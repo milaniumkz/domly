@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Deployment or read-only server inspection
+        default: deploy
+        type: choice
+        options: [deploy, inspect]
 
 permissions:
   contents: read
@@ -13,7 +19,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  inspect:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'inspect'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Inspect web server
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" '
+            command -v caddy || true
+            systemctl is-active caddy || true
+            docker ps --format "{{.Names}} {{.Ports}}"
+            if test -f /etc/caddy/Caddyfile; then
+              awk "/domly\\.kz|^[[:space:]]*(root|reverse_proxy|file_server|handle|handle_path|import|redir)/" /etc/caddy/Caddyfile
+            fi
+          '
   test:
+    if: inputs.mode != 'inspect'
     uses: ./.github/workflows/ci.yml
 
   deploy:
