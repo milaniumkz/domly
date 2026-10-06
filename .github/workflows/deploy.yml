@@ -33,14 +33,30 @@ jobs:
           install -m 600 /dev/null ~/.ssh/deploy_key
           printf '%s' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
           printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" '
-            command -v caddy || true
-            systemctl is-active caddy || true
-            docker ps --format "{{.Names}} {{.Ports}}"
-            if test -f /etc/caddy/Caddyfile; then
-              awk "/domly\\.kz|^[[:space:]]*(root|reverse_proxy|file_server|handle|handle_path|import|redir)/" /etc/caddy/Caddyfile
-            fi
-          '
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" bash -s > catalog-export.json <<'REMOTE'
+          docker exec -i domly-backend-api-1 node <<'JS'
+          const admin=require('firebase-admin');
+          const {env}=require('./dist/common/env');
+          (async()=>{
+            admin.initializeApp({credential:admin.credential.cert({projectId:env.fcmProjectId,clientEmail:env.fcmClientEmail,privateKey:env.fcmPrivateKey})});
+            const db=admin.firestore();
+            const result={};
+            for(const name of ['packages','catalogPackages','servicePackages','tariffs','addons','addonGroups','cities','houses','zones']) {
+              try {
+                const snapshot=await db.collection(name).get();
+                result[name]=snapshot.docs.map(doc=>({id:doc.id,data:doc.data()}));
+              }catch(error){result[name]={error:String(error.code ?? 'read_failed')};}
+            }
+            console.log(JSON.stringify(result));
+          })().catch(()=>{console.log(JSON.stringify({error:'firebase_access_failed'}));process.exitCode=1});
+          JS
+          REMOTE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firestore-catalog-readonly
+          path: catalog-export.json
+          retention-days: 1
+
   test:
     if: inputs.mode != 'inspect'
     uses: ./.github/workflows/ci.yml
