@@ -54,6 +54,7 @@ functions/node_modules/
 # Runtime data/backups/uploads
 backend/backups/
 backend/storage/
+domly-minio/
 backups/
 outputs/
 output/
