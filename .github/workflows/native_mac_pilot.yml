@@ -1,44 +1,20 @@
-name: CI
+name: Native Mac Pilot
 
 on:
-  workflow_call:
-  pull_request:
   push:
-    branches: [main]
+    branches: [codex/mac-ci-pilot]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-jobs:
-  backend:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: domly_test
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U postgres -d domly_test"
-          --health-interval 5s --health-timeout 5s --health-retries 10
-    env:
-      DOMLY_INTEGRATION_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/domly_test
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci
-      - run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d domly_test -v ON_ERROR_STOP=1 -f sql/schema.sql
-      - run: npm test
+concurrency:
+  group: native-mac-domly-${{ github.ref }}
+  cancel-in-progress: false
 
+jobs:
   flutter:
+    if: github.repository == 'milaniumkz/domly' && (github.ref == 'refs/heads/codex/mac-ci-pilot' || github.ref == 'refs/heads/main')
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64", "repo-domly"]') || fromJSON('["ubuntu-latest"]') }}
     timeout-minutes: 45
     env:
