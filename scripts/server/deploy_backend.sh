@@ -9,6 +9,7 @@ COMMIT_SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
 RELEASE_DIR="$RELEASES_DIR/$COMMIT_SHA"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/health}"
 READY_URL="${READY_URL:-http://127.0.0.1:8080/ready}"
+COMPOSE_PROJECT="${COMPOSE_PROJECT:-domly-backend}"
 
 mkdir -p "$RELEASES_DIR" "$BACKUP_DIR"
 
@@ -27,17 +28,14 @@ backup_stamp="$(date +%Y%m%d-%H%M%S)-$COMMIT_SHA"
 mkdir -p "$BACKUP_DIR/$backup_stamp"
 cp "$RELEASE_DIR/backend/.env" "$BACKUP_DIR/$backup_stamp/backend.env"
 
-if docker compose -f "$APP_DIR/docker-compose.yml" ps postgres >/dev/null 2>&1; then
-  docker compose -f "$APP_DIR/docker-compose.yml" exec -T postgres pg_dump -U "${POSTGRES_USER:-domly}" "${POSTGRES_DB:-domly}" > "$BACKUP_DIR/$backup_stamp/postgres.sql" || true
+if docker compose -p "$COMPOSE_PROJECT" -f "$APP_DIR/docker-compose.yml" ps postgres >/dev/null 2>&1; then
+  docker compose -p "$COMPOSE_PROJECT" -f "$APP_DIR/docker-compose.yml" exec -T postgres pg_dump -U "${POSTGRES_USER:-domly}" "${POSTGRES_DB:-domly}" > "$BACKUP_DIR/$backup_stamp/postgres.sql" || true
 fi
 
 ln -sfn "$RELEASE_DIR" "$CURRENT_DIR"
-rsync -a --delete --exclude 'backend/.env' --exclude 'backend/node_modules' --exclude 'backend/dist' "$CURRENT_DIR/" "$APP_DIR/"
-cp "$RELEASE_DIR/backend/.env" "$APP_DIR/backend/.env"
-
 echo "$COMMIT_SHA" > "$APP_DIR/REVISION"
 
-docker compose -f "$APP_DIR/docker-compose.yml" up -d --build api worker backup
+docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --project-directory "$CURRENT_DIR" up -d --build api worker backup
 
 for i in {1..30}; do
   if curl -fsS "$HEALTH_URL" >/dev/null && curl -fsS "$READY_URL" >/dev/null; then
@@ -48,5 +46,5 @@ for i in {1..30}; do
 done
 
 echo "Deploy failed healthcheck" >&2
-docker compose -f "$APP_DIR/docker-compose.yml" ps >&2 || true
+docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --project-directory "$CURRENT_DIR" ps >&2 || true
 exit 1
