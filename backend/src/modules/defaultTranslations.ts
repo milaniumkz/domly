@@ -1,0 +1,52 @@
+export type DefaultTranslation = {
+  key: string;
+  ru: string;
+  kk: string;
+  namespace?: string;
+};
+
+export const defaultTranslations: DefaultTranslation[] = [
+  { key: 'nav.home', ru: 'Главная', kk: 'Басты бет' },
+  { key: 'nav.orders', ru: 'Заказы', kk: 'Тапсырыстар' },
+  { key: 'nav.profile', ru: 'Профиль', kk: 'Профиль' },
+  { key: 'nav.notifications', ru: 'Уведомления', kk: 'Хабарламалар' },
+  { key: 'nav.settings', ru: 'Настройки', kk: 'Баптаулар' },
+  { key: 'auth.login_title', ru: 'Вход в DOMLY', kk: 'DOMLY жүйесіне кіру' },
+  { key: 'auth.phone', ru: 'Номер телефона', kk: 'Телефон нөмірі' },
+  { key: 'auth.sms_code', ru: 'Код подтверждения', kk: 'Растау коды' },
+  { key: 'common.save', ru: 'Сохранить', kk: 'Сақтау' },
+  { key: 'common.cancel', ru: 'Отмена', kk: 'Болдырмау' },
+  { key: 'common.back', ru: 'Назад', kk: 'Артқа' },
+  { key: 'common.close', ru: 'Закрыть', kk: 'Жабу' },
+  { key: 'common.details', ru: 'Детали', kk: 'Толығырақ' },
+  { key: 'common.confirm', ru: 'Подтвердить', kk: 'Растау' },
+  { key: 'common.pay', ru: 'Оплатить', kk: 'Төлеу' },
+  { key: 'home.next_cleaning', ru: 'Следующая уборка', kk: 'Келесі тазалау' },
+  { key: 'home.choose_subscription', ru: 'Подобрать подписку', kk: 'Жазылым таңдау' },
+  { key: 'home.preorder', ru: 'Предварительная запись', kk: 'Алдын ала жазылу' },
+  { key: 'home.important_info', ru: 'Важная информация', kk: 'Маңызды ақпарат' },
+  { key: 'home.choose_package', ru: 'Выбрать пакет', kk: 'Пакет таңдау' },
+  { key: 'home.calculator', ru: 'Калькулятор', kk: 'Калькулятор' },
+  { key: 'orders.active', ru: 'Активные', kk: 'Белсенді' },
+  { key: 'orders.completed', ru: 'Завершенные', kk: 'Аяқталған' },
+  { key: 'orders.choose_date_time', ru: 'Выбрать дату и время', kk: 'Күн мен уақытты таңдау' },
+  { key: 'orders.add_addons', ru: 'Добавить допы', kk: 'Қосымша қызмет қосу' },
+  { key: 'orders.checklist', ru: 'Чек-лист', kk: 'Тексеру парағы' },
+  { key: 'orders.chat', ru: 'Чат', kk: 'Чат' },
+  { key: 'orders.call', ru: 'Звонок', kk: 'Қоңырау' },
+  { key: 'payment.kaspi', ru: 'Kaspi.kz', kk: 'Kaspi.kz' },
+  { key: 'payment.online', ru: 'Онлайн-платёж', kk: 'Онлайн төлем' },
+  { key: 'payment.use_bonus', ru: 'Оплатить бонусами', kk: 'Бонустармен төлеу' },
+  { key: 'payment.awaiting', ru: 'Ожидает оплаты', kk: 'Төлем күтілуде' },
+  { key: 'bonus.title', ru: 'Бонусы', kk: 'Бонустар' },
+  { key: 'bonus.history', ru: 'История бонусов', kk: 'Бонустар тарихы' },
+  { key: 'quality.title', ru: 'Проверка площади', kk: 'Ауданды тексеру' },
+  { key: 'quality.upload_plan', ru: 'Загрузите план квартиры', kk: 'Пәтер жоспарын жүктеңіз' },
+  { key: 'quality.schedule', ru: 'Назначить проверку', kk: 'Тексеруді тағайындау' },
+  { key: 'quality.in_app', ru: 'Пройти проверку в приложении', kk: 'Қосымшада тексеруден өту' },
+  { key: 'notification.empty', ru: 'В этой вкладке будут отображаться уведомления.', kk: 'Бұл бөлімде хабарламалар көрсетіледі.' },
+  { key: 'error.unauthorized', ru: 'Сессия истекла. Войдите заново.', kk: 'Сессия аяқталды. Қайта кіріңіз.' },
+  { key: 'error.payment_required', ru: 'Сначала подтвердите оплату.', kk: 'Алдымен төлемді растаңыз.' },
+  { key: 'error.cleaner_unavailable', ru: 'На это время нет свободной уборщицы. Выберите другое время.', kk: 'Бұл уақытта бос орындаушы жоқ. Басқа уақыт таңдаңыз.' },
+  { key: 'error.try_again', ru: 'Не удалось выполнить действие. Попробуйте позже.', kk: 'Әрекетті орындау мүмкін болмады. Кейінірек қайталап көріңіз.' },
+];

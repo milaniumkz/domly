@@ -1,0 +1,133 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && (request.auth.token.admin == true || request.auth.token.superAdmin == true);
+    }
+
+    function isImageUpload() {
+      return request.resource != null
+        && request.resource.contentType.matches('image/.*')
+        && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    function order(orderId) {
+      return firestore.get(/databases/(default)/documents/customer_orders/$(orderId));
+    }
+
+    function orderExists(orderId) {
+      return firestore.exists(/databases/(default)/documents/customer_orders/$(orderId));
+    }
+
+    function scheduleSlot(slotId) {
+      return firestore.get(/databases/(default)/documents/schedule_slots/$(slotId));
+    }
+
+    function scheduleSlotExists(slotId) {
+      return firestore.exists(/databases/(default)/documents/schedule_slots/$(slotId));
+    }
+
+    function canAccessOrder(orderId) {
+      return signedIn()
+        && orderExists(orderId)
+        && (
+          order(orderId).data.customerId == request.auth.uid
+          || order(orderId).data.cleanerId == request.auth.uid
+          || isAdmin()
+        );
+    }
+
+    function canAccessScheduleSlot(slotId) {
+      return signedIn()
+        && scheduleSlotExists(slotId)
+        && (
+          scheduleSlot(slotId).data.customerId == request.auth.uid
+          || scheduleSlot(slotId).data.cleanerId == request.auth.uid
+          || isAdmin()
+        );
+    }
+
+    function canAccessReportTarget(targetId) {
+      return canAccessOrder(targetId) || canAccessScheduleSlot(targetId);
+    }
+
+    function isOrderCleaner(orderId) {
+      return signedIn()
+        && orderExists(orderId)
+        && order(orderId).data.cleanerId == request.auth.uid;
+    }
+
+    function isScheduleSlotCleaner(slotId) {
+      return signedIn()
+        && scheduleSlotExists(slotId)
+        && scheduleSlot(slotId).data.cleanerId == request.auth.uid;
+    }
+
+    function isReportTargetCleaner(targetId) {
+      return isOrderCleaner(targetId) || isScheduleSlotCleaner(targetId);
+    }
+
+    function isOrderCustomer(orderId) {
+      return signedIn()
+        && orderExists(orderId)
+        && order(orderId).data.customerId == request.auth.uid;
+    }
+
+    function isScheduleSlotCustomer(slotId) {
+      return signedIn()
+        && scheduleSlotExists(slotId)
+        && scheduleSlot(slotId).data.customerId == request.auth.uid;
+    }
+
+    match /photo_reports/{orderId}/{fileName} {
+      allow read: if signedIn() || canAccessReportTarget(orderId);
+      allow write: if signedIn() && isImageUpload();
+      allow delete: if isAdmin() || isReportTargetCleaner(orderId);
+    }
+
+    match /reviews/{orderId}/{fileName} {
+      allow read: if signedIn() || canAccessReportTarget(orderId);
+      allow write: if signedIn() && isImageUpload();
+      allow delete: if isAdmin() || isOrderCustomer(orderId) || isScheduleSlotCustomer(orderId);
+    }
+
+    match /complaints/{orderId}/{fileName} {
+      allow read: if signedIn() || canAccessReportTarget(orderId);
+      allow write: if signedIn() && isImageUpload();
+      allow delete: if isAdmin() || isOrderCustomer(orderId) || isScheduleSlotCustomer(orderId);
+    }
+
+    match /cleaner_verification/{cleanerId}/{fileName} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == cleanerId);
+      allow write: if (isAdmin() || (signedIn() && request.auth.uid == cleanerId)) && isImageUpload();
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == cleanerId);
+    }
+
+    match /cleaner_documents/{cleanerId}/{fileName} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == cleanerId);
+      allow write: if (isAdmin() || (signedIn() && request.auth.uid == cleanerId)) && isImageUpload();
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == cleanerId);
+    }
+
+    match /area_confirmations/{userId}/{fileName} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == userId);
+      allow write: if (isAdmin() || (signedIn() && request.auth.uid == userId)) && isImageUpload();
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == userId);
+    }
+
+    match /promo_banners/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin() && isImageUpload();
+      allow delete: if isAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

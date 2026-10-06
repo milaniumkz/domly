@@ -1,0 +1,10 @@
+/.gradle
+/captures/
+/local.properties
+GeneratedPluginRegistrant.java
+.cxx/
+
+# Never publish signing credentials.
+key.properties
+**/*.keystore
+**/*.jks

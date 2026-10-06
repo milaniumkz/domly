@@ -1,0 +1,101 @@
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+*.iml
+*.log
+*.tmp
+*.swp
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.p8
+*.p12
+*.jks
+*.keystore
+*service-account*.json
+*service*account*.json
+firebase-admin*.json
+GoogleService-Info.plist
+google-services.json
+android/upload-keystore.jks
+android/key.properties
+ios/Runner/*.mobileprovision
+ios/Runner/*.cer
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+coverage/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+app.*.symbols
+app.*.map.json
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+backend/dist/
+functions/lib/
+functions/node_modules/
+
+# Runtime data/backups/uploads
+backend/backups/
+backend/storage/
+backups/
+outputs/
+output/
+artifacts/
+migrate_working_dir/
+firebase-export/
+*.sql
+*.dump
+*.bak
+*.tar
+*.tar.gz
+*.zip
+
+# Local test/browser caches
+.firebase/
+.playwright-cli/
+.playwright-mcp/
+qa-shots/
+
+# Generated screenshots / QA images in repo root
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+/*.gif
+/*.mp4
+
+# Android generated artifacts
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Xcode generated
+DerivedData/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# Keep source SQL and Gradle wrapper required for clean clone builds
+!backend/sql/
+!backend/sql/**
+!android/gradle/wrapper/gradle-wrapper.jar
+!android/gradlew
+!android/gradlew.bat

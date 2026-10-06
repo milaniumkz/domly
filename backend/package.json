@@ -1,0 +1,50 @@
+{
+  "name": "domly-backend-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/http/server.js",
+    "start:worker": "node dist/jobs/workers.js",
+    "dev": "ts-node src/http/server.ts",
+    "migrate": "psql \"$DATABASE_URL\" -f sql/schema.sql",
+    "bootstrap:admin": "node dist/scripts/bootstrap-admin.js",
+    "bootstrap:admin:dev": "ts-node src/scripts/bootstrap-admin.ts",
+    "firebase:export": "ts-node src/scripts/firebase-export-readonly.ts",
+    "firebase:audit": "ts-node src/scripts/migration-audit.ts",
+    "firebase:import": "ts-node src/scripts/import-to-postgres.ts",
+    "firebase:verify": "ts-node src/scripts/verify-migration.ts",
+    "migration:run": "./run-migration.sh",
+    "smoke:vps": "node dist/scripts/smoke-vps.js",
+    "smoke:vps:dev": "ts-node src/scripts/smoke-vps.ts",
+    "test": "npm run build && node --test dist/tests/*.test.js"
+  },
+  "dependencies": {
+    "@firebase/app-types": "^0.9.3",
+    "bcryptjs": "^2.4.3",
+    "bullmq": "^5.15.1",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "firebase-admin": "^12.7.0",
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "minio": "^8.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.12.0",
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.13.10",
+    "@types/pg": "^8.23.1",
+    "@types/swagger-ui-express": "^4.1.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  }
+}
