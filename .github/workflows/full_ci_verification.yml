@@ -1,5 +1,10 @@
 ---
-name: CI
+name: Full CI Verification
+'on':
+  push:
+    branches:
+    - codex/full-ci-pilot
+  workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
@@ -41,6 +46,8 @@ jobs:
       run: |
         test -n "$DOMLY_INTEGRATION_DATABASE_URL"
         node --test dist/tests/admin-integration.test.js dist/tests/catalog-migration.test.js dist/tests/mobile-integration.test.js
+    if: github.repository == 'milaniumkz/domly' && github.event_name != 'pull_request'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/full-ci-pilot')
   backend-unit:
     runs-on: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main'
       || github.ref == 'refs/heads/codex/full-ci-pilot') && fromJSON('["milanium-mac-arm64",
@@ -88,6 +95,8 @@ jobs:
         path: backend/dist
         if-no-files-found: error
         retention-days: 1
+    if: github.repository == 'milaniumkz/domly' && github.event_name != 'pull_request'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/full-ci-pilot')
   flutter:
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64",
       "repo-domly"]') || fromJSON('["ubuntu-latest"]') }}
@@ -127,9 +136,5 @@ jobs:
         name: domly-web
         path: web-release/
         retention-days: 7
-'on':
-  workflow_call: 
-  pull_request: 
-  push:
-    branches:
-    - main
+    if: github.repository == 'milaniumkz/domly' && github.event_name != 'pull_request'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/full-ci-pilot')
