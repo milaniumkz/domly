@@ -48,6 +48,10 @@ jobs:
                 result[name]=snapshot.docs.map(doc=>({id:doc.id,data:doc.data()}));
               }catch(error){result[name]={error:String(error.code ?? 'read_failed')};}
             }
+            for(const name of ['app_config','customer_packages']) {
+              const snapshot=await db.collection(name).limit(5).get();
+              result[name+'Fields']=snapshot.docs.map(doc=>({id:doc.id,fields:Object.keys(doc.data())}));
+            }
             console.log(JSON.stringify(result));
           })().catch(()=>{console.log(JSON.stringify({error:'firebase_access_failed'}));process.exitCode=1});
           JS
