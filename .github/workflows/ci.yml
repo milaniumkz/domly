@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   backend:
+    needs: backend-unit
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -36,7 +37,57 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d domly_test -v ON_ERROR_STOP=1 -f sql/schema.sql
-      - run: npm test
+      - uses: actions/download-artifact@v4
+        with:
+          name: domly-backend-tests
+          path: backend/dist
+      - name: Mandatory real PostgreSQL integration tests
+        run: |
+          test -n "$DOMLY_INTEGRATION_DATABASE_URL"
+          node --test dist/tests/admin-integration.test.js dist/tests/catalog-migration.test.js dist/tests/mobile-integration.test.js
+
+  backend-unit:
+    runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["milanium-mac-arm64", "repo-domly"]') || fromJSON('["ubuntu-latest"]') }}
+    timeout-minutes: 30
+    env:
+      DOMLY_INTEGRATION_DATABASE_URL: ''
+      DATABASE_URL: postgres://unit:unit@127.0.0.1:9/domly_unit
+      REDIS_URL: redis://127.0.0.1:9
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Select installed Node 22
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          echo /opt/homebrew/opt/node@22/bin >> "$GITHUB_PATH"
+          test "$(/opt/homebrew/opt/node@22/bin/node -p 'process.versions.node.split(".")[0]')" = 22
+      - run: npm ci
+      - name: Require explicit partition of every backend test file
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          expected={'backend-core.test.ts','cleaner-status.test.ts','scheduler.test.ts','admin-integration.test.ts','catalog-migration.test.ts','mobile-integration.test.ts'}
+          assert {p.name for p in Path('src/tests').glob('*.test.ts')} == expected, 'Classify any new backend test in the unit or DB gate before CI can pass'
+          PYCODE
+      - run: npm run build
+      - name: Pure unit tests, no DB test skipped to claim success
+        run: node --test dist/tests/backend-core.test.js dist/tests/cleaner-status.test.js dist/tests/scheduler.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: domly-backend-tests
+          path: backend/dist
+          if-no-files-found: error
+          retention-days: 1
 
   flutter:
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64", "repo-domly"]') || fromJSON('["ubuntu-latest"]') }}

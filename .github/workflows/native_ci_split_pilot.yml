@@ -1,0 +1,48 @@
+name: Native CI Split Pilot
+on:
+  push:
+    branches: [codex/ci-split-pilot]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-ci-split-domly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  backend-unit:
+    if: github.repository == 'milaniumkz/domly' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/ci-split-pilot')
+    runs-on: [milanium-mac-arm64, repo-domly]
+    timeout-minutes: 30
+    env:
+      DOMLY_INTEGRATION_DATABASE_URL: ''
+      DATABASE_URL: postgres://unit:unit@127.0.0.1:9/domly_unit
+      REDIS_URL: redis://127.0.0.1:9
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Select installed Node 22
+        run: |
+          echo /opt/homebrew/opt/node@22/bin >> "$GITHUB_PATH"
+          test "$(/opt/homebrew/opt/node@22/bin/node -p 'process.versions.node.split(".")[0]')" = 22
+      - run: npm ci
+      - name: Require explicit partition of every backend test file
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          expected={'backend-core.test.ts','cleaner-status.test.ts','scheduler.test.ts','admin-integration.test.ts','catalog-migration.test.ts','mobile-integration.test.ts'}
+          assert {p.name for p in Path('src/tests').glob('*.test.ts')} == expected, 'Classify any new backend test in the unit or DB gate before CI can pass'
+          PYCODE
+      - run: npm run build
+      - name: Pure unit tests, no DB test skipped to claim success
+        run: node --test dist/tests/backend-core.test.js dist/tests/cleaner-status.test.js dist/tests/scheduler.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: domly-backend-tests
+          path: backend/dist
+          if-no-files-found: error
+          retention-days: 1
+
