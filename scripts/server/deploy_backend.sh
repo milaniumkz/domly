@@ -37,7 +37,7 @@ cp "$RELEASE_DIR/backend/.env" "$APP_DIR/backend/.env"
 
 echo "$COMMIT_SHA" > "$APP_DIR/REVISION"
 
-docker compose -f "$APP_DIR/docker-compose.yml" up -d --build api worker backup
+docker compose -f "$APP_DIR/docker-compose.yml" up -d --build api worker backup nginx
 
 for i in {1..30}; do
   if curl -fsS "$HEALTH_URL" >/dev/null && curl -fsS "$READY_URL" >/dev/null; then

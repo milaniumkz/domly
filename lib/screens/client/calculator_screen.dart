@@ -1,3 +1,4 @@
+import '../../services/backend_api_service.dart';
 import 'dart:async';
 
 // ignore_for_file: unused_element
@@ -1644,34 +1645,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         : mapped;
   }
 
-  Map<String, dynamic> _buildLocalRegularQuote({
-    required int cleaningCount,
-    required int addonTotal,
-    required double discountRate,
-  }) {
-    final packageAreaRate =
-        PackageCatalogUtils.numValue(_selectedPackage?['price'])?.toInt() ?? 0;
-    final basePerCleaning = packageAreaRate > 0
-        ? (packageAreaRate * _area.ceil()).round()
-        : (_area.ceil() * 120).round();
-    final packageSubtotal = basePerCleaning * cleaningCount;
-    final discountAmount = (packageSubtotal * discountRate).round();
-    final subtotal = packageSubtotal + addonTotal;
-    return <String, dynamic>{
-      'perCleaningPrice': basePerCleaning,
-      'monthlyPrice': subtotal - discountAmount,
-      'subtotal': subtotal,
-      'discountRate': discountRate,
-      'discountAmount': discountAmount,
-      'cleaningCount': cleaningCount,
-      'billingPeriodMonths': _billingPeriodMonths,
-      'addonTotalPrice': addonTotal,
-      'addonsBillableTotal': addonTotal,
-      'addonsSeparatePaymentTotal': 0,
-      'separatePaymentAddons': const <Map<String, dynamic>>[],
-    };
-  }
-
   void _changeAddonQuantity(String key, int nextQuantity) {
     setState(() {
       if (nextQuantity <= 0) {
@@ -1701,68 +1674,28 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       });
       return;
     }
-    final frequency = _selectedFrequency;
-    final freq = frequency > 0 ? frequency : 2;
-    final cleaningCount = _billingPeriodMonths == 3 ? freq * 3 : freq;
-    final discountRate = PackageCatalogUtils.discountRate(pkg);
-    final localAddonTotal = _localBillableAddonTotal();
     try {
-      final isSpecial = PackageCatalogUtils.isSpecialPackage(pkg);
-
-      if (isSpecial) {
-        final pkgId = (pkg?['id'] ?? '').toString();
-        final basePrice =
-            PackageCatalogUtils.numValue(pkg?['price'])?.toInt() ??
-                (pkgId == 'renovation' ? 60000 : 45000);
-        final addonTotal = _localBillableAddonTotal();
-        final specialQuote = <String, dynamic>{
-          'perCleaningPrice': basePrice + addonTotal,
-          'monthlyPrice': basePrice + addonTotal,
-          'subtotal': basePrice + addonTotal,
-          'discountRate': 0.0,
-          'discountAmount': 0,
-          'cleaningCount': 1,
-          'billingPeriodMonths': 1,
-          'addonTotalPrice': addonTotal,
-          'addonsBillableTotal': addonTotal,
-          'addonsSeparatePaymentTotal': 0,
-          'separatePaymentAddons': const <Map<String, dynamic>>[],
-        };
-        setState(() {
-          _quote = specialQuote;
-          _loadingQuote = false;
-        });
-        return;
-      }
-
-      if (mounted) {
-        setState(() {
-          _quote = _buildLocalRegularQuote(
-            cleaningCount: cleaningCount,
-            addonTotal: localAddonTotal,
-            discountRate: discountRate,
-          );
-          _loadingQuote = false;
-        });
-      }
-
-      final quote = _buildLocalRegularQuote(
-        cleaningCount: cleaningCount,
-        addonTotal: localAddonTotal,
-        discountRate: discountRate,
-      );
-      if (!mounted || requestId != _quoteRequestId) return;
-      setState(() => _quote = quote);
-    } catch (_) {
+      final quote =
+          await BackendApiService.instance.postMap('/packages/quote', body: {
+        'packageId': pkg?['id'],
+        'area': _area.ceil(),
+        'addonsDetailed': _selectedAddonsDetailed()
+      });
       if (!mounted || requestId != _quoteRequestId) return;
       setState(() {
-        _quote = _buildLocalRegularQuote(
-          cleaningCount: cleaningCount,
-          addonTotal: localAddonTotal,
-          discountRate: discountRate,
-        );
+        _quote = quote;
         _loadingQuote = false;
       });
+    } catch (error) {
+      if (!mounted || requestId != _quoteRequestId) return;
+      setState(() {
+        _quote = const {'monthlyPrice': 0};
+        _loadingQuote = false;
+      });
+      showDomlySnackBar(context,
+          title: 'Не удалось рассчитать стоимость',
+          subtitle: '$error',
+          type: DomlySnackBarType.error);
     }
   }
 

@@ -100,3 +100,6 @@ ios/Flutter/Flutter.podspec
 !android/gradle/wrapper/gradle-wrapper.jar
 !android/gradlew
 !android/gradlew.bat
+
+# Published local web releases
+frontend/releases/

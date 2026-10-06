@@ -2,3 +2,7 @@
 #include "Generated.xcconfig"
 APP_DISPLAY_NAME = Domly
 MAPS_API_KEY =
+
+CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements
+DOMLY_URL_SCHEME = domly
+APS_ENVIRONMENT = development

@@ -1,3 +1,4 @@
+import { referralDiscount } from './referrals';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { Database } from '../infrastructure/db/Database';
@@ -307,6 +308,7 @@ export class PaymentService {
     provider: 'kaspi' | 'bcc' | 'manual';
     orderId?: string;
     customerPackageId?: string;
+    applyReferralDiscount?: boolean;
     useBonus?: boolean;
     requestedBonus?: number;
     maxBonusPercent?: number;
@@ -317,6 +319,9 @@ export class PaymentService {
       `SELECT bonus_balance FROM app_users WHERE id=$1`,
       [input.customerId],
     )).rows);
+    const referralPercent = input.applyReferralDiscount === false ? 0 : await referralDiscount(this.db,input.customerId);
+    const referralAmount = Math.round(input.amount * referralPercent / 100);
+    input = {...input, amount: input.amount - referralAmount, payload: {...input.payload, referralDiscountPercent: referralPercent, referralDiscountAmount: referralAmount}};
     const pricing = new PricingService();
     const split = input.useBonus
       ? pricing.splitBonus(input.amount, input.requestedBonus ?? input.amount, Number(user?.bonus_balance ?? 0), input.maxBonusPercent ?? 50)

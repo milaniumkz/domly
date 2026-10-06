@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -639,12 +640,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   Future<void> _completeAuth() async {
     final authController = AppScope.of(context).authController;
     await authController.refresh();
-    final pendingReferralCode = _pendingReferralCode;
+    final prefs = await SharedPreferences.getInstance();
+    final pendingReferralCode =
+        _pendingReferralCode ?? prefs.getString('domly_pending_referral');
     if (pendingReferralCode != null) {
       try {
         await FirestoreDataService.instance.applyReferralCodeIfMissing(
           pendingReferralCode,
         );
+        await prefs.remove('domly_pending_referral');
       } catch (_) {
         // Referral code application is non-blocking for auth completion.
       }

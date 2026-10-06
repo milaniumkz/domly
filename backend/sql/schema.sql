@@ -995,3 +995,40 @@ CREATE INDEX IF NOT EXISTS idx_notification_reads_user ON notification_reads(use
 CREATE INDEX IF NOT EXISTS idx_chat_participants_user ON chat_participants(user_id, last_read_at);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_created ON chat_messages(chat_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_order_offers_cleaner ON order_offers(cleaner_id, status, expires_at);
+
+-- Mobile backend migration: additive, safe for existing records.
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS user_referrals (
+  customer_id UUID PRIMARY KEY REFERENCES app_users(id),
+  inviter_id UUID NOT NULL REFERENCES app_users(id),
+  qualified_at TIMESTAMPTZ,
+  reward_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (customer_id <> inviter_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_referrals_inviter ON user_referrals(inviter_id);
+CREATE TABLE IF NOT EXISTS house_waitlist (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  house_id UUID NOT NULL REFERENCES connected_houses(id),
+  user_id UUID NOT NULL REFERENCES app_users(id),
+  source TEXT NOT NULL DEFAULT 'app',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(house_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS training_videos (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL,
+  audience_type TEXT NOT NULL DEFAULT 'both' CHECK(audience_type IN ('client','cleaner','both')),
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  published_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE customer_packages ADD COLUMN IF NOT EXISTS purchase_config JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+INSERT INTO app_settings (key,value) VALUES ('referralBonusAmount','2000'::jsonb), ('referralMilestoneCount','5'::jsonb), ('referralMilestoneBonus','10000'::jsonb) ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO app_settings (key,value) VALUES ('referralDiscountTiers','[{"count":5,"discount":3},{"count":10,"discount":7},{"count":20,"discount":10}]'::jsonb) ON CONFLICT (key) DO NOTHING;
+
+ALTER TABLE training_videos ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '';

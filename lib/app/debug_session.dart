@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 class DebugSession {
   static String? get uid {
-    if (!kIsWeb) {
+    if (!kIsWeb || !kDebugMode) {
       return null;
     }
     final value =
@@ -16,7 +16,7 @@ class DebugSession {
   static bool get enabled => uid != null;
 
   static String? get route {
-    if (!kIsWeb) {
+    if (!kIsWeb || !kDebugMode) {
       return null;
     }
     final value = Uri.base.queryParameters['debug_route']?.trim() ??
@@ -45,7 +45,7 @@ class DebugSession {
   }
 
   static String? value(String key) {
-    if (!kIsWeb) {
+    if (!kIsWeb || !kDebugMode) {
       return null;
     }
     final direct = Uri.base.queryParameters[key]?.trim();

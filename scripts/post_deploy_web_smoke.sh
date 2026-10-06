@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CUSTOMER_URL="${CUSTOMER_URL:-https://domly-d0f91.web.app}"
-PRO_URL="${PRO_URL:-https://domly-pro.web.app}"
-ADMIN_URL="${ADMIN_URL:-https://domly-admin-web.web.app}"
+CUSTOMER_URL="${CUSTOMER_URL:-https://domly.kz/customer/}"
+PRO_URL="${PRO_URL:-https://domly.kz/pro/}"
+ADMIN_URL="${ADMIN_URL:-https://domly.kz/admin/}"
 
 check_url() {
   local label="$1"

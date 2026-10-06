@@ -1,3 +1,6 @@
+import { qualifyReferral, referralDiscount } from '../../modules/referrals';
+import { packageQuote } from '../../modules/packageQuote';
+import { mobileRouter } from './mobile';
 import { Router } from 'express';
 import fs from 'fs/promises';
 import multer from 'multer';
@@ -26,6 +29,7 @@ export function buildV1Router(deps: {
   wapi: WapiOtpService;
 }) {
   const router = Router();
+  router.use(mobileRouter(deps.db));
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
   const cleanText = (value: unknown) => {
@@ -243,6 +247,7 @@ export function buildV1Router(deps: {
         [payment.customer_package_id, payment.id],
       );
       payment.appliedPromotions = await applyPackagePromotions(payment);
+      await qualifyReferral(deps.db, payment);
       payment.qualityCheck = await ensurePackageQualityCheck(deps.db, deps.notifications, payment.customer_package_id);
     }
     const preorderId = payment.payload?.preorderId;
@@ -255,9 +260,10 @@ export function buildV1Router(deps: {
       );
     }
     if (payment.order_id) {
-      await deps.db.query(`UPDATE service_orders SET status='pending_assignment', updated_at=NOW() WHERE id=$1`, [payment.order_id]);
+      await deps.db.query(`UPDATE service_orders SET status=CASE WHEN cleaner_id IS NULL THEN 'pending_assignment' ELSE 'assigned' END, payable_amount=0, updated_at=NOW() WHERE id=$1`, [payment.order_id]);
       await deps.db.query(`UPDATE order_addons SET payment_status='paid' WHERE order_id=$1`, [payment.order_id]);
-      await offerNextCleanerAndNotify(payment.order_id);
+      const assigned = first<any>((await deps.db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[payment.order_id])).rows);
+      if (!assigned?.cleaner_id) await offerNextCleanerAndNotify(payment.order_id);
     }
     if (payment.customer_id) {
       await deps.notifications.create({
@@ -330,7 +336,15 @@ export function buildV1Router(deps: {
       `SELECT * FROM customer_addresses WHERE user_id=$1 ORDER BY is_primary DESC, created_at DESC`,
       [req.user!.id],
     )).rows;
-    ok(res, { ...(user as object), addresses });
+    const safeUser = {...(user as any)};
+    delete safeUser.password_hash;
+    if (req.user!.role === 'customer') {
+      const stats = first<any>((await deps.db.query('SELECT COUNT(*)::int AS total FROM user_referrals WHERE inviter_id=$1 AND qualified_at IS NOT NULL', [req.user!.id])).rows);
+      const own = first<any>((await deps.db.query("SELECT 'DOMLY-' || u.numeric_id AS code FROM user_referrals r JOIN app_users u ON u.id=r.inviter_id WHERE r.customer_id=$1", [req.user!.id])).rows);
+      Object.assign(safeUser, {referralCode: `DOMLY-${safeUser.numeric_id}`, referredByCode: own?.code,
+        referralQualifiedCount: stats.total, referralDiscountPercent: await referralDiscount(deps.db,req.user!.id)});
+    }
+    ok(res, { ...safeUser, addresses });
   }));
 
   router.patch('/me', auth(), asyncHandler(async (req, res) => {
@@ -897,8 +911,8 @@ export function buildV1Router(deps: {
         zoneId: house.zone_id,
         zoneNameRu: house.zone_name_ru,
         zoneNameKk: house.zone_name_kk,
-        lat: house.lat,
-        lng: house.lng,
+        lat: house.latitude,
+        lng: house.longitude,
       }));
     if (localRows.length >= Math.min(3, limit)) {
       ok(res, { suggestions: localRows, source: 'connected_houses' });
@@ -913,6 +927,14 @@ export function buildV1Router(deps: {
       limit: limit - localRows.length,
     });
     ok(res, { suggestions: [...localRows, ...externalRows].slice(0, limit), source: localRows.length ? 'mixed' : 'external' });
+  }));
+
+  router.get('/geo/reverse', asyncHandler(async (req, res) => {
+    const lat = Number(req.query.lat), lng = Number(req.query.lng);
+    if (!req.query.lat || !req.query.lng || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat)>90 || Math.abs(lng)>180) {
+      throw new ApiError(400, 'invalid_coordinates', 'Проверьте координаты.');
+    }
+    ok(res, {suggestion: await deps.addressSearch.reverse(lat, lng)});
   }));
 
   router.post('/geo/service-address-requests', auth(['customer']), asyncHandler(async (req, res) => {
@@ -1127,6 +1149,10 @@ export function buildV1Router(deps: {
     ok(res, payload);
   }));
 
+  router.post('/packages/quote', asyncHandler(async (req, res) => {
+    ok(res, await packageQuote(deps.db, {...req.body, customerId: req.user?.id}));
+  }));
+
   router.post('/packages/purchase', auth(['customer']), asyncHandler(async (req, res) => {
     const pkg = first<{ id: string; base_price: string; price_per_m2: string; cleaning_count: number; months: number }>((await deps.db.query(
       `SELECT * FROM catalog_packages WHERE id=$1 AND active=TRUE`,
@@ -1138,20 +1164,23 @@ export function buildV1Router(deps: {
       [req.body.addressId, req.user!.id],
     )).rows);
     if (!address?.area) throw new ApiError(400, 'area_required', 'Заполните площадь квартиры в профиле.');
-    const total = deps.pricing.calculatePackage(Number(pkg.base_price), Number(pkg.price_per_m2), Number(address.area), pkg.cleaning_count, pkg.months);
+    const quote = await packageQuote(deps.db, {...req.body, area: Number(address.area), customerId: req.user!.id});
+    const total = quote.monthlyPrice;
     const customerPackage = first((await deps.db.query(
-      `INSERT INTO customer_packages (customer_id, package_id, address_id, total_cleanings, available_cleanings, months, status)
-       VALUES ($1,$2,$3,$4,$4,$5,'pending_payment') RETURNING *`,
-      [req.user!.id, pkg.id, address.id, pkg.cleaning_count, pkg.months],
+      `INSERT INTO customer_packages (customer_id, package_id, address_id, total_cleanings, available_cleanings, months, status, purchase_config)
+       VALUES ($1,$2,$3,$4,$4,$5,'pending_payment',$6) RETURNING *`,
+      [req.user!.id, pkg.id, address.id, quote.cleaningCount, pkg.months, quote],
     )).rows);
     const payment = await deps.payments.createPayment({
       customerId: req.user!.id,
       customerPackageId: (customerPackage as { id: string }).id,
       provider: req.body.provider ?? 'kaspi',
+      applyReferralDiscount: false,
       amount: total,
-      useBonus: false,
+      useBonus: req.body.useBonus === true,
+      requestedBonus: Number(req.body.requestedBonus ?? 0),
       invoicePhone: req.body.invoicePhone,
-      payload: { kind: 'package_purchase', mInfo: formatPaymentAddress(address) },
+      payload: { kind: 'package_purchase', mInfo: formatPaymentAddress(address), quote },
     });
     await deps.notifications.createAdminEvent({
       event: 'new_payment',
@@ -1171,18 +1200,21 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/orders', auth(['customer']), asyncHandler(async (req, res) => {
-    const customerPackage = first<{ id: string; package_id: string; address_id: string; available_cleanings: number; status: string }>((await deps.db.query(
+    const customerPackage = first<{ id: string; package_id: string; address_id: string; available_cleanings: number; total_cleanings: number; status: string; purchase_config: any; freeze_until?: string }>((await deps.db.query(
       `SELECT * FROM customer_packages WHERE id=$1 AND customer_id=$2`,
       [req.body.customerPackageId, req.user!.id],
     )).rows);
     if (!customerPackage || customerPackage.status !== 'active') throw new ApiError(402, 'payment_required', 'Сначала подтвердите оплату пакета.');
+    if (customerPackage.freeze_until && String(req.body.date) <= String(customerPackage.freeze_until).slice(0,10)) throw new ApiError(409,'package_frozen','Пакет заморожен на выбранную дату.');
     if (customerPackage.available_cleanings <= 0) throw new ApiError(400, 'no_cleanings_left', 'В пакете не осталось доступных уборок.');
-    const addonIds = Array.isArray(req.body.addonIds) ? req.body.addonIds : [];
+    const prepaid = (customerPackage.purchase_config?.addons ?? []) as any[];
+    const prepaidIds = new Set(prepaid.map(item=>item.id));
+    const addonIds = (Array.isArray(req.body.addonIds) ? req.body.addonIds : []).filter((id: string)=>!prepaidIds.has(id));
     const addons = addonIds.length
       ? (await deps.db.query<{ id: string; price: string; duration_minutes: number }>(`SELECT * FROM catalog_addons WHERE id = ANY($1::uuid[])`, [addonIds])).rows
       : [];
     const addonAmount = addons.reduce((sum: number, row) => sum + Number(row.price), 0);
-    const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons);
+    const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes ?? 0),0);
     const end = addMinutes(String(req.body.startTime), duration);
     const initialStatus = addonAmount > 0 ? 'pending_payment' : 'pending_assignment';
     const row = await deps.db.transaction(async (tx) => {
@@ -1190,7 +1222,7 @@ export function buildV1Router(deps: {
         `UPDATE customer_packages
          SET available_cleanings=available_cleanings-1, updated_at=NOW()
          WHERE id=$1 AND customer_id=$2 AND status='active' AND available_cleanings > 0
-         RETURNING id`,
+         RETURNING id,available_cleanings,total_cleanings`,
         [customerPackage.id, req.user!.id],
       )).rows);
       if (!reserved) throw new ApiError(400, 'no_cleanings_left', 'В пакете не осталось доступных уборок.');
@@ -1205,6 +1237,11 @@ export function buildV1Router(deps: {
           `INSERT INTO order_addons (order_id, addon_id, price, duration_minutes, payment_status) VALUES ($1,$2,$3,$4,'pending')`,
           [created!.id, addon.id, addon.price, addon.duration_minutes ?? 0],
         );
+      }
+      for (const addon of prepaid) {
+        if (addon.pricingType !== 'per_visit' && (reserved as any).available_cleanings !== (reserved as any).total_cleanings - 1) continue;
+        await tx.query(`INSERT INTO order_addons (order_id,addon_id,price,duration_minutes,quantity,payment_status)
+          VALUES ($1,$2,$3,$4,$5,'paid')`, [created!.id,addon.id,Number(addon.price),addon.durationMinutes ?? 0,addon.quantity]);
       }
       return created;
     });
@@ -1239,11 +1276,12 @@ export function buildV1Router(deps: {
       [req.params.id, req.user!.id],
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
+    if (Number(order.payable_amount) <= 0) throw new ApiError(409,'already_paid','Нет услуг к оплате.');
     const result = await deps.payments.createPayment({
       customerId: req.user!.id,
       orderId: order.id,
       provider: req.body.provider ?? 'kaspi',
-      amount: Number(order.payable_amount || order.total_amount),
+      amount: Number(order.payable_amount),
       useBonus: req.body.useBonus === true,
       requestedBonus: Number(req.body.requestedBonus ?? 0),
       maxBonusPercent: Number(req.body.maxBonusPercent ?? 50),
@@ -1375,7 +1413,10 @@ export function buildV1Router(deps: {
       `SELECT o.*, p.name_ru AS package_name_ru, p.name_kk AS package_name_kk,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.area,
               cu.full_name AS customer_name, cu.phone AS customer_phone,
-              cl.full_name AS cleaner_name, cl.phone AS cleaner_phone
+              cl.full_name AS cleaner_name, cl.phone AS cleaner_phone,
+              COALESCE((SELECT json_agg(json_build_object('id',a.id,'key',a.id,'label',a.title_ru,'quantity',oa.quantity,
+                'price',oa.price,'durationMinutes',oa.duration_minutes,'paymentStatus',oa.payment_status))
+                FROM order_addons oa JOIN catalog_addons a ON a.id=oa.addon_id WHERE oa.order_id=o.id),'[]'::json) AS addons
        FROM service_orders o
        LEFT JOIN catalog_packages p ON p.id=o.package_id
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
@@ -3359,16 +3400,18 @@ export function buildV1Router(deps: {
     if (!area || area <= 0) throw new ApiError(400, 'area_required', 'Укажите площадь квартиры.');
     const total = deps.pricing.calculatePackage(Number(pkg.base_price), Number(pkg.price_per_m2), area, pkg.cleaning_count, pkg.months);
     const customerPackage = first<{ id: string }>((await deps.db.query(
-      `INSERT INTO customer_packages (customer_id, package_id, address_id, total_cleanings, available_cleanings, months, status)
-       VALUES ($1,$2,$3,$4,$4,$5,'pending_payment') RETURNING *`,
+      `INSERT INTO customer_packages (customer_id, package_id, address_id, total_cleanings, available_cleanings, months, status, purchase_config)
+       VALUES ($1,$2,$3,$4,$4,$5,'pending_payment',$6) RETURNING *`,
       [req.user!.id, pkg.id, preorder.address_id, pkg.cleaning_count, pkg.months],
     )).rows);
     const payment = await deps.payments.createPayment({
       customerId: req.user!.id,
       customerPackageId: customerPackage!.id,
       provider: req.body.provider ?? 'kaspi',
+      applyReferralDiscount: false,
       amount: total,
-      useBonus: false,
+      useBonus: req.body.useBonus === true,
+      requestedBonus: Number(req.body.requestedBonus ?? 0),
       invoicePhone: req.body.invoicePhone,
       payload: { kind: 'preorder_package_purchase', preorderId: preorder.id, mInfo: formatPaymentAddress(address) },
     });

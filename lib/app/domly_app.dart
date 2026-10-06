@@ -1,3 +1,6 @@
+import 'package:app_links/app_links.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'domly_links.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -85,6 +88,7 @@ class _DomlyAppState extends State<DomlyApp> {
   String? _bootRequestedRoute;
   String? _tutorialHandledForUserId;
   StreamSubscription<Map<String, dynamic>>? _notificationTapSubscription;
+  StreamSubscription<Uri>? _linkSubscription;
 
   AppConfig get config => widget.config;
   AuthController get authController => widget.authController;
@@ -100,6 +104,30 @@ class _DomlyAppState extends State<DomlyApp> {
     _notificationTapSubscription =
         NotificationService.notificationTaps.listen(_handleNotificationTap);
     _scheduleInitialRouteSync();
+    if (!kIsWeb) {
+      final links = AppLinks();
+      _linkSubscription =
+          links.uriLinkStream.listen((uri) => unawaited(_handleAppLink(uri)));
+      unawaited(links.getInitialLink().then((uri) async {
+        if (uri != null) await _handleAppLink(uri);
+      }));
+    }
+  }
+
+  Future<void> _handleAppLink(Uri uri) async {
+    final route = DomlyLinks.route(uri, config.flavor);
+    if (route == null) return;
+    final ref = uri.queryParameters['ref'];
+    if (ref != null && config.flavor == AppFlavor.customer) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('domly_pending_referral', ref);
+    }
+    if (!mounted) return;
+    _bootRequestedRoute = route;
+    _navigatorKey.currentState?.pushNamed(route, arguments: {
+      ...uri.queryParameters,
+      ...Uri.tryParse(uri.fragment)?.queryParameters ?? {}
+    });
   }
 
   @override
@@ -115,6 +143,7 @@ class _DomlyAppState extends State<DomlyApp> {
   @override
   void dispose() {
     _notificationTapSubscription?.cancel();
+    _linkSubscription?.cancel();
     authController.removeListener(_handleAuthStateChanged);
     super.dispose();
   }

@@ -208,6 +208,24 @@ export class AddressSearchService {
     return [...osm, ...yandex].slice(0, limit);
   }
 
+  async reverse(lat: number, lng: number): Promise<AddressSuggestion | null> {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      throw new Error('Invalid coordinates');
+    }
+    const endpoint = new URL(env.osmNominatimUrl);
+    endpoint.pathname = endpoint.pathname.replace(/search\/?$/, 'reverse');
+    endpoint.search = new URLSearchParams({lat: String(lat), lon: String(lng), format: 'jsonv2', 'accept-language': 'ru'}).toString();
+    const response = await fetch(endpoint, {headers: {'User-Agent': 'DOMLY backend address search'}, signal: AbortSignal.timeout(7000)});
+    if (response.ok) {
+      const row = await response.json() as any;
+      if (row.display_name) return {source: 'osm', label: row.display_name, city: row.address?.city ?? row.address?.town ?? row.address?.village ?? null,
+        street: row.address?.road ?? null, house: row.address?.house_number ?? null, residentialComplex: row.address?.residential ?? null,
+        lat: Number(row.lat), lng: Number(row.lon), distanceKm: 0, raw: row};
+    }
+    const rows = await this.searchYandex({query: `${lng},${lat}`, lat, lng, radiusKm: 50, limit: 1});
+    return rows[0] ?? null;
+  }
+
   private async searchOsm(input: {
     query: string;
     city?: string | null;
@@ -225,7 +243,7 @@ export class AddressSearchService {
       countrycodes: 'kz',
     });
     const response = await fetch(`${env.osmNominatimUrl}?${params}`, {
-      headers: { 'User-Agent': 'DOMLY backend address search' },
+      headers: { 'User-Agent': 'DOMLY backend address search' }, signal: AbortSignal.timeout(7000),
     });
     if (!response.ok) return [];
     const rows = await response.json() as any[];
@@ -273,7 +291,7 @@ export class AddressSearchService {
       params.set('ll', `${input.lng},${input.lat}`);
       params.set('spn', '0.45,0.45');
     }
-    const response = await fetch(`https://geocode-maps.yandex.ru/1.x/?${params}`);
+    const response = await fetch(`https://geocode-maps.yandex.ru/1.x/?${params}`, {signal: AbortSignal.timeout(7000)});
     if (!response.ok) return [];
     const data = await response.json() as any;
     const members = data?.response?.GeoObjectCollection?.featureMember ?? [];

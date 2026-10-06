@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FLUTTER_BIN=${FLUTTER_BIN:-/Volumes/PD1000/job/flutter/bin/flutter}
+FLUTTER_BIN=${FLUTTER_BIN:-flutter}
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$PROJECT_DIR/build/web-domly"
 TMP_OUT_DIR="${OUT_DIR}.tmp"
@@ -12,16 +12,15 @@ rm -rf "$TMP_OUT_DIR"
 
 cd "$PROJECT_DIR"
 
-"$FLUTTER_BIN" build web --release \
+"$FLUTTER_BIN" build web --release --base-href /customer/ \
   --target "lib/main_customer.dart" \
+  --no-web-resources-cdn \
   --pwa-strategy=none \
   --no-wasm-dry-run \
   -o "$REL_TMP_OUT_DIR" \
   --dart-define=FIREBASE_API_KEY_WEB=AIzaSyATusQAZ4b14N8aUUPREx7AUU5X0dmbLw4 \
   --dart-define=FIREBASE_APP_ID_WEB=1:288330515337:web:d894db4a58831b07cd9758 \
-  --dart-define=FIREBASE_MESSAGING_SENDER_ID=288330515337 \
-  --dart-define=YANDEX_GEOSUGGEST_API_KEY=43a1d086-4182-4b44-9d4b-58d73fda8ee5 \
-  --dart-define=YANDEX_GEOCODER_API_KEY=b8ee33e5-d419-4968-bd7c-e34b93556027
+  --dart-define=FIREBASE_MESSAGING_SENDER_ID=288330515337
 
 for required in index.html flutter.js flutter_bootstrap.js main.dart.js; do
   if [[ ! -f "$TMP_OUT_DIR/$required" ]]; then
@@ -104,7 +103,7 @@ cache_bust = """  <script>
       }
       function checkDomlyVersion() {
         try {
-          fetch('/version.json?v=' + Date.now(), { cache: 'no-store' })
+          fetch('version.json?v=' + Date.now(), { cache: 'no-store' })
             .then(function (response) { return response.ok ? response.json() : null; })
             .then(function (version) {
               if (!version || !version.build) return;

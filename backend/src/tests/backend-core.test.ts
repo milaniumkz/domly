@@ -33,7 +33,7 @@ test('migration status normalization matches backend canonical statuses', () => 
 });
 
 test('OpenAPI documents every v1 Express route', () => {
-  const source = fs.readFileSync('src/http/routes/v1.ts', 'utf8');
+  const source = ['src/http/routes/v1.ts', 'src/http/routes/mobile.ts'].map(file => fs.readFileSync(file, 'utf8')).join('\n');
   const routePairs = Array.from(source.matchAll(/router\.(get|post|patch|put|delete)\('([^']+)'/g))
     .map((match) => `${match[1].toUpperCase()} ${match[2].replace(/:([A-Za-z0-9_]+)/g, '{$1}')}`);
   const paths = openApiSpec.paths as Record<string, Record<string, unknown>>;

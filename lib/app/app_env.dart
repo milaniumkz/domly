@@ -34,14 +34,6 @@ class AppEnv {
     'MAPS_API_KEY',
     defaultValue: '',
   );
-  static const String yandexGeosuggestApiKey = String.fromEnvironment(
-    'YANDEX_GEOSUGGEST_API_KEY',
-    defaultValue: '',
-  );
-  static const String yandexGeocoderApiKey = String.fromEnvironment(
-    'YANDEX_GEOCODER_API_KEY',
-    defaultValue: '',
-  );
   static const String firebaseAppIdAndroidCustomer = String.fromEnvironment(
     'FIREBASE_APP_ID_ANDROID_CUSTOMER',
     defaultValue: '1:288330515337:android:272dcba306b05783cd9758',
@@ -67,22 +59,6 @@ class AppEnv {
     defaultValue: '',
   );
 
-  static const String wappiToken = String.fromEnvironment(
-    'WAPPI_TOKEN',
-    defaultValue: '',
-  );
-  static const String wappiProfileId = String.fromEnvironment(
-    'WAPPI_PROFILE_ID',
-    defaultValue: '',
-  );
-  static const String wappiBaseUrl = String.fromEnvironment(
-    'WAPPI_BASE_URL',
-    defaultValue: 'https://wappi.pro',
-  );
-  static const String wappiSendPath = String.fromEnvironment(
-    'WAPPI_SEND_PATH',
-    defaultValue: '/api/sync/message/send',
-  );
 
   static const String customerUserId = String.fromEnvironment(
     'CUSTOMER_USER_ID',

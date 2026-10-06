@@ -1,3 +1,4 @@
+import { appLinksRouter } from './appLinks';
 import cors from 'cors';
 import express from 'express';
 import IORedis from 'ioredis';
@@ -46,6 +47,7 @@ const app = express();
 app.disable('x-powered-by');
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+app.use(appLinksRouter());
 
 const wapi = new WapiOtpService();
 const fcm = new FcmService();

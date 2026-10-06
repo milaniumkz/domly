@@ -5,7 +5,6 @@ import 'dart:math' as math;
 import '../utils/backend_compat.dart';
 import 'package:flutter/foundation.dart';
 
-import '../app/app_env.dart';
 import '../app/debug_session.dart';
 import '../app/debug_storage.dart';
 import '../app/launch_config.dart';
@@ -44,7 +43,7 @@ class FirestoreDataService {
       AuthService.temporarySessionUid ??
       AuthService.restoredSessionUid;
   String get _uid =>
-      _uidOrNull ?? (throw StateError('Требуется авторизация Firebase.'));
+      _uidOrNull ?? (throw StateError('Требуется вход в аккаунт.'));
   String get currentUserId => _uid;
   bool get _useDebugFixtures => kIsWeb && DebugSession.enabled;
   bool get _isDebugCustomer =>
@@ -421,6 +420,10 @@ class FirestoreDataService {
     final fullName = (user['full_name'] ?? user['fullName'] ?? '').toString();
     return {
       'id': user['id'],
+      'referralCode': user['referralCode'],
+      'referredByCode': user['referredByCode'],
+      'referralQualifiedCount': user['referralQualifiedCount'],
+      'referralDiscountPercent': user['referralDiscountPercent'],
       'numericId': user['numeric_id'],
       'name': fullName.isEmpty ? 'Пользователь' : fullName,
       'fullName': fullName,
@@ -549,6 +552,7 @@ class FirestoreDataService {
     return {
       'id': item['id'],
       'orderId': item['id'],
+      'addonsDetailed': item['addons'] ?? const [],
       'number': item['numeric_id'],
       'status': item['status'],
       'orderStatus': item['status'],
@@ -941,7 +945,8 @@ class FirestoreDataService {
     if (_isDebugAdmin) {
       return _debugSnapshotStream(_debugAdminReferralStats);
     }
-    return Stream.value(const <Map<String, dynamic>>[]);
+    return _backendPollingStream(
+        () => BackendApiService.instance.getList('/admin/referrals'));
   }
 
   Future<List<Map<String, dynamic>>> getAvailableHouses() async {
@@ -1326,7 +1331,8 @@ class FirestoreDataService {
     if (_useDebugFixtures) {
       return _debugSharedWaitlistStream(houseId: houseId);
     }
-    return Stream.value(const <Map<String, dynamic>>[]);
+    return _backendPollingStream(() =>
+        BackendApiService.instance.getList('/geo/houses/$houseId/waitlist'));
   }
 
   Stream<List<Map<String, dynamic>>> scheduleSlotsByClusterStream(
@@ -1818,7 +1824,7 @@ class FirestoreDataService {
     if (_isDebugAdmin) {
       return _debugSharedCustomerScheduleSlotsStream();
     }
-    return Stream.value(const <Map<String, dynamic>>[]);
+    return adminOrdersStream();
   }
 
   Stream<List<Map<String, dynamic>>> adminAssignmentItemsStream() {
@@ -1867,7 +1873,8 @@ class FirestoreDataService {
     if (_isDebugAdmin) {
       return _debugSnapshotStream(_debugAdminVideoContent);
     }
-    return Stream.value(const <Map<String, dynamic>>[]);
+    return _backendPollingStream(
+        () => BackendApiService.instance.getList('/admin/videos'));
   }
 
   Stream<List<Map<String, dynamic>>> adminInfoContentStream() {
@@ -1973,7 +1980,16 @@ class FirestoreDataService {
     if (_isDebugAdmin) {
       return _debugSnapshotStream(_debugAdminSavedViews);
     }
-    return Stream.value(const <Map<String, dynamic>>[]);
+    return _backendPollingStream(() async {
+      final rows = await BackendApiService.instance.getList('/admin/settings');
+      return rows
+          .where((row) =>
+              (row['key'] ?? '').toString().startsWith('admin_saved_view_') &&
+              row['value'] is Map &&
+              row['value']['deleted'] != true)
+          .map((row) => Map<String, dynamic>.from(row['value'] as Map))
+          .toList();
+    });
   }
 
   Stream<List<Map<String, dynamic>>> areaMismatchReportsStream() {
@@ -2715,9 +2731,8 @@ class FirestoreDataService {
   Future<List<Map<String, dynamic>>> _loadVideosForAudience(
     String audienceType,
   ) async {
-    return audienceType == 'cleaner'
-        ? _debugCleanerVideos()
-        : _debugClientVideos();
+    return BackendApiService.instance.getList('/training/videos',
+        query: {'audience': audienceType}, authenticated: false);
   }
 
   bool _isClientAudience(Map<String, dynamic> item) {
@@ -2800,7 +2815,8 @@ class FirestoreDataService {
   }
 
   Future<Map<String, dynamic>?> _loadVideoById(String videoId) async {
-    return fallbackVideoById(videoId);
+    return BackendApiService.instance
+        .getMap('/training/videos/$videoId', authenticated: false);
   }
 
   List<Map<String, dynamic>> _debugVideosForAudience(String audienceType) {
@@ -2930,10 +2946,12 @@ class FirestoreDataService {
       });
     }
     return _backendPollingStream(() async {
-      final settings = await BackendApiService.instance.getMap(
-        '/runtime/settings',
+      final bootstrap = await BackendApiService.instance.getMap(
+        '/app/bootstrap',
         authenticated: false,
       );
+      final settings =
+          Map<String, dynamic>.from((bootstrap['settings'] as Map?) ?? {});
       return {
         'id': 'default',
         'currency': 'KZT',
@@ -6351,23 +6369,8 @@ class FirestoreDataService {
       _notifyDebugStateChanged();
       return;
     }
-    await BackendApiService.instance.postMap(
-      '/admin/content-pages',
-      body: {
-        'slug': 'video_$videoId',
-        'titleRu':
-            (videoData['title'] ?? videoData['titleRu'] ?? 'Видео').toString(),
-        'titleKk': videoData['titleKk'],
-        'bodyRu': (videoData['description'] ??
-                videoData['descriptionRu'] ??
-                videoData['url'] ??
-                '')
-            .toString(),
-        'bodyKk': videoData['descriptionKk'],
-        'kind': 'video',
-        'active': videoData['isActive'] != false,
-      },
-    );
+    await BackendApiService.instance
+        .postMap('/admin/videos', body: {...videoData, 'id': videoId});
   }
 
   Future<void> saveAdminInfoContent(Map<String, dynamic> infoData) async {
@@ -6575,7 +6578,7 @@ class FirestoreDataService {
 
     try {
       final config = await BackendApiService.instance.getMap(
-        '/runtime/config',
+        '/app/runtime-config',
         authenticated: false,
       );
       scanValue(config);
@@ -8900,6 +8903,9 @@ class FirestoreDataService {
           '/packages/purchase',
           body: {
             'packageId': normalizedPackageId,
+            'addonsDetailed': addonsDetailed,
+            'useBonus': bonusToSpend > 0,
+            'requestedBonus': bonusToSpend,
             if (addressId != null && addressId.isNotEmpty)
               'addressId': addressId,
             'provider': 'manual',
@@ -8941,78 +8947,26 @@ class FirestoreDataService {
   }
 
   Future<void> freezeSubscription({required int days}) async {
-    if (_isTemporaryCustomerSession) {
-      await updateCustomerProfile({
-        'subscriptionFrozenUntil':
-            DateTime.now().add(Duration(days: days)).toIso8601String(),
-      });
-      return;
-    }
-    await updateCustomerProfile({
-      'subscriptionFrozenUntil':
-          DateTime.now().add(Duration(days: days)).toIso8601String(),
-    });
+    if (days <= 0) throw FlutterError('Укажите срок заморозки.');
+    final packages = await BackendApiService.instance.getList('/packages/my');
+    final active =
+        packages.where((item) => item['status'] == 'active').toList();
+    if (active.isEmpty) throw FlutterError('Активный пакет не найден.');
+    await BackendApiService.instance.postMap(
+        '/packages/my/${active.first['id']}/freeze',
+        body: {'days': days});
   }
 
   Future<void> saveReferralCode({required String code}) async {
     if (code.trim().isEmpty) {
       return;
     }
-    await updateCustomerProfile({'referredByCode': code.trim().toUpperCase()});
+    await BackendApiService.instance
+        .postMap('/referrals', body: {'code': code.trim().toUpperCase()});
   }
 
-  Future<Map<String, dynamic>> ensureReferralLink() async {
-    if (_isDebugCustomer) {
-      return {
-        'ok': true,
-        'referralCode': 'ASET2026',
-        'referralLink':
-            'https://${AppEnv.firebaseProjectId}.web.app/?ref=ASET2026',
-      };
-    }
-    if (_isTemporaryCustomerSession) {
-      final profile = _temporaryCustomerProfile();
-      var referralCode =
-          (profile['referralCode'] ?? '').toString().trim().toUpperCase();
-      if (referralCode.isEmpty) {
-        final uid = (AuthService.temporarySessionUid ?? '').trim();
-        final suffix = uid.isEmpty
-            ? DateTime.now().millisecondsSinceEpoch.toString()
-            : uid.replaceFirst('temp_customer_', '');
-        final normalizedDigits = suffix.replaceAll(RegExp(r'[^0-9]'), '');
-        final safeSuffix = normalizedDigits.isEmpty
-            ? suffix.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase()
-            : normalizedDigits;
-        referralCode =
-            'DOMLY-${safeSuffix.substring(0, math.min(6, safeSuffix.length))}';
-        await updateCustomerProfile({'referralCode': referralCode});
-      }
-      return {
-        'ok': true,
-        'referralCode': referralCode,
-        'referralLink':
-            'https://${AppEnv.firebaseProjectId}.web.app/?ref=$referralCode',
-      };
-    }
-    final profile = await BackendApiService.instance.me();
-    var referralCode =
-        (profile['referralCode'] ?? profile['referral_code'] ?? '')
-            .toString()
-            .trim()
-            .toUpperCase();
-    if (referralCode.isEmpty) {
-      final numericId = (profile['numericId'] ?? profile['numeric_id'] ?? '')
-          .toString()
-          .replaceAll(RegExp(r'[^0-9]'), '');
-      referralCode =
-          'DOMLY-${numericId.isEmpty ? (_uidOrNull ?? 'USER') : numericId}';
-    }
-    return {
-      'ok': true,
-      'referralCode': referralCode,
-      'referralLink': 'https://domly.kz/?ref=$referralCode',
-    };
-  }
+  Future<Map<String, dynamic>> ensureReferralLink() =>
+      BackendApiService.instance.getMap('/referrals');
 
   DateTime _toDateTime(Object? value) {
     if (value is Timestamp) {
@@ -9025,109 +8979,15 @@ class FirestoreDataService {
   }
 
   Future<void> applyReferralCodeIfMissing(String code) async {
-    final normalized = code.trim().toUpperCase();
-    if (normalized.isEmpty) {
-      return;
-    }
-    if (_isDebugCustomer) {
-      final profile = await _debugSharedCustomerProfileStream().first ??
-          _debugCustomerProfile();
-      final existing =
-          (profile['referredByCode'] ?? '').toString().trim().toUpperCase();
-      if (existing.isNotEmpty) {
-        return;
-      }
-      final ownCode =
-          (profile['referralCode'] ?? '').toString().trim().toUpperCase();
-      if (ownCode == normalized) {
-        return;
-      }
-      await updateCustomerProfile({'referredByCode': normalized});
-      return;
-    }
-    if (_isTemporaryCustomerSession) {
-      final profile = _temporaryCustomerProfile();
-      final existing =
-          (profile['referredByCode'] ?? '').toString().trim().toUpperCase();
-      if (existing.isNotEmpty) {
-        return;
-      }
-      final ownCode =
-          (profile['referralCode'] ?? '').toString().trim().toUpperCase();
-      if (ownCode == normalized) {
-        return;
-      }
-      await updateCustomerProfile({'referredByCode': normalized});
-      return;
-    }
-    final profile = await BackendApiService.instance.me();
-    final existing =
-        (profile['referredByCode'] ?? profile['referred_by_code'] ?? '')
-            .toString()
-            .trim()
-            .toUpperCase();
-    if (existing.isNotEmpty) {
-      return;
-    }
-    final ownCode = (profile['referralCode'] ?? profile['referral_code'] ?? '')
-        .toString()
-        .trim()
-        .toUpperCase();
-    if (ownCode == normalized) {
-      return;
-    }
-    await updateCustomerProfile({'referredByCode': normalized});
+    if (code.trim().isEmpty) return;
+    final current = await BackendApiService.instance.getMap('/referrals');
+    if ((current['referredByCode'] ?? '').toString().isNotEmpty) return;
+    await BackendApiService.instance
+        .postMap('/referrals', body: {'code': code.trim()});
   }
 
-  Future<Map<String, dynamic>> getUserProgress({String? userId}) async {
-    if (_isTemporaryCustomerSession) {
-      final profile = _temporaryCustomerProfile();
-      final qualified =
-          (profile['referralQualifiedCount'] as num?)?.toInt() ?? 0;
-      return {
-        'ok': true,
-        'userId': userId ?? _uidOrNull,
-        'referralQualifiedCount': qualified,
-        'bonusPoints': (profile['bonusPoints'] as num?)?.toInt() ?? 0,
-        'monthlyActivated': (profile['monthlyActivated'] as num?)?.toInt() ?? 0,
-      };
-    }
-    final profile = await BackendApiService.instance.me();
-    return {
-      'ok': true,
-      'userId': userId ?? _uidOrNull,
-      'referralQualifiedCount': _num(
-        profile['referralQualifiedCount'] ??
-            profile['referral_qualified_count'],
-      ).round(),
-      'bonusPoints': _num(
-        profile['bonusPoints'] ?? profile['bonus_balance'],
-      ).round(),
-      'monthlyActivated': _num(
-        profile['monthlyActivated'] ?? profile['monthly_activated'],
-      ).round(),
-    };
-  }
-
-  Future<Map<String, dynamic>> getReferralStats({String? userId}) async {
-    if (_isTemporaryCustomerSession) {
-      return _temporaryCustomerReferralStats();
-    }
-    final profile = await BackendApiService.instance.me();
-    return {
-      'ok': true,
-      'userId': userId ?? _uidOrNull,
-      'referralCode': profile['referralCode'] ?? profile['referral_code'],
-      'referralQualifiedCount': _num(
-        profile['referralQualifiedCount'] ??
-            profile['referral_qualified_count'],
-      ).round(),
-      'bonusPoints': _num(
-        profile['bonusPoints'] ?? profile['bonus_balance'],
-      ).round(),
-      'invitedCount': _num(profile['invitedCount'] ?? 0).round(),
-    };
-  }
+  Future<Map<String, dynamic>> getReferralStats({String? userId}) =>
+      BackendApiService.instance.getMap('/referrals');
 
   Future<Map<String, dynamic>> verifyApartmentArea({
     String? userId,
@@ -11153,14 +11013,20 @@ class FirestoreDataService {
       _notifyDebugStateChanged();
       return {'ok': true, 'slotId': slotId};
     }
-    final result = await BackendApiService.instance.postMap(
-      '/orders/$slotId/reschedule',
-      body: {
+    Map<String, dynamic> result = {};
+    if (date != null || time != null) {
+      result = await BackendApiService.instance
+          .postMap('/orders/$slotId/reschedule', body: {
         if (date != null) 'date': _dateOnlyText(date),
-        if (time != null) 'time': time,
-      },
-    );
-    return {'ok': true, 'slotId': slotId, 'order': result};
+        if (time != null) 'time': time.split(' - ').first,
+      });
+    }
+    if (addonsDetailed != null) {
+      result = await BackendApiService.instance.postMap(
+          '/orders/$slotId/addons',
+          body: {'addonsDetailed': addonsDetailed});
+    }
+    return {...result, 'ok': true, 'slotId': slotId};
   }
 
   Future<Map<String, dynamic>> submitKaspiInvoiceRequest({
@@ -12660,130 +12526,9 @@ class FirestoreDataService {
   }
 
   Future<Map<String, dynamic>?> getHouseStats({required String houseId}) async {
-    if (houseId.trim().isEmpty) {
-      return null;
-    }
-    if (_isTemporaryCustomerSession) {
-      final waitlist = _temporaryHouseWaitlist()
-          .where((item) => (item['houseId'] ?? '').toString() == houseId)
-          .toList();
-      const threshold = 20;
-      final current = waitlist.length;
-      final activeCount = waitlist
-          .where(
-            (item) =>
-                ((item['source'] ?? 'app').toString() != 'invite_neighbors'),
-          )
-          .length;
-      final progress = (current / threshold).clamp(0, 1).toDouble();
-      final remaining = math.max(threshold - current, 0);
-      final status = current >= threshold
-          ? 'ACTIVE'
-          : current > 0
-              ? 'IN_PROGRESS'
-              : 'INACTIVE';
-      return {
-        'house': {
-          'id': houseId,
-          'address': houseId,
-          'status': status,
-          'threshold': threshold,
-          'current_users': current,
-          'total_users': current,
-        },
-        'progress': progress,
-        'remaining': remaining,
-        'activationText': status == 'ACTIVE'
-            ? 'Дом уже активирован. Можно оформлять заказы.'
-            : remaining > 0
-                ? 'До старта сервиса нужно еще $remaining заявок.'
-                : 'Порог достигнут. Дом готов к активации.',
-        'popularPackage': current >= 10 ? '4 раза в месяц' : 'Комфорт',
-        'packageBreakdown': {
-          '4 раза в месяц': math.max(activeCount ~/ 2, 1),
-          '2 раза в месяц': math.max(current - activeCount, 1),
-          'Разовый пакет': math.max(remaining ~/ 2, 0),
-        },
-      };
-    }
-    if (_useDebugFixtures) {
-      final housesSnap = await _db.collection('debug_bridge_houses').get();
-      final house = _mergeDebugHouses(
-        housesSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
-      ).firstWhere(
-        (item) => (item['id'] ?? '').toString() == houseId,
-        orElse: () => {
-          'id': houseId,
-          'address': 'Дом',
-          'status': 'INACTIVE',
-          'threshold': 20,
-          'current_users': 0,
-        },
-      );
-      final waitlistSnap =
-          await _db.collection('debug_bridge_house_waitlist').get();
-      final waitlist = _mergeDebugWaitlist(
-        waitlistSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
-      ).where((item) => (item['houseId'] ?? '').toString() == houseId).toList();
-      final threshold = (house['threshold'] as num?)?.toInt() ?? 20;
-      final current = math.max(
-        (house['current_users'] as num?)?.toInt() ?? 0,
-        waitlist.length,
-      );
-      final activeCount = waitlist
-          .where(
-            (item) =>
-                ((item['source'] ?? 'app').toString() != 'invite_neighbors'),
-          )
-          .length;
-      final progress =
-          threshold <= 0 ? 1.0 : (current / threshold).clamp(0, 1).toDouble();
-      final remaining = math.max(threshold - current, 0);
-      final status = (house['status'] ?? 'INACTIVE').toString().toUpperCase();
-      return {
-        'house': {
-          ...house,
-          'current_users': current,
-          'total_users': current,
-          'status': status,
-        },
-        'progress': progress,
-        'remaining': remaining,
-        'activationText': status == 'ACTIVE'
-            ? 'Дом уже активирован. Можно оформлять заказы.'
-            : remaining > 0
-                ? 'До старта сервиса нужно еще $remaining заявок.'
-                : 'Порог достигнут. Дом готов к активации.',
-        'popularPackage': current >= 10 ? '4 раза в месяц' : 'Комфорт',
-        'packageBreakdown': {
-          '4 раза в месяц': math.max(activeCount ~/ 2, 1),
-          '2 раза в месяц': math.max(current - activeCount, 1),
-          'Разовый пакет': math.max(remaining ~/ 2, 0),
-        },
-      };
-    }
-    if (_isDebugCustomer) {
-      return {
-        'house': {
-          'id': houseId,
-          'address': 'ЖК Триумф',
-          'status': 'IN_PROGRESS',
-          'threshold': 20,
-          'current_users': 8,
-          'total_users': 8,
-        },
-        'progress': 0.4,
-        'remaining': 12,
-        'activationText': 'До старта сервиса нужно еще 12 заявок.',
-        'popularPackage': 'Комфорт',
-        'packageBreakdown': {
-          'Комфорт': 4,
-          'Поддерживающая': 2,
-          'Генеральная': 2,
-        },
-      };
-    }
-    return null;
+    if (houseId.trim().isEmpty) return null;
+    return BackendApiService.instance
+        .getMap('/geo/houses/$houseId/stats', authenticated: false);
   }
 
   Future<Map<String, dynamic>> joinWaitlist({
@@ -12828,7 +12573,8 @@ class FirestoreDataService {
       await _syncDebugHouseProgress(houseId);
       return {'ok': true, 'houseId': houseId, 'joined': true};
     }
-    return {'ok': true, 'houseId': houseId, 'joined': true, 'backend': true};
+    return BackendApiService.instance
+        .postMap('/geo/houses/$houseId/waitlist', body: {'source': source});
   }
 
   Future<Map<String, dynamic>> inviteNeighbors({
@@ -12882,12 +12628,7 @@ class FirestoreDataService {
         'inviteLink': 'https://domly.kz/invite/$houseId',
       };
     }
-    return {
-      'ok': true,
-      'houseId': houseId,
-      'inviteLink': 'https://domly.kz/invite/$houseId',
-      'backend': true,
-    };
+    return BackendApiService.instance.postMap('/geo/houses/$houseId/invite');
   }
 
   Future<Map<String, dynamic>> requestServiceAddress({
@@ -13912,7 +13653,8 @@ class FirestoreDataService {
     if (value is DateTime) {
       return value.millisecondsSinceEpoch;
     }
-    return 0;
+    return DateTime.tryParse(value?.toString() ?? '')?.millisecondsSinceEpoch ??
+        0;
   }
 
   bool _looksLikeUuid(String value) {

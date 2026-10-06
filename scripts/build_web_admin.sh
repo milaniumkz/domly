@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FLUTTER_BIN=${FLUTTER_BIN:-/Volumes/PD1000/job/flutter/bin/flutter}
+FLUTTER_BIN=${FLUTTER_BIN:-flutter}
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$PROJECT_DIR/build/web-admin"
 TMP_OUT_DIR="${OUT_DIR}.tmp"
@@ -12,7 +12,7 @@ rm -rf "$TMP_OUT_DIR"
 
 cd "$PROJECT_DIR"
 
-"$FLUTTER_BIN" build web --release \
+"$FLUTTER_BIN" build web --release --base-href /admin/ \
   --target "lib/main_admin_web.dart" \
   --no-wasm-dry-run \
   -o "$REL_TMP_OUT_DIR" \

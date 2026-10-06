@@ -271,14 +271,13 @@ class _OrdersScreenState extends State<OrdersScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _addonGroupsSubscription = AppConfigService.instance
-        .addonGroupConfigsStream()
-        .listen((groups) {
-          if (!mounted) return;
-          setState(() {
-            _addonGroups = _mapAddonGroupConfigs(groups);
-          });
-        });
+    _addonGroupsSubscription =
+        AppConfigService.instance.addonGroupConfigsStream().listen((groups) {
+      if (!mounted) return;
+      setState(() {
+        _addonGroups = _mapAddonGroupConfigs(groups);
+      });
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _applyDebugRescheduleIfNeeded();
     });
@@ -318,7 +317,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   _addonUnitPrices[key] = price;
                   _addonSeparatePayment[key] =
                       item['separatePayment'] == true ||
-                      item['separate'] == true;
+                          item['separate'] == true;
                 }
                 return _OrderAddonItemDef(
                   key: key,
@@ -327,8 +326,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   note: (item['note'] ?? '').toString().trim().isEmpty
                       ? null
                       : (item['note'] ?? '').toString(),
-                  shortInfo:
-                      (item['shortInfo'] ??
+                  shortInfo: (item['shortInfo'] ??
                               item['description'] ??
                               item['note'] ??
                               item['hint'] ??
@@ -342,24 +340,23 @@ class _OrdersScreenState extends State<OrdersScreen>
                           .isEmpty
                       ? null
                       : (item['shortInfo'] ??
-                                item['description'] ??
-                                item['note'] ??
-                                item['hint'] ??
-                                item['prompt'])
-                            .toString(),
-                  fullInfo:
-                      (item['fullInfo'] ?? item['longDescription'] ?? '')
+                              item['description'] ??
+                              item['note'] ??
+                              item['hint'] ??
+                              item['prompt'])
+                          .toString(),
+                  fullInfo: (item['fullInfo'] ?? item['longDescription'] ?? '')
                           .toString()
                           .trim()
                           .isEmpty
                       ? null
                       : (item['fullInfo'] ?? item['longDescription'])
-                            .toString(),
+                          .toString(),
                   features: item['features'] is List
                       ? (item['features'] as List)
-                            .map((value) => value.toString())
-                            .where((value) => value.trim().isNotEmpty)
-                            .toList()
+                          .map((value) => value.toString())
+                          .where((value) => value.trim().isNotEmpty)
+                          .toList()
                       : const <String>[],
                   durationMinutes:
                       (item['durationMinutes'] as num?)?.toInt() ?? 15,
@@ -399,9 +396,8 @@ class _OrdersScreenState extends State<OrdersScreen>
       _pendingEditSlotId = editSlotId;
       _tabController.index = 0;
     }
-    final focusOrderId = (args['focusOrderId'] ?? args['orderId'])
-        ?.toString()
-        .trim();
+    final focusOrderId =
+        (args['focusOrderId'] ?? args['orderId'])?.toString().trim();
     if (focusOrderId != null && focusOrderId.isNotEmpty) {
       _pendingFocusOrderId = focusOrderId;
       _tabController.index = 0;
@@ -457,7 +453,8 @@ class _OrdersScreenState extends State<OrdersScreen>
           return status != 'completed' &&
               status != 'canceled' &&
               status != 'cancelled';
-        }).toList()..sort((a, b) => _slotDate(a).compareTo(_slotDate(b)));
+        }).toList()
+          ..sort((a, b) => _slotDate(a).compareTo(_slotDate(b)));
         _openPendingEditIfNeeded(active);
 
         return StreamBuilder<List<Map<String, dynamic>>>(
@@ -467,11 +464,10 @@ class _OrdersScreenState extends State<OrdersScreen>
             final allOrders = ordersSnap.data ?? <Map<String, dynamic>>[];
             final scheduledOrderIds = slots
                 .map(
-                  (slot) =>
-                      (slot['sourceOrderId'] ??
-                              slot['customerOrderId'] ??
-                              slot['orderId'])
-                          .toString(),
+                  (slot) => (slot['sourceOrderId'] ??
+                          slot['customerOrderId'] ??
+                          slot['orderId'])
+                      .toString(),
                 )
                 .where((id) => id.isNotEmpty)
                 .toSet();
@@ -481,22 +477,22 @@ class _OrdersScreenState extends State<OrdersScreen>
                 .toSet();
             final loadingSlots =
                 slotsSnap.connectionState == ConnectionState.waiting &&
-                !slotsSnap.hasData &&
-                !slotsSnap.hasError;
+                    !slotsSnap.hasData &&
+                    !slotsSnap.hasError;
             final loadingOrders =
                 ordersSnap.connectionState == ConnectionState.waiting &&
-                !ordersSnap.hasData &&
-                !ordersSnap.hasError;
+                    !ordersSnap.hasData &&
+                    !ordersSnap.hasError;
             final pendingOrders = allOrders.where((order) {
               final status = (order['status'] ?? '').toString().toLowerCase();
-              final orderId = (order['id'] ?? order['orderId'] ?? '')
-                  .toString();
+              final orderId =
+                  (order['id'] ?? order['orderId'] ?? '').toString();
               if (orderId.isNotEmpty &&
                   _locallyCancelledOrderIds.contains(orderId)) {
                 return false;
               }
-              final orderSubscriptionId = (order['subscriptionId'] ?? '')
-                  .toString();
+              final orderSubscriptionId =
+                  (order['subscriptionId'] ?? '').toString();
               return status != 'completed' &&
                   status != 'canceled' &&
                   status != 'cancelled' &&
@@ -504,7 +500,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                   !scheduledOrderIds.contains(orderId) &&
                   (orderSubscriptionId.isEmpty ||
                       !scheduledSubscriptionIds.contains(orderSubscriptionId));
-            }).toList()..sort((a, b) => _orderDate(a).compareTo(_orderDate(b)));
+            }).toList()
+              ..sort((a, b) => _orderDate(a).compareTo(_orderDate(b)));
             final visiblePendingOrders = _hidePaidPackageOrdersAwaitingSchedule(
               pendingOrders,
             );
@@ -583,16 +580,14 @@ class _OrdersScreenState extends State<OrdersScreen>
                                       slots: active,
                                       pendingOrders: visiblePendingOrders,
                                       loading: loadingSlots || loadingOrders,
-                                      hasError:
-                                          slotsSnap.hasError ||
+                                      hasError: slotsSnap.hasError ||
                                           ordersSnap.hasError,
                                     ),
                                   ] else
                                     _buildFigmaHistoryContent(
                                       orders: history,
                                       loading: loadingSlots || loadingOrders,
-                                      hasError:
-                                          slotsSnap.hasError ||
+                                      hasError: slotsSnap.hasError ||
                                           ordersSnap.hasError,
                                     ),
                                 ],
@@ -674,15 +669,15 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   Set<String> _orderIdentityValues(Map<String, dynamic> item) {
     return {
-          item['id'],
-          item['slotId'],
-          item['scheduleSlotId'],
-          item['chatId'],
-          item['sourceOrderId'],
-          item['customerOrderId'],
-          item['orderId'],
-          item['paymentId'],
-        }
+      item['id'],
+      item['slotId'],
+      item['scheduleSlotId'],
+      item['chatId'],
+      item['sourceOrderId'],
+      item['customerOrderId'],
+      item['orderId'],
+      item['paymentId'],
+    }
         .map((value) => (value ?? '').toString().trim())
         .where((value) => value.isNotEmpty)
         .toSet();
@@ -890,10 +885,10 @@ class _OrdersScreenState extends State<OrdersScreen>
     String? kaspiPhone;
     var selectedBonusToSpend =
         paymentSelection.method == DomlyPaymentMethod.bonus
-        ? amount
-        : paymentSelection.useBonus
-        ? bonusBalance.clamp(0, bonusLimit).clamp(0, amount).toInt()
-        : 0;
+            ? amount
+            : paymentSelection.useBonus
+                ? bonusBalance.clamp(0, bonusLimit).clamp(0, amount).toInt()
+                : 0;
     if (paymentSelection.method == DomlyPaymentMethod.kaspi) {
       final paymentRequest = await showKaspiInvoiceRequestOptionsDialog(
         context,
@@ -1028,32 +1023,25 @@ class _OrdersScreenState extends State<OrdersScreen>
     required List<Map<String, dynamic>> orders,
     required List<Map<String, dynamic>> slots,
   }) {
-    final completedSlots = slots
-        .where((slot) {
-          final status = (slot['status'] ?? '').toString().toLowerCase();
-          final orderStatus = (slot['orderStatus'] ?? '')
-              .toString()
-              .toLowerCase();
-          return status == 'completed' || orderStatus == 'completed';
-        })
-        .map((slot) {
-          final slotId = _cleanString(slot['id'] ?? slot['slotId']);
-          final sourceOrderId = _cleanString(
-            slot['sourceOrderId'] ?? slot['customerOrderId'] ?? slot['orderId'],
-          );
-          return {
-            ...slot,
-            'id': sourceOrderId.isNotEmpty ? sourceOrderId : slotId,
-            'slotId': slotId,
-            'status': 'completed',
-            'date':
-                slot['scheduledFor'] ??
-                slot['date'] ??
-                slot['scheduledDateKey'],
-            'cleanerName': _slotCleanerDisplayName(slot),
-          };
-        })
-        .toList();
+    final completedSlots = slots.where((slot) {
+      final status = (slot['status'] ?? '').toString().toLowerCase();
+      final orderStatus = (slot['orderStatus'] ?? '').toString().toLowerCase();
+      return status == 'completed' || orderStatus == 'completed';
+    }).map((slot) {
+      final slotId = _cleanString(slot['id'] ?? slot['slotId']);
+      final sourceOrderId = _cleanString(
+        slot['sourceOrderId'] ?? slot['customerOrderId'] ?? slot['orderId'],
+      );
+      return {
+        ...slot,
+        'id': sourceOrderId.isNotEmpty ? sourceOrderId : slotId,
+        'slotId': slotId,
+        'status': 'completed',
+        'date':
+            slot['scheduledFor'] ?? slot['date'] ?? slot['scheduledDateKey'],
+        'cleanerName': _slotCleanerDisplayName(slot),
+      };
+    }).toList();
 
     final scheduledOrderIds = completedSlots
         .map((slot) => _cleanString(slot['id']))
@@ -1245,14 +1233,13 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   Future<void> _showFigmaSlotActions(Map<String, dynamic> slot) async {
     final status = (slot['status'] ?? '').toString();
-    final orderId =
-        (slot['chatId'] ??
-                slot['scheduleSlotId'] ??
-                slot['slotId'] ??
-                slot['id'] ??
-                slot['sourceOrderId'] ??
-                slot['orderId'])
-            .toString();
+    final orderId = (slot['chatId'] ??
+            slot['scheduleSlotId'] ??
+            slot['slotId'] ??
+            slot['id'] ??
+            slot['sourceOrderId'] ??
+            slot['orderId'])
+        .toString();
     final phone = (slot['cleanerPhone'] ?? '').toString();
     final cleanerId = (slot['cleanerId'] ?? '').toString().trim();
     final canOpenChat = orderId.isNotEmpty && cleanerId.isNotEmpty;
@@ -1401,25 +1388,22 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   List<Map<String, dynamic>> _hidePaidPackageOrdersAwaitingSchedule(
     List<Map<String, dynamic>> orders,
-  ) => orders.where((order) => !_isPaidPackageAwaitingSchedule(order)).toList();
+  ) =>
+      orders.where((order) => !_isPaidPackageAwaitingSchedule(order)).toList();
 
   bool _isPaidPackageAwaitingSchedule(Map<String, dynamic> order) {
-    final paymentStatus = (order['paymentStatus'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
+    final paymentStatus =
+        (order['paymentStatus'] ?? '').toString().trim().toLowerCase();
     final orderStatus = ((order['orderStatus'] ?? order['status']) ?? '')
         .toString()
         .trim()
         .toLowerCase();
     final status = (order['status'] ?? '').toString().trim().toLowerCase();
-    final isPaid =
-        paymentStatus == 'paid' ||
+    final isPaid = paymentStatus == 'paid' ||
         order['paidAt'] != null ||
         order['subscriptionStatus'] == 'active' ||
         (order['subscriptionId'] ?? '').toString().trim().isNotEmpty;
-    final awaitsSchedule =
-        orderStatus == 'pending_assignment' ||
+    final awaitsSchedule = orderStatus == 'pending_assignment' ||
         status == 'pending_assignment' ||
         status == 'pending';
     return isPaid && awaitsSchedule;
@@ -1462,14 +1446,13 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   String _pendingOrderTitle(Map<String, dynamic> order) {
-    final packageName =
-        (order['packageName'] ??
-                order['package'] ??
-                order['planName'] ??
-                order['frequencyLabel'] ??
-                '')
-            .toString()
-            .trim();
+    final packageName = (order['packageName'] ??
+            order['package'] ??
+            order['planName'] ??
+            order['frequencyLabel'] ??
+            '')
+        .toString()
+        .trim();
     if (packageName.isNotEmpty) {
       return packageName;
     }
@@ -1489,9 +1472,8 @@ class _OrdersScreenState extends State<OrdersScreen>
         if (label.isEmpty || _isStandardCleaningTask(label)) {
           continue;
         }
-        final quantity = ((item['quantity'] as num?)?.toInt() ?? 1)
-            .clamp(1, 999)
-            .toInt();
+        final quantity =
+            ((item['quantity'] as num?)?.toInt() ?? 1).clamp(1, 999).toInt();
         final price = (item['price'] as num?)?.toInt() ?? 0;
         final total = price * quantity;
         final qtyText = quantity > 1 ? ' × $quantity' : '';
@@ -1586,9 +1568,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           ),
           if (addonLines.isNotEmpty) ...[
             const SizedBox(height: 6),
-            ...addonLines
-                .take(4)
-                .map(
+            ...addonLines.take(4).map(
                   (line) => Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
@@ -1621,10 +1601,8 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Widget _buildFigmaPendingOrderCard(Map<String, dynamic> order) {
-    final paymentStatus = (order['paymentStatus'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
+    final paymentStatus =
+        (order['paymentStatus'] ?? '').toString().trim().toLowerCase();
     final orderStatus = ((order['orderStatus'] ?? order['status']) ?? '')
         .toString()
         .trim()
@@ -1639,21 +1617,20 @@ class _OrdersScreenState extends State<OrdersScreen>
     final canCancelPendingOrder = paymentStatus != 'paid';
     final orderId = (order['id'] ?? order['orderId'] ?? '').toString().trim();
     final subscriptionId = (order['subscriptionId'] ?? '').toString().trim();
-    final schedulingSubscriptionId = subscriptionId.isNotEmpty
-        ? subscriptionId
-        : orderId;
+    final schedulingSubscriptionId =
+        subscriptionId.isNotEmpty ? subscriptionId : orderId;
     final title = isPaidAwaitingAssignment
         ? 'Выберите\nвремя'
         : isInvoiceRequested
-        ? 'Ожидает\nоплаты'
-        : 'Ожидает\nподтверждения';
+            ? 'Ожидает\nоплаты'
+            : 'Ожидает\nподтверждения';
     final subtitle = isPaidAwaitingAssignment
         ? isCombinedPaidPackages && combinedPackageCount > 1
-              ? 'Оплата подтверждена. Все купленные пакеты объединены здесь. Выберите даты и время уборок.'
-              : 'Оплата подтверждена. Выберите удобную дату и время уборки.'
+            ? 'Оплата подтверждена. Все купленные пакеты объединены здесь. Выберите даты и время уборок.'
+            : 'Оплата подтверждена. Выберите удобную дату и время уборки.'
         : isInvoiceRequested
-        ? 'Счет уже выставлен. Вы можете оплатить его позже или отменить заказ.'
-        : 'Заявка отправлена. Вы можете отменить заказ или оформить еще один.';
+            ? 'Счет уже выставлен. Вы можете оплатить его позже или отменить заказ.'
+            : 'Заявка отправлена. Вы можете отменить заказ или оформить еще один.';
     return Container(
       padding: const EdgeInsets.fromLTRB(26, 18, 18, 18),
       decoration: BoxDecoration(
@@ -1764,12 +1741,11 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Widget _buildFigmaHistoryOrderCard(Map<String, dynamic> order) {
-    final cleaner =
-        (order['cleanerName'] ??
-                order['cleaner'] ??
-                order['executorName'] ??
-                'Исполнитель')
-            .toString();
+    final cleaner = (order['cleanerName'] ??
+            order['cleaner'] ??
+            order['executorName'] ??
+            'Исполнитель')
+        .toString();
     final price = order['price'] ?? order['amount'] ?? order['total'] ?? 0;
     return InkWell(
       borderRadius: BorderRadius.circular(24),
@@ -1939,11 +1915,10 @@ class _OrdersScreenState extends State<OrdersScreen>
               borderRadius: BorderRadius.circular(24),
             ),
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: AppConfigService.instance
-                  .cleanerChecklistTemplatesStream(),
+              stream:
+                  AppConfigService.instance.cleanerChecklistTemplatesStream(),
               builder: (context, templatesSnapshot) {
-                final templates =
-                    templatesSnapshot.data ??
+                final templates = templatesSnapshot.data ??
                     AppConfigService.defaultCleanerChecklistTemplates;
                 return StreamBuilder<Map<String, dynamic>?>(
                   stream: FirestoreDataService.instance
@@ -2309,12 +2284,9 @@ class _OrdersScreenState extends State<OrdersScreen>
   String _slotCleanerDisplayName(Map<String, dynamic> slot) {
     final status = (slot['status'] ?? '').toString().trim().toLowerCase();
     final cleanerName = (slot['cleanerName'] ?? '').toString().trim();
-    final assignmentStatus = (slot['assignmentStatus'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
-    final isConfirmed =
-        status == 'assigned' ||
+    final assignmentStatus =
+        (slot['assignmentStatus'] ?? '').toString().trim().toLowerCase();
+    final isConfirmed = status == 'assigned' ||
         status == 'confirmed' ||
         status == 'in_progress' ||
         status == 'completed' ||
@@ -2326,8 +2298,8 @@ class _OrdersScreenState extends State<OrdersScreen>
     }
     final hasActiveOffer =
         (slot['currentOfferId'] ?? '').toString().trim().isNotEmpty ||
-        assignmentStatus == 'offer_pending' ||
-        assignmentStatus == 'scheduled_pending_confirmation';
+            assignmentStatus == 'offer_pending' ||
+            assignmentStatus == 'scheduled_pending_confirmation';
     return hasActiveOffer ? 'Ждем ответ уборщицы' : 'Ищем уборщицу';
   }
 
@@ -2371,15 +2343,14 @@ class _OrdersScreenState extends State<OrdersScreen>
     if (!mounted || approved != true) {
       return;
     }
-    final orderId =
-        (slot['scheduleSlotId'] ??
-                slot['slotId'] ??
-                slot['id'] ??
-                slot['sourceOrderId'] ??
-                slot['customerOrderId'] ??
-                slot['orderId'])
-            .toString()
-            .trim();
+    final orderId = (slot['scheduleSlotId'] ??
+            slot['slotId'] ??
+            slot['id'] ??
+            slot['sourceOrderId'] ??
+            slot['customerOrderId'] ??
+            slot['orderId'])
+        .toString()
+        .trim();
     if (orderId.isEmpty) {
       showDomlySnackBar(
         context,
@@ -2532,9 +2503,8 @@ class _OrdersScreenState extends State<OrdersScreen>
         subtitle: penaltyApplied
             ? 'Уборка списана по правилам отмены.'
             : 'Уборка вернулась в доступные.',
-        type: penaltyApplied
-            ? DomlySnackBarType.info
-            : DomlySnackBarType.success,
+        type:
+            penaltyApplied ? DomlySnackBarType.info : DomlySnackBarType.success,
       );
     } catch (error) {
       if (!mounted) {
@@ -2714,11 +2684,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                 }
                 byKey[dateKey] = item;
               }
-              for (
-                var cursor = monthStart;
-                !cursor.isAfter(monthEnd);
-                cursor = cursor.add(const Duration(days: 1))
-              ) {
+              for (var cursor = monthStart;
+                  !cursor.isAfter(monthEnd);
+                  cursor = cursor.add(const Duration(days: 1))) {
                 if (cursor.isBefore(firstAllowed)) {
                   continue;
                 }
@@ -2729,8 +2697,8 @@ class _OrdersScreenState extends State<OrdersScreen>
               final dates = byKey.values.toList()
                 ..sort(
                   (a, b) => (a['date'] ?? '').toString().compareTo(
-                    (b['date'] ?? '').toString(),
-                  ),
+                        (b['date'] ?? '').toString(),
+                      ),
                 );
               return dates;
             }
@@ -3077,9 +3045,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                     ),
                     const SizedBox(height: 12),
                     DomlyPrimaryButton(
-                      label: addonsOnly
-                          ? 'Заказать допы'
-                          : 'Сохранить изменения',
+                      label:
+                          addonsOnly ? 'Заказать допы' : 'Сохранить изменения',
                       onPressed: () => Navigator.pop(context, true),
                     ),
                   ],
@@ -3106,7 +3073,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         return;
       }
 
-      await PaymentLinkService.runBlocking(
+      final saved = await PaymentLinkService.runBlocking(
         context,
         task: () => _data.updateScheduledCleaning(
           slotId: slot['id'].toString(),
@@ -3120,7 +3087,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         return;
       }
 
-      final billableAddonTotal = _billableAddonTotal(deltaAddonsDetailed);
+      final billableAddonTotal = (saved['payableAmount'] as num?)?.toInt() ?? 0;
       if (billableAddonTotal > 0) {
         final profile = await _data.customerProfileStream().first;
         if (!mounted) {
@@ -3157,13 +3124,13 @@ class _OrdersScreenState extends State<OrdersScreen>
         paymentMethod = paymentSelection.method;
         var selectedBonusToSpend =
             paymentSelection.method == DomlyPaymentMethod.bonus
-            ? billableAddonTotal
-            : paymentSelection.useBonus
-            ? bonusBalance
-                  .clamp(0, bonusLimit)
-                  .clamp(0, billableAddonTotal)
-                  .toInt()
-            : 0;
+                ? billableAddonTotal
+                : paymentSelection.useBonus
+                    ? bonusBalance
+                        .clamp(0, bonusLimit)
+                        .clamp(0, billableAddonTotal)
+                        .toInt()
+                    : 0;
         String? kaspiPhone;
         if (selectedBonusToSpend >= billableAddonTotal) {
           paymentMethod = DomlyPaymentMethod.bonus;
@@ -3195,9 +3162,9 @@ class _OrdersScreenState extends State<OrdersScreen>
           kaspiPhone = paymentRequest.phone;
           selectedBonusToSpend = paymentRequest.useBonus
               ? bonusBalance
-                    .clamp(0, bonusLimit)
-                    .clamp(0, billableAddonTotal)
-                    .toInt()
+                  .clamp(0, bonusLimit)
+                  .clamp(0, billableAddonTotal)
+                  .toInt()
               : 0;
         }
 
@@ -3310,15 +3277,15 @@ class _OrdersScreenState extends State<OrdersScreen>
         title: addonsOnly ? 'Допы добавлены' : 'Уборка обновлена',
         subtitle: addonsOnly
             ? (billableAddonTotal > 0
-                  ? paymentMethod == DomlyPaymentMethod.bonus
-                        ? 'Доп. услуги оплачены бонусами и добавлены в текущую уборку.'
-                        : 'Доп. услуги добавлены в текущую уборку. Счёт будет выставлен на Kaspi.'
-                  : 'Доп. услуги обновлены в текущей уборке.')
+                ? paymentMethod == DomlyPaymentMethod.bonus
+                    ? 'Доп. услуги оплачены бонусами и добавлены в текущую уборку.'
+                    : 'Доп. услуги добавлены в текущую уборку. Счёт будет выставлен на Kaspi.'
+                : 'Доп. услуги обновлены в текущей уборке.')
             : (billableAddonTotal > 0
-                  ? paymentMethod == DomlyPaymentMethod.bonus
-                        ? 'Новые допуслуги оплачены бонусами и сохранены.'
-                        : 'Новые дата, время и допуслуги сохранены. Счёт будет выставлен на Kaspi.'
-                  : 'Новые дата, время и допуслуги сохранены.'),
+                ? paymentMethod == DomlyPaymentMethod.bonus
+                    ? 'Новые допуслуги оплачены бонусами и сохранены.'
+                    : 'Новые дата, время и допуслуги сохранены. Счёт будет выставлен на Kaspi.'
+                : 'Новые дата, время и допуслуги сохранены.'),
         type: DomlySnackBarType.success,
       );
     } catch (error) {
@@ -3356,8 +3323,7 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   DateTime _orderDate(Map<String, dynamic> order) {
-    final value =
-        order['completedAt'] ??
+    final value = order['completedAt'] ??
         order['scheduledFor'] ??
         order['date'] ??
         order['createdAt'];
@@ -3507,9 +3473,8 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   Map<String, int> _loadAddonQuantities(Map<String, dynamic> slot) {
     final values = <String, int>{};
-    final detailed = (slot['addonsDetailed'] as List? ?? const [])
-        .whereType<Map>()
-        .toList();
+    final detailed =
+        (slot['addonsDetailed'] as List? ?? const []).whereType<Map>().toList();
     for (final raw in detailed) {
       final key = raw['key']?.toString() ?? '';
       final quantity = (raw['quantity'] as num?)?.toInt() ?? 0;
@@ -3704,9 +3669,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                 children: [
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    onPressed: quantity <= 0
-                        ? null
-                        : () => onChanged(quantity - 1),
+                    onPressed:
+                        quantity <= 0 ? null : () => onChanged(quantity - 1),
                     icon: const Icon(Icons.remove_circle_outline),
                   ),
                   SizedBox(
@@ -3802,8 +3766,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           ...item,
           'price':
               _addonUnitPrices[key] ?? (config?['price'] as num?)?.toInt() ?? 0,
-          'durationMinutes':
-              (durations[key] ??
+          'durationMinutes': (durations[key] ??
                   (config?['durationMinutes'] as num?)?.toInt() ??
                   15) *
               ((item['quantity'] as num?)?.toInt() ?? 1),
@@ -3967,9 +3930,8 @@ class _OrdersSegmentedTabs extends StatelessWidget {
           AnimatedAlign(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
-            alignment: activeIndex == 0
-                ? Alignment.centerLeft
-                : Alignment.centerRight,
+            alignment:
+                activeIndex == 0 ? Alignment.centerLeft : Alignment.centerRight,
             child: Container(
               width: 166,
               height: 46,
@@ -4028,9 +3990,8 @@ class _OrdersTabButton extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: selected
-                  ? const Color(0xFF2B4338)
-                  : const Color(0xFF658170),
+              color:
+                  selected ? const Color(0xFF2B4338) : const Color(0xFF658170),
               fontSize: 13,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               height: 18 / 13,

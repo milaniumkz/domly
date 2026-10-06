@@ -65,8 +65,8 @@ class NotificationService {
       FirebaseMessaging.onMessageOpenedApp.listen((message) {
         _emitNotificationTap(message.data);
       });
-      final initialMessage = await FirebaseMessaging.instance
-          .getInitialMessage();
+      final initialMessage =
+          await FirebaseMessaging.instance.getInitialMessage();
       if (initialMessage != null) {
         _emitNotificationTap(initialMessage.data);
       }
@@ -76,7 +76,8 @@ class NotificationService {
     await FirebaseMessaging.instance.requestPermission();
 
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidInit);
+    const initSettings = InitializationSettings(
+        android: androidInit, iOS: DarwinInitializationSettings());
     await _localNotifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (response) {
@@ -97,12 +98,15 @@ class NotificationService {
     await _configureAndroidChannels();
 
     final token = await FirebaseMessaging.instance.getToken();
-    final platform = defaultTargetPlatform == TargetPlatform.iOS
-        ? 'ios'
-        : 'android';
+    final platform =
+        defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
     if (token != null) {
       await _saveBackendDeviceToken(platform: platform, token: token);
     }
+
+    FirebaseMessaging.instance.onTokenRefresh.listen((nextToken) async {
+      await _saveBackendDeviceToken(platform: platform, token: nextToken);
+    });
 
     FirebaseMessaging.onMessage.listen((message) async {
       final notification = message.notification;
@@ -119,13 +123,13 @@ class NotificationService {
       final channelId = isUrgentOrderOffer
           ? 'domly_order_offer_alarm_v2'
           : isScheduledOrderOffer
-          ? 'domly_schedule_offer_alarm_v2'
-          : 'domly_main';
+              ? 'domly_schedule_offer_alarm_v2'
+              : 'domly_main';
       final channelName = isUrgentOrderOffer
           ? 'Order Offers Alarm'
           : isScheduledOrderOffer
-          ? 'Scheduled Offers Alarm'
-          : 'Domly Notifications';
+              ? 'Scheduled Offers Alarm'
+              : 'Domly Notifications';
 
       final androidDetails = AndroidNotificationDetails(
         channelId,
@@ -194,10 +198,9 @@ class NotificationService {
     if (defaultTargetPlatform != TargetPlatform.android) {
       return;
     }
-    final androidPlatform = _localNotifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
+    final androidPlatform =
+        _localNotifications.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
     await androidPlatform?.createNotificationChannel(
       const AndroidNotificationChannel(
         'domly_main',

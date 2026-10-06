@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../app/app_env.dart';
 import '../../services/app_config_service.dart';
 import '../../services/firestore_data_service.dart';
 import '../../ui/domly_ui.dart';
@@ -179,7 +178,7 @@ class _BonusScreenState extends State<BonusScreen> {
     if (normalized.isEmpty) {
       return '';
     }
-    return 'https://${AppEnv.firebaseProjectId}.web.app/?ref=$normalized';
+    return 'https://domly.kz/customer/?ref=$normalized';
   }
 
   Future<void> _showBonusInfo(
@@ -739,11 +738,10 @@ class _BonusTransactionRow extends StatelessWidget {
             height: 34,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color:
-                  (positive
-                          ? _BonusScreenState._green
-                          : _BonusScreenState._button)
-                      .withValues(alpha: 0.14),
+              color: (positive
+                      ? _BonusScreenState._green
+                      : _BonusScreenState._button)
+                  .withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -844,9 +842,8 @@ class _BonusSmallButton extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: borderColor == null
-                ? null
-                : Border.all(color: borderColor!),
+            border:
+                borderColor == null ? null : Border.all(color: borderColor!),
           ),
           child: Text(
             label,

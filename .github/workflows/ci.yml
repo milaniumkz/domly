@@ -12,6 +12,18 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: domly_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d domly_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DOMLY_INTEGRATION_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/domly_test
     defaults:
       run:
         working-directory: backend
@@ -23,6 +35,7 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      - run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d domly_test -v ON_ERROR_STOP=1 -f sql/schema.sql
       - run: npm test
 
   flutter:
@@ -35,4 +48,18 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings
-      - run: flutter test test/localization test/models test/services
+      - run: flutter test test/localization test/models test/services test/app
+      - run: ./scripts/build_web_domly.sh
+      - run: ./scripts/build_web_domly_pro.sh
+      - run: ./scripts/build_web_admin.sh
+      - name: Stage web release
+        run: |
+          mkdir -p web-release/customer web-release/pro web-release/admin
+          cp -a build/web-domly/. web-release/customer/
+          cp -a build/web-pro/. web-release/pro/
+          cp -a build/web-admin/. web-release/admin/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: domly-web
+          path: web-release/
+          retention-days: 7

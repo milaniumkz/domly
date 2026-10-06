@@ -31,6 +31,48 @@ export const openApiSpec = {
     },
   },
   paths: {
+    '/orders/{id}/addons': {post:{...secured('Обновить дополнительные услуги заказа'),responses:okError()}},
+    '/admin/referrals': {get:{...secured('Реферальная статистика'),responses:okError()}},
+    '/packages/my/{id}/freeze': {post: {...secured('Заморозить собственный пакет'),responses: okError()}},
+    '/packages/quote': {
+      post: { summary: 'Серверный расчёт пакета и дополнительных услуг', responses: okError() },
+    },
+
+    '/geo/reverse': {
+      get: { summary: 'Адрес по координатам', responses: okError() },
+    },
+
+    '/admin/videos': {
+      get: { summary: 'Управление каталогом видео', responses: okError() },
+      post: { summary: 'Сохранить видео', responses: okError() },
+    },
+
+    '/training/videos/{id}': {
+      get: { summary: 'Карточка видео', responses: okError() },
+    },
+
+    '/training/videos': {
+      get: { summary: 'Каталог обучающих видео', responses: okError() },
+    },
+
+    '/geo/houses/{id}/invite': {
+      post: { summary: 'Ссылка приглашения в дом', responses: okError() },
+    },
+
+    '/geo/houses/{id}/waitlist': {
+      get: { summary: 'Собственная заявка на подключение', responses: okError() },
+      post: { summary: 'Вступить в очередь дома', responses: okError() },
+    },
+
+    '/geo/houses/{id}/stats': {
+      get: { summary: 'Статистика подключения дома', responses: okError() },
+    },
+
+    '/referrals': {
+      get: { summary: 'Реферальная ссылка и статистика', responses: okError() },
+      post: { summary: 'Применить реферальный код', responses: okError() },
+    },
+
     '/auth/otp/request': {
       post: {
         summary: 'Отправить OTP через WAPI',
@@ -66,6 +108,7 @@ export const openApiSpec = {
       },
     },
     '/me': {
+      delete: { ...secured('Удалить и обезличить свой аккаунт'), responses: okError() },
       get: secured('Текущий пользователь'),
       patch: {
         ...secured('Обновить профиль пользователя'),

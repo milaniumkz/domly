@@ -117,16 +117,8 @@ class AuthService {
   }
 
   static Future<void> restorePersistedTemporarySession() async {
-    if (temporarySessionUidListenable.value != null) {
-      return;
-    }
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final uid = prefs.getString(_temporarySessionUidKey)?.trim();
-      if (uid != null && uid.isNotEmpty) {
-        temporarySessionUidListenable.value = uid;
-      }
-    } catch (_) {}
+    // Migrate away from obsolete offline login. Only backend JWT sessions grant access.
+    clearTemporarySession();
   }
 
   static Future<void> _persistTemporarySessionUid(String? uid) async {
@@ -294,8 +286,7 @@ class AuthService {
 
   Future<void> signOut() async {
     clearDebugUrlSession(route: _config.adminSurface ? '/admin/web' : '/auth');
-    final currentUserId =
-        DebugSession.uid ??
+    final currentUserId = DebugSession.uid ??
         AuthService.temporarySessionUid ??
         restoredSessionUid;
     clearTemporarySession();
@@ -308,24 +299,8 @@ class AuthService {
   }
 
   Future<void> deleteAccount() async {
-    clearDebugUrlSession(route: _config.adminSurface ? '/admin/web' : '/auth');
-    final currentUserId =
-        DebugSession.uid ??
-        AuthService.temporarySessionUid ??
-        restoredSessionUid;
-
-    if (currentUserId == null) {
-      await signOut();
-      return;
-    }
-
-    clearTemporarySession();
-    await _persistAuthenticatedSession(false);
-    AuthService._setRestoredSessionUid(null);
-    await BackendApiService.instance.logout().catchError((_) {});
-    if (currentUserId != null) {
-      // Backend logout invalidates the session; no Firestore user data is touched.
-    }
+    await BackendApiService.instance.delete('/me');
+    await signOut();
   }
 
   String? _normalizePhone(String rawPhone) {

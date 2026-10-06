@@ -14,7 +14,6 @@ import '../ui/domly_loading_screen.dart';
 import '../utils/app_logger.dart';
 import 'app_brand.dart';
 import 'app_config.dart';
-import 'app_env.dart';
 import 'app_flavor.dart';
 import 'domly_app.dart';
 
@@ -171,7 +170,7 @@ Future<void> _initializeFirebase(AppConfig config) async {
     AppLogger.w('BOOT', 'Firebase initialization timed out, continuing anyway');
   } on FirebaseException catch (error) {
     if (error.code != 'duplicate-app') {
-      rethrow;
+      AppLogger.w('PUSH', 'Push initialization failed: ${error.code}');
     }
   }
 }
