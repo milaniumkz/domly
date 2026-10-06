@@ -42,7 +42,7 @@ jobs:
             const db=admin.firestore();
             const result={projectId:env.fcmProjectId};
             result.collectionNames=(await db.listCollections()).map(ref=>ref.id);
-            for(const name of result.collectionNames.filter(name=>/^(packages|catalogPackages|servicePackages|cleaningPackages|cleaning_packages|catalog_packages|products|catalog|tariffs|addons|extras|additionalServices|addonGroups|addon_groups)$/i.test(name))) {
+            for(const name of ['pricing','addons_config','addon_groups_config','service_zones','houses']) {
               try {
                 const snapshot=await db.collection(name).get();
                 result[name]=snapshot.docs.map(doc=>({id:doc.id,data:doc.data()}));
