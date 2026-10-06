@@ -90,12 +90,13 @@ jobs:
             ./ "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/releases/${GITHUB_SHA}/"
       - name: Deploy checked commit
         env:
+          OTP_FAILURE_FALLBACK_UNTIL: "2026-10-07T07:50:00Z"
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
         run: |
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
-            "cd '$DEPLOY_PATH/releases/${GITHUB_SHA}' && GITHUB_SHA='${GITHUB_SHA}' APP_DIR='$DEPLOY_PATH' bash scripts/server/deploy_backend.sh"
+            "cd '$DEPLOY_PATH/releases/${GITHUB_SHA}' && GITHUB_SHA='${GITHUB_SHA}' APP_DIR='$DEPLOY_PATH' OTP_FAILURE_FALLBACK_UNTIL='$OTP_FAILURE_FALLBACK_UNTIL' bash scripts/server/deploy_backend.sh"
       - name: Public smoke
         run: |
           curl -fsS "${{ secrets.API_HEALTH_URL }}"

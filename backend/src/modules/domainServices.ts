@@ -14,17 +14,28 @@ export class AuthService {
 
   async requestOtp(phone: string) {
     const normalized = normalizePhone(phone);
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = await bcrypt.hash(code, 8);
     await this.db.query(
       `INSERT INTO auth_otp_codes (phone, code_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')`,
       [normalized, codeHash],
     );
-    await this.wapi.sendOtp(normalized, code);
-    return { phone: normalized, expiresInSeconds: 300 };
+    try {
+      await this.wapi.sendOtp(normalized, code);
+    } catch (error) {
+      const until = Date.parse(env.otpFailureFallbackUntil);
+      if (!Number.isFinite(until) || until <= Date.now()) throw error;
+      const user = first<{role: string; status: string}>((await this.db.query(
+        'SELECT role,status FROM app_users WHERE phone=$1', [normalized],
+      )).rows);
+      if (user && (!['customer','cleaner'].includes(user.role) || ['blocked','rejected'].includes(user.status))) throw error;
+      return {phone: normalized, expiresInSeconds: 300, codeSent: false, deliveryFailed: true, fallbackCode: code};
+    }
+    return { phone: normalized, expiresInSeconds: 300, codeSent: true };
   }
 
   async verifyOtp(phone: string, code: string, role: AuthUser['role'] = 'customer') {
+    if (!['customer','cleaner'].includes(role)) throw new ApiError(400, 'invalid_role', 'Недопустимый тип аккаунта.');
     const normalized = normalizePhone(phone);
     const otp = first<{ id: string; code_hash: string }>((await this.db.query(
       `SELECT id, code_hash FROM auth_otp_codes

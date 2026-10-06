@@ -301,12 +301,22 @@ test('WapiOtpService returns friendly integration error on provider failure', as
   const originalProfileId = env.wapiProfileId;
   env.wapiToken = 'token';
   env.wapiProfileId = 'profile';
-  globalThis.fetch = (async () => ({ ok: false })) as any;
   try {
-    await assert.rejects(
-      () => new WapiOtpService().sendOtp('+77052597368', '123456'),
-      (error: any) => error instanceof ApiError && error.code === 'integration_error' && error.status === 503,
-    );
+    for (const mock of [
+      async () => ({ok:false}),
+      async () => ({ok:true,json:async()=>({status:'error'})}),
+      async () => {throw new Error('network timeout');},
+    ]) {
+      globalThis.fetch = mock as any;
+      await assert.rejects(
+        () => new WapiOtpService().sendOtp('+77052597368', '123456'),
+        (error: any) => error instanceof ApiError && error.code === 'integration_error' && error.status === 503,
+      );
+    }
+    globalThis.fetch = (async()=>({ok:true,json:async()=>({status:'done'})})) as any;
+    await new WapiOtpService().sendOtp('+77052597368','123456');
+    env.wapiToken='';
+    await assert.rejects(()=>new WapiOtpService().sendOtp('+77052597368','123456'),(error:any)=>error.code==='integration_error');
   } finally {
     globalThis.fetch = originalFetch;
     env.wapiToken = originalToken;
@@ -709,4 +719,50 @@ test('validateBootstrapPassword rejects placeholders and accepts strong password
 test('toLatin transliterates payment m_info without Cyrillic', () => {
   assert.equal(toLatin('Астана, улица Брусиловского, 110'), 'Astana, ulitsa Brusilovskogo, 110');
   assert.equal(toLatin('Тәуелсіздік даңғылы 39'), 'Tauelsizdik dangyly 39');
+});
+
+test('OTP delivery fallback reveals a verifiable code only during the configured window', async () => {
+  const original = env.otpFailureFallbackUntil;
+  const failure = new ApiError(503, 'integration_error', 'Delivery failed');
+  const delivery = {sendOtp: async () => {throw failure;}} as any;
+  let storedHash = '';
+  let user: any;
+  const db = {query: async (sql: string, args: any[]) => {
+    if (sql.includes('INSERT INTO auth_otp_codes')) storedHash=args[1];
+    return {rows: sql.includes('FROM app_users') && user ? [user] : []};
+  }} as any;
+  const service = new AuthService(db,delivery);
+  try {
+    for (const value of ['', 'invalid', new Date(Date.now()-1000).toISOString()]) {
+      env.otpFailureFallbackUntil=value;
+      await assert.rejects(()=>service.requestOtp('+77052597368'),failure);
+    }
+    env.otpFailureFallbackUntil=new Date(Date.now()+60000).toISOString();
+    const result = await service.requestOtp('+77052597368');
+    assert.match(result.fallbackCode!,/^\d{6}$/);
+    assert.equal(result.codeSent,false);
+    assert.equal(result.expiresInSeconds,300);
+    const bcrypt = await import('bcryptjs');
+    assert.equal(await bcrypt.compare(result.fallbackCode!,storedHash),true);
+    for (const role of ['admin','superadmin']) {
+      user={role,status:'approved'};
+      await assert.rejects(()=>service.requestOtp('+77052597368'),failure);
+    }
+    user={role:'customer',status:'blocked'};
+    await assert.rejects(()=>service.requestOtp('+77052597368'),failure);
+    for (const role of ['customer','cleaner']) {
+      user={role,status:'new'};
+      assert.match((await service.requestOtp('+77052597368')).fallbackCode!,/^\d{6}$/);
+    }
+    const sent = await new AuthService(db,{sendOtp:async()=>{}} as any).requestOtp('+77052597368');
+    assert.equal(sent.codeSent,true);
+    assert.equal(sent.fallbackCode,undefined);
+  } finally {env.otpFailureFallbackUntil=original;}
+});
+
+test('OTP signup cannot create privileged roles', async () => {
+  const service = new AuthService({query:async()=>{throw Error('Unexpected DB access');}} as any,{} as any);
+  for (const role of ['admin','superadmin']) {
+    await assert.rejects(()=>service.verifyOtp('+77052597368','123456',role as any),(e:any)=>e instanceof ApiError && e.code==='invalid_role');
+  }
 });

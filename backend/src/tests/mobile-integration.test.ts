@@ -105,3 +105,31 @@ test('mobile backend persistence, permissions, pricing and account lifecycle', {
     await db.close();
   }
 });
+
+test('temporary delivery fallback completes backend login and the code is single-use', {skip: !process.env.DOMLY_INTEGRATION_DATABASE_URL}, async () => {
+  const {AuthService} = await import('../modules/domainServices');
+  const {env} = await import('../common/env');
+  const {ApiError} = await import('../common/api');
+  const {randomInt} = await import('node:crypto');
+  const db = new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
+  const id=randomUUID(), phone='+7700'+randomInt(1000000,10000000);
+  const original=env.otpFailureFallbackUntil;
+  try {
+    await db.query("INSERT INTO app_users (id,phone,role) VALUES ($1,$2,'customer')",[id,phone]);
+    env.otpFailureFallbackUntil=new Date(Date.now()+60000).toISOString();
+    const service=new AuthService(db,{sendOtp:async()=>{throw new ApiError(503,'integration_error','Provider unavailable');}} as any);
+    const sent=await service.requestOtp(phone);
+    const session=await service.verifyOtp(phone,sent.fallbackCode!);
+    assert.equal(session.user.id,id);
+    assert.equal(session.user.role,'customer');
+    assert.ok(session.accessToken);
+    assert.ok(session.refreshToken);
+    await assert.rejects(()=>service.verifyOtp(phone,sent.fallbackCode!),(e:any)=>e.code==='invalid_otp');
+  } finally {
+    env.otpFailureFallbackUntil=original;
+    await db.query('DELETE FROM refresh_sessions WHERE user_id=$1',[id]);
+    await db.query('DELETE FROM auth_otp_codes WHERE phone=$1',[phone]);
+    await db.query('DELETE FROM app_users WHERE id=$1',[id]);
+    await db.close();
+  }
+});

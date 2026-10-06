@@ -8,19 +8,20 @@ import { ApiError } from '../common/api';
 
 export class WapiOtpService {
   async sendOtp(phone: string, code: string): Promise<void> {
-    if (!env.wapiToken || !env.wapiProfileId) return;
-    const response = await fetch(`${env.wapiBaseUrl}/sync/message/send?profile_id=${env.wapiProfileId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: env.wapiToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        recipient: phone.replace(/^\+/, ''),
-        body: `DOMLY код подтверждения: ${code}`,
-      }),
-    });
-    if (!response.ok) throw new ApiError(503, 'integration_error', 'Не удалось отправить SMS-код. Попробуйте позже.');
+    if (!env.wapiToken || !env.wapiProfileId) throw new ApiError(503, 'integration_error', 'Сервис отправки кодов не настроен.');
+    try {
+      const response = await fetch(`${env.wapiBaseUrl}/sync/message/send?profile_id=${env.wapiProfileId}`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(10000),
+        headers: { Authorization: env.wapiToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({recipient: phone.replace(/^\+/, ''), body: `DOMLY код подтверждения: ${code}`}),
+      });
+      if (!response.ok) throw new Error('delivery_failed');
+      const result = await response.json() as {status?: string; error?: unknown};
+      if (result.error || ['error','failed','failure'].includes(String(result.status ?? '').toLowerCase())) throw new Error('delivery_failed');
+    } catch (_) {
+      throw new ApiError(503, 'integration_error', 'Не удалось отправить SMS-код. Попробуйте позже.');
+    }
   }
 }
 

@@ -79,6 +79,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     setState(() {
       _isLoading = true;
       _errorText = null;
+      _fallbackCode = null;
     });
 
     try {
@@ -466,7 +467,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         const SizedBox(height: 6),
         Text(
           _fallbackCode != null
-              ? 'Тестовый код для проверки приложения.'.tr()
+              ? 'Сервис отправки недоступен. Временный код показан ниже.'.tr()
               : 'Код отправлен на номер {phone}'
                   .tr(params: {'phone': _formattedPhone}),
           textAlign: TextAlign.center,

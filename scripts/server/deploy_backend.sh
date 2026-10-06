@@ -39,6 +39,19 @@ if [ -n "$postgres_container" ]; then
   docker exec "$postgres_container" sh -c 'pg_dump -U "${POSTGRES_USER:-domly}" "${POSTGRES_DB:-domly}"' > "$BACKUP_DIR/$backup_stamp/postgres.sql"
 fi
 
+if [ -n "${OTP_FAILURE_FALLBACK_UNTIL:-}" ]; then
+  RELEASE_ENV="$RELEASE_DIR/backend/.env" python3 - <<'PYCODE'
+import datetime, os, pathlib
+value = os.environ['OTP_FAILURE_FALLBACK_UNTIL']
+datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+p = pathlib.Path(os.environ['RELEASE_ENV'])
+lines = [line for line in p.read_text().splitlines() if not line.startswith('OTP_FAILURE_FALLBACK_UNTIL=')]
+p.write_text('\n'.join(lines) + '\nOTP_FAILURE_FALLBACK_UNTIL=' + value + '\n')
+p.chmod(0o600)
+PYCODE
+  cp "$RELEASE_DIR/backend/.env" "$SHARED_ENV"
+fi
+
 ln -sfn "$RELEASE_DIR" "$CURRENT_DIR"
 echo "$COMMIT_SHA" > "$APP_DIR/REVISION"
 
@@ -52,6 +65,7 @@ for i in {1..30}; do
     else
       docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --project-directory "$CURRENT_DIR" up -d nginx
     fi
+    docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --project-directory "$CURRENT_DIR" exec -T api node -e "console.log('Temporary OTP fallback expires:', process.env.OTP_FAILURE_FALLBACK_UNTIL || 'disabled')"
     echo "Deploy OK: $COMMIT_SHA"
     exit 0
   fi
