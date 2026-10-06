@@ -1809,11 +1809,16 @@ class ProfileScreen extends StatelessWidget {
                     const SizedBox(height: 14),
                     TextField(
                       controller: cityController,
-                      onChanged: (value) {
-                        setModalState(() {
-                          citySuggestions = AddressSearchService.instance
-                              .searchCities(value);
-                        });
+                      onChanged: (value) async {
+                        try {
+                          final cities = await AddressSearchService.instance.searchCities(value);
+                          if (!context.mounted || cityController.text != value) return;
+                          setModalState(() => citySuggestions = cities);
+                        } catch (_) {
+                          if (context.mounted && cityController.text == value) {
+                            setModalState(() => citySuggestions = []);
+                          }
+                        }
                       },
                       decoration: const InputDecoration(
                         labelText: 'Город',

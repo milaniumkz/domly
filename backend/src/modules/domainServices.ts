@@ -1,3 +1,4 @@
+import { Queryable } from '../domain/repositories/UnitOfWork';
 import { referralDiscount } from './referrals';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -115,6 +116,19 @@ export class AuthService {
   }
 }
 
+export interface NotificationInput {
+    userId?: string;
+    role?: AuthUser['role'];
+    titleRu: string;
+    bodyRu: string;
+    titleKk?: string;
+    bodyKk?: string;
+    targetType?: string;
+    targetId?: string;
+    dedupeKey?: string;
+}
+
+
 export class NotificationService {
   constructor(private readonly db: Database, private readonly fcm: FcmService, private readonly queues?: { cleanerAlarms?: { add: Function } }) {}
 
@@ -143,65 +157,68 @@ export class NotificationService {
     return Math.max(1000, wake.getTime() - now.getTime());
   }
 
-  async create(input: {
-    userId?: string;
-    role?: AuthUser['role'];
-    titleRu: string;
-    bodyRu: string;
-    titleKk?: string;
-    bodyKk?: string;
-    targetType?: string;
-    targetId?: string;
-    dedupeKey?: string;
-  }) {
+  async persist(input: NotificationInput, queryable: Queryable = this.db) {
     if (input.role && input.dedupeKey) {
-      const existing = first((await this.db.query(
+      const existing = first((await queryable.query(
         `SELECT * FROM notifications WHERE role=$1 AND dedupe_key=$2 LIMIT 1`,
         [input.role, input.dedupeKey],
       )).rows);
-      if (existing) return existing;
+      if (existing) return { notification: existing, created: false };
     }
-    const row = first<{ id: string; user_id: string | null; role: string | null }>((await this.db.query(
+    const row = first<{ id: string; user_id: string | null; role: string | null }>((await queryable.query(
       `INSERT INTO notifications (user_id, role, title_ru, title_kk, body_ru, body_kk, target_type, target_id, dedupe_key)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (user_id, dedupe_key) DO NOTHING
        RETURNING *`,
       [input.userId ?? null, input.role ?? null, input.titleRu, input.titleKk ?? null, input.bodyRu, input.bodyKk ?? null, input.targetType ?? null, input.targetId ?? null, input.dedupeKey ?? null],
     )).rows);
-    const tokens = (await this.db.query<{ token: string }>(
-      input.userId
-        ? `SELECT token FROM device_tokens WHERE user_id=$1 AND enabled=TRUE`
-        : `SELECT dt.token FROM device_tokens dt JOIN app_users u ON u.id=dt.user_id WHERE u.role=$1 AND dt.enabled=TRUE`,
-      input.userId ? [input.userId] : [input.role],
-    )).rows.map((r: { token: string }) => r.token);
-    const isCleanerOrderOffer = Boolean(input.userId && input.targetType === 'order_offer');
-    if (!isCleanerOrderOffer) {
-      await this.fcm.send(tokens, input.titleRu, input.bodyRu, {
-        targetType: input.targetType ?? '',
-        targetId: input.targetId ?? '',
-        notificationId: row?.id ?? '',
-      });
+    return { notification: row, created: Boolean(row) };
+  }
+
+  async deliver(row: { id: string; user_id: string | null; role: string | null }, input: NotificationInput) {
+    try {
+      if (row?.user_id) {
+        await publishToUser(row.user_id, { type: 'notification', notification: row });
+      } else if (row?.role) {
+        const users = (await this.db.query<{ id: string }>(
+          `SELECT id FROM app_users WHERE role=$1 AND status <> 'blocked'`,
+          [row.role],
+        )).rows;
+        for (const user of users) await publishToUser(user.id, { type: 'notification', notification: row });
+      }
+      const tokens = (await this.db.query<{ token: string }>(
+        input.userId
+          ? `SELECT token FROM device_tokens WHERE user_id=$1 AND enabled=TRUE`
+          : `SELECT dt.token FROM device_tokens dt JOIN app_users u ON u.id=dt.user_id WHERE u.role=$1 AND dt.enabled=TRUE`,
+        input.userId ? [input.userId] : [input.role],
+      )).rows.map((r: { token: string }) => r.token);
+      const isCleanerOrderOffer = Boolean(input.userId && input.targetType === 'order_offer');
+      if (!isCleanerOrderOffer) {
+        await this.fcm.send(tokens, input.titleRu, input.bodyRu, {
+          targetType: input.targetType ?? '',
+          targetId: input.targetId ?? '',
+          notificationId: row?.id ?? '',
+        });
+      }
+      if (input.userId && input.targetType === 'order_offer') {
+        const delay = await this.cleanerAlarmDelayMs();
+        await this.queues?.cleanerAlarms?.add('cleaner-order-alarm', {
+          cleanerId: input.userId,
+          orderId: input.targetId,
+          titleRu: input.titleRu,
+          bodyRu: input.bodyRu,
+          notificationId: row?.id ?? '',
+        }, { delay, attempts: 3, removeOnComplete: true });
+      }
+    } catch (error) {
+      console.warn('[notifications] Delivery failed; notification remains stored', error instanceof Error ? error.name : 'unknown');
     }
-    if (row?.user_id) {
-      await publishToUser(row.user_id, { type: 'notification', notification: row });
-    } else if (row?.role) {
-      const users = (await this.db.query<{ id: string }>(
-        `SELECT id FROM app_users WHERE role=$1 AND status <> 'blocked'`,
-        [row.role],
-      )).rows;
-      for (const user of users) await publishToUser(user.id, { type: 'notification', notification: row });
-    }
-    if (input.userId && input.targetType === 'order_offer') {
-      const delay = await this.cleanerAlarmDelayMs();
-      await this.queues?.cleanerAlarms?.add('cleaner-order-alarm', {
-        cleanerId: input.userId,
-        orderId: input.targetId,
-        titleRu: input.titleRu,
-        bodyRu: input.bodyRu,
-        notificationId: row?.id ?? '',
-      }, { delay, attempts: 3, removeOnComplete: true });
-    }
-    return row;
+  }
+
+  async create(input: NotificationInput) {
+    const saved = await this.persist(input);
+    if (saved.created && saved.notification) await this.deliver(saved.notification, input);
+    return saved.notification;
   }
 
   async createAdminEvent(input: {

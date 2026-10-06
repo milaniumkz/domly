@@ -9,7 +9,7 @@ on:
         description: Deployment or read-only server inspection
         default: deploy
         type: choice
-        options: [deploy, inspect]
+        options: [deploy, inspect, import-catalog]
 
 permissions:
   contents: read
@@ -41,8 +41,26 @@ jobs:
               awk "/domly\\.kz|^[[:space:]]*(root|reverse_proxy|file_server|handle|handle_path|import|redir)/" /etc/caddy/Caddyfile
             fi
           '
+  import-catalog:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'import-catalog' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Back up database and import catalogue once
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+            "cd '$DEPLOY_PATH/current' && APP_DIR='$DEPLOY_PATH' bash scripts/server/import_catalog.sh"
   test:
-    if: inputs.mode != 'inspect'
+    if: inputs.mode != 'inspect' && inputs.mode != 'import-catalog'
     uses: ./.github/workflows/ci.yml
 
   deploy:

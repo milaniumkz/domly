@@ -1028,7 +1028,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 title: 'Жалобы в работе',
                 subtitle: 'Нужна реакция или закрытие',
                 icon: Icons.report_problem_outlined,
-                stream: _data.complaintsStream(),
+                stream: _data.complaintsStream(admin: true),
                 countBuilder: (items) => items.where((doc) {
                   final status =
                       (doc['status'] ?? 'open').toString().toLowerCase();
@@ -1051,7 +1051,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                       subtitle:
                           'Зоны, где менеджеру лучше действовать в первую очередь',
                       child: StreamBuilder<List<Map<String, dynamic>>>(
-                        stream: _data.housesStream(),
+                        stream: _data.housesStream(admin: true),
                         builder: (context, snapshot) {
                           final items =
                               (snapshot.data ?? const <Map<String, dynamic>>[])
@@ -2395,7 +2395,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
 
   Widget _complaints() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.complaintsStream(),
+      stream: _data.complaintsStream(admin: true),
       builder: (context, snapshot) {
         final complaints = _applyDebugComplaintOverrides(
           List<Map<String, dynamic>>.from(snapshot.data ?? const []),
@@ -6876,7 +6876,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
 
   Widget _houses() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.housesStream(),
+      stream: _data.housesStream(admin: true),
       builder: (context, snapshot) {
         final query = _searchQuery.trim().toLowerCase();
         final filteredHouses = (snapshot.data ?? []).where((house) {
@@ -6971,7 +6971,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         final query = _searchQuery.trim().toLowerCase();
         final waitlist = snapshot.data ?? const <Map<String, dynamic>>[];
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _data.housesStream(),
+          stream: _data.housesStream(admin: true),
           builder: (context, housesSnapshot) {
             final housesById = {
               for (final house
@@ -7588,12 +7588,32 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
   }
 
+  Future<void> _openCitiesDirectory() async {
+    try {
+      final cities = await _data.adminCities();
+      if (!mounted) return;
+      await showDialog<void>(context: context, builder: (context) => AlertDialog(
+        title: Text('Города Казахстана: ${cities.length}'),
+        content: SizedBox(width: 480, height: 500, child: ListView.builder(
+          itemCount: cities.length,
+          itemBuilder: (_, index) => ListTile(
+            title: Text((cities[index]['name_ru'] ?? '').toString()),
+            subtitle: Text('${cities[index]['name_kk'] ?? ''} · ${cities[index]['region'] ?? ''}'),
+          ),
+        )),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Закрыть'))],
+      ));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось загрузить города. Попробуйте ещё раз.')));
+    }
+  }
+
   Widget _zones() {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _data.serviceZonesStream(),
       builder: (context, snapshot) {
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _data.housesStream(),
+          stream: _data.housesStream(admin: true),
           builder: (context, housesSnapshot) {
             final houses =
                 housesSnapshot.data ?? const <Map<String, dynamic>>[];
@@ -7621,11 +7641,18 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             });
             final items = _sortRecordsByDate(filteredZones);
             return _sectionScaffold(
-              toolbar: OutlinedButton.icon(
-                onPressed: () => _openZoneEditor(context, null),
-                icon: const Icon(Icons.add_location_alt_outlined),
-                label: Text('Добавить зону'.tr()),
-              ),
+              toolbar: Wrap(spacing: 12, children: [
+                OutlinedButton.icon(
+                  onPressed: () => _openZoneEditor(context, null),
+                  icon: const Icon(Icons.add_location_alt_outlined),
+                  label: Text('Добавить зону'.tr()),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _openCitiesDirectory,
+                  icon: const Icon(Icons.location_city_outlined),
+                  label: const Text('Города Казахстана'),
+                ),
+              ]),
               child: items.isEmpty
                   ? _emptyState('Зоны не найдены', 'Измените строку поиска.')
                   : ListView.separated(
@@ -11805,7 +11832,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     }
     final zoneId = (zone['id'] ?? '').toString();
     final title = (zone['title'] ?? zoneId).toString();
-    final houses = await _data.housesStream().first;
+    final houses = await _data.housesStream(admin: true).first;
     var changed = 0;
     for (final house in houses) {
       final lat = house['lat'];
@@ -13220,7 +13247,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   TextField(
                     controller: priceController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Цена'),
+                    decoration: const InputDecoration(labelText: 'Цена за м² за одну уборку, ₸'),
                   ),
                   TextField(
                     controller: sortOrderController,
@@ -13311,6 +13338,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 return;
               }
               await _data.saveAdminPackage({
+                ...initial,
                 'id': id,
                 'name': nameController.text.trim(),
                 'frequency': frequencyController.text.trim(),

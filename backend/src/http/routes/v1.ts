@@ -1,3 +1,4 @@
+import { verifyCleaner } from '../../modules/cleanerVerification';
 import { qualifyReferral, referralDiscount } from '../../modules/referrals';
 import { packageQuote } from '../../modules/packageQuote';
 import { mobileRouter } from './mobile';
@@ -707,7 +708,7 @@ export function buildV1Router(deps: {
        WHERE u.id=$1`,
       [req.user!.id],
     )).rows);
-    const documents = (await deps.db.query(`SELECT * FROM cleaner_documents WHERE cleaner_id=$1 ORDER BY created_at DESC`, [req.user!.id])).rows;
+    const documents = (await deps.db.query(`SELECT d.*,f.public_url FROM cleaner_documents d LEFT JOIN files f ON f.id=d.file_id WHERE d.cleaner_id=$1 ORDER BY d.created_at DESC`, [req.user!.id])).rows;
     const zones = (await deps.db.query(
       `SELECT z.* FROM cleaner_zones cz JOIN service_zones z ON z.id=cz.zone_id WHERE cz.cleaner_id=$1 ORDER BY z.city, z.name_ru`,
       [req.user!.id],
@@ -840,6 +841,16 @@ export function buildV1Router(deps: {
     )).rows);
   }));
 
+  router.get('/geo/cities', asyncHandler(async (req, res) => {
+    const search = `%${normalizeText(String(req.query.search ?? ''))}%`;
+    const { limit, offset } = pageParams(req.query);
+    ok(res, (await deps.db.query(
+      `SELECT * FROM city_directory
+       WHERE domly_normalize_address(concat_ws(' ',name_ru,name_kk,array_to_string(aliases,' '))) LIKE $1
+       ORDER BY name_ru LIMIT $2 OFFSET $3`, [search,limit,offset],
+    )).rows);
+  }));
+
   router.get('/geo/connected-houses', asyncHandler(async (req, res) => {
     const { limit, offset } = pageParams(req.query);
     const city = req.query.city ? String(req.query.city) : null;
@@ -878,11 +889,12 @@ export function buildV1Router(deps: {
       `SELECT h.*, z.name_ru AS zone_name_ru, z.name_kk AS zone_name_kk
        FROM connected_houses h
        LEFT JOIN service_zones z ON z.id=h.zone_id
-       WHERE h.active=TRUE
-       AND ($1::text IS NULL OR h.city ILIKE $1)
-       ORDER BY h.city, h.street_ru, h.house
-       LIMIT 500`,
-      [city ? `%${city}%` : null],
+       WHERE ($1::text IS NULL OR h.city ILIKE $1)
+       AND domly_normalize_address(concat_ws(' ',h.city,h.street_ru,h.street_kk,
+           h.residential_complex_ru,h.residential_complex_kk,h.house)) LIKE ALL($2::text[])
+       ORDER BY h.active DESC, h.city, h.street_ru, h.house
+       LIMIT 100`,
+      [city ? `%${city}%` : null, normalizedQuery.split(' ').filter(Boolean).map(token => `%${token}%`)],
     )).rows
       .map((house: any) => {
         const haystack = normalizeText([
@@ -900,7 +912,8 @@ export function buildV1Router(deps: {
       .sort((a: any, b: any) => b.score - a.score)
       .slice(0, limit)
       .map(({ house }: any) => ({
-        source: 'connected_house',
+        source: house.active ? 'connected_house' : 'address_directory',
+        connected: house.active,
         id: house.id,
         label: formatHouseLabel(house),
         city: house.city,
@@ -2462,7 +2475,7 @@ export function buildV1Router(deps: {
       [req.params.id],
     )).rows);
     if (!cleaner) throw new ApiError(404, 'not_found', 'Уборщица не найдена.');
-    const documents = (await deps.db.query(`SELECT * FROM cleaner_documents WHERE cleaner_id=$1 ORDER BY created_at DESC`, [req.params.id])).rows;
+    const documents = (await deps.db.query(`SELECT d.*,f.public_url FROM cleaner_documents d LEFT JOIN files f ON f.id=d.file_id WHERE d.cleaner_id=$1 ORDER BY d.created_at DESC`, [req.params.id])).rows;
     const zones = (await deps.db.query(
       `SELECT z.* FROM cleaner_zones cz JOIN service_zones z ON z.id=cz.zone_id WHERE cz.cleaner_id=$1 ORDER BY z.city, z.name_ru`,
       [req.params.id],
@@ -2597,36 +2610,7 @@ export function buildV1Router(deps: {
   }));
 
   router.patch('/admin/cleaners/:id/verification', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
-    const status = String(req.body.status ?? '');
-    if (!['approved', 'rejected', 'blocked', 'pending'].includes(status)) {
-      throw new ApiError(400, 'invalid_status', 'Укажите корректный статус уборщицы.');
-    }
-    const cleaner = first((await deps.db.query(
-      `UPDATE app_users SET status=$2, updated_at=NOW() WHERE id=$1 AND role='cleaner' RETURNING id, phone, full_name, status`,
-      [req.params.id, status === 'blocked' ? 'blocked' : status],
-    )).rows);
-    if (!cleaner) throw new ApiError(404, 'not_found', 'Уборщица не найдена.');
-    const profile = first((await deps.db.query(
-      `INSERT INTO cleaner_profiles (user_id, registration_status, verification_status, work_start_date, verified_at)
-       VALUES ($1,$2,$2,CASE WHEN $2='approved' THEN CURRENT_DATE ELSE NULL END,CASE WHEN $2='approved' THEN NOW() ELSE NULL END)
-       ON CONFLICT (user_id) DO UPDATE SET
-         registration_status=$2,
-         verification_status=$2,
-         work_start_date=CASE WHEN $2='approved' THEN COALESCE(cleaner_profiles.work_start_date, CURRENT_DATE) ELSE cleaner_profiles.work_start_date END,
-         verified_at=CASE WHEN $2='approved' THEN NOW() ELSE cleaner_profiles.verified_at END,
-         updated_at=NOW()
-       RETURNING *`,
-      [req.params.id, status === 'blocked' ? 'rejected' : status],
-    )).rows);
-    await deps.db.query(`UPDATE cleaner_documents SET status=$2 WHERE cleaner_id=$1 AND status='pending'`, [req.params.id, status === 'approved' ? 'approved' : 'rejected']);
-    await deps.notifications.create({
-      userId: String(req.params.id),
-      titleRu: status === 'approved' ? 'Верификация пройдена' : 'Статус верификации изменён',
-      bodyRu: status === 'approved' ? 'Ваш профиль уборщицы подтверждён.' : 'Проверьте статус профиля в приложении.',
-      targetType: 'cleaner_profile',
-      targetId: String(req.params.id),
-    });
-    ok(res, { cleaner, profile });
+    ok(res, await verifyCleaner(deps.db,deps.notifications,String(req.params.id),String(req.body.status ?? ''),req.user!.id));
   }));
 
   router.put('/admin/cleaners/:id/zones', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
@@ -3678,7 +3662,7 @@ export function buildV1Router(deps: {
          features=EXCLUDED.features,
          updated_at=NOW()
        RETURNING *`,
-      [req.body.nameRu, req.body.nameKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.cleaningCount, req.body.months ?? 1, req.body.basePrice, req.body.pricePerM2 ?? 0, req.body.active, req.body.features ?? {}],
+      [req.body.nameRu, req.body.nameKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.cleaningCount, req.body.months ?? 1, req.body.basePrice, req.body.pricePerM2 ?? 0, req.body.active, JSON.stringify(req.body.features ?? {})],
     )).rows);
     ok(res, row, 201);
   }));
@@ -3692,7 +3676,7 @@ export function buildV1Router(deps: {
        base_price=COALESCE($8,base_price), price_per_m2=COALESCE($9,price_per_m2),
        active=COALESCE($10,active), features=COALESCE($11,features), updated_at=NOW()
        WHERE id=$1 RETURNING *`,
-      [req.params.id, req.body.nameRu ?? null, req.body.nameKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.cleaningCount ?? null, req.body.months ?? null, req.body.basePrice ?? null, req.body.pricePerM2 ?? null, req.body.active ?? null, req.body.features ?? null],
+      [req.params.id, req.body.nameRu ?? null, req.body.nameKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.cleaningCount ?? null, req.body.months ?? null, req.body.basePrice ?? null, req.body.pricePerM2 ?? null, req.body.active ?? null, req.body.features == null ? null : JSON.stringify(req.body.features)],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Пакет не найден.');
     ok(res, row);
@@ -3775,7 +3759,7 @@ export function buildV1Router(deps: {
        ON CONFLICT (city, name_ru) DO UPDATE SET
          name_kk=EXCLUDED.name_kk, polygon=EXCLUDED.polygon, active=EXCLUDED.active
        RETURNING *`,
-      [req.body.nameRu, req.body.nameKk ?? null, req.body.city, req.body.polygon ?? null, req.body.active ?? true],
+      [req.body.nameRu, req.body.nameKk ?? null, req.body.city, req.body.polygon == null ? null : JSON.stringify(req.body.polygon), req.body.active ?? true],
     )).rows);
     ok(res, row, 201);
   }));
@@ -3786,7 +3770,7 @@ export function buildV1Router(deps: {
        name_ru=COALESCE($2,name_ru), name_kk=COALESCE($3,name_kk), city=COALESCE($4,city),
        polygon=COALESCE($5,polygon), active=COALESCE($6,active)
        WHERE id=$1 RETURNING *`,
-      [req.params.id, req.body.nameRu ?? null, req.body.nameKk ?? null, req.body.city ?? null, req.body.polygon ?? null, req.body.active ?? null],
+      [req.params.id, req.body.nameRu ?? null, req.body.nameKk ?? null, req.body.city ?? null, req.body.polygon == null ? null : JSON.stringify(req.body.polygon), req.body.active ?? null],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Зона не найдена.');
     ok(res, row);
@@ -4020,6 +4004,7 @@ export function buildV1Router(deps: {
       payouts: { table: 'payouts' },
       audit: { table: 'audit_logs', search: ['action', 'entity_type', 'entity_id'] },
       zones: { table: 'service_zones', search: ['name_ru', 'name_kk', 'city'] },
+      cities: { table: 'city_directory', search: ['name_ru', 'name_kk', 'region'] },
       houses: { table: 'connected_houses', search: ['city', 'street_ru', 'street_kk', 'house', 'residential_complex_ru', 'residential_complex_kk'] },
       checklistTemplates: { table: 'checklist_templates', search: ['title_ru', 'title_kk'] },
       packages: { table: 'catalog_packages', search: ['name_ru', 'name_kk', 'description_ru', 'description_kk'] },
@@ -4239,7 +4224,9 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     return {
       sql: `SELECT u.id, u.numeric_id, u.full_name, u.phone, u.email, u.status, u.rating, u.created_at,
-                   cp.city, cp.registration_status, cp.verification_status, cp.verified_at,
+                   cp.city, cp.registration_status, cp.verification_status, cp.verified_at,cp.work_start_date,
+                   (SELECT COALESCE(jsonb_agg(jsonb_build_object('id',d.id,'type',d.type,'url',f.public_url,'status',d.status) ORDER BY d.created_at DESC),'[]'::jsonb)
+                    FROM cleaner_documents d LEFT JOIN files f ON f.id=d.file_id WHERE d.cleaner_id=u.id) AS documents,
                    COUNT(DISTINCT o.id)::int AS orders_count
             FROM app_users u
             LEFT JOIN cleaner_profiles cp ON cp.user_id=u.id

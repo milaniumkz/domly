@@ -1678,6 +1678,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       final quote =
           await BackendApiService.instance.postMap('/packages/quote', body: {
         'packageId': pkg?['id'],
+        'cleaningsPerMonth': _selectedFrequency,
         'area': _area.ceil(),
         'addonsDetailed': _selectedAddonsDetailed()
       });

@@ -9,8 +9,19 @@ export async function packageQuote(db: Queryable, input: Record<string, any>) {
   if (Number(pkg.cleaning_count) <= 0 || Number(pkg.months) <= 0) throw new ApiError(400,'invalid_package','Проверьте настройки пакета.');
   const area = Number(input.area);
   if (!Number.isFinite(area) || area <= 0 || area > 10000) throw new ApiError(400, 'area_required', 'Укажите площадь квартиры.');
-  const cleaningCount = Number(pkg.cleaning_count) * Number(pkg.months);
-  const base = Math.round((Number(pkg.base_price) + Number(pkg.price_per_m2) * area) * cleaningCount);
+  let visits = Number(pkg.cleaning_count);
+  let rate = Number(pkg.price_per_m2);
+  if (pkg.features?.isQuarterly) {
+    visits = Number(input.cleaningsPerMonth ?? pkg.cleaning_count);
+    if (![2,4,8].includes(visits)) throw new ApiError(400,'invalid_frequency','Выберите 2, 4 или 8 уборок в месяц.');
+    const monthly = first<any>((await db.query(
+      'SELECT price_per_m2 FROM catalog_packages WHERE active=TRUE AND months=1 AND cleaning_count=$1 ORDER BY updated_at DESC LIMIT 1', [visits],
+    )).rows);
+    if (!monthly) throw new ApiError(400,'invalid_package','Месячный тариф недоступен.');
+    rate = Number(monthly.price_per_m2);
+  }
+  const cleaningCount = visits * Number(pkg.months);
+  const base = Math.round((Number(pkg.base_price) + rate * area) * cleaningCount);
   const selected = Array.isArray(input.addonsDetailed) ? input.addonsDetailed : [];
   if (selected.length > 100) throw new ApiError(400, 'invalid_addons', 'Слишком много дополнительных услуг.');
   const addons = [];
@@ -33,7 +44,7 @@ export async function packageQuote(db: Queryable, input: Record<string, any>) {
   const referralPercent = input.customerId ? await referralDiscount(db, input.customerId) : 0;
   const referralAmount = Math.round((base + addonTotal - discountAmount) * referralPercent / 100);
   return {referralDiscountPercent: referralPercent, referralDiscountAmount: referralAmount, packageId: pkg.id, perCleaningPrice: Math.round(base / cleaningCount), cleaningCount,
-    billingPeriodMonths: Number(pkg.months), subtotal: base + addonTotal, monthlyPrice: base + addonTotal - discountAmount - referralAmount,
+    cleaningsPerMonth: visits, billingPeriodMonths: Number(pkg.months), subtotal: base + addonTotal, monthlyPrice: base + addonTotal - discountAmount - referralAmount,
     discountRate, discountAmount, addonTotalPrice: addonTotal, addonsBillableTotal: addonTotal,
     addonsSeparatePaymentTotal: 0, separatePaymentAddons: [], addons};
 }

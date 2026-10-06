@@ -51,73 +51,13 @@ class AddressSuggestion {
 class AddressSearchService {
   AddressSearchService._();
   static final AddressSearchService instance = AddressSearchService._();
-  static const List<String> _kazakhstanCities = [
-    'Абай',
-    'Акколь',
-    'Аксай',
-    'Аксу',
-    'Актау',
-    'Актобе',
-    'Алга',
-    'Алматы',
-    'Алтай',
-    'Аральск',
-    'Аркалык',
-    'Арыс',
-    'Астана',
-    'Атбасар',
-    'Атырау',
-    'Аягоз',
-    'Байконыр',
-    'Балхаш',
-    'Ерейментау',
-    'Есик',
-    'Жанаозен',
-    'Жаркент',
-    'Жезказган',
-    'Жетысай',
-    'Зайсан',
-    'Кандыагаш',
-    'Караганда',
-    'Кентау',
-    'Кокшетау',
-    'Конаев',
-    'Костанай',
-    'Кульсары',
-    'Кызылорда',
-    'Лисаковск',
-    'Павлодар',
-    'Петропавловск',
-    'Риддер',
-    'Рудный',
-    'Сарань',
-    'Сарканд',
-    'Сарыагаш',
-    'Сатпаев',
-    'Семей',
-    'Степногорск',
-    'Талгар',
-    'Талдыкорган',
-    'Тараз',
-    'Темиртау',
-    'Туркестан',
-    'Уральск',
-    'Усть-Каменогорск',
-    'Ушарал',
-    'Шардара',
-    'Шахтинск',
-    'Шемонаиха',
-    'Шу',
-    'Шымкент',
-    'Экибастуз',
-  ];
-
-  List<String> searchCities(String query) {
-    final normalized = query.trim().toLowerCase();
-    return _kazakhstanCities
-        .where((city) => city.toLowerCase().contains(normalized))
-        .take(10)
-        .toList();
+  Future<List<String>> searchCities(String query) async {
+    final rows = await BackendApiService.instance.getList(
+      '/geo/cities',
+      authenticated: false,
+      query: {'search': query.trim(), 'limit': '10'},
+    );
+    return rows.map((row) => (row['name_ru'] ?? '').toString()).toList();
   }
 
   AddressSuggestion _map(Map<String, dynamic> row) {

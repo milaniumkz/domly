@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import '../utils/backend_compat.dart';
+import '../utils/admin_cleaner_data.dart';
 import 'package:flutter/foundation.dart';
 
 import '../app/debug_session.dart';
@@ -479,7 +480,13 @@ class FirestoreDataService {
     final cleaningCount = _num(item['cleaning_count']).toInt();
     final months = _num(item['months']).toInt();
     final basePrice = _num(item['base_price']).round();
+    final metadata = item['features'] is Map
+        ? Map<String, dynamic>.from(item['features'] as Map)
+        : <String, dynamic>{};
     return {
+      ...item,
+      ...metadata,
+      'features': item['features'] is List ? item['features'] : metadata['items'] ?? [],
       'id': item['id'],
       'name': item['name_ru'] ?? item['name'] ?? 'Пакет',
       'nameLocales': {
@@ -491,14 +498,14 @@ class FirestoreDataService {
         'ru': item['description_ru'] ?? '',
         'kk': item['description_kk'] ?? item['description_ru'] ?? '',
       },
-      'price': basePrice,
+      'price': _num(item['price_per_m2']) > 0 ? _num(item['price_per_m2']).round() : basePrice,
       'basePrice': basePrice,
       'pricePerM2': _num(item['price_per_m2']).round(),
       'cleaningsPerMonth': cleaningCount,
       'includedVisits': cleaningCount,
       'billingPeriodMonths': months <= 0 ? 1 : months,
       'months': months <= 0 ? 1 : months,
-      'sortOrder': _num(item['sort_order']).toInt(),
+      'sortOrder': _num(item['sort_order'] ?? metadata['sortOrder']).toInt(),
       'isActive': item['active'] != false,
       'createdAt': item['created_at'],
       'updatedAt': item['updated_at'],
@@ -731,7 +738,7 @@ class FirestoreDataService {
       return _debugSharedAdminCleanersStream();
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/admin/cleaners'),
+      () async => (await BackendApiService.instance.getList('/admin/cleaners')).map(mapAdminCleaner).toList(),
     );
   }
 
@@ -743,11 +750,16 @@ class FirestoreDataService {
       return _debugSharedClustersStream();
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/admin/zones'),
+      () async => (await BackendApiService.instance.getList('/admin/zones')).map((row) => <String, dynamic>{
+        ...row,
+        'title': row['name_ru'], 'titleKk': row['name_kk'],
+        'status': row['active'] == true ? 'active' : 'inactive',
+        'createdAt': row['created_at'],
+      }).toList(),
     );
   }
 
-  Stream<List<Map<String, dynamic>>> housesStream() {
+  Stream<List<Map<String, dynamic>>> housesStream({bool admin = false}) {
     if (_isTemporaryCustomerSession || _isTemporaryCleanerSession) {
       return _debugSnapshotStream(_temporaryHouses);
     }
@@ -755,7 +767,27 @@ class FirestoreDataService {
       return _debugSharedHousesStream();
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/geo/connected-houses'),
+      () async {
+        final houses = <Map<String, dynamic>>[];
+        while (true) {
+          final page = await BackendApiService.instance.getList(
+            admin ? '/admin/houses' : '/geo/connected-houses',
+            query: {'limit': '200', 'offset': '${houses.length}'},
+          );
+          houses.addAll(page);
+          if (page.length < 200) break;
+        }
+        return houses.map((row) => <String, dynamic>{
+          ...row,
+          'address': '${row['street_ru'] ?? ''}, ${row['house'] ?? ''}, ${row['city'] ?? ''}',
+          'street': row['street_ru'],
+          'residentialComplex': row['residential_complex_ru'],
+          'zoneId': row['zone_id'],
+          'lat': row['latitude'], 'lng': row['longitude'],
+          'status': row['active'] == true ? 'ACTIVE' : 'INACTIVE',
+          'createdAt': row['created_at'],
+        }).toList();
+      },
     );
   }
 
@@ -1270,6 +1302,8 @@ class FirestoreDataService {
 
   double _radians(double degrees) => degrees * math.pi / 180;
 
+  Future<List<Map<String, dynamic>>> adminCities() => BackendApiService.instance.getList('/admin/cities', query: {'limit': '200'});
+
   Stream<List<Map<String, dynamic>>> serviceZonesStream() {
     if (_isTemporaryCustomerSession || _isTemporaryCleanerSession) {
       return _debugSnapshotStream(_debugServiceZones);
@@ -1281,7 +1315,12 @@ class FirestoreDataService {
       return _debugSnapshotStream(_debugServiceZones);
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/admin/zones'),
+      () async => (await BackendApiService.instance.getList('/admin/zones')).map((row) => <String, dynamic>{
+        ...row,
+        'title': row['name_ru'], 'titleKk': row['name_kk'],
+        'status': row['active'] == true ? 'active' : 'inactive',
+        'createdAt': row['created_at'],
+      }).toList(),
     );
   }
 
@@ -1891,7 +1930,7 @@ class FirestoreDataService {
       return _debugSnapshotStream(_debugAdminPackages);
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/admin/packages'),
+      () async => (await BackendApiService.instance.getList('/admin/packages')).map(_mapBackendCatalogPackage).toList(),
     );
   }
 
@@ -1957,7 +1996,21 @@ class FirestoreDataService {
     if (_isDebugAdmin) {
       return _debugSnapshotStream(_debugAdminAddonGroups);
     }
-    return AppConfigService.instance.addonGroupConfigsStream();
+    return _backendPollingStream(() async {
+      final groups = await BackendApiService.instance.getList('/admin/addonGroups', query: {'limit': '200'});
+      final addons = await BackendApiService.instance.getList('/admin/addons', query: {'limit': '200'});
+      return groups.map((group) => <String, dynamic>{
+        ...group, 'key': group['id'], 'label': group['title_ru'], 'labelKk': group['title_kk'],
+        'sortOrder': group['sort_order'], 'isActive': group['active'],
+        'items': addons.where((item) => item['group_id'] == group['id']).map((item) => <String, dynamic>{
+          ...item, 'key': item['id'], 'label': item['title_ru'], 'labelKk': item['title_kk'],
+          'description': item['description_ru'], 'fullInfo': item['description_ru'], 'note': item['hint_ru'],
+          'price': _num(item['price']).round(), 'durationMinutes': item['duration_minutes'],
+          'pricingType': item['pricing_type'], 'supportsQuantity': item['pricing_type'] != 'fixed_per_order',
+          'separatePayment': item['paid_separately'], 'sortOrder': item['sort_order'], 'isActive': item['active'],
+        }).toList(),
+      }).toList();
+    });
   }
 
   Stream<List<Map<String, dynamic>>> adminChecklistTemplatesStream() {
@@ -2431,7 +2484,7 @@ class FirestoreDataService {
       return _debugSharedCleanerVerificationsStream();
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/admin/cleaners'),
+      () async => (await BackendApiService.instance.getList('/admin/cleaners')).map((row) => {...mapAdminCleaner(row), 'status': row['verification_status'] ?? 'pending'}).toList(),
     );
   }
 
@@ -7477,7 +7530,7 @@ class FirestoreDataService {
     );
   }
 
-  Stream<List<Map<String, dynamic>>> complaintsStream() {
+  Stream<List<Map<String, dynamic>>> complaintsStream({bool admin = false}) {
     if (_isDebugAdmin) {
       return _debugSharedComplaintsStream();
     }
@@ -7506,7 +7559,7 @@ class FirestoreDataService {
       });
     }
     return _backendPollingStream(() async {
-      return (await BackendApiService.instance.getList('/complaints')).map((
+      return (await BackendApiService.instance.getList(admin ? '/admin/complaints' : '/complaints')).map((
         item,
       ) {
         return {
@@ -8903,6 +8956,7 @@ class FirestoreDataService {
           '/packages/purchase',
           body: {
             'packageId': normalizedPackageId,
+            'cleaningsPerMonth': cleaningsPerMonth,
             'addonsDetailed': addonsDetailed,
             'useBonus': bonusToSpend > 0,
             'requestedBonus': bonusToSpend,
@@ -12988,29 +13042,35 @@ class FirestoreDataService {
       _notifyDebugStateChanged();
       return;
     }
-    await BackendApiService.instance.postMap(
-      '/admin/catalog/packages',
-      body: {
-        'nameRu': packageData['name'] ?? packageData['title'] ?? packageId,
-        'nameKk': packageData['nameKk'] ?? packageData['titleKk'],
-        'descriptionRu':
-            packageData['description'] ?? packageData['descriptionRu'],
-        'descriptionKk': packageData['descriptionKk'],
-        'cleaningCount': packageData['cleaningCount'] ??
-            packageData['includedVisits'] ??
-            packageData['frequency'] ??
-            1,
-        'months':
-            packageData['months'] ?? packageData['billingPeriodMonths'] ?? 1,
-        'basePrice': packageData['price'] ??
-            packageData['basePrice'] ??
-            packageData['monthlyPrice'] ??
-            0,
-        'pricePerM2': packageData['pricePerM2'] ?? 0,
-        'active': packageData['active'] ?? true,
-        'features': packageData['features'] ?? {'raw': packageData},
-      },
-    );
+    final monthlyVisits = packageData['cleaningsPerMonth'] ??
+        packageData['cleaningCount'] ?? packageData['includedVisits'] ?? 2;
+    final metadata = <String, dynamic>{
+      'items': packageData['features'] is List ? packageData['features'] : [],
+      'isQuarterly': packageData['isQuarterly'] == true,
+      'discountPercent': packageData['discountPercent'] ?? 0,
+      'sortOrder': packageData['sortOrder'] ?? 0,
+      'frequency': packageData['frequency'],
+      'popular': packageData['popular'] == true,
+      'shortInfo': packageData['shortInfo'] ?? '',
+      'fullInfo': packageData['fullInfo'] ?? '',
+    };
+    final body = <String, dynamic>{
+      'nameRu': packageData['name'] ?? packageData['title'] ?? packageId,
+      'nameKk': packageData['nameKk'] ?? packageData['name_kk'],
+      'descriptionRu': packageData['fullInfo'] ?? packageData['description'] ?? '',
+      'descriptionKk': packageData['descriptionKk'],
+      'cleaningCount': monthlyVisits,
+      'months': packageData['billingPeriodMonths'] ?? packageData['months'] ?? 1,
+      'basePrice': 0,
+      'pricePerM2': packageData['price'] ?? packageData['pricePerM2'] ?? 0,
+      'active': packageData['isActive'] ?? packageData['active'] ?? true,
+      'features': metadata,
+    };
+    if (_looksLikeUuid(packageId)) {
+      await BackendApiService.instance.patchMap('/admin/catalog/packages/$packageId', body: body);
+    } else {
+      await BackendApiService.instance.postMap('/admin/catalog/packages', body: body);
+    }
   }
 
   Future<void> deleteAdminPackage(String packageId) async {
@@ -13224,15 +13284,16 @@ class FirestoreDataService {
         .toString()
         .trim();
     if (title.isEmpty) return null;
-    final saved = await BackendApiService.instance.postMap(
-      '/admin/catalog/addon-groups',
-      body: {
-        'titleRu': title,
-        'titleKk': group['titleKk'] ?? group['labelKk'] ?? group['nameKk'],
-        'sortOrder': group['sortOrder'] ?? group['order'] ?? 0,
-        'active': group['active'] ?? group['isActive'] ?? true,
-      },
-    );
+    final body = <String, dynamic>{
+      'titleRu': title,
+      'titleKk': group['titleKk'] ?? group['labelKk'] ?? group['nameKk'],
+      'sortOrder': group['sortOrder'] ?? group['order'] ?? 0,
+      'active': group['active'] ?? group['isActive'] ?? true,
+    };
+    final id = (group['id'] ?? group['key'] ?? '').toString();
+    final saved = _looksLikeUuid(id)
+        ? await BackendApiService.instance.patchMap('/admin/catalog/addon-groups/$id', body: body)
+        : await BackendApiService.instance.postMap('/admin/catalog/addon-groups', body: body);
     return (saved['id'] ?? saved['group_id']).toString();
   }
 
@@ -13276,7 +13337,7 @@ class FirestoreDataService {
         'active': item['active'] ?? item['isActive'] ?? true,
         'sortOrder': item['sortOrder'] ?? i,
       };
-      final itemId = (item['id'] ?? '').toString();
+      final itemId = (item['id'] ?? item['key'] ?? '').toString();
       if (_looksLikeUuid(itemId)) {
         await BackendApiService.instance.patchMap(
           '/admin/catalog/addons/$itemId',
