@@ -33,11 +33,33 @@ jobs:
           install -m 600 /dev/null ~/.ssh/deploy_key
           printf '%s' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
           printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" bash -s <<'REMOTE'
-          docker exec -i domly-backend-postgres-1 sh -c 'psql -U "${POSTGRES_USER:-domly}" -d "${POSTGRES_DB:-domly}" -At' <<'SQL'
-          SELECT phone,status FROM app_users WHERE role IN ('admin','superadmin') AND deleted_at IS NULL ORDER BY created_at;
-          SQL
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" bash -s > admin-credentials.enc <<'REMOTE'
+          docker exec -i domly-backend-api-1 node <<'JS'
+          const crypto = require('node:crypto');
+          const {Pool} = require('pg');
+          const bcrypt = require('bcryptjs');
+          const {normalizePhone} = require('./dist/modules/domainServices');
+          const db = new Pool({connectionString:process.env.DATABASE_URL});
+          (async()=>{
+            try {
+              const password=process.env.ADMIN_BOOTSTRAP_PASSWORD;
+              const phone=normalizePhone(process.env.ADMIN_BOOTSTRAP_PHONE ?? '+77781110170');
+              const row=(await db.query("SELECT password_hash FROM app_users WHERE phone=$1 AND role IN ('admin','superadmin') AND status='approved' AND deleted_at IS NULL",[phone])).rows[0];
+              if (!password || !row?.password_hash || !await bcrypt.compare(password,row.password_hash)) {
+                console.log(JSON.stringify({available:false,reason:'saved_password_unavailable_or_changed'}));
+                return;
+              }
+              const ciphertext=crypto.publicEncrypt({key:Buffer.from('LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUFra241bTdOM2pmNHJra2FsTzhUbQpJQ1NNVHdNNUpzUElCdGdxQ2QxRE5pRUlwdzhsOHUwdGpKUHpiQXhGVVp4TFJSREpwWDZxZWVBWVNTRkZrY2dhCllPVzRaaks0Tjd3WW9CK2g3M3NzeFovZ2xWblBNZXlmYkRhbThQK0o2SURrRzNVZU5Qakhha1VDMlhrdFk4ZGYKWElib1c2dTVOOFJka1Q0NnpoMUxRT0NsMkZQNDlnc2h4L0dJOUt1MFpSeWVMRHlPRHViRldHc1dRUmhhalpPeQpSeFZuMFd4ZHR1MlFCaEZ5OU5scUh0T3BROWxvN2xqSExRNENZeUNIdklsaEVSajhNNEZoUk84b1ZZbzdIeUtoClNBNEZpa28weDN5UDRPOGxKQkdWQ3lhZ0FCUHVRd1hza3o0NitvWm93RXJKcFBFUUpieEpVa0xNdUpYMUtOSGgKZnIyTEJZc3J1SklHMFlBdTk0dU14TTZ4WkF6WmRYZStWUkZDRm1iWGdtYXN1SWpsM2lRL2NzUzFVNWhDa0d1WAo1NkRvUEN2REpxZG5TV1JrR2hzajFIQ0tVQ0RmTUpFblgvRG0zNkY1VDNqSkpFYXZ1Zk4zVTdMeWpKR004QjErCnA1Mm1qUmdoSGRiVmlkdXRWcFI3ZW05SS9NTkZ0RHpSc085NUNiRXh0Yi9CcHllY0tES1RWbzZjR2NrNWRnd3cKUHhTaTdBM1EwSVBPcXEwUVViTC9NM29YalNMeHUvNXZKdHZYM285R3I2NWptQUJPa1k3c3RPNGFoYm5tY1V4MAp0ZnY2bFVGZXQ1QkxoMllULzE3bXFHdVloYm1tK2VIZm9rTS9Ed0FZVlFVUmJ1Tmd1SlN3Qm5GUWJJSk1CdE9MCjRsNVZiendLK2ZIdVNDWWZMY254NVVjQ0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=','base64'),oaepHash:'sha256'},Buffer.from(JSON.stringify({phone,password}))).toString('base64');
+              console.log(JSON.stringify({available:true,ciphertext}));
+            } finally {await db.end();}
+          })().catch(()=>{console.log(JSON.stringify({available:false,reason:'read_failed'}));process.exitCode=1});
+          JS
           REMOTE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: admin-credentials-encrypted
+          path: admin-credentials.enc
+          retention-days: 1
 
   test:
     if: inputs.mode != 'inspect'
