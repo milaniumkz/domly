@@ -98,6 +98,25 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       assert.equal((await request('/admin/cleaners/'+cleaner+'/verification','PATCH',{status:'wrong'})).status,400);
       assert.equal((await request('/admin/cleaners/'+customer+'/verification','PATCH',{status:'approved'})).status,404);
     });
+    await t.test('area photo request persists an owned file and admin can review it',async()=>{
+      const ownFile=randomUUID();
+      await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1::uuid,$2,'test',$1::text,'https://example.com/area-plan')",[ownFile,customer]);
+      try {
+        assert.equal((await request('/quality-checks/from-file','POST',{actualArea:100,fileId:file},true)).status,404);
+        assert.equal((await request('/quality-checks/from-file','POST',{actualArea:100,addressId:randomUUID(),fileId:ownFile},true)).status,404);
+        assert.equal((await request('/quality-checks/from-file','POST',{actualArea:100,fileUrl:'upload-error://fake'},true)).status,404);
+        assert.equal((await request('/quality-checks/from-file','POST',{actualArea:100,fileUrl:'https://example.com/area-plan'},true)).status,201);
+        const result=await request('/quality-checks/from-file','POST',{actualArea:100,fileId:ownFile},true);
+        assert.equal(result.status,201);assert.equal(result.json.data.request.document_file_id,ownFile);
+        const rows=(await request('/admin/quality')).json.data;
+        assert.equal(rows.find((row:any)=>row.id===result.json.data.request.id).areaTechnicalPlanUrl,'https://example.com/area-plan');
+        assert.equal((await request('/admin/quality-checks/'+result.json.data.request.id,'PATCH',{adminComment:'Проверено',approvedArea:100,status:'approved'})).status,200);
+        assert.equal((await request('/quality-checks/from-file','POST',{actualArea:0,fileId:ownFile},true)).status,400);
+      } finally {
+        await db.query('DELETE FROM quality_check_requests WHERE customer_id=$1',[customer]);
+        await db.query('DELETE FROM files WHERE id=$1',[ownFile]);
+      }
+    });
     await t.test('complaints are scoped to the customer and available to admin',async()=>{
       await db.query("INSERT INTO complaints(customer_id,title,body) VALUES($1,'Тестовая жалоба','Тест')",[customer]);
       assert.equal((await request('/complaints','GET',undefined,true)).status,200);

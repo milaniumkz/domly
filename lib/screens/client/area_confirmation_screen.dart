@@ -184,6 +184,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
 
     try {
       String? downloadUrl;
+      String? fileId;
       if (uploadEnabled && _selectedImage != null) {
         final uid = _data.currentUserId;
         if (AuthService.hasTemporarySession) {
@@ -204,6 +205,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                 'platform': kIsWeb ? 'web' : 'native',
               },
             );
+            fileId = upload['id']?.toString();
             downloadUrl = (upload['public_url'] ?? upload['publicUrl'] ?? '')
                 .toString()
                 .trim();
@@ -211,10 +213,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
               throw StateError('Сервис не вернул ссылку на фото.');
             }
           } catch (error) {
-            downloadUrl =
-                'upload-error://area_confirmations/$uid/${DateTime.now().millisecondsSinceEpoch}';
-            _uploadWarning =
-                'Фото выбрано, но хранилище временно не приняло файл. Заявка отправлена на ручную проверку.';
+            throw StateError('Не удалось загрузить фото. Попробуйте ещё раз.');
           }
         }
       }
@@ -222,6 +221,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
       final result = await _data.verifyApartmentArea(
         actualArea: area,
         areaTechnicalPlanUrl: downloadUrl,
+        documentFileId: fileId,
       );
 
       if (!mounted) return;
@@ -234,17 +234,16 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
         title: areaVerified
             ? 'Площадь подтверждена'
             : pendingReview
-            ? 'Отправлено на проверку'
-            : 'Площадь сохранена',
-        subtitle:
-            _uploadWarning ??
+                ? 'Отправлено на проверку'
+                : 'Площадь сохранена',
+        subtitle: _uploadWarning ??
             (areaVerified
                 ? awardedBonus > 0
-                      ? 'Бонус $awardedBonus ₸ начислен.'
-                      : 'Данные обновлены.'
+                    ? 'Бонус $awardedBonus ₸ начислен.'
+                    : 'Данные обновлены.'
                 : pendingReview
-                ? 'Документ отправлен администратору. Бонус будет начислен только после проверки.'
-                : 'Администратор увидит расхождение и проверит его.'),
+                    ? 'Документ отправлен администратору. Бонус будет начислен только после проверки.'
+                    : 'Администратор увидит расхождение и проверит его.'),
         type: areaVerified ? DomlySnackBarType.success : DomlySnackBarType.info,
       );
 
@@ -266,9 +265,8 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
       canPop: !_isSubmitting,
       child: DomlyShell(
         showBackButton: _isSubmitting ? false : null,
-        bottomNavigationBar: _isSubmitting
-            ? null
-            : const DomlyClientBottomNav(currentIndex: 2),
+        bottomNavigationBar:
+            _isSubmitting ? null : const DomlyClientBottomNav(currentIndex: 2),
         child: SafeArea(
           bottom: false,
           child: StreamBuilder<Map<String, dynamic>?>(
@@ -282,15 +280,14 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
               );
               final techPlanRequired =
                   _config.getBool(areaConfig, 'techPlanRequired', false) ||
-                  _forceTechPlanPrompt;
+                      _forceTechPlanPrompt;
 
               return StreamBuilder<Map<String, dynamic>?>(
                 stream: _data.customerProfileStream(),
                 builder: (context, snapshot) {
                   final profile = snapshot.data ?? const <String, dynamic>{};
                   final areaVerified = profile['areaVerified'] == true;
-                  final rawArea =
-                      _initialAreaFromRoute ??
+                  final rawArea = _initialAreaFromRoute ??
                       _readAreaValue(profile['actualArea']) ??
                       _readAreaValue(profile['apartmentArea']) ??
                       _readAreaValue(profile['area']) ??
@@ -366,9 +363,9 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                             child: ElevatedButton(
                               onPressed: canSubmit
                                   ? () => _submit(
-                                      uploadEnabled: uploadEnabled,
-                                      techPlanRequired: techPlanRequired,
-                                    )
+                                        uploadEnabled: uploadEnabled,
+                                        techPlanRequired: techPlanRequired,
+                                      )
                                   : null,
                               style: ElevatedButton.styleFrom(
                                 padding: EdgeInsets.zero,
@@ -562,9 +559,8 @@ class _AreaStatusPill extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: verified
-                  ? const Color(0xFF439F73)
-                  : const Color(0xFFF4B330),
+              color:
+                  verified ? const Color(0xFF439F73) : const Color(0xFFF4B330),
               fontSize: 12,
               fontWeight: FontWeight.w600,
               height: 16 / 12,

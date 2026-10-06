@@ -2794,24 +2794,32 @@ export function buildV1Router(deps: {
   router.post('/quality-checks/from-file', auth(['customer']), asyncHandler(async (req, res) => {
     const area = Number(req.body.area ?? req.body.actualArea ?? req.body.requestedArea ?? 0);
     if (!Number.isFinite(area) || area <= 0) throw new ApiError(400, 'invalid_area', 'Укажите площадь.');
-    const row = first((await deps.db.query(
-      `INSERT INTO quality_check_requests
-       (customer_id, address_id, requested_area, status, document_file_id, admin_comment)
-       VALUES ($1,$2,$3,'pending',$4,$5) RETURNING *`,
-      [
-        req.user!.id,
-        req.body.addressId ?? null,
-        area,
-        req.body.fileId ?? null,
-        req.body.fileUrl ? `Файл: ${req.body.fileUrl}` : null,
-      ],
-    )).rows);
-    if (req.body.addressId) {
-      await deps.db.query(
-        `UPDATE customer_addresses SET area=$2, updated_at=NOW() WHERE id=$1 AND user_id=$3`,
-        [req.body.addressId, area, req.user!.id],
-      );
-    }
+    const row = await deps.db.transaction(async (tx) => {
+      if (req.body.addressId) {
+        const address = first((await tx.query(
+          'SELECT id FROM customer_addresses WHERE id=$1 AND user_id=$2 FOR UPDATE',
+          [req.body.addressId, req.user!.id],
+        )).rows);
+        if (!address) throw new ApiError(404, 'not_found', 'Адрес не найден.');
+      }
+      let fileId: string | null = null;
+      if (req.body.fileId || req.body.fileUrl) {
+        const file = first((await tx.query(
+          req.body.fileId
+            ? 'SELECT id FROM files WHERE id=$1 AND owner_id=$2'
+            : 'SELECT id FROM files WHERE public_url=$1 AND owner_id=$2',
+          [req.body.fileId ?? req.body.fileUrl, req.user!.id],
+        )).rows) as { id: string } | undefined;
+        if (!file) throw new ApiError(404, 'file_not_found', 'Загрузите фото повторно.');
+        fileId = file.id;
+      }
+      return first((await tx.query(
+        `INSERT INTO quality_check_requests
+         (customer_id, address_id, requested_area, status, document_file_id)
+         VALUES ($1,$2,$3,'pending',$4) RETURNING *`,
+        [req.user!.id, req.body.addressId ?? null, area, fileId],
+      )).rows);
+    });
     await deps.notifications.createAdminEvent({
       event: 'quality_check',
       titleRu: 'Проверка площади',
@@ -2836,7 +2844,13 @@ export function buildV1Router(deps: {
     const values: unknown[] = [req.params.id];
     for (const [key, column] of Object.entries(allowed)) {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {
-        values.push(req.body[key]);
+        const value = column === 'status'
+          ? ({ verified: 'approved', resolved: 'approved', call_required: 'scheduled', open: 'pending' } as Record<string, string>)[req.body[key]] ?? req.body[key]
+          : req.body[key];
+        if (column === 'status' && !['pending','scheduled','approved','rejected','cancelled'].includes(value)) {
+          throw new ApiError(400, 'invalid_status', 'Некорректный статус проверки площади.');
+        }
+        values.push(value);
         updates.push(`${column}=$${values.length}`);
       }
     }
@@ -4131,10 +4145,12 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
     return done(
       `SELECT q.*, u.full_name AS customer_name, u.phone AS customer_phone,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.area, ca.verified_area,
-              cp.id AS package_purchase_id, pkg.name_ru AS package_name_ru
+              cp.id AS package_purchase_id, pkg.name_ru AS package_name_ru,
+              f.public_url AS document_url, f.public_url AS "areaTechnicalPlanUrl"
        FROM quality_check_requests q
        JOIN app_users u ON u.id=q.customer_id
        LEFT JOIN customer_addresses ca ON ca.id=q.address_id
+       LEFT JOIN files f ON f.id=q.document_file_id
        LEFT JOIN customer_packages cp ON cp.id=q.customer_package_id
        LEFT JOIN catalog_packages pkg ON pkg.id=cp.package_id`,
       'q.created_at DESC',

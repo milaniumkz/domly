@@ -2050,7 +2050,23 @@ class FirestoreDataService {
       return _debugAreaMismatchReportsBridgeStream();
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/admin/quality'),
+      () async => (await BackendApiService.instance.getList('/admin/quality'))
+          .map((row) => <String, dynamic>{
+                ...row,
+                'userId': row['customer_id'],
+                'customerId': row['customer_id'],
+                'orderId': row['order_id'],
+                'actualArea': row['requested_area'],
+                'initialArea': row['verified_area'] ?? row['area'] ?? 0,
+                'createdAt': row['created_at'],
+                'updatedAt': row['updated_at'],
+                'type': row['document_file_id'] == null
+                    ? 'quality_area_check' : 'area_mismatch',
+                'status': row['status'] == 'approved' ? 'resolved' : row['status'],
+                'reviewStatus': row['status'],
+                'customerName': row['customer_name'],
+                'customerPhone': row['customer_phone'],
+              }).toList(),
     );
   }
 
@@ -9047,6 +9063,7 @@ class FirestoreDataService {
     String? userId,
     required int actualArea,
     String? areaTechnicalPlanUrl,
+    String? documentFileId,
   }) async {
     if (_isDebugCustomer) {
       final currentUid = _uidOrNull ?? 'customer_demo';
@@ -9134,6 +9151,7 @@ class FirestoreDataService {
       '/quality-checks/from-file',
       body: {
         'actualArea': actualArea,
+        if (documentFileId != null) 'fileId': documentFileId,
         if (addressId != null) 'addressId': addressId,
         if (areaTechnicalPlanUrl != null && areaTechnicalPlanUrl.isNotEmpty)
           'fileUrl': areaTechnicalPlanUrl,

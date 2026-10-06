@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -23,12 +24,19 @@ class BackendApiException implements Exception {
 }
 
 class BackendApiService {
-  BackendApiService._();
+  BackendApiService._()
+      : _client = http.Client(),
+        _sessionStore = SessionStore();
+  @visibleForTesting
+  BackendApiService.forTesting(
+      {required http.Client client, required SessionStore sessionStore})
+      : _client = client,
+        _sessionStore = sessionStore;
 
   static final BackendApiService instance = BackendApiService._();
 
-  final http.Client _client = http.Client();
-  final SessionStore _sessionStore = SessionStore();
+  final http.Client _client;
+  final SessionStore _sessionStore;
   Future<void>? _refreshInFlight;
 
   Uri _uri(String path, [Map<String, String?>? query]) {
@@ -118,23 +126,24 @@ class BackendApiService {
     required String contentType,
     Map<String, String> fields = const <String, String>{},
   }) async {
-    final token = await _sessionStore.accessToken();
-    final request = http.MultipartRequest('POST', _uri(path));
-    request.headers['Accept'] = 'application/json';
-    if (token != null && token.isNotEmpty) {
-      request.headers['Authorization'] = 'Bearer $token';
+    Future<http.Response> send() async {
+      final token = await _sessionStore.accessToken();
+      final request = http.MultipartRequest('POST', _uri(path));
+      request.headers['Accept'] = 'application/json';
+      if (token != null && token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+      request.fields.addAll(fields);
+      request.files.add(http.MultipartFile.fromBytes('file', bytes,
+          filename: filename, contentType: _mediaType(contentType)));
+      return http.Response.fromStream(await _client.send(request));
     }
-    request.fields.addAll(fields);
-    request.files.add(
-      http.MultipartFile.fromBytes(
-        'file',
-        bytes,
-        filename: filename,
-        contentType: _mediaType(contentType),
-      ),
-    );
-    final streamed = await request.send();
-    final response = await http.Response.fromStream(streamed);
+
+    var response = await send();
+    if (response.statusCode == 401) {
+      await _refreshSession();
+      response = await send();
+    }
     final data = _decodeResponse(response);
     return Map<String, dynamic>.from(data as Map);
   }
@@ -252,13 +261,11 @@ class BackendApiService {
     return fallback;
   }
 
-  Future<void> _refreshSession() async {
-    final current = _refreshInFlight;
-    if (current != null) {
-      return current;
-    }
-    final completer = Completer<void>();
-    _refreshInFlight = completer.future;
+  Future<void> _refreshSession() {
+    return _refreshInFlight ??= _performRefresh();
+  }
+
+  Future<void> _performRefresh() async {
     try {
       final refreshToken = await _sessionStore.refreshToken();
       if (refreshToken == null || refreshToken.isEmpty) {
@@ -276,10 +283,9 @@ class BackendApiService {
       );
       final data = Map<String, dynamic>.from(_decodeResponse(response) as Map);
       await _saveAuthData(data);
-      completer.complete();
-    } catch (error, stackTrace) {
-      await _sessionStore.clearBackendSession();
-      completer.completeError(error, stackTrace);
+    } on BackendApiException catch (error) {
+      if (error.statusCode == 401 || error.statusCode == 403)
+        await _sessionStore.clearBackendSession();
       rethrow;
     } finally {
       _refreshInFlight = null;
@@ -354,6 +360,13 @@ class BackendApiService {
 
   Future<void> _saveAuthData(Map<String, dynamic> data) async {
     final user = Map<String, dynamic>.from(data['user'] as Map);
+    if (!_sessionStore.acceptsRole(user['role'].toString())) {
+      throw const BackendApiException(
+          code: 'wrong_application',
+          message:
+              'Этот аккаунт относится к другой версии DOMLY. Войдите в соответствующее приложение.',
+          statusCode: 403);
+    }
     await _sessionStore.saveBackendSession(
       BackendSession(
         accessToken: data['accessToken'].toString(),

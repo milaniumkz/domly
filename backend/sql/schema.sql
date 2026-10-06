@@ -770,6 +770,7 @@ CREATE TABLE IF NOT EXISTS quality_check_requests (
 );
 
 ALTER TABLE quality_check_requests ADD COLUMN IF NOT EXISTS customer_package_id UUID REFERENCES customer_packages(id);
+ALTER TABLE quality_check_requests ADD COLUMN IF NOT EXISTS admin_comment TEXT;
 
 CREATE TABLE IF NOT EXISTS payments (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

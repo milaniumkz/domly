@@ -22,12 +22,14 @@ class OtpRequestResult {
 }
 
 class AuthService {
-  static const String _temporarySessionUidKey = 'domly_temporary_session_uid';
-  static const String _authenticatedSessionKey = 'domly_authenticated_session';
-  static const String _authenticatedSessionUidKey =
-      'domly_authenticated_session_uid';
-  static const String _authenticatedSessionSecretKey =
-      'domly_authenticated_session_secret';
+  static String get _temporarySessionUidKey =>
+      SessionStore.appKey('domly_temporary_session_uid');
+  static String get _authenticatedSessionKey =>
+      SessionStore.appKey('domly_authenticated_session');
+  static String get _authenticatedSessionUidKey =>
+      SessionStore.appKey('domly_authenticated_session_uid');
+  static String get _authenticatedSessionSecretKey =>
+      SessionStore.appKey('domly_authenticated_session_secret');
   AuthService({
     Object? firestore,
     Object? firebaseAuth,
@@ -329,6 +331,7 @@ class AuthController extends ChangeNotifier {
   final AppConfig _config;
 
   VoidCallback? _temporarySessionListener;
+  VoidCallback? _backendSessionListener;
   String? _restoredSessionUid;
   String? _restoredSessionRole;
   bool _initialized = false;
@@ -360,6 +363,14 @@ class AuthController extends ChangeNotifier {
       !_config.adminSurface && _config.flavor == AppFlavor.pro;
 
   Future<void> init() async {
+    _backendSessionListener ??= () {
+      _restoredSessionUid = null;
+      _restoredSessionRole = null;
+      AuthService._setRestoredSessionUid(null);
+      _applyBackendRole(null);
+      notifyListeners();
+    };
+    SessionStore.invalidation.addListener(_backendSessionListener!);
     _temporarySessionListener ??= () {
       _initialized = true;
       notifyListeners();
@@ -471,6 +482,8 @@ class AuthController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_backendSessionListener != null)
+      SessionStore.invalidation.removeListener(_backendSessionListener!);
     if (_temporarySessionListener != null) {
       AuthService.temporarySessionUidListenable.removeListener(
         _temporarySessionListener!,
