@@ -99,3 +99,7 @@ jobs:
       - name: Public smoke
         run: |
           curl -fsS "${{ secrets.API_HEALTH_URL }}"
+          for app in customer pro admin; do
+            curl -fsS "https://domly.kz/$app/" -o /dev/null
+            curl -fsS "https://domly.kz/$app/main.dart.js" -o /dev/null
+          done

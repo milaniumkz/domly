@@ -1,0 +1,32 @@
+# Imported inside the domly.kz site; the existing landing page remains available.
+redir /customer /customer/ 308
+redir /pro /pro/ 308
+redir /admin /admin/ 308
+handle_path /customer/* {
+  root * DOMLY_APP_DIR/current/frontend/releases/current/customer
+  try_files {path} /index.html
+  file_server
+}
+handle_path /pro/* {
+  root * DOMLY_APP_DIR/current/frontend/releases/current/pro
+  try_files {path} /index.html
+  file_server
+}
+handle_path /admin/* {
+  root * DOMLY_APP_DIR/current/frontend/releases/current/admin
+  try_files {path} /index.html
+  file_server
+}
+handle /firebase-messaging-sw.js {
+  root * DOMLY_APP_DIR/current/frontend/releases/current/customer
+  file_server
+}
+handle /.well-known/apple-app-site-association {
+  reverse_proxy 127.0.0.1:8080
+}
+handle /.well-known/assetlinks.json {
+  reverse_proxy 127.0.0.1:8080
+}
+handle /app-links {
+  reverse_proxy 127.0.0.1:8080
+}

@@ -34,8 +34,9 @@ backup_stamp="$(date +%Y%m%d-%H%M%S)-$COMMIT_SHA"
 mkdir -p "$BACKUP_DIR/$backup_stamp"
 cp "$RELEASE_DIR/backend/.env" "$BACKUP_DIR/$backup_stamp/backend.env"
 
-if docker compose -p "$COMPOSE_PROJECT" -f "$APP_DIR/docker-compose.yml" ps postgres >/dev/null 2>&1; then
-  docker compose -p "$COMPOSE_PROJECT" -f "$APP_DIR/docker-compose.yml" exec -T postgres pg_dump -U "${POSTGRES_USER:-domly}" "${POSTGRES_DB:-domly}" > "$BACKUP_DIR/$backup_stamp/postgres.sql" || true
+postgres_container="$(docker ps -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter 'label=com.docker.compose.service=postgres')"
+if [ -n "$postgres_container" ]; then
+  docker exec "$postgres_container" sh -c 'pg_dump -U "${POSTGRES_USER:-domly}" "${POSTGRES_DB:-domly}"' > "$BACKUP_DIR/$backup_stamp/postgres.sql"
 fi
 
 ln -sfn "$RELEASE_DIR" "$CURRENT_DIR"
@@ -45,6 +46,12 @@ docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --proj
 
 for i in {1..30}; do
   if curl -fsS "$HEALTH_URL" >/dev/null && curl -fsS "$READY_URL" >/dev/null; then
+    if systemctl is-active --quiet caddy; then
+      chmod -R a+rX "$CURRENT_DIR/frontend/releases/current"
+      APP_DIR="$APP_DIR" GITHUB_SHA="$COMMIT_SHA" python3 "$CURRENT_DIR/scripts/server/publish_web_caddy.py"
+    else
+      docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --project-directory "$CURRENT_DIR" up -d nginx
+    fi
     echo "Deploy OK: $COMMIT_SHA"
     exit 0
   fi
