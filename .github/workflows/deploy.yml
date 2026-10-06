@@ -33,14 +33,12 @@ jobs:
           install -m 600 /dev/null ~/.ssh/deploy_key
           printf '%s' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
           printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" '
-            command -v caddy || true
-            systemctl is-active caddy || true
-            docker ps --format "{{.Names}} {{.Ports}}"
-            if test -f /etc/caddy/Caddyfile; then
-              awk "/domly\\.kz|^[[:space:]]*(root|reverse_proxy|file_server|handle|handle_path|import|redir)/" /etc/caddy/Caddyfile
-            fi
-          '
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" bash -s <<'REMOTE'
+          docker exec -i domly-backend-postgres-1 sh -c 'psql -U "${POSTGRES_USER:-domly}" -d "${POSTGRES_DB:-domly}" -At' <<'SQL'
+          SELECT phone,status FROM app_users WHERE role IN ('admin','superadmin') AND deleted_at IS NULL ORDER BY created_at;
+          SQL
+          REMOTE
+
   test:
     if: inputs.mode != 'inspect'
     uses: ./.github/workflows/ci.yml
