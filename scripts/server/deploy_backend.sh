@@ -5,15 +5,20 @@ APP_DIR="${APP_DIR:-/opt/domly-backend}"
 RELEASES_DIR="$APP_DIR/releases"
 BACKUP_DIR="$APP_DIR/backups"
 CURRENT_DIR="$APP_DIR/current"
+SHARED_DIR="$APP_DIR/shared"
+SHARED_ENV="$SHARED_DIR/backend.env"
 COMMIT_SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
 RELEASE_DIR="$RELEASES_DIR/$COMMIT_SHA"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/health}"
 READY_URL="${READY_URL:-http://127.0.0.1:8080/ready}"
 COMPOSE_PROJECT="${COMPOSE_PROJECT:-domly-backend}"
 
-mkdir -p "$RELEASES_DIR" "$BACKUP_DIR"
+mkdir -p "$RELEASES_DIR" "$BACKUP_DIR" "$SHARED_DIR"
 
-if [ -f "$APP_DIR/backend/.env" ]; then
+if [ -f "$SHARED_ENV" ]; then
+  mkdir -p "$RELEASE_DIR/backend"
+  cp "$SHARED_ENV" "$RELEASE_DIR/backend/.env"
+elif [ -f "$APP_DIR/backend/.env" ]; then
   mkdir -p "$RELEASE_DIR/backend"
   cp "$APP_DIR/backend/.env" "$RELEASE_DIR/backend/.env"
 elif [ -f "$CURRENT_DIR/backend/.env" ]; then
@@ -23,6 +28,7 @@ else
   echo "Missing production backend/.env on server" >&2
   exit 1
 fi
+cp "$RELEASE_DIR/backend/.env" "$SHARED_ENV"
 
 backup_stamp="$(date +%Y%m%d-%H%M%S)-$COMMIT_SHA"
 mkdir -p "$BACKUP_DIR/$backup_stamp"
