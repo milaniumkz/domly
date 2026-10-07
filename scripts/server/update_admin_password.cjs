@@ -13,7 +13,7 @@ let stage = 'input';
   try {
     await client.query('BEGIN');
     stage = 'account lookup';
-    const result = await client.query("SELECT id FROM app_users WHERE phone=$1 AND role IN ('admin','superadmin') AND status <> 'deleted' FOR UPDATE", [input.phone]);
+    const result = await client.query("SELECT id FROM app_users WHERE phone=$1 AND role IN ('admin','superadmin') AND status::text <> 'deleted' FOR UPDATE", [input.phone]);
     if (result.rowCount !== 1) throw new Error('Expected exactly one existing admin account');
     stage = 'password update';
     await client.query('UPDATE app_users SET password_hash=$2, updated_at=NOW() WHERE id=$1', [result.rows[0].id, input.hash]);
