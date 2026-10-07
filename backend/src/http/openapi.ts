@@ -38,6 +38,7 @@ export const openApiSpec = {
       post: { summary: 'Серверный расчёт пакета и дополнительных услуг', responses: okError() },
     },
 
+    '/admin/files/preview': {get:{...secured('Защищённый просмотр файла'),responses:okError()}},
     '/geo/zones': {get:{summary:'Активные рабочие районы',responses:okError()}},
     '/geo/cities': {
       get: { summary: 'Справочник городов Казахстана', parameters: [query('search', 'Астана'), query('limit', '200'), query('offset', '0')], responses: okError() },

@@ -1,3 +1,4 @@
+import {Readable} from 'node:stream';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -18,7 +19,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
   let failPush=false;
   const notifications=new NotificationService(db,{send:async()=>{if(failPush)throw Error('Provider offline');return {sent:0};}} as any);
   const app=express();
-  app.use(express.json(),buildV1Router({db,notifications} as any),errorHandler);
+  app.use(express.json(),buildV1Router({db,notifications,storage:{client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
   const server=app.listen(0,'127.0.0.1');
   await new Promise<void>(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
@@ -117,6 +118,14 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('UPDATE app_users SET bonus_balance=$2 WHERE id=$1',[customer,initial]);
         await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
       }
+    });
+    await t.test('document preview reads stored objects only and rejects customer access',async()=>{
+      const url='https://example.com/document';
+      const preview=await request('/admin/files/preview?url='+encodeURIComponent(url));
+      assert.equal(preview.status,200);
+      assert.equal(Buffer.from(preview.json.data.base64,'base64').toString(),'test image');
+      assert.equal((await request('/admin/files/preview?url='+encodeURIComponent(url),'GET',undefined,true)).status,403);
+      assert.equal((await request('/admin/files/preview?url=http%3A%2F%2Flocalhost%2Fprivate')).status,404);
     });
     await t.test('all admin list sections load and deny customer access',async()=>{
       for(const section of ['cities','orders','payments','complaints','reviews','checklistReports','photoReports','cleaners','users','preorders','quality','addressRequests','payouts','audit','zones','houses','checklistTemplates','packages','addons','addonGroups','banners','promotions','promotionRedemptions','contentPages','videoViews']) {

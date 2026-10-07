@@ -433,6 +433,23 @@ export function buildV1Router(deps: {
     ok(res, row, 201);
   }));
 
+  router.get('/admin/files/preview', auth(['admin','superadmin']), asyncHandler(async (req,res)=>{
+    const url=String(req.query.url??'');
+    const file=first<any>((await deps.db.query('SELECT bucket,object_key,mime_type,size_bytes FROM files WHERE public_url=$1 LIMIT 1',[url])).rows);
+    if (!file) throw new ApiError(404,'not_found','Файл не найден.');
+    if (Number(file.size_bytes)>20*1024*1024) throw new ApiError(413,'file_too_large','Файл слишком большой для предпросмотра.');
+    const stream=await deps.storage.client.getObject(file.bucket,file.object_key);
+    const chunks:Buffer[]=[];
+    let size=0;
+    for await (const chunk of stream) {
+      size+=chunk.length;
+      if (size>20*1024*1024) {stream.destroy();throw new ApiError(413,'file_too_large','Файл слишком большой для предпросмотра.');}
+      chunks.push(Buffer.from(chunk));
+    }
+    res.setHeader('Cache-Control','private, no-store');
+    ok(res,{mimeType:file.mime_type??'application/octet-stream',base64:Buffer.concat(chunks).toString('base64')});
+  }));
+
   router.get('/users', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const { limit, offset } = pageParams(req.query);
     const role = req.query.role ? String(req.query.role) : null;
