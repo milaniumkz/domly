@@ -777,3 +777,37 @@ test('refresh tokens renew access without carrying old JWT expiry claims', () =>
   assert.notEqual(signRefreshToken(restored), refresh);
   assert.throws(() => verifyRefreshToken('invalid'), (error: unknown) => error instanceof ApiError && error.status === 401);
 });
+
+
+test('explicit OTP display has no deadline and shows the real code on success or failure', async () => {
+  const originalFlag=env.otpShowCode, originalUntil=env.otpFailureFallbackUntil;
+  let storedHash='', user: any;
+  const db={query:async(sql:string,args:any[])=>{
+    if(sql.includes('INSERT INTO auth_otp_codes'))storedHash=args[1];
+    return {rows:sql.includes('FROM app_users') && user ? [user] : []};
+  }} as any;
+  const failure=new ApiError(503,'integration_error','Provider unavailable');
+  try {
+    env.otpShowCode=true;env.otpFailureFallbackUntil='';
+    for(const role of [undefined,'customer','cleaner']) {
+      user=role?{role,status:'approved'}:undefined;
+      for(const succeeds of [true,false]) {
+        const service=new AuthService(db,{sendOtp:async()=>{if(!succeeds)throw failure;}} as any);
+        const result=await service.requestOtp('+77052597368');
+        assert.match(result.fallbackCode!,/^\d{6}$/);
+        assert.equal(result.codeSent,succeeds);
+        assert.equal(result.expiresInSeconds,300);
+        assert.equal(await (await import('bcryptjs')).compare(result.fallbackCode!,storedHash),true);
+      }
+    }
+    for(const account of [{role:'admin',status:'approved'},{role:'superadmin',status:'approved'},{role:'customer',status:'blocked'},{role:'cleaner',status:'rejected'}]) {
+      user=account;
+      const sent=await new AuthService(db,{sendOtp:async()=>{}} as any).requestOtp('+77052597368');
+      assert.equal(sent.fallbackCode,undefined);
+      await assert.rejects(()=>new AuthService(db,{sendOtp:async()=>{throw failure;}} as any).requestOtp('+77052597368'),failure);
+    }
+    env.otpShowCode=false;user={role:'customer',status:'approved'};
+    assert.equal((await new AuthService(db,{sendOtp:async()=>{}} as any).requestOtp('+77052597368')).fallbackCode,undefined);
+    await assert.rejects(()=>new AuthService(db,{sendOtp:async()=>{throw failure;}} as any).requestOtp('+77052597368'),failure);
+  } finally {env.otpShowCode=originalFlag;env.otpFailureFallbackUntil=originalUntil;}
+});

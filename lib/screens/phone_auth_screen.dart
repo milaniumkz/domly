@@ -38,6 +38,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   bool _acceptedTerms = false;
   String? _errorText;
   String? _fallbackCode;
+  bool _codeSent = false;
 
   @override
   void initState() {
@@ -96,6 +97,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       setState(() {
         _step = 'code';
         _fallbackCode = result.fallbackCode;
+        _codeSent = result.codeSent;
       });
     } catch (error) {
       if (!mounted) {
@@ -466,7 +468,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          _fallbackCode != null
+          _fallbackCode != null && !_codeSent
               ? 'Сервис отправки недоступен. Временный код показан ниже.'.tr()
               : 'Код отправлен на номер {phone}'
                   .tr(params: {'phone': _formattedPhone}),

@@ -21,18 +21,24 @@ export class AuthService {
       `INSERT INTO auth_otp_codes (phone, code_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')`,
       [normalized, codeHash],
     );
-    try {
-      await this.wapi.sendOtp(normalized, code);
-    } catch (error) {
-      const until = Date.parse(env.otpFailureFallbackUntil);
-      if (!Number.isFinite(until) || until <= Date.now()) throw error;
+    const until = Date.parse(env.otpFailureFallbackUntil);
+    const fallbackActive = Number.isFinite(until) && until > Date.now();
+    let mayShowCode = false;
+    if (env.otpShowCode || fallbackActive) {
       const user = first<{role: string; status: string}>((await this.db.query(
         'SELECT role,status FROM app_users WHERE phone=$1', [normalized],
       )).rows);
-      if (user && (!['customer','cleaner'].includes(user.role) || ['blocked','rejected'].includes(user.status))) throw error;
+      mayShowCode = !user || (['customer','cleaner'].includes(user.role)
+        && !['blocked','rejected'].includes(user.status));
+    }
+    try {
+      await this.wapi.sendOtp(normalized, code);
+    } catch (error) {
+      if (!mayShowCode) throw error;
       return {phone: normalized, expiresInSeconds: 300, codeSent: false, deliveryFailed: true, fallbackCode: code};
     }
-    return { phone: normalized, expiresInSeconds: 300, codeSent: true };
+    return { phone: normalized, expiresInSeconds: 300, codeSent: true,
+      ...(env.otpShowCode && mayShowCode ? {fallbackCode: code} : {}) };
   }
 
   async verifyOtp(phone: string, code: string, role: AuthUser['role'] = 'customer') {
