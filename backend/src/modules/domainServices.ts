@@ -463,27 +463,27 @@ export class SchedulingService {
 
   async offerNextCleaner(orderId: string, excludeCleanerIds: string[] = [], ttlMinutes = 2) {
     return this.db.transaction(async client => {
-    const order = first<any>((await client.query(
-      `SELECT * FROM service_orders WHERE id=$1 FOR UPDATE`,
-      [orderId],
-    )).rows);
-    if (!order || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status)) return null;
-    if (!order?.scheduled_date || !order.start_time || !order.end_time) {
-      throw new ApiError(400, 'invalid_order_time', 'У заказа не указаны дата и время.');
-    }
-    const cleaners = await this.availableCleaners(order.scheduled_date, order.start_time, order.end_time);
-    const next = cleaners.find((cleaner: any) => !excludeCleanerIds.includes(cleaner.id));
-    if (!next) {
-      await client.query(`UPDATE service_orders SET status='waiting_cleaner', updated_at=NOW() WHERE id=$1`, [orderId]);
-      return null;
-    }
-    return first((await client.query(
-      `INSERT INTO order_offers (order_id, cleaner_id, status, expires_at)
-       VALUES ($1,$2,'offered',NOW() + ($3::int * INTERVAL '1 minute'))
-       ON CONFLICT (order_id, cleaner_id) DO UPDATE SET status='offered', expires_at=NOW() + ($3::int * INTERVAL '1 minute'), created_at=NOW()
-       RETURNING *`,
-      [orderId, next.id, Math.max(1, Math.round(ttlMinutes))],
-    )).rows);
+      const order = first<any>((await client.query(
+        `SELECT * FROM service_orders WHERE id=$1 FOR UPDATE`,
+        [orderId],
+      )).rows);
+      if (!order || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status)) return null;
+      if (!order?.scheduled_date || !order.start_time || !order.end_time) {
+        throw new ApiError(400, 'invalid_order_time', 'У заказа не указаны дата и время.');
+      }
+      const cleaners = await this.availableCleaners(order.scheduled_date, order.start_time, order.end_time);
+      const next = cleaners.find((cleaner: any) => !excludeCleanerIds.includes(cleaner.id));
+      if (!next) {
+        await client.query(`UPDATE service_orders SET status='waiting_cleaner', updated_at=NOW() WHERE id=$1`, [orderId]);
+        return null;
+      }
+      return first((await client.query(
+        `INSERT INTO order_offers (order_id, cleaner_id, status, expires_at)
+         VALUES ($1,$2,'offered',NOW() + ($3::int * INTERVAL '1 minute'))
+         ON CONFLICT (order_id, cleaner_id) DO UPDATE SET status='offered', expires_at=NOW() + ($3::int * INTERVAL '1 minute'), created_at=NOW()
+         RETURNING *`,
+        [orderId, next.id, Math.max(1, Math.round(ttlMinutes))],
+      )).rows);
     });
   }
 

@@ -90,6 +90,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const complete=await cleanerRequest(`/orders/${order}/status`,{status:'completed'});
         assert.equal(complete.status,200);
         assert.ok(complete.json.data.completed_at);
+        assert.equal((await request(`/orders/${order}/photo-report`,'GET',undefined,true)).json.data.canSubmit,false);
         assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'completed'})).status,200);
         assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'in_progress'})).status,409);
         assert.equal((await request(`/orders/${order}/reschedule`,'POST',{date:'2030-01-01',time:'10:00'},true)).status,409);

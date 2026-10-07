@@ -1639,9 +1639,8 @@ export function buildV1Router(deps: {
       [req.params.id],
     )).rows);
     const anyOrder = order as any;
-    const canSubmit = anyOrder.start_requires_customer_confirmation === true
-      ? anyOrder.cleaning_start_confirmed === true
-      : anyOrder.status === 'in_progress';
+    const canSubmit = anyOrder.status === 'in_progress'
+      && (!anyOrder.start_requires_customer_confirmation || anyOrder.cleaning_start_confirmed === true);
     ok(res, { report: row ?? null, canSubmit });
   }));
 
