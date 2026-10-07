@@ -368,6 +368,7 @@ class DomlyClientBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final targetKeys = DomlyTutorialTargets.navigationKeys(context);
     return StreamBuilder<int>(
       stream: FirestoreDataService.instance.userUnreadActivityCountStream(),
       initialData: 0,
@@ -379,32 +380,32 @@ class DomlyClientBottomNav extends StatelessWidget {
               label: 'Главная',
               icon: Icons.home_outlined,
               selectedIcon: Icons.home,
-              targetKey: DomlyTutorialTargets.clientBottomNav[0],
+              targetKey: targetKeys[0],
             ),
             _DomlyNavItem(
               label: 'Заказы',
               icon: Icons.receipt_long_outlined,
               selectedIcon: Icons.receipt_long,
-              targetKey: DomlyTutorialTargets.clientBottomNav[1],
+              targetKey: targetKeys[1],
             ),
             _DomlyNavItem(
               label: 'Профиль',
               icon: Icons.person_outline,
               selectedIcon: Icons.person,
-              targetKey: DomlyTutorialTargets.clientBottomNav[2],
+              targetKey: targetKeys[2],
             ),
             _DomlyNavItem(
               label: 'Уведомления',
               icon: Icons.notifications_none,
               selectedIcon: Icons.notifications,
               badgeCount: snapshot.data ?? 0,
-              targetKey: DomlyTutorialTargets.clientBottomNav[3],
+              targetKey: targetKeys[3],
             ),
             _DomlyNavItem(
               label: 'Настройки',
               icon: Icons.settings_outlined,
               selectedIcon: Icons.settings,
-              targetKey: DomlyTutorialTargets.clientBottomNav[4],
+              targetKey: targetKeys[4],
             ),
           ],
           onSelected: (index) {
@@ -429,6 +430,7 @@ class DomlyCleanerBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final targetKeys = DomlyTutorialTargets.navigationKeys(context);
     final data = FirestoreDataService.instance;
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: data.userChatSummariesStream(),
@@ -457,33 +459,33 @@ class DomlyCleanerBottomNav extends StatelessWidget {
                   label: 'Главная',
                   icon: Icons.dashboard_outlined,
                   selectedIcon: Icons.dashboard,
-                  targetKey: DomlyTutorialTargets.cleanerBottomNav[0],
+                  targetKey: targetKeys[0],
                 ),
                 _DomlyNavItem(
                   label: 'Календарь',
                   icon: Icons.calendar_today_outlined,
                   selectedIcon: Icons.calendar_today,
                   badgeCount: calendarAlerts,
-                  targetKey: DomlyTutorialTargets.cleanerBottomNav[1],
+                  targetKey: targetKeys[1],
                 ),
                 _DomlyNavItem(
                   label: 'Заказы',
                   icon: Icons.receipt_long_outlined,
                   selectedIcon: Icons.receipt_long,
-                  targetKey: DomlyTutorialTargets.cleanerBottomNav[2],
+                  targetKey: targetKeys[2],
                 ),
                 _DomlyNavItem(
                   label: 'Сообщения',
                   icon: Icons.chat_bubble_outline,
                   selectedIcon: Icons.chat_bubble,
                   badgeCount: unread,
-                  targetKey: DomlyTutorialTargets.cleanerBottomNav[3],
+                  targetKey: targetKeys[3],
                 ),
                 _DomlyNavItem(
                   label: 'Профиль',
                   icon: Icons.person_outline,
                   selectedIcon: Icons.person,
-                  targetKey: DomlyTutorialTargets.cleanerBottomNav[4],
+                  targetKey: targetKeys[4],
                 ),
               ],
               onSelected: (index) {

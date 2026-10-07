@@ -367,7 +367,9 @@ class _DomlyCoachTutorialState extends State<_DomlyCoachTutorial> {
   }
 
   Rect _targetRect(Size size, EdgeInsets safe, _TutorialStep step) {
-    final keyRect = _rectForKey(step.targetKey);
+    final keyRect = _rectForKey(
+      DomlyTutorialTargets.resolveNavigationTarget(step.targetKey, step.routeName),
+    );
     if (keyRect != null) {
       final inflate = step.target == _TutorialTarget.bottomNav ? 4.0 : 6.0;
       return keyRect.inflate(inflate);
