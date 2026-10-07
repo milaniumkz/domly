@@ -59,6 +59,16 @@ docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --proj
 
 for i in {1..30}; do
   if curl -fsS "$HEALTH_URL" >/dev/null && curl -fsS "$READY_URL" >/dev/null; then
+    schema_ready="$(docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --project-directory "$CURRENT_DIR" exec -T postgres sh -c 'exec psql -U "${POSTGRES_USER:-domly}" -d "${POSTGRES_DB:-domly}" -v ON_ERROR_STOP=1 -At' <<'SQL'
+SELECT count(*) FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'quality_check_requests'
+AND column_name = 'admin_comment';
+SQL
+)"
+    if [ "$schema_ready" != "1" ]; then
+      echo "Deploy failed: quality_check_requests.admin_comment is missing" >&2
+      exit 1
+    fi
     if systemctl is-active --quiet caddy; then
       chmod -R a+rX "$CURRENT_DIR/frontend/releases/current"
       APP_DIR="$APP_DIR" GITHUB_SHA="$COMMIT_SHA" python3 "$CURRENT_DIR/scripts/server/publish_web_caddy.py"
