@@ -1554,7 +1554,7 @@ export function buildV1Router(deps: {
     });
     ok(res, { order, refundedPayments });
   };
-  router.post('/orders/:id/cancel', auth(), asyncHandler(cancelOrder));
+  router.post('/orders/:id/cancel', auth(['customer','admin','superadmin']), asyncHandler(cancelOrder));
 
   router.post('/orders/:id/confirm-start', auth(['customer']), asyncHandler(async (req, res) => {
     const order = await transitionOrder(deps.db, deps.notifications, String(req.params.id), req.user!, req.body.confirmed === true ? 'confirm_start' : 'reject_start');

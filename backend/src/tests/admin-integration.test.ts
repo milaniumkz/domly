@@ -136,6 +136,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       }
       try {
         await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status,scheduled_date,start_time,end_time,estimated_duration_minutes,total_amount) VALUES($1,$3,$4,'assigned','2032-01-01','10:00','12:00',120,22000),($2,$3,$4,'assigned',CURRENT_DATE,'00:01','02:01',120,22000)",[order,late,customer,cleaner]);
+        assert.equal((await fetch(base+`/orders/${order}/cancel`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'})).status,403);
         assert.equal((await release(late)).status,409);
         assert.equal((await release(order)).status,200);
         const row=(await db.query('SELECT * FROM service_orders WHERE id=$1',[order])).rows[0];
