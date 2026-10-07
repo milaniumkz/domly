@@ -128,6 +128,28 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
       }
     });
+    await t.test('cleaner cancellation releases assignment without cancelling payment and rejects late withdrawal',async()=>{
+      const order=randomUUID(),late=randomUUID();
+      const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});
+      async function release(id:string) {
+        return fetch(base+`/orders/${id}/status`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({status:'canceled'})});
+      }
+      try {
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status,scheduled_date,start_time,end_time,estimated_duration_minutes,total_amount) VALUES($1,$3,$4,'assigned','2032-01-01','10:00','12:00',120,22000),($2,$3,$4,'assigned',CURRENT_DATE,'00:01','02:01',120,22000)",[order,late,customer,cleaner]);
+        assert.equal((await release(late)).status,409);
+        assert.equal((await release(order)).status,200);
+        const row=(await db.query('SELECT * FROM service_orders WHERE id=$1',[order])).rows[0];
+        assert.equal(row.cleaner_id,null);
+        assert.ok(['pending_assignment','waiting_cleaner'].includes(row.status));
+        assert.equal(Number(row.total_amount),22000);
+        assert.equal(row.cancelled_by,null);
+        assert.equal((await release(order)).status,403);
+        assert.ok((await db.query("SELECT id FROM notifications WHERE target_id=$1 AND user_id=$2 AND title_ru='Подбираем другую уборщицу'",[order,customer])).rows.length);
+      } finally {
+        await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[[order,late]]);
+        await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[[order,late]]);
+      }
+    });
     await t.test('personal notifications never leak through role membership',async()=>{
       const other=randomUUID();
       const ids=[randomUUID(),randomUUID(),randomUUID()];

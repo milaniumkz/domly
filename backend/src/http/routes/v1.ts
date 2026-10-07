@@ -1,4 +1,4 @@
-import { transitionOrder } from '../../modules/orderLifecycle';
+import { transitionOrder, releaseCleanerAssignment } from '../../modules/orderLifecycle';
 import {confirmArea} from '../../modules/areaVerification';
 import { verifyCleaner } from '../../modules/cleanerVerification';
 import { qualifyReferral, referralDiscount } from '../../modules/referrals';
@@ -1682,7 +1682,7 @@ export function buildV1Router(deps: {
 
   const changeOrderStatus = async (req: any, res: any) => {
     const order = await getVisibleOrder(deps.db, String(req.params.id), req.user!);
-    const nextStatus = String(req.body.status ?? '');
+    const nextStatus = req.body.status === 'canceled' ? 'cancelled' : String(req.body.status ?? '');
     const allowed = ['assigned', 'in_progress', 'completed', 'cancelled'];
     if (!allowed.includes(nextStatus)) throw new ApiError(400, 'invalid_status', 'Недопустимый статус заказа.');
     if (req.user!.role === 'cleaner' && (order as any).cleaner_id !== req.user!.id) {
@@ -1717,6 +1717,14 @@ export function buildV1Router(deps: {
       });
       await deps.notifications.create({userId: (order as any).customer_id, titleRu:'Уборщица назначена', bodyRu:'Уборщица назначена на ваш заказ.', targetType:'order', targetId:String(req.params.id)});
       ok(res, row);
+      return;
+    }
+    if (nextStatus === 'cancelled' && req.user!.role === 'cleaner') {
+      const released = await releaseCleanerAssignment(deps.db,deps.notifications,String(req.params.id),req.user!.id);
+      const declined = (await deps.db.query<{cleaner_id:string}>(`SELECT cleaner_id FROM order_offers WHERE order_id=$1 AND status IN ('declined','expired')`,[req.params.id])).rows.map(row=>row.cleaner_id);
+      const offer = await offerNextCleanerAndNotify(String(req.params.id),[...new Set([req.user!.id,...declined])]);
+      if (!offer) await deps.notifications.createAdminEvent({event:'new_order',titleRu:'Требуется другая уборщица',bodyRu:'Уборщица отказалась от назначения. Подберите замену.',targetType:'order',targetId:String(req.params.id)});
+      ok(res, {order:released,nextOffer:offer});
       return;
     }
     if (nextStatus === 'cancelled') {

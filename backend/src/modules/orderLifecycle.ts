@@ -56,3 +56,23 @@ export async function transitionOrder(db: Database, notifications: NotificationS
   for (const {input,saved} of result.deliveries) if (saved.created && saved.notification) await notifications.deliver(saved.notification,input);
   return result.order;
 }
+
+export async function releaseCleanerAssignment(db: Database, notifications: NotificationService, id: string, cleanerId: string) {
+  const input: NotificationInput = {titleRu:'Подбираем другую уборщицу',bodyRu:'Уборщица отказалась от назначенного заказа. Дата, время и оплата сохраняются.',targetType:'order',targetId:id};
+  const result = await db.transaction(async tx => {
+    const order = first<any>((await tx.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[id])).rows);
+    if (!order || order.cleaner_id !== cleanerId) throw new ApiError(403,'forbidden','Нет доступа к назначению.');
+    if (order.status !== 'assigned') throw new ApiError(409,'invalid_transition','Отказаться можно только до начала уборки.');
+    // Kazakhstan service dates are local time (UTC+5), not the server timezone.
+    const early = first<{allowed:boolean}>((await tx.query(`SELECT (scheduled_date+start_time) AT TIME ZONE 'Asia/Almaty' >= NOW()+INTERVAL '12 hours' AS allowed FROM service_orders WHERE id=$1`,[id])).rows);
+    if (early?.allowed !== true) throw new ApiError(409,'too_late','Отказаться можно минимум за 12 часов до начала.');
+    const updated=first<any>((await tx.query(`UPDATE service_orders SET cleaner_id=NULL,status='pending_assignment',start_requires_customer_confirmation=FALSE,cleaning_start_confirmed=FALSE,cleaning_start_rejected=FALSE,updated_at=NOW() WHERE id=$1 RETURNING *`,[id])).rows)!;
+    await tx.query("UPDATE order_offers SET status=CASE WHEN cleaner_id=$2 THEN 'declined' ELSE 'expired' END WHERE order_id=$1",[id,cleanerId]);
+    await tx.query("INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,'assigned','pending_assignment',$2,'Уборщица отказалась от назначения')",[id,cleanerId]);
+    input.userId=order.customer_id;
+    const saved=await notifications.persist(input,tx);
+    return {order:updated,saved};
+  });
+  if (result.saved.created && result.saved.notification) await notifications.deliver(result.saved.notification,input);
+  return result.order;
+}
