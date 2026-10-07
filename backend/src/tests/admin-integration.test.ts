@@ -221,6 +221,9 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const accepted=(await (await fetch(base+'/cleaner/orders',{headers:{Authorization:'Bearer '+token}})).json() as any).data.find((row:any)=>row.id===order);
         assert.equal(accepted.cleaner_id,cleaner);assert.equal(accepted.status,'assigned');assert.ok(accepted.scheduled_date);
         assert.ok(!(await service.cleanerOffers(cleaner)).some((row:any)=>row.order_id===order));
+        await assert.rejects(service.declineOffer(order,cleaner));
+        assert.equal(await service.offerNextCleaner(order),null);
+        assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[order])).rows[0].status,'assigned');
       } finally {
         await db.query('DELETE FROM order_offers WHERE order_id=$1',[order]);
         await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
