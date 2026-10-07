@@ -4430,6 +4430,7 @@ class _PromoBannersSectionState extends State<_PromoBannersSection> {
                   148.0,
                 );
                 return SizedBox(
+                  key: DomlyTutorialTargets.clientInfoBanner,
                   height: height,
                   child: PageView.builder(
                     controller: _pageController,
@@ -4761,7 +4762,6 @@ class _CompanyPromotionsSectionState extends State<_CompanyPromotionsSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              key: DomlyTutorialTargets.clientInfoBanner,
               height: 132,
               child: PageView.builder(
                 controller: _controller,

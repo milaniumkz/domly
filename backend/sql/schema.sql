@@ -1141,3 +1141,7 @@ CREATE OR REPLACE FUNCTION domly_normalize_address(value TEXT) RETURNS TEXT
 LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS $$
  SELECT trim(regexp_replace(translate(lower(value),'әіңғүұқөһёы','аингуукохе'),'[^[:alnum:]]+',' ','g'));
 $$;
+
+-- Idempotent rewards: repeated approvals cannot credit the same apartment twice.
+ALTER TABLE bonus_transactions ADD COLUMN IF NOT EXISTS dedupe_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS bonus_transactions_dedupe_key_unique ON bonus_transactions(dedupe_key) WHERE dedupe_key IS NOT NULL;

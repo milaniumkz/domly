@@ -48,6 +48,76 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       }
       assert.equal((await request('/auth/refresh','POST',{refreshToken:'invalid'})).status,401);
     });
+    await t.test('personal notifications never leak through role membership',async()=>{
+      const other=randomUUID();
+      const ids=[randomUUID(),randomUUID(),randomUUID()];
+      await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'customer','approved')",[other,'notification-test-'+other]);
+      try {
+        for(const [id,user,role] of [[ids[0],customer,'customer'],[ids[1],other,'customer'],[ids[2],null,'customer']]) {
+          await db.query("INSERT INTO notifications(id,user_id,role,title_ru,body_ru) VALUES($1,$2,$3,'Test','Test')",[id,user,role]);
+        }
+        const rows=(await request('/notifications','GET',undefined,true)).json.data;
+        assert.ok(rows.some((row:any)=>row.id===ids[0]));
+        assert.ok(rows.some((row:any)=>row.id===ids[2]));
+        assert.ok(!rows.some((row:any)=>row.id===ids[1]));
+        assert.equal((await request('/notifications/'+ids[1]+'/read','POST',{},true)).status,404);
+        const before=(await request('/notifications/unread-count','GET',undefined,true)).json.data.count;
+        await request('/notifications/'+ids[0]+'/read','POST',{},true);
+        assert.equal((await request('/notifications/unread-count','GET',undefined,true)).json.data.count,before-1);
+        assert.equal((await request('/notifications/read-all','POST',{},true)).status,200);
+        assert.equal((await db.query('SELECT read_at FROM notifications WHERE id=$1',[ids[1]])).rows[0].read_at,null);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS count FROM notification_reads WHERE notification_id=$1 AND user_id=$2',[ids[1],customer])).rows[0].count,0);
+      } finally {
+        await db.query('DELETE FROM notifications WHERE id=ANY($1::uuid[])',[ids]);
+        await db.query('DELETE FROM app_users WHERE id=$1',[other]);
+      }
+    });
+    await t.test('cleaner zones load, persist, clear and reject inactive selections',async()=>{
+      const active=randomUUID(),inactive=randomUUID();
+      const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});
+      async function cleanerRequest(body?:object) {
+        const res=await fetch(base+'/cleaner/profile',{method:body?'PATCH':'GET',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+        return {status:res.status,json:await res.json() as any};
+      }
+      try {
+        await db.query("INSERT INTO service_zones(id,name_ru,city,active) VALUES($1,'Test Active','Test',TRUE),($2,'Test Inactive','Test',FALSE)",[active,inactive]);
+        const zones=(await request('/geo/zones?city=Test')).json.data;
+        assert.ok(zones.some((row:any)=>row.id===active));
+        assert.ok(!zones.some((row:any)=>row.id===inactive));
+        assert.equal((await fetch(base+'/admin/zones',{headers:{Authorization:'Bearer '+token}})).status,403);
+        assert.equal((await cleanerRequest({zoneIds:[active,active]})).status,200);
+        assert.deepEqual((await cleanerRequest()).json.data.zones.map((z:any)=>z.id),[active]);
+        assert.equal((await cleanerRequest({soundVolume:50})).status,200);
+        assert.equal((await cleanerRequest()).json.data.zones.length,1);
+        assert.equal((await cleanerRequest({zoneIds:[inactive],fullName:'Must Roll Back'})).status,400);
+        assert.equal((await cleanerRequest()).json.data.profile.full_name,'Тестовая анкета');
+        assert.equal((await cleanerRequest()).json.data.zones.length,1);
+        assert.equal((await cleanerRequest({zoneIds:[]})).status,200);
+        assert.equal((await cleanerRequest()).json.data.zones.length,0);
+      } finally {await db.query('DELETE FROM cleaner_zones WHERE cleaner_id=$1',[cleaner]);await db.query('DELETE FROM service_zones WHERE id=ANY($1::uuid[])',[[active,inactive]]);}
+    });
+    await t.test('area approval credits bonus once across both endpoints and retries',async()=>{
+      const address=randomUUID(),check=randomUUID();
+      const initial=Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance);
+      try {
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area,is_primary) VALUES($1,$2,'Астана','Test','1',90,TRUE)",[address,customer]);
+        await db.query("INSERT INTO quality_check_requests(id,customer_id,address_id,requested_area) VALUES($1,$2,$3,100)",[check,customer,address]);
+        assert.equal((await request('/admin/quality-checks/'+check,'PATCH',{status:'approved',approvedArea:100})).status,200);
+        assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),initial+2000);
+        assert.equal(Number((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area),100);
+        const repeated=await Promise.all([request('/admin/quality-checks/'+check+'/approve','POST',{approvedArea:100}),request('/admin/users/'+customer+'/confirm-area','POST',{actualArea:100})]);
+        for(const res of repeated) assert.equal(res.status,200);
+        assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),initial+2000);
+        const history=(await request('/bonus/history','GET',undefined,true)).json.data;
+        assert.equal(history.filter((row:any)=>row.dedupe_key==='area-confirmation:'+customer+':'+address).length,1);
+        assert.equal((await request('/admin/quality-checks/'+check+'/approve','POST',{approvedArea:-5})).status,400);
+      } finally {
+        await db.query('DELETE FROM quality_check_requests WHERE id=$1',[check]);
+        await db.query('DELETE FROM bonus_transactions WHERE user_id=$1',[customer]);
+        await db.query('UPDATE app_users SET bonus_balance=$2 WHERE id=$1',[customer,initial]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+      }
+    });
     await t.test('all admin list sections load and deny customer access',async()=>{
       for(const section of ['cities','orders','payments','complaints','reviews','checklistReports','photoReports','cleaners','users','preorders','quality','addressRequests','payouts','audit','zones','houses','checklistTemplates','packages','addons','addonGroups','banners','promotions','promotionRedemptions','contentPages','videoViews']) {
         assert.equal((await request('/admin/'+section)).status,200,section);
@@ -89,6 +159,25 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       assert.equal(house.status,201);catalogIds.house=house.json.data.id;
       assert.equal((await request('/admin/connected-houses/'+catalogIds.house,'PATCH',{active:true})).status,200);
     });
+    await t.test('payment cards include customer, package, address and creation date',async()=>{
+      const address=randomUUID(),purchase=randomUUID(),payment=randomUUID();
+      try {
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,apartment,area,verified_area) VALUES($1,$2,'Астана','Test Street','14','5',100,100)",[address,customer]);
+        await db.query('INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings) VALUES($1,$2,$3,$4,2,2)',[purchase,customer,catalogIds.pkg,address]);
+        await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,status,amount,invoice_phone) VALUES($1,$2,$3,'kaspi','invoice_requested',22000,'+77000000000')",[payment,customer,purchase]);
+        const row=(await request('/admin/payments')).json.data.find((item:any)=>item.id===payment);
+        assert.equal(row.customer_name,'Тестовая анкета');
+        assert.equal(row.customer_phone,'admin-test-'+customer);
+        assert.equal(row.package_name_ru,housePrefix+' edited');
+        assert.equal(row.street,'Test Street');assert.equal(row.house,'14');assert.equal(row.apartment,'5');
+        assert.equal(Number(row.verified_area),100);
+        assert.ok(row.created_at);assert.equal(row.invoice_phone,'+77000000000');
+      } finally {
+        await db.query('DELETE FROM payments WHERE id=$1',[payment]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+      }
+    });
     await t.test('failed notification persistence rolls back the entire decision',async()=>{
       await assert.rejects(verifyCleaner(db,{persist:async()=>{throw Error('Storage failure');}} as any,cleaner,'approved',admin));
       const state=(await db.query('SELECT u.status,cp.verification_status FROM app_users u JOIN cleaner_profiles cp ON cp.user_id=u.id WHERE u.id=$1',[cleaner])).rows[0];
@@ -102,7 +191,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       assert.equal(state.status,'approved');assert.equal(state.verification_status,'approved');assert.ok(state.verified_at);
       assert.equal((await db.query('SELECT status FROM cleaner_documents WHERE cleaner_id=$1',[cleaner])).rows[0].status,'approved');
       assert.equal(Number((await db.query('SELECT COUNT(*) FROM notifications WHERE user_id=$1',[cleaner])).rows[0].count),1);
-      assert.equal(Number((await db.query('SELECT COUNT(*) FROM audit_logs WHERE actor_id=$1',[admin])).rows[0].count),1);
+      assert.equal(Number((await db.query("SELECT COUNT(*) FROM audit_logs WHERE actor_id=$1 AND action='cleaner.verification'",[admin])).rows[0].count),1);
     });
     await t.test('reject, block and pending keep user, profile and documents consistent',async()=>{
       failPush=false;

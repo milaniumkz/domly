@@ -164,9 +164,9 @@ export class NotificationService {
   }
 
   async persist(input: NotificationInput, queryable: Queryable = this.db) {
-    if (input.role && input.dedupeKey) {
+    if (!input.userId && input.role && input.dedupeKey) {
       const existing = first((await queryable.query(
-        `SELECT * FROM notifications WHERE role=$1 AND dedupe_key=$2 LIMIT 1`,
+        `SELECT * FROM notifications WHERE user_id IS NULL AND role=$1 AND dedupe_key=$2 LIMIT 1`,
         [input.role, input.dedupeKey],
       )).rows);
       if (existing) return { notification: existing, created: false };

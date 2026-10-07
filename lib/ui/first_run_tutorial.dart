@@ -51,12 +51,29 @@ class DomlyFirstRunTutorial {
     }
 
     var index = 0;
+    String? currentRoute;
     while (index >= 0 && index < steps.length && navigator.mounted) {
       final step = steps[index];
-      navigator.pushNamedAndRemoveUntil(step.routeName, (_) => false);
+      if (currentRoute != step.routeName) {
+        navigator.pushNamedAndRemoveUntil(step.routeName, (_) => false);
+        currentRoute = step.routeName;
+      }
       await Future<void>.delayed(const Duration(milliseconds: 420));
       if (!navigator.mounted) {
         return;
+      }
+      if (step.targetKey != null) {
+        for (var attempt = 0;
+            attempt < 30 &&
+                step.targetKey!.currentContext == null &&
+                navigator.mounted;
+            attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        if (step.targetKey!.currentContext == null) {
+          index++;
+          continue;
+        }
       }
       final targetContext = step.targetKey?.currentContext;
       if (targetContext != null) {
@@ -317,6 +334,7 @@ class _DomlyCoachTutorialState extends State<_DomlyCoachTutorial> {
             rect: targetRect,
             child: IgnorePointer(
               child: Container(
+                key: const ValueKey('tutorial-highlight'),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: Colors.white, width: 3),
@@ -431,7 +449,12 @@ class _DomlyCoachTutorialState extends State<_DomlyCoachTutorial> {
         !renderObject.hasSize) {
       return null;
     }
-    return renderObject.localToGlobal(Offset.zero) & renderObject.size;
+    final overlay = context.findRenderObject();
+    final origin = overlay is RenderBox && overlay.attached && overlay.hasSize
+        ? overlay.localToGlobal(Offset.zero)
+        : Offset.zero;
+    return (renderObject.localToGlobal(Offset.zero) - origin) &
+        renderObject.size;
   }
 }
 
@@ -558,19 +581,20 @@ class _CoachBubble extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              Row(
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                spacing: 8,
+                runSpacing: 4,
                 children: [
                   TextButton(
                     onPressed: onSkip,
                     child: Text('Пропустить'.tr()),
                   ),
-                  const Spacer(),
                   if (onBack != null)
                     TextButton(
                       onPressed: onBack,
                       child: Text('Назад'.tr()),
                     ),
-                  const SizedBox(width: 8),
                   FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: DomlyColors.buttonPrimary,

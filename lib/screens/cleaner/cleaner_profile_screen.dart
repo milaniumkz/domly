@@ -1068,9 +1068,20 @@ class CleanerProfileScreen extends StatelessWidget {
     FirestoreDataService data,
     Map<String, dynamic> profile,
   ) async {
-    final zones = await data.serviceZonesStream().first;
-    final clusters = await data.clustersStream().first;
-    final houses = await data.housesStream().first;
+    List<Map<String, dynamic>> zones;
+    List<Map<String, dynamic>> clusters;
+    List<Map<String, dynamic>> houses;
+    try {
+      zones = await data.serviceZonesStream().first;
+      clusters = zones.isEmpty ? await data.clustersStream().first : zones;
+      houses = zones.isEmpty ? await data.housesStream().first : [];
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Не удалось загрузить районы: $error')));
+      }
+      return;
+    }
     if (!context.mounted) {
       return;
     }

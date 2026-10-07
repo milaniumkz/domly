@@ -1,3 +1,4 @@
+import {confirmArea} from '../../modules/areaVerification';
 import { verifyCleaner } from '../../modules/cleanerVerification';
 import { qualifyReferral, referralDiscount } from '../../modules/referrals';
 import { packageQuote } from '../../modules/packageQuote';
@@ -494,19 +495,11 @@ export function buildV1Router(deps: {
       [req.params.id],
     )).rows);
     if (!user) throw new ApiError(404, 'not_found', 'Клиент не найден.');
-    const address = first((await deps.db.query(
-      `UPDATE customer_addresses
-       SET area=$2, verified_area=$2, updated_at=NOW()
-       WHERE id = (
-         SELECT id FROM customer_addresses
-         WHERE user_id=$1
-         ORDER BY is_primary DESC, created_at DESC
-         LIMIT 1
-       )
-       RETURNING *`,
-      [req.params.id, area],
-    )).rows);
-    if (!address) throw new ApiError(404, 'address_not_found', 'У клиента не заполнен адрес.');
+    const address = await deps.db.transaction(async client=>{
+      const address=await confirmArea(client,String(req.params.id),null,area);
+      if (!address) throw new ApiError(404,'address_not_found','У клиента не заполнен адрес.');
+      return address;
+    });
     await deps.notifications.create({
       userId: String(req.params.id),
       titleRu: 'Площадь подтверждена',
@@ -721,13 +714,24 @@ export function buildV1Router(deps: {
   }));
 
   router.patch('/cleaner/profile', auth(['cleaner']), asyncHandler(async (req, res) => {
+    const profile = await deps.db.transaction(async client => {
+    await client.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[req.user!.id]);
+    const zoneIds = req.body.zoneIds;
+    if (zoneIds !== undefined) {
+      if (!Array.isArray(zoneIds) || zoneIds.some((id:unknown)=>typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) throw new ApiError(400,'invalid_zones','Выберите корректные районы.');
+      const ids = [...new Set(zoneIds)];
+      const zones = (await client.query('SELECT id FROM service_zones WHERE id=ANY($1::uuid[]) AND active=TRUE FOR SHARE',[ids])).rows;
+      if (zones.length !== ids.length) throw new ApiError(400,'invalid_zones','Один из выбранных районов недоступен.');
+      await client.query('DELETE FROM cleaner_zones WHERE cleaner_id=$1',[req.user!.id]);
+      await client.query('INSERT INTO cleaner_zones(cleaner_id,zone_id) SELECT $1,unnest($2::uuid[])',[req.user!.id,ids]);
+    }
     if (req.body.fullName || req.body.email) {
-      await deps.db.query(
+      await client.query(
         `UPDATE app_users SET full_name=COALESCE($2,full_name), email=COALESCE($3,email), updated_at=NOW() WHERE id=$1`,
         [req.user!.id, req.body.fullName ?? null, req.body.email ?? null],
       );
     }
-    const profile = first((await deps.db.query(
+    const profile = first((await client.query(
       `INSERT INTO cleaner_profiles
        (user_id, city, registration_status, verification_status, monthly_area_limit, daily_work_limit_minutes, sound_enabled, sound_volume, sound_key)
        VALUES ($1,COALESCE($2,'Астана'),'pending','pending',COALESCE($3,220),COALESCE($4,540),COALESCE($5,TRUE),COALESCE($6,100),COALESCE($7,'system'))
@@ -750,6 +754,8 @@ export function buildV1Router(deps: {
         req.body.soundKey ?? null,
       ],
     )).rows);
+    return profile;
+    });
     ok(res, profile);
   }));
 
@@ -843,6 +849,11 @@ export function buildV1Router(deps: {
       `SELECT * FROM banners WHERE active=TRUE AND placement=$1 ORDER BY sort_order, created_at DESC`,
       [req.query.placement ?? 'home_top'],
     )).rows);
+  }));
+
+  router.get('/geo/zones', asyncHandler(async (req,res)=>{
+    const {limit,offset}=pageParams(req.query);
+    ok(res,(await deps.db.query('SELECT * FROM service_zones WHERE active=TRUE AND ($1::text IS NULL OR city=$1) ORDER BY city,name_ru,id LIMIT $2 OFFSET $3',[req.query.city?String(req.query.city):null,limit,offset])).rows);
   }));
 
   router.get('/geo/cities', asyncHandler(async (req, res) => {
@@ -2861,27 +2872,35 @@ export function buildV1Router(deps: {
     if (!updates.length) throw new ApiError(400, 'empty_update', 'Нет данных для обновления проверки площади.');
     values.push(req.user!.id);
     const adminParam = values.length;
-    const row = first((await deps.db.query(
+    const row = await deps.db.transaction(async client=>{
+    await client.query('SELECT id FROM quality_check_requests WHERE id=$1 FOR UPDATE',[req.params.id]);
+    const updated = first<any>((await client.query(
       `UPDATE quality_check_requests
        SET ${updates.join(', ')}, admin_id=$${adminParam}, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       values,
     )).rows);
-    if (!row) throw new ApiError(404, 'not_found', 'Заявка проверки площади не найдена.');
+    if (!updated) throw new ApiError(404, 'not_found', 'Заявка проверки площади не найдена.');
+    if (updated.status==='approved') {
+      const area=Number(updated.approved_area??updated.requested_area);
+      await confirmArea(client,updated.customer_id,updated.address_id,area);
+      await client.query('UPDATE quality_check_requests SET approved_area=$2 WHERE id=$1',[updated.id,area]);
+      updated.approved_area=area;
+    }
+    return updated;
+    });
     await recordAudit('quality_check.updated', 'quality_check', String(req.params.id), { fields: Object.keys(req.body) }, req.user?.id);
     ok(res, row);
   }));
 
   router.post('/admin/quality-checks/:id/approve', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
-    const row = first<{ id: string; customer_id: string; address_id: string; requested_area: string }>((await deps.db.query(
-      `UPDATE quality_check_requests SET status='approved', approved_area=$2, admin_id=$3, recalculation_amount=COALESCE($4,0), updated_at=NOW()
-       WHERE id=$1 RETURNING *`,
-      [req.params.id, req.body.approvedArea, req.user!.id, req.body.recalculationAmount ?? 0],
-    )).rows);
-    if (!row) throw new ApiError(404, 'not_found', 'Заявка проверки площади не найдена.');
-    if (row.address_id) {
-      await deps.db.query(`UPDATE customer_addresses SET verified_area=$2, area=$2, updated_at=NOW() WHERE id=$1`, [row.address_id, req.body.approvedArea]);
-    }
+    const row = await deps.db.transaction(async client=>{
+      const current=first<any>((await client.query('SELECT * FROM quality_check_requests WHERE id=$1 FOR UPDATE',[req.params.id])).rows);
+      if (!current) throw new ApiError(404,'not_found','Заявка проверки площади не найдена.');
+      const area=Number(req.body.approvedArea??current.approved_area??current.requested_area);
+      await confirmArea(client,current.customer_id,current.address_id,area);
+      return first<any>((await client.query(`UPDATE quality_check_requests SET status='approved',approved_area=$2,admin_id=$3,recalculation_amount=COALESCE($4,0),updated_at=NOW() WHERE id=$1 RETURNING *`,[req.params.id,area,req.user!.id,req.body.recalculationAmount??0])).rows)!;
+    });
     await deps.notifications.create({
       userId: row.customer_id,
       titleRu: Number(req.body.recalculationAmount ?? 0) > 0 ? 'Перерасчёт площади' : 'Площадь подтверждена',
@@ -2915,7 +2934,7 @@ export function buildV1Router(deps: {
       `SELECT n.*, COALESCE(n.read_at, nr.read_at) AS read_at
        FROM notifications n
        LEFT JOIN notification_reads nr ON nr.notification_id=n.id AND nr.user_id=$1
-       WHERE n.user_id=$1 OR n.role=$2
+       WHERE n.user_id=$1 OR (n.user_id IS NULL AND n.role=$2)
        ORDER BY COALESCE(n.read_at, nr.read_at) NULLS FIRST, n.created_at DESC`,
       [req.user!.id, req.user!.role],
     )).rows);
@@ -2926,7 +2945,7 @@ export function buildV1Router(deps: {
       `SELECT COUNT(*)::text AS count
        FROM notifications n
        LEFT JOIN notification_reads nr ON nr.notification_id=n.id AND nr.user_id=$1
-       WHERE (n.user_id=$1 OR n.role=$2) AND COALESCE(n.read_at, nr.read_at) IS NULL`,
+       WHERE (n.user_id=$1 OR (n.user_id IS NULL AND n.role=$2)) AND COALESCE(n.read_at, nr.read_at) IS NULL`,
       [req.user!.id, req.user!.role],
     )).rows);
     ok(res, { count: Number(row?.count ?? 0) });
@@ -2938,7 +2957,7 @@ export function buildV1Router(deps: {
       `SELECT n.*, COALESCE(n.read_at, nr.read_at) AS read_at
        FROM notifications n
        LEFT JOIN notification_reads nr ON nr.notification_id=n.id AND nr.user_id=$1
-       WHERE n.role IN ('admin','superadmin') OR n.user_id=$1
+       WHERE (n.user_id IS NULL AND n.role IN ('admin','superadmin')) OR n.user_id=$1
        ORDER BY COALESCE(n.read_at, nr.read_at) NULLS FIRST, n.created_at DESC
        LIMIT $2 OFFSET $3`,
       [req.user!.id, limit, offset],
@@ -2993,7 +3012,7 @@ export function buildV1Router(deps: {
 
   router.post('/notifications/:id/read', auth(), asyncHandler(async (req, res) => {
     const notificationRows = await deps.db.query(
-      `SELECT * FROM notifications WHERE id=$1 AND (user_id=$2 OR role=$3)`,
+      `SELECT * FROM notifications WHERE id=$1 AND (user_id=$2 OR (user_id IS NULL AND role=$3))`,
       [req.params.id, req.user!.id, req.user!.role],
     );
     const notification = first<any>(notificationRows.rows);
@@ -3029,7 +3048,7 @@ export function buildV1Router(deps: {
        SELECT n.id, $1, NOW()
        FROM notifications n
        LEFT JOIN notification_reads nr ON nr.notification_id=n.id AND nr.user_id=$1
-       WHERE n.role=$2 AND nr.notification_id IS NULL
+       WHERE n.user_id IS NULL AND n.role=$2 AND nr.notification_id IS NULL
        ON CONFLICT (notification_id, user_id) DO UPDATE SET read_at=NOW()
        RETURNING notification_id`,
       [req.user!.id, req.user!.role],
@@ -4121,12 +4140,14 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
     addCommon('p', ['p.numeric_id::text', 'u.full_name', 'u.phone', 'o.numeric_id::text', 'pkg.name_ru']);
     return done(
       `SELECT p.*, u.full_name AS customer_name, u.phone AS customer_phone,
-              o.numeric_id AS order_number, cp.id AS package_purchase_id, pkg.name_ru AS package_name_ru
+              o.numeric_id AS order_number, cp.id AS package_purchase_id, pkg.name_ru AS package_name_ru,
+              ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.area, ca.verified_area
        FROM payments p
        LEFT JOIN app_users u ON u.id=p.customer_id
        LEFT JOIN service_orders o ON o.id=p.order_id
        LEFT JOIN customer_packages cp ON cp.id=p.customer_package_id
-       LEFT JOIN catalog_packages pkg ON pkg.id=cp.package_id`,
+       LEFT JOIN catalog_packages pkg ON pkg.id=COALESCE(cp.package_id,o.package_id)
+       LEFT JOIN customer_addresses ca ON ca.id=COALESCE(cp.address_id,o.address_id)`,
       'p.created_at DESC',
     );
   }
