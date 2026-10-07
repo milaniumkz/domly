@@ -43,6 +43,7 @@ void main() {
     expect(row['customerName'], 'Клиент');
     expect(row['customerPhone'], '+77000000000');
     expect(row['date'], '2026-10-08');
+    expect(row['scheduledDateKey'], '2026-10-08');
   });
   test('backend start confirmation and completion fields reach Pro unchanged',
       () {

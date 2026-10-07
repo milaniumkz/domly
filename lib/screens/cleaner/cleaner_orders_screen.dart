@@ -1705,7 +1705,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     if (value is DateTime) {
       return value;
     }
-    return DateTime.tryParse('${slot['scheduledDateKey'] ?? ''}') ??
+    return DateTime.tryParse(value?.toString() ?? '') ??
+        DateTime.tryParse('${slot['scheduledDateKey'] ?? ''}') ??
         DateTime.now();
   }
 

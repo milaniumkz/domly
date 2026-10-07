@@ -27,6 +27,8 @@ Map<String, dynamic> mapCleanerWorkItem(Map<String, dynamic> row,
     'createdAt': row['created_at'] ?? row['createdAt'],
     'scheduledFor': row['scheduled_date'] ?? row['scheduledFor'] ?? row['date'],
     'date': row['scheduled_date'] ?? row['date'],
+    'scheduledDateKey':
+        row['scheduled_date'] ?? row['scheduledDateKey'] ?? row['date'],
     'time': row['time'] ?? (end.isEmpty ? start : '$start - $end'),
     'startTime': start,
     'endTime': end,
