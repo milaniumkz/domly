@@ -112,12 +112,13 @@ jobs:
       - name: Deploy checked commit
         env:
           OTP_SHOW_CODE: "true"
+          PUBLIC_API_URL: "https://domly.kz"
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
         run: |
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
-            "cd '$DEPLOY_PATH/releases/${GITHUB_SHA}' && GITHUB_SHA='${GITHUB_SHA}' APP_DIR='$DEPLOY_PATH' OTP_SHOW_CODE='$OTP_SHOW_CODE' bash scripts/server/deploy_backend.sh"
+            "cd '$DEPLOY_PATH/releases/${GITHUB_SHA}' && GITHUB_SHA='${GITHUB_SHA}' APP_DIR='$DEPLOY_PATH' OTP_SHOW_CODE='$OTP_SHOW_CODE' PUBLIC_API_URL='$PUBLIC_API_URL' bash scripts/server/deploy_backend.sh"
       - name: Public smoke
         run: |
           curl -fsS "${{ secrets.API_HEALTH_URL }}"

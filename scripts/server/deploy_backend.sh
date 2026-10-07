@@ -53,6 +53,21 @@ PYCODE
   cp "$RELEASE_DIR/backend/.env" "$SHARED_ENV"
 fi
 
+if [ -n "${PUBLIC_API_URL:-}" ]; then
+  RELEASE_ENV="$RELEASE_DIR/backend/.env" python3 - <<'PYCODE'
+import os, pathlib, urllib.parse
+value = os.environ['PUBLIC_API_URL'].rstrip('/')
+url = urllib.parse.urlparse(value)
+if url.scheme != 'https' or not url.netloc or url.path or url.query or url.fragment or url.username:
+    raise SystemExit('PUBLIC_API_URL must be a public HTTPS origin')
+p = pathlib.Path(os.environ['RELEASE_ENV'])
+lines = [line for line in p.read_text().splitlines() if not line.startswith('PUBLIC_API_URL=')]
+p.write_text('\n'.join(lines) + '\nPUBLIC_API_URL=' + value + '\n')
+p.chmod(0o600)
+PYCODE
+  cp "$RELEASE_DIR/backend/.env" "$SHARED_ENV"
+fi
+
 ln -sfn "$RELEASE_DIR" "$CURRENT_DIR"
 echo "$COMMIT_SHA" > "$APP_DIR/REVISION"
 
