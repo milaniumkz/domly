@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import { ApiError, errorHandler } from '../common/api';
-import { auth, signAccessToken } from '../common/auth';
+import { auth, signAccessToken, signRefreshToken, verifyRefreshToken, verifyAccessToken } from '../common/auth';
 import { env, validateEnvConfig } from '../common/env';
 import { AuthService, normalizePhone, NotificationService, PaymentService, PricingService } from '../modules/domainServices';
 import { FcmService, normalizeText, PaymentGatewayService, toLatin, WapiOtpService } from '../modules/integrations';
@@ -765,4 +765,15 @@ test('OTP signup cannot create privileged roles', async () => {
   for (const role of ['admin','superadmin']) {
     await assert.rejects(()=>service.verifyOtp('+77052597368','123456',role as any),(e:any)=>e instanceof ApiError && e.code==='invalid_role');
   }
+});
+
+
+test('refresh tokens renew access without carrying old JWT expiry claims', () => {
+  const user = { id: 'admin', role: 'superadmin' as const, phone: '+77000000000' };
+  const refresh = signRefreshToken(user);
+  const restored = verifyRefreshToken(refresh);
+  assert.deepEqual(restored, user);
+  assert.equal(verifyAccessToken(signAccessToken(restored)).id, user.id);
+  assert.notEqual(signRefreshToken(restored), refresh);
+  assert.throws(() => verifyRefreshToken('invalid'), (error: unknown) => error instanceof ApiError && error.status === 401);
 });

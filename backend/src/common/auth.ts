@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { ApiError } from './api';
@@ -18,17 +19,27 @@ declare global {
 }
 
 export function signAccessToken(user: AuthUser): string {
-  return jwt.sign(user, env.jwtAccessSecret, { expiresIn: env.jwtAccessTtlSeconds });
+  return jwt.sign({ id: user.id, role: user.role, phone: user.phone }, env.jwtAccessSecret, { expiresIn: env.jwtAccessTtlSeconds });
 }
 
 export function signRefreshToken(user: AuthUser): string {
   return jwt.sign({ id: user.id, role: user.role, phone: user.phone }, env.jwtRefreshSecret, {
     expiresIn: env.jwtRefreshTtlSeconds,
+    jwtid: randomUUID(),
   });
 }
 
 export function verifyRefreshToken(token: string): AuthUser {
-  return jwt.verify(token, env.jwtRefreshSecret) as AuthUser;
+  try {
+    const decoded = jwt.verify(token, env.jwtRefreshSecret) as jwt.JwtPayload;
+    if (typeof decoded.id !== 'string' || !decoded.id || typeof decoded.phone !== 'string'
+        || !['customer', 'cleaner', 'admin', 'superadmin'].includes(decoded.role)) {
+      throw new Error('Invalid refresh identity');
+    }
+    return { id: decoded.id, role: decoded.role, phone: decoded.phone };
+  } catch (_) {
+    throw new ApiError(401, 'unauthorized', 'Сессия истекла. Войдите заново.');
+  }
 }
 
 export function verifyAccessToken(token: string): AuthUser {

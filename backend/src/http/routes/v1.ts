@@ -306,20 +306,24 @@ export function buildV1Router(deps: {
     const refreshToken = String(req.body.refreshToken ?? '');
     if (!refreshToken) throw new ApiError(401, 'unauthorized', 'Войдите в аккаунт заново.');
     const user = verifyRefreshToken(refreshToken);
-    const session = first((await deps.db.query(
-      `SELECT id FROM refresh_sessions
-       WHERE user_id=$1 AND token_hash=$2 AND revoked_at IS NULL AND expires_at > NOW()`,
-      [user.id, hashToken(refreshToken)],
-    )).rows);
-    if (!session) throw new ApiError(401, 'unauthorized', 'Сессия истекла. Войдите заново.');
     const nextRefreshToken = signRefreshToken(user);
-    await deps.db.query(`UPDATE refresh_sessions SET revoked_at=NOW() WHERE id=$1`, [(session as any).id]);
-    await deps.db.query(
-      `INSERT INTO refresh_sessions (user_id, token_hash, expires_at)
-       VALUES ($1,$2,NOW() + INTERVAL '30 days')`,
-      [user.id, hashToken(nextRefreshToken)],
-    );
-    ok(res, { accessToken: signAccessToken(user), refreshToken: nextRefreshToken, user });
+    const accessToken = signAccessToken(user);
+    await deps.db.transaction(async (tx) => {
+      const session = first((await tx.query(
+        `SELECT id FROM refresh_sessions
+         WHERE user_id=$1 AND token_hash=$2 AND revoked_at IS NULL AND expires_at > NOW()
+         FOR UPDATE`,
+        [user.id, hashToken(refreshToken)],
+      )).rows);
+      if (!session) throw new ApiError(401, 'unauthorized', 'Сессия истекла. Войдите заново.');
+      await tx.query(`UPDATE refresh_sessions SET revoked_at=NOW() WHERE id=$1`, [(session as any).id]);
+      await tx.query(
+        `INSERT INTO refresh_sessions (user_id, token_hash, expires_at)
+         VALUES ($1,$2,NOW() + ($3 || ' seconds')::interval)`,
+        [user.id, hashToken(nextRefreshToken), env.jwtRefreshTtlSeconds],
+      );
+    });
+    ok(res, { accessToken, refreshToken: nextRefreshToken, user });
   }));
 
   router.post('/auth/logout', auth(), asyncHandler(async (req, res) => {

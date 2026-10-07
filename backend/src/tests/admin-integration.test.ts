@@ -6,8 +6,8 @@ import {AddressInfo} from 'node:net';
 import {Database} from '../infrastructure/db/Database';
 import {buildV1Router} from '../http/routes/v1';
 import {errorHandler} from '../common/api';
-import {signAccessToken} from '../common/auth';
-import {NotificationService} from '../modules/domainServices';
+import {signAccessToken,signRefreshToken,verifyAccessToken} from '../common/auth';
+import {NotificationService,hashToken} from '../modules/domainServices';
 import {verifyCleaner} from '../modules/cleanerVerification';
 
 test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async t=>{
@@ -32,6 +32,22 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('admin session refresh rotates tokens and preserves access after reopening',async()=>{
+      const original=signRefreshToken({id:admin,role:'superadmin',phone:'fixture'});
+      await db.query("INSERT INTO refresh_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')",[admin,hashToken(original)]);
+      let token=original;
+      for(let i=0;i<3;i++) {
+        const response=await request('/auth/refresh','POST',{refreshToken:token});
+        assert.equal(response.status,200);
+        const next=response.json.data;
+        assert.notEqual(next.refreshToken,token);
+        assert.equal(verifyAccessToken(next.accessToken).id,admin);
+        assert.equal((await fetch(base+'/admin/quality',{headers:{Authorization:'Bearer '+next.accessToken}})).status,200);
+        assert.equal((await request('/auth/refresh','POST',{refreshToken:token})).status,401);
+        token=next.refreshToken;
+      }
+      assert.equal((await request('/auth/refresh','POST',{refreshToken:'invalid'})).status,401);
+    });
     await t.test('all admin list sections load and deny customer access',async()=>{
       for(const section of ['cities','orders','payments','complaints','reviews','checklistReports','photoReports','cleaners','users','preorders','quality','addressRequests','payouts','audit','zones','houses','checklistTemplates','packages','addons','addonGroups','banners','promotions','promotionRedemptions','contentPages','videoViews']) {
         assert.equal((await request('/admin/'+section)).status,200,section);
