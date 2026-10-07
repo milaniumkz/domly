@@ -21,7 +21,7 @@ concurrency:
 jobs:
   inspect:
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'inspect'
-    runs-on: [milanium-linux-arm64, repo-domly]
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || fromJSON('["milanium-linux-arm64", "repo-domly"]') }}
     timeout-minutes: 30
     environment: production
     steps:
@@ -44,7 +44,7 @@ jobs:
           '
   import-catalog:
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'import-catalog' && github.ref == 'refs/heads/main'
-    runs-on: [milanium-linux-arm64, repo-domly]
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || fromJSON('["milanium-linux-arm64", "repo-domly"]') }}
     timeout-minutes: 30
     environment: production
     steps:
@@ -67,7 +67,7 @@ jobs:
 
   deploy:
     needs: test
-    runs-on: [milanium-linux-arm64, repo-domly]
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || fromJSON('["milanium-linux-arm64", "repo-domly"]') }}
     timeout-minutes: 30
     if: github.ref == 'refs/heads/main'
     environment: production

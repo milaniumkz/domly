@@ -5,7 +5,7 @@ permissions:
 jobs:
   backend:
     needs: backend-unit
-    runs-on: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main'
+    runs-on: ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && (github.ref == 'refs/heads/main'
       || github.ref == 'refs/heads/codex/full-ci-pilot') && fromJSON('["milanium-linux-arm64",
       "repo-domly"]') || fromJSON('["ubuntu-latest"]') }}
     services:
@@ -42,7 +42,7 @@ jobs:
         test -n "$DOMLY_INTEGRATION_DATABASE_URL"
         node --test dist/tests/admin-integration.test.js dist/tests/catalog-migration.test.js dist/tests/mobile-integration.test.js
   backend-unit:
-    runs-on: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main'
+    runs-on: ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && (github.ref == 'refs/heads/main'
       || github.ref == 'refs/heads/codex/full-ci-pilot') && fromJSON('["milanium-mac-arm64",
       "repo-domly"]') || fromJSON('["ubuntu-latest"]') }}
     timeout-minutes: 30
@@ -58,14 +58,14 @@ jobs:
       with:
         persist-credentials: false
     - uses: actions/setup-node@v4
-      if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/main'
+      if: (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') || (github.ref != 'refs/heads/main'
         && github.ref != 'refs/heads/codex/full-ci-pilot')
       with:
         node-version: '22'
         cache: npm
         cache-dependency-path: backend/package-lock.json
     - name: Select installed Node 22
-      if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main'
+      if: github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && (github.ref == 'refs/heads/main'
         || github.ref == 'refs/heads/codex/full-ci-pilot')
       run: |
         echo /opt/homebrew/opt/node@22/bin >> "$GITHUB_PATH"
@@ -89,27 +89,27 @@ jobs:
         if-no-files-found: error
         retention-days: 1
   flutter:
-    runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64",
+    runs-on: ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && fromJSON('["milanium-mac-arm64",
       "repo-domly"]') || fromJSON('["ubuntu-latest"]') }}
     timeout-minutes: 45
     env:
-      FLUTTER_BIN: "${{ github.event_name != 'pull_request' && '/Users/dmitriyshtrakhov/flutter-sdk/flutter/bin/flutter'
+      FLUTTER_BIN: "${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && '/Users/dmitriyshtrakhov/flutter-sdk/flutter/bin/flutter'
         || 'flutter' }}"
     steps:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
     - uses: subosito/flutter-action@v2
-      if: github.event_name == 'pull_request'
+      if: (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
       with:
         flutter-version: 3.44.1
         cache: true
     - name: Select existing Mac Flutter 3.44.1
-      if: github.event_name != 'pull_request'
+      if: github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch'
       run: |
         echo /Users/dmitriyshtrakhov/flutter-sdk/flutter/bin >> "$GITHUB_PATH"
         /Users/dmitriyshtrakhov/flutter-sdk/flutter/bin/flutter --version --machine | python3 -c 'import json,sys; v=json.load(sys.stdin); assert v["frameworkVersion"] == "3.44.1" and v["dartSdkVersion"] == "3.12.1"'
-    - run: flutter pub get ${{ github.event_name != 'pull_request' && '--enforce-lockfile'
+    - run: flutter pub get ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && '--enforce-lockfile'
         || '' }}
     - run: flutter analyze --no-fatal-infos --no-fatal-warnings
     - run: flutter test test/localization test/models test/services test/app test/utils
