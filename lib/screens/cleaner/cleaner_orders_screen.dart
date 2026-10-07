@@ -1,3 +1,4 @@
+import '../common/customer_rating_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -461,6 +462,14 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
           if ((order['accessMethod'] ?? '').toString().isNotEmpty)
             Text('Доступ: ${(order['accessMethod'] ?? '—')}'),
           Text('Пакет: ${(order['package'] ?? '—')}'),
+          if (status == 'completed')
+            TextButton(
+                onPressed: () => showCustomerRatingDialog(context,
+                    submit: (rating, note) => _data.submitCustomerReview(
+                        orderId: _statusTargetId(order),
+                        rating: rating,
+                        text: note)),
+                child: Text('Оценить клиента'.tr())),
           if (status != 'completed') ...[
             const SizedBox(height: 2),
             Column(

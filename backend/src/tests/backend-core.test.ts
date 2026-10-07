@@ -1,3 +1,4 @@
+import {canonicalMediaUrl,httpsMediaUrl,mapMediaValues,verifyMediaLink} from '../modules/mediaLinks';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -810,4 +811,22 @@ test('explicit OTP display has no deadline and shows the real code on success or
     assert.equal((await new AuthService(db,{sendOtp:async()=>{}} as any).requestOtp('+77052597368')).fallbackCode,undefined);
     await assert.rejects(()=>new AuthService(db,{sendOtp:async()=>{throw failure;}} as any).requestOtp('+77052597368'),failure);
   } finally {env.otpShowCode=originalFlag;env.otpFailureFallbackUntil=originalUntil;}
+});
+
+test('signed media URLs preserve storage references, expire and reject tampering',()=>{
+  const raw=env.minioPublicUrl.replace(/\/$/,'')+'/photo_reports/user/image.jpg';
+  const link=new URL(httpsMediaUrl(raw));
+  assert.equal(link.pathname,'/api/v1/files/media');
+  assert.equal(canonicalMediaUrl(link.toString()),raw);
+  assert.equal(httpsMediaUrl(link.toString()),link.toString());
+  const key=link.searchParams.get('key')!,expires=link.searchParams.get('expires')!,signature=link.searchParams.get('signature')!;
+  assert.equal(verifyMediaLink(key,expires,signature),true);
+  assert.equal(verifyMediaLink('private/other.jpg',expires,signature),false);
+  assert.equal(verifyMediaLink(key,'1',signature),false);
+  assert.equal(verifyMediaLink('../secret',expires,signature),false);
+  assert.equal(httpsMediaUrl('https://external.example/image.jpg'),'https://external.example/image.jpg');
+  const date=new Date();
+  const mapped=mapMediaValues({photos:[raw],created_at:date},httpsMediaUrl);
+  assert.equal(mapped.photos[0],link.toString());
+  assert.equal(mapped.created_at,date);
 });

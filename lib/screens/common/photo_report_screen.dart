@@ -1,3 +1,4 @@
+import 'customer_rating_dialog.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/debug_session.dart';
@@ -408,14 +409,18 @@ class _PhotoReportScreenState extends State<PhotoReportScreen> {
       if (!mounted) {
         return;
       }
-      await _showCustomerRatingDialog(orderId);
+      final rated = await showCustomerRatingDialog(context,
+          submit: (rating, note) => _data.submitCustomerReview(
+              orderId: orderId, rating: rating, text: note));
       if (!mounted) {
         return;
       }
       showDomlySnackBar(
         context,
         title: 'Фотоотчёт отправлен',
-        subtitle: 'Заказ завершён, оценка клиента сохранена.',
+        subtitle: rated
+            ? 'Заказ завершён, оценка клиента сохранена.'
+            : 'Заказ завершён. Оценку можно оставить в завершённых заказах.',
         type: DomlySnackBarType.success,
       );
       Navigator.pushNamedAndRemoveUntil(
@@ -438,100 +443,6 @@ class _PhotoReportScreenState extends State<PhotoReportScreen> {
       if (mounted) {
         setState(() => _loading = false);
       }
-    }
-  }
-
-  Future<void> _showCustomerRatingDialog(String orderId) async {
-    var rating = 5;
-    final noteController = TextEditingController();
-    try {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) {
-          var submitting = false;
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              return AlertDialog(
-                title: Text('Оцените клиента'.tr()),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Эта оценка будет влиять на рейтинг клиента.'.tr()),
-                    const SizedBox(height: 14),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        for (var i = 1; i <= 5; i++)
-                          IconButton(
-                            onPressed: submitting
-                                ? null
-                                : () => setDialogState(() => rating = i),
-                            icon: Icon(
-                              i <= rating ? Icons.star : Icons.star_border,
-                              color: const Color(0xFFD06D45),
-                              size: 32,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: noteController,
-                      enabled: !submitting,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Комментарий',
-                        hintText: 'Например: всё было готово к уборке',
-                      ),
-                    ),
-                  ],
-                ),
-                actions: [
-                  FilledButton(
-                    onPressed: submitting
-                        ? null
-                        : () async {
-                            setDialogState(() => submitting = true);
-                            try {
-                              await _data.submitCustomerReview(
-                                orderId: orderId,
-                                rating: rating,
-                                text: noteController.text,
-                              );
-                              if (dialogContext.mounted) {
-                                Navigator.pop(dialogContext);
-                              }
-                            } catch (error) {
-                              if (!context.mounted) {
-                                return;
-                              }
-                              setDialogState(() => submitting = false);
-                              showDomlySnackBar(
-                                context,
-                                title: 'Не удалось сохранить оценку',
-                                subtitle: '$error',
-                                type: DomlySnackBarType.error,
-                              );
-                            }
-                          },
-                    child: submitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text('Сохранить'.tr()),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      noteController.dispose();
     }
   }
 

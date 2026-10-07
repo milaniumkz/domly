@@ -920,6 +920,9 @@ ALTER TABLE reviews
   ADD COLUMN IF NOT EXISTS positive_traits JSONB NOT NULL DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS negative_traits JSONB NOT NULL DEFAULT '[]'::jsonb;
 
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS author_role TEXT NOT NULL DEFAULT 'customer';
+CREATE INDEX IF NOT EXISTS idx_reviews_order_author ON reviews(order_id,author_role);
+
 CREATE TABLE IF NOT EXISTS checklist_reports (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   order_id UUID NOT NULL REFERENCES service_orders(id) ON DELETE CASCADE,

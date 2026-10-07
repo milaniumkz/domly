@@ -1,3 +1,5 @@
+import {saveOrderReview} from '../../modules/orderReviews';
+import {canonicalMediaUrl, mediaLinksMiddleware, verifyMediaLink} from '../../modules/mediaLinks';
 import { transitionOrder, releaseCleanerAssignment } from '../../modules/orderLifecycle';
 import {confirmArea} from '../../modules/areaVerification';
 import { verifyCleaner } from '../../modules/cleanerVerification';
@@ -32,6 +34,7 @@ export function buildV1Router(deps: {
   wapi: WapiOtpService;
 }) {
   const router = Router();
+  router.use(mediaLinksMiddleware(deps.db));
   router.use(mobileRouter(deps.db));
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -434,8 +437,22 @@ export function buildV1Router(deps: {
     ok(res, row, 201);
   }));
 
+  router.get('/files/media', asyncHandler(async (req,res)=>{
+    const key=String(req.query.key??'');
+    if(!verifyMediaLink(key,String(req.query.expires??''),String(req.query.signature??'')))throw new ApiError(403,'invalid_media_link','Ссылка на файл недействительна. Обновите страницу.');
+    const file=first<any>((await deps.db.query('SELECT mime_type FROM files WHERE bucket=$1 AND object_key=$2 LIMIT 1',[env.minioBucket,key])).rows);
+    const stream=await deps.storage.client.getObject(env.minioBucket,key);
+    res.setHeader('Content-Type',file?.mime_type??'application/octet-stream');
+    res.setHeader('Cache-Control','private, max-age=300');
+    res.setHeader('X-Content-Type-Options','nosniff');
+    res.setHeader('Content-Security-Policy',"sandbox");
+    stream.on('error',()=>{if(!res.headersSent)res.status(404).end();else res.destroy();});
+    res.on('close',()=>stream.destroy());
+    stream.pipe(res);
+  }));
+
   router.get('/admin/files/preview', auth(['admin','superadmin']), asyncHandler(async (req,res)=>{
-    const url=String(req.query.url??'');
+    const url=canonicalMediaUrl(String(req.query.url??''));
     const file=first<any>((await deps.db.query('SELECT bucket,object_key,mime_type,size_bytes FROM files WHERE public_url=$1 LIMIT 1',[url])).rows);
     if (!file) throw new ApiError(404,'not_found','Файл не найден.');
     if (Number(file.size_bytes)>20*1024*1024) throw new ApiError(413,'file_too_large','Файл слишком большой для предпросмотра.');
@@ -2706,7 +2723,7 @@ export function buildV1Router(deps: {
        FROM reviews r
        LEFT JOIN app_users cu ON cu.id=r.customer_id
        LEFT JOIN service_orders o ON o.id=r.order_id
-       WHERE r.cleaner_id=$1
+       WHERE r.cleaner_id=$1 AND r.author_role='customer'
        ORDER BY r.created_at DESC LIMIT 20`,
       [(review as any).cleaner_id],
     )).rows;
@@ -3276,40 +3293,13 @@ export function buildV1Router(deps: {
     )).rows);
   }));
 
-  router.post('/reviews', auth(['customer']), asyncHandler(async (req, res) => {
-    const positiveTraits = Array.isArray(req.body.positiveTraits) ? req.body.positiveTraits.map(String).filter(Boolean) : [];
-    const negativeTraits = Array.isArray(req.body.negativeTraits) ? req.body.negativeTraits.map(String).filter(Boolean) : [];
-    const row = first((await deps.db.query(
-      `INSERT INTO reviews (customer_id, cleaner_id, order_id, rating, comment, photo_url, positive_traits, negative_traits)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [
-        req.user!.id,
-        req.body.cleanerId ?? null,
-        req.body.orderId ?? null,
-        req.body.rating,
-        req.body.comment ?? null,
-        req.body.photoUrl ?? null,
-        JSON.stringify(positiveTraits),
-        JSON.stringify(negativeTraits),
-      ],
-    )).rows);
-    if (req.body.cleanerId) {
-      await deps.db.query(
-        `UPDATE app_users SET rating=(
-          SELECT ROUND(AVG(rating)::numeric, 2) FROM reviews WHERE cleaner_id=$1
-        ), updated_at=NOW() WHERE id=$1`,
-        [req.body.cleanerId],
-      );
+  router.post('/reviews', auth(['customer','cleaner']), asyncHandler(async (req,res)=>{
+    const result=await saveOrderReview(deps.db,req.user!,req.body);
+    if(result.created) {
+      await deps.notifications.create({userId:result.target,titleRu:'Новая оценка по заказу',bodyRu:`Оценка: ${result.review.rating} из 5.`,targetType:'review',targetId:result.review.id});
+      await deps.notifications.createAdminEvent({event:'review',titleRu:'Новый отзыв',bodyRu:`Участник заказа оставил оценку ${result.review.rating}.`,targetType:'review',targetId:result.review.id,dedupeKey:`review-${result.review.id}`});
     }
-    await deps.notifications.createAdminEvent({
-      event: 'review',
-      titleRu: 'Новый отзыв',
-      bodyRu: `Клиент оставил отзыв с оценкой ${req.body.rating}.`,
-      targetType: 'review',
-      targetId: (row as any).id,
-      dedupeKey: `review-${(row as any).id}`,
-    });
-    ok(res, row, 201);
+    ok(res,result.review,result.created?201:200);
   }));
 
   router.get('/preorders', auth(['customer']), asyncHandler(async (req, res) => {

@@ -128,7 +128,7 @@ class BackendApiService {
     Map<String, String> fields = const <String, String>{},
   }) async {
     Future<http.Response> send() async {
-      final token = await _sessionStore.accessToken();
+      final token = await _accessToken();
       final request = http.MultipartRequest('POST', _uri(path));
       request.headers['Accept'] = 'application/json';
       if (token != null && token.isNotEmpty) {
@@ -155,6 +155,28 @@ class BackendApiService {
     return MediaType(parts[0], parts[1]);
   }
 
+  Future<String?> _accessToken() async {
+    final token = await _sessionStore.accessToken();
+    if (token == null || token.isEmpty) return token;
+    final parts = token.split('.');
+    if (parts.length == 3) {
+      int? expiry;
+      try {
+        final payload = jsonDecode(
+            utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+        if (payload is Map && payload['exp'] is num) {
+          expiry = (payload['exp'] as num).toInt();
+        }
+      } catch (_) {}
+      if (expiry != null &&
+          expiry <= DateTime.now().millisecondsSinceEpoch ~/ 1000 + 30) {
+        await _refreshSession();
+        return _sessionStore.accessToken();
+      }
+    }
+    return token;
+  }
+
   Future<dynamic> _request(
     String method,
     String path, {
@@ -163,7 +185,7 @@ class BackendApiService {
     bool authenticated = true,
     bool retryOnUnauthorized = true,
   }) async {
-    final token = authenticated ? await _sessionStore.accessToken() : null;
+    final token = authenticated ? await _accessToken() : null;
     final response = await _send(
       method,
       path,
@@ -173,7 +195,10 @@ class BackendApiService {
     );
 
     if (response.statusCode == 401 && authenticated && retryOnUnauthorized) {
-      await _refreshSession();
+      final latest = await _sessionStore.accessToken();
+      if (latest == null || latest.isEmpty || latest == token) {
+        await _refreshSession();
+      }
       return _request(
         method,
         path,

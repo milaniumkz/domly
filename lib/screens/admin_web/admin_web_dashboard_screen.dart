@@ -4350,6 +4350,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             title: 'Отзыв по заказу ${review['orderId'] ?? '—'}',
             sections: [
               _detailSection('Отзыв', {
+                'Автор': review['authorRole'] == 'cleaner'
+                    ? 'Уборщица оценила клиента'
+                    : 'Клиент оценил уборщицу',
                 'Оценка': '$rating / 5',
                 'Текст': (review['text'] ?? '—').toString(),
                 'Плюсы': ((review['positiveTraits'] ?? const []) as List).join(

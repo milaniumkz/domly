@@ -78,4 +78,60 @@ void main() {
         api.postMap('/failed', body: {}), throwsA(isA<BackendApiException>()));
     expect(api.dataRevision.value, 1);
   });
+  test('expired Pro token refreshes before parallel reads and upload',
+      () async {
+    final store = SessionStore(surface: SessionSurface.pro);
+    final expired = 'e30.${base64Url.encode(utf8.encode(jsonEncode({
+              'exp': 1
+            }))).replaceAll('=', '')}.signature';
+    await store.saveBackendSession(BackendSession(
+        accessToken: expired,
+        refreshToken: 'valid',
+        userId: 'cleaner',
+        role: 'cleaner'));
+    var refreshes = 0;
+    final usedTokens = <String?>[];
+    final api = BackendApiService.forTesting(
+        sessionStore: store,
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/auth/refresh')) {
+            refreshes++;
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+            return http.Response(
+                jsonEncode({
+                  'data': {
+                    'accessToken': 'fresh',
+                    'refreshToken': 'rotated',
+                    'user': {
+                      'id': 'cleaner',
+                      'role': 'cleaner',
+                      'phone': '+77000000000'
+                    }
+                  }
+                }),
+                200);
+          }
+          usedTokens.add(request.headers['Authorization']);
+          return http.Response(
+              jsonEncode({
+                'data': {
+                  'ok': true,
+                  'public_url': 'https://example.com/image.jpg'
+                }
+              }),
+              200);
+        }));
+    await Future.wait([
+      api.getMap('/cleaner/orders'),
+      api.getMap('/cleaner/profile'),
+      api.uploadFile(
+          path: '/files',
+          bytes: [1, 2, 3],
+          filename: 'image.jpg',
+          contentType: 'image/jpeg')
+    ]);
+    expect(refreshes, 1);
+    expect(usedTokens, everyElement('Bearer fresh'));
+    expect(await store.refreshToken(), 'rotated');
+  });
 }

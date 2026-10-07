@@ -1,3 +1,5 @@
+import {env} from '../common/env';
+import {httpsMediaUrl} from '../modules/mediaLinks';
 import {Readable} from 'node:stream';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +21,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
   let failPush=false;
   const notifications=new NotificationService(db,{send:async()=>{if(failPush)throw Error('Provider offline');return {sent:0};}} as any);
   const app=express();
-  app.use(express.json(),buildV1Router({db,notifications,payments:{refundOrderPayments:async()=>[]},scheduling:new SchedulingService(db),storage:{client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
+  app.use(express.json(),buildV1Router({db,notifications,payments:{refundOrderPayments:async()=>[]},scheduling:new SchedulingService(db),storage:{uploadBuffer:async(key:string)=>env.minioPublicUrl.replace(/\/$/,'')+'/'+key,client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
   const server=app.listen(0,'127.0.0.1');
   await new Promise<void>(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
@@ -149,6 +151,73 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       } finally {
         await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[[order,late]]);
         await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[[order,late]]);
+      }
+    });
+    await t.test('uploads and photo reports use signed media across customer, Pro and admin without opening private storage',async()=>{
+      const order=randomUUID();let uploaded:any;
+      const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});
+      try {
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status) VALUES($1,$2,$3,'in_progress')",[order,customer,cleaner]);
+        const form=new FormData();form.append('folder','photo_reports');form.append('file',new Blob(['test image'],{type:'image/jpeg'}),'report.jpg');
+        const upload=await fetch(base+'/files',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});
+        assert.equal(upload.status,201);uploaded=(await upload.json() as any).data;
+        const url=new URL(uploaded.public_url);
+        assert.equal(url.pathname,'/api/v1/files/media');
+        const image=await fetch(base+url.pathname.replace('/api/v1','')+url.search);
+        assert.equal(image.status,200);assert.equal(image.headers.get('content-type'),'image/jpeg');
+        assert.equal(await image.text(),'test image');
+        assert.equal((await fetch(base+'/files/media?key=private')).status,403);
+        const tampered=new URL(url);tampered.searchParams.set('key','other/file.jpg');
+        assert.equal((await fetch(base+tampered.pathname.replace('/api/v1','')+tampered.search)).status,403);
+        const stored=(await db.query('SELECT public_url FROM files WHERE id=$1',[uploaded.id])).rows[0].public_url;
+        assert.equal((await request('/complaints','POST',{title:'test',body:'test',photoUrls:[stored]},true)).status,403);
+        const report=await fetch(base+`/orders/${order}/photo-report`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({photoUrls:[uploaded.public_url,uploaded.public_url,uploaded.public_url]})});
+        assert.equal(report.status,201);
+        assert.equal((await db.query('SELECT photo_urls FROM photo_reports WHERE order_id=$1',[order])).rows[0].photo_urls[0],stored);
+        for(const asCustomer of [true,false]) {
+          const response=await request(`/orders/${order}/photo-report`,'GET',undefined,asCustomer);
+          assert.equal(response.status,200);
+          const photo=new URL(response.json.data.report.photo_urls[0]);
+          assert.equal(photo.pathname,'/api/v1/files/media');
+          assert.equal((await fetch(base+photo.pathname.replace('/api/v1','')+photo.search)).status,200);
+        }
+        const preview=await request('/admin/files/preview?url='+encodeURIComponent(uploaded.public_url));
+        assert.equal(preview.status,200);assert.equal(Buffer.from(preview.json.data.base64,'base64').toString(),'test image');
+      } finally {
+        await db.query('DELETE FROM notifications WHERE target_id=$1',[order]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
+        if(uploaded)await db.query('DELETE FROM files WHERE id=$1',[uploaded.id]);
+      }
+    });
+    await t.test('both order participants review completed work once and ratings stay separate',async()=>{
+      const order=randomUUID(),other=randomUUID();
+      const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});
+      const outsider=signAccessToken({id:other,role:'cleaner',phone:'fixture'});
+      async function review(asCleaner:boolean,rating:number) {
+        if(!asCleaner)return request('/reviews','POST',{orderId:order,rating,cleanerId:other},true);
+        const res=await fetch(base+'/reviews',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({orderId:order,rating})});
+        return {status:res.status,json:await res.json() as any};
+      }
+      try {
+        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[other,'review-test-'+other]);
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status) VALUES($1,$2,$3,'in_progress')",[order,customer,cleaner]);
+        assert.equal((await review(true,5)).status,409);
+        await db.query("UPDATE service_orders SET status='completed' WHERE id=$1",[order]);
+        assert.equal((await fetch(base+'/reviews',{method:'POST',headers:{Authorization:'Bearer '+outsider,'Content-Type':'application/json'},body:JSON.stringify({orderId:order,rating:5})})).status,403);
+        assert.equal((await review(true,6)).status,400);
+        const pro=await review(true,4);assert.equal(pro.status,201);assert.equal(pro.json.data.author_role,'cleaner');
+        assert.equal((await review(true,4)).status,200);
+        const client=await review(false,5);assert.equal(client.status,201);assert.equal(client.json.data.cleaner_id,cleaner);
+        assert.equal((await review(false,5)).status,200);
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS count FROM reviews WHERE order_id=$1',[order])).rows[0].count),2);
+        assert.equal(Number((await db.query('SELECT rating FROM app_users WHERE id=$1',[customer])).rows[0].rating),4);
+        assert.equal(Number((await db.query('SELECT rating FROM app_users WHERE id=$1',[cleaner])).rows[0].rating),5);
+      } finally {
+        const reviews=(await db.query('SELECT id FROM reviews WHERE order_id=$1',[order])).rows.map((r:any)=>r.id);
+        if(reviews.length)await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[reviews]);
+        await db.query('DELETE FROM reviews WHERE order_id=$1',[order]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
+        await db.query('DELETE FROM app_users WHERE id=$1',[other]);
       }
     });
     await t.test('personal notifications never leak through role membership',async()=>{

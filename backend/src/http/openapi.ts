@@ -357,6 +357,7 @@ export const openApiSpec = {
         requestBody: jsonBody({ checked: true }),
       },
     },
+    '/files/media': {get:{summary:'Read a storage file using an expiring signed capability',parameters:[{in:'query',name:'key',required:true,schema:{type:'string'}},{in:'query',name:'expires',required:true,schema:{type:'integer'}},{in:'query',name:'signature',required:true,schema:{type:'string'}}],responses:{'200':{description:'File bytes'},'403':{description:'Invalid or expired signature'}}}},
     '/orders/{id}/photo-report': {
       get: { ...secured('Фотоотчёт по заказу'), parameters: [path('id')] },
       post: {
@@ -489,7 +490,7 @@ export const openApiSpec = {
     '/reviews': {
       get: secured('Список отзывов пользователя или админа'),
       post: {
-        ...secured('Оставить отзыв и пересчитать рейтинг'),
+        ...secured('Участник завершённого заказа: оценить другую сторону и пересчитать её рейтинг'),
         requestBody: jsonBody({ orderId: 'uuid', cleanerId: 'uuid', rating: 5, text: 'Хорошо' }),
       },
     },
