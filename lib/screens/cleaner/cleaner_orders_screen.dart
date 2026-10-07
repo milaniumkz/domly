@@ -297,7 +297,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     required List<Map<String, dynamic>> chatSummaries,
     required bool hasServiceAreas,
   }) {
-    if (!hasServiceAreas && offers.isEmpty && active.isEmpty) {
+    if (!hasServiceAreas && offers.isEmpty && slots.isEmpty) {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
