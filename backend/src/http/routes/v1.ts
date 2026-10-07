@@ -135,7 +135,7 @@ export function buildV1Router(deps: {
       bodyRu: 'Вам поступил новый заказ на подтверждение.',
       targetType: 'order_offer',
       targetId: orderId,
-      dedupeKey: `order-offer-${orderId}-${offer.cleaner_id}`,
+      dedupeKey: `order-offer-${orderId}-${offer.cleaner_id}-${new Date(offer.expires_at).toISOString()}`,
     });
     return offer;
   };

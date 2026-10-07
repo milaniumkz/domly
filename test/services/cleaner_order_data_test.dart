@@ -8,6 +8,7 @@ void main() {
     final expiry = DateTime.now().toUtc().add(const Duration(minutes: 15));
     final row = mapCleanerWorkItem({
       'id': 'offer-1',
+      'status': 'offered',
       'order_id': 'order-1',
       'expires_at': expiry.toIso8601String(),
       'scheduled_date': '2026-10-08T00:00:00Z',
@@ -21,6 +22,7 @@ void main() {
     }, offer: true);
     expect(DateTime.parse(row['expiresAt'] as String).isAfter(DateTime.now()),
         isTrue);
+    expect(row['status'], 'pending');
     expect(row['id'], 'order-1');
     expect(row['offerId'], 'offer-1');
     expect(row['scheduledFor'], '2026-10-08T00:00:00Z');

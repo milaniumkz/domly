@@ -13,6 +13,7 @@ Map<String, dynamic> mapCleanerWorkItem(Map<String, dynamic> row,
       .join(', ');
   return {
     ...row,
+    'status': offer && row['status'] == 'offered' ? 'pending' : row['status'],
     'id': orderId,
     'orderId': orderId,
     if (offer) 'offerId': row['id'],
