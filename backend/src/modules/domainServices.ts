@@ -487,12 +487,14 @@ export class SchedulingService {
   async cleanerOffers(cleanerId: string) {
     return (await this.db.query(
       `SELECT oo.*, o.numeric_id AS order_number, o.scheduled_date, o.start_time, o.end_time,
-              o.estimated_duration_minutes, o.area, ca.city, ca.street, ca.house, ca.apartment,
+              o.estimated_duration_minutes, COALESCE(ca.verified_area,ca.area,o.area) AS area, ca.city, ca.street, ca.house, ca.apartment,
+              pkg.name_ru AS package_name_ru,
               u.full_name AS customer_name, u.phone AS customer_phone
        FROM order_offers oo
        JOIN service_orders o ON o.id=oo.order_id
        JOIN app_users u ON u.id=o.customer_id
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
+       LEFT JOIN catalog_packages pkg ON pkg.id=o.package_id
        WHERE oo.cleaner_id=$1 AND oo.status='offered' AND oo.expires_at > NOW()
        ORDER BY oo.created_at ASC`,
       [cleanerId],
@@ -524,27 +526,19 @@ export class SchedulingService {
   }
 
   async acceptOffer(orderId: string, cleanerId: string) {
-    const order = first<{ scheduled_date: string; start_time: string; end_time: string }>((await this.db.query(
-      `SELECT scheduled_date, start_time, end_time FROM service_orders WHERE id=$1`,
-      [orderId],
-    )).rows);
-    if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
-    if (!(await this.cleanerAvailable(cleanerId, order.scheduled_date, order.start_time, order.end_time))) {
-      throw new ApiError(400, 'cleaner_unavailable', 'Это время уже занято другим заказом.');
-    }
-    return this.db.transaction(async () => {
-      const current = first<{ id: string }>((await this.db.query(
-        `SELECT id FROM order_offers
-         WHERE order_id=$1 AND cleaner_id=$2 AND status='offered' AND expires_at > NOW()`,
-        [orderId, cleanerId],
-      )).rows);
-      if (!current) throw new ApiError(404, 'offer_not_found', 'Предложение заказа уже недоступно.');
-      await this.db.query(`UPDATE order_offers SET status='expired' WHERE order_id=$1 AND cleaner_id<>$2`, [orderId, cleanerId]);
-      await this.db.query(`UPDATE order_offers SET status='accepted' WHERE order_id=$1 AND cleaner_id=$2`, [orderId, cleanerId]);
-      return first((await this.db.query(
-        `UPDATE service_orders SET cleaner_id=$2, status='assigned', updated_at=NOW() WHERE id=$1 RETURNING *`,
-        [orderId, cleanerId],
-      )).rows);
+    return this.db.transaction(async client=>{
+      await client.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[cleanerId]);
+      const order=first<any>((await client.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[orderId])).rows);
+      if(!order)throw new ApiError(404,'not_found','Заказ не найден.');
+      if(order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status))throw new ApiError(409,'order_unavailable','Заказ уже недоступен для принятия.');
+      const overlap=(await client.query(`SELECT id FROM service_orders WHERE cleaner_id=$1 AND scheduled_date=$2
+        AND status NOT IN ('cancelled','completed') AND start_time<$4::time AND end_time>$3::time AND id<>$5 LIMIT 1`,[cleanerId,order.scheduled_date,order.start_time,order.end_time,orderId])).rows;
+      if(overlap.length)throw new ApiError(400,'cleaner_unavailable','Это время уже занято другим заказом.');
+      const current=first((await client.query(`SELECT id FROM order_offers WHERE order_id=$1 AND cleaner_id=$2 AND status='offered' AND expires_at>NOW() FOR UPDATE`,[orderId,cleanerId])).rows);
+      if(!current)throw new ApiError(404,'offer_not_found','Предложение заказа уже недоступно.');
+      await client.query("UPDATE order_offers SET status='expired' WHERE order_id=$1 AND cleaner_id<>$2",[orderId,cleanerId]);
+      await client.query("UPDATE order_offers SET status='accepted' WHERE order_id=$1 AND cleaner_id=$2",[orderId,cleanerId]);
+      return first((await client.query("UPDATE service_orders SET cleaner_id=$2,status='assigned',updated_at=NOW() WHERE id=$1 RETURNING *",[orderId,cleanerId])).rows);
     });
   }
 

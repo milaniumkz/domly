@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import '../utils/backend_compat.dart';
 import '../utils/admin_cleaner_data.dart';
+import '../utils/cleaner_order_data.dart';
 import 'package:flutter/foundation.dart';
 
 import '../app/debug_session.dart';
@@ -2669,7 +2670,7 @@ class FirestoreDataService {
     List<Map<String, dynamic>> items,
   ) async {
     return items.map((item) {
-      final merged = Map<String, dynamic>.from(item);
+      final merged = mapCleanerWorkItem(item);
       final address = (merged['address'] ?? '').toString().trim();
       final residentialComplex =
           (merged['residentialComplex'] ?? '').toString().trim();
@@ -2703,23 +2704,25 @@ class FirestoreDataService {
   ) async {
     final now = DateTime.now();
     final result = items.map((item) {
-      final expiresAt = _toDateTime(item['expiresAt']);
+      final normalized = mapCleanerWorkItem(item, offer: true);
+      final expiresAt = _toDateTime(normalized['expiresAt']);
       final remainingSeconds =
           expiresAt.difference(now).inSeconds.clamp(0, 365 * 24 * 3600);
       Object? listValue(Object? value) => value is List ? value : const [];
       return <String, dynamic>{
-        ...item,
-        'address': item['address'] ?? item['residentialComplex'] ?? '',
-        'residentialComplex': item['residentialComplex'],
-        'package': item['package'],
-        'addons': listValue(item['addons']),
-        'addonsDetailed': listValue(item['addonsDetailed']),
-        'separatePaymentAddons': listValue(item['separatePaymentAddons']),
-        'area': item['area'] ?? item['areaSqm'] ?? 0,
-        'price': item['price'] ?? 0,
-        'estimatedDurationMinutes':
-            item['totalDurationMinutes'] ?? item['estimatedDurationMinutes'],
-        'travelMinutes': item['travelMinutes'] ?? 0,
+        ...normalized,
+        'address':
+            normalized['address'] ?? normalized['residentialComplex'] ?? '',
+        'residentialComplex': normalized['residentialComplex'],
+        'package': normalized['package'],
+        'addons': listValue(normalized['addons']),
+        'addonsDetailed': listValue(normalized['addonsDetailed']),
+        'separatePaymentAddons': listValue(normalized['separatePaymentAddons']),
+        'area': normalized['area'] ?? normalized['areaSqm'] ?? 0,
+        'price': normalized['price'] ?? 0,
+        'estimatedDurationMinutes': normalized['totalDurationMinutes'] ??
+            normalized['estimatedDurationMinutes'],
+        'travelMinutes': normalized['travelMinutes'] ?? 0,
         'remainingSeconds': remainingSeconds,
       };
     }).toList()

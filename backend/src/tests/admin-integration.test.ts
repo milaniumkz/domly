@@ -8,7 +8,7 @@ import {Database} from '../infrastructure/db/Database';
 import {buildV1Router} from '../http/routes/v1';
 import {errorHandler} from '../common/api';
 import {signAccessToken,signRefreshToken,verifyAccessToken} from '../common/auth';
-import {NotificationService,hashToken} from '../modules/domainServices';
+import {NotificationService,SchedulingService,hashToken} from '../modules/domainServices';
 import {verifyCleaner} from '../modules/cleanerVerification';
 
 test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async t=>{
@@ -19,7 +19,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
   let failPush=false;
   const notifications=new NotificationService(db,{send:async()=>{if(failPush)throw Error('Provider offline');return {sent:0};}} as any);
   const app=express();
-  app.use(express.json(),buildV1Router({db,notifications,storage:{client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
+  app.use(express.json(),buildV1Router({db,notifications,scheduling:new SchedulingService(db),storage:{client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
   const server=app.listen(0,'127.0.0.1');
   await new Promise<void>(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
@@ -117,6 +117,35 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM bonus_transactions WHERE user_id=$1',[customer]);
         await db.query('UPDATE app_users SET bonus_balance=$2 WHERE id=$1',[customer,initial]);
         await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+      }
+    });
+    await t.test('dispatched order reaches cleaner and acceptance keeps it in cleaner orders',async()=>{
+      const order=randomUUID();
+      const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});
+      const service=new SchedulingService(db);
+      try {
+        await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
+        await db.query("UPDATE cleaner_profiles SET verification_status='approved' WHERE user_id=$1",[cleaner]);
+        await db.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,estimated_duration_minutes,area,status) VALUES($1,$2,'2030-01-02','10:00','12:00',120,100,'pending_assignment')",[order,customer]);
+        const candidates=await service.availableCleaners('2030-01-02','10:00','12:00');
+        const offer=await service.offerNextCleaner(order,candidates.filter((c:any)=>c.id!==cleaner).map((c:any)=>c.id)) as any;
+        assert.equal(offer.cleaner_id,cleaner);
+        const offersResponse=await fetch(base+'/cleaner/offers',{headers:{Authorization:'Bearer '+token}});
+        assert.equal(offersResponse.status,200);
+        const offers=(await offersResponse.json() as any).data;
+        assert.equal(offers.find((row:any)=>row.order_id===order).id,offer.id);
+        assert.ok(Date.parse(offers.find((row:any)=>row.order_id===order).expires_at)>Date.now());
+        assert.equal((await request('/orders/'+order+'/offers/accept','POST',{},true)).status,403);
+        const responses=await Promise.all([service.acceptOffer(order,cleaner),service.acceptOffer(order,cleaner)].map(p=>p.then(()=>200,error=>error.statusCode??error.status??409)));
+        assert.equal(responses.filter(status=>status===200).length,1);
+        const accepted=(await (await fetch(base+'/cleaner/orders',{headers:{Authorization:'Bearer '+token}})).json() as any).data.find((row:any)=>row.id===order);
+        assert.equal(accepted.cleaner_id,cleaner);assert.equal(accepted.status,'assigned');assert.ok(accepted.scheduled_date);
+        assert.ok(!(await service.cleanerOffers(cleaner)).some((row:any)=>row.order_id===order));
+      } finally {
+        await db.query('DELETE FROM order_offers WHERE order_id=$1',[order]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
+        await db.query("UPDATE app_users SET status='pending' WHERE id=$1",[cleaner]);
+        await db.query("UPDATE cleaner_profiles SET verification_status='pending' WHERE user_id=$1",[cleaner]);
       }
     });
     await t.test('document preview reads stored objects only and rejects customer access',async()=>{
