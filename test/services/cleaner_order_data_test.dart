@@ -5,7 +5,7 @@ void main() {
   test(
       'backend offer keeps a future expiry and uses order ID for accept and decline',
       () {
-    final expiry = DateTime.now().toUtc().add(const Duration(minutes: 15));
+    final expiry = DateTime.now().toUtc().add(const Duration(minutes: 2));
     final row = mapCleanerWorkItem({
       'id': 'offer-1',
       'status': 'offered',
@@ -43,5 +43,30 @@ void main() {
     expect(row['customerName'], 'Клиент');
     expect(row['customerPhone'], '+77000000000');
     expect(row['date'], '2026-10-08');
+  });
+  test('backend start confirmation and completion fields reach Pro unchanged',
+      () {
+    final row = mapCleanerWorkItem({
+      'id': 'one',
+      'status': 'start_pending',
+      'start_requires_customer_confirmation': true,
+      'cleaning_start_confirmed': false,
+      'cleaning_start_rejected': false,
+      'started_at': null,
+      'completed_at': null
+    });
+    expect(row['status'], 'start_pending');
+    expect(row['startRequiresCustomerConfirmation'], true);
+    expect(row['cleaningStartConfirmed'], false);
+    expect(row['startedAt'], null);
+    final completed = mapCleanerWorkItem({
+      'id': 'one',
+      'status': 'completed',
+      'cleaning_start_confirmed': true,
+      'started_at': 'start',
+      'completed_at': 'finish'
+    });
+    expect(completed['completedAt'], 'finish');
+    expect(completed['cleaningStartConfirmed'], true);
   });
 }

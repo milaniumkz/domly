@@ -24,6 +24,7 @@ class BackendApiException implements Exception {
 }
 
 class BackendApiService {
+  final ValueNotifier<int> dataRevision = ValueNotifier<int>(0);
   BackendApiService._()
       : _client = http.Client(),
         _sessionStore = SessionStore();
@@ -183,7 +184,9 @@ class BackendApiService {
       );
     }
 
-    return _decodeResponse(response);
+    final decoded = _decodeResponse(response);
+    if (method != 'GET') dataRevision.value++;
+    return decoded;
   }
 
   Future<http.Response> _send(

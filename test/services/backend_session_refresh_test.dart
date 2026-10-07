@@ -57,4 +57,25 @@ void main() {
         api.getMap('/orders'), throwsA(isA<BackendApiException>()));
     expect(await store.refreshToken(), 'valid');
   });
+  test('successful mutations refresh live data immediately; errors do not',
+      () async {
+    final api = BackendApiService.forTesting(
+        sessionStore: SessionStore(surface: SessionSurface.customer),
+        client: MockClient((request) async => http.Response(
+            jsonEncode(request.url.path.endsWith('/failed')
+                ? {
+                    'error': {'code': 'conflict', 'message': 'Conflict'}
+                  }
+                : {
+                    'data': {'ok': true}
+                  }),
+            request.url.path.endsWith('/failed') ? 409 : 200)));
+    await api.getMap('/orders');
+    expect(api.dataRevision.value, 0);
+    await api.postMap('/orders/one/status', body: {'status': 'in_progress'});
+    expect(api.dataRevision.value, 1);
+    await expectLater(
+        api.postMap('/failed', body: {}), throwsA(isA<BackendApiException>()));
+    expect(api.dataRevision.value, 1);
+  });
 }

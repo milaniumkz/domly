@@ -19,7 +19,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
   let failPush=false;
   const notifications=new NotificationService(db,{send:async()=>{if(failPush)throw Error('Provider offline');return {sent:0};}} as any);
   const app=express();
-  app.use(express.json(),buildV1Router({db,notifications,scheduling:new SchedulingService(db),storage:{client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
+  app.use(express.json(),buildV1Router({db,notifications,payments:{refundOrderPayments:async()=>[]},scheduling:new SchedulingService(db),storage:{client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
   const server=app.listen(0,'127.0.0.1');
   await new Promise<void>(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
@@ -48,6 +48,84 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         token=next.refreshToken;
       }
       assert.equal((await request('/auth/refresh','POST',{refreshToken:'invalid'})).status,401);
+    });
+    await t.test('order start confirmation, completion, ownership and retry are consistent',async()=>{
+      const order=randomUUID();
+      await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status) VALUES($1,$2,$3,'assigned')",[order,customer,cleaner]);
+      async function cleanerRequest(path:string,body:object) {
+        const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});
+        const res=await fetch(base+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});
+        return {status:res.status,json:await res.json() as any};
+      }
+      try {
+        const other=randomUUID();
+        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'customer','approved')",[other,'order-owner-'+other]);
+        try {
+          const token=signAccessToken({id:other,role:'customer',phone:'fixture'});
+          for (const path of ['cancel','confirm-start']) {
+            const res=await fetch(base+`/orders/${order}/${path}`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({confirmed:true})});
+            assert.ok([403,404].includes(res.status));
+          }
+          assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[order])).rows[0].status,'assigned');
+        } finally {await db.query('DELETE FROM app_users WHERE id=$1',[other]);}
+        assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'completed'})).status,409);
+        assert.equal((await cleanerRequest(`/orders/${order}/photo-report`,{photoUrls:['a','b','c']})).status,409);
+        const start=await cleanerRequest(`/orders/${order}/status`,{status:'in_progress'});
+        assert.equal(start.status,200);
+        assert.equal(start.json.data.status,'start_pending');
+        assert.equal(start.json.data.start_requires_customer_confirmation,true);
+        assert.equal((await request(`/orders/${order}/confirm-start`,'POST',{confirmed:false},true)).status,200);
+        assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'in_progress'})).status,200);
+        const confirm=await request(`/orders/${order}/confirm-start`,'POST',{confirmed:true},true);
+        assert.equal(confirm.status,200);
+        assert.equal(confirm.json.data.order.status,'in_progress');
+        assert.equal(confirm.json.data.order.cleaning_start_confirmed,true);
+        assert.ok(confirm.json.data.order.started_at);
+        const count=Number((await db.query('SELECT COUNT(*) AS count FROM notifications WHERE target_id=$1',[order])).rows[0].count);
+        assert.equal((await request(`/orders/${order}/confirm-start`,'POST',{confirmed:true},true)).status,200);
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS count FROM notifications WHERE target_id=$1',[order])).rows[0].count),count);
+        assert.equal((await request(`/orders/${order}/photo-report`,'GET',undefined,true)).json.data.canSubmit,true);
+        assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'completed'})).status,409);
+        assert.equal((await cleanerRequest(`/orders/${order}/photo-report`,{photoUrls:['a','b','c']})).status,201);
+        const complete=await cleanerRequest(`/orders/${order}/status`,{status:'completed'});
+        assert.equal(complete.status,200);
+        assert.ok(complete.json.data.completed_at);
+        assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'completed'})).status,200);
+        assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'in_progress'})).status,409);
+        assert.equal((await request(`/orders/${order}/reschedule`,'POST',{date:'2030-01-01',time:'10:00'},true)).status,409);
+        assert.equal((await request(`/orders/${order}/cancel`,'POST',{},true)).status,404);
+        const history=(await db.query('SELECT new_status FROM order_status_history WHERE order_id=$1 ORDER BY created_at',[order])).rows.map((row:any)=>row.new_status);
+        assert.deepEqual(history,['start_pending','assigned','start_pending','in_progress','completed']);
+        const notices=(await db.query('SELECT user_id,title_ru FROM notifications WHERE target_id=$1',[order])).rows;
+        assert.ok(notices.some((row:any)=>row.user_id===customer&&row.title_ru==='Уборка завершена'));
+        assert.ok(notices.every((row:any)=>[customer,cleaner].includes(row.user_id)));
+      } finally {
+        await db.query('DELETE FROM notifications WHERE target_id=$1',[order]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
+      }
+    });
+    await t.test('rescheduling and cancellation notify both parties and retain history',async()=>{
+      const order=randomUUID();
+      await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status,scheduled_date,start_time,end_time,estimated_duration_minutes) VALUES($1,$2,$3,'assigned','2031-01-01','10:00','12:00',120)",[order,customer,cleaner]);
+      try {
+        const move=await request(`/orders/${order}/reschedule`,'POST',{date:'2031-01-02',time:'13:00'},true);
+        assert.equal(move.status,200);
+        assert.equal(String(move.json.data.start_time),'13:00:00');
+        assert.equal((await request(`/orders/${order}/cancel`,'POST',{reason:'test'},true)).status,200);
+        assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[order])).rows[0].status,'cancelled');
+        assert.equal((await request(`/orders/${order}/cancel`,'POST',{},true)).status,404);
+        assert.equal((await request(`/orders/${order}/status`,'POST',{status:'in_progress'})).status,409);
+        const history=(await db.query('SELECT new_status FROM order_status_history WHERE order_id=$1 ORDER BY created_at',[order])).rows;
+        assert.deepEqual(history.map((row:any)=>row.new_status),['assigned','cancelled']);
+        const notices=(await db.query('SELECT user_id,title_ru FROM notifications WHERE target_id=$1',[order])).rows;
+        for(const user of [customer,cleaner]) {
+          assert.ok(notices.some((row:any)=>row.user_id===user&&row.title_ru==='Время уборки изменено'));
+          assert.ok(notices.some((row:any)=>row.user_id===user&&row.title_ru==='Заказ отменён'));
+        }
+      } finally {
+        await db.query('DELETE FROM notifications WHERE target_id=$1',[order]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
+      }
     });
     await t.test('personal notifications never leak through role membership',async()=>{
       const other=randomUUID();
@@ -130,6 +208,8 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const candidates=await service.availableCleaners('2030-01-02','10:00','12:00');
         const offer=await service.offerNextCleaner(order,candidates.filter((c:any)=>c.id!==cleaner).map((c:any)=>c.id)) as any;
         assert.equal(offer.cleaner_id,cleaner);
+        const remaining=Date.parse(offer.expires_at)-Date.now();
+        assert.ok(remaining>110000 && remaining<=120000,'Default offer expires after two minutes');
         const offersResponse=await fetch(base+'/cleaner/offers',{headers:{Authorization:'Bearer '+token}});
         assert.equal(offersResponse.status,200);
         const offers=(await offersResponse.json() as any).data;

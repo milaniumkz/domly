@@ -377,26 +377,43 @@ class FirestoreDataService {
     return controller.stream;
   }
 
-  Stream<T> _backendPollingStream<T>(Future<T> Function() loader) {
+  Stream<T> _backendPollingStream<T>(Future<T> Function() loader,
+      {Duration interval = const Duration(seconds: 20)}) {
     return Stream<T>.multi((controller) {
       Timer? timer;
       var closed = false;
+      var loading = false;
+      var reload = false;
       Future<void> emit() async {
         if (closed) return;
+        if (loading) {
+          reload = true;
+          return;
+        }
+        loading = true;
         try {
-          controller.add(await loader());
+          final value = await loader();
+          if (!closed) controller.add(value);
         } catch (_) {
           if (!closed) {
             controller.addError('Сервис временно недоступен.');
+          }
+        } finally {
+          loading = false;
+          if (reload && !closed) {
+            reload = false;
+            emit();
           }
         }
       }
 
       emit();
-      timer = Timer.periodic(const Duration(seconds: 20), (_) => emit());
+      timer = Timer.periodic(interval, (_) => emit());
+      BackendApiService.instance.dataRevision.addListener(emit);
       controller.onCancel = () {
         closed = true;
         timer?.cancel();
+        BackendApiService.instance.dataRevision.removeListener(emit);
       };
     });
   }
@@ -570,6 +587,12 @@ class FirestoreDataService {
       'number': item['numeric_id'],
       'status': item['status'],
       'orderStatus': item['status'],
+      'startRequiresCustomerConfirmation':
+          item['start_requires_customer_confirmation'] == true,
+      'cleaningStartConfirmed': item['cleaning_start_confirmed'] == true,
+      'cleaningStartRejected': item['cleaning_start_rejected'] == true,
+      'startedAt': item['started_at'],
+      'completedAt': item['completed_at'],
       'paymentStatus':
           item['status'] == 'pending_payment' ? 'pending_invoice' : 'paid',
       'customerId': item['customer_id'],
@@ -1578,7 +1601,7 @@ class FirestoreDataService {
         ).compareTo(_timestampMillis(a['createdAt'] ?? a['updatedAt'])),
       );
       return orders;
-    });
+    }, interval: const Duration(seconds: 2));
     return _combineLatestLists(
       mergedOrdersStream,
       customerPrelaunchBookingsStream(),
@@ -1664,7 +1687,7 @@ class FirestoreDataService {
               ),
             );
       return items;
-    });
+    }, interval: const Duration(seconds: 2));
   }
 
   bool _shouldShowInAdminOrders(Map<String, dynamic> item) {
@@ -1995,8 +2018,8 @@ class FirestoreDataService {
       return _debugSnapshotStream(() => const <Map<String, dynamic>>[]);
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/admin/notifications'),
-    );
+        () => BackendApiService.instance.getList('/admin/notifications'),
+        interval: const Duration(seconds: 2));
   }
 
   Stream<Map<String, dynamic>> adminPoliciesStream() {
@@ -2221,7 +2244,7 @@ class FirestoreDataService {
             },
           )
           .toList();
-    });
+    }, interval: const Duration(seconds: 2));
   }
 
   Stream<List<Map<String, dynamic>>> customerSubscriptionsStream() {
@@ -2601,8 +2624,9 @@ class FirestoreDataService {
       return Stream.value(const <Map<String, dynamic>>[]);
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/cleaner/orders'),
-    ).asyncMap(_enrichCleanerAssignments);
+            () => BackendApiService.instance.getList('/cleaner/orders'),
+            interval: const Duration(seconds: 2))
+        .asyncMap(_enrichCleanerAssignments);
   }
 
   Stream<List<Map<String, dynamic>>> cleanerOrderOffersStream() {
@@ -2614,8 +2638,9 @@ class FirestoreDataService {
       return Stream.value(const <Map<String, dynamic>>[]);
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/cleaner/offers'),
-    ).asyncMap(_enrichCleanerOffers);
+            () => BackendApiService.instance.getList('/cleaner/offers'),
+            interval: const Duration(seconds: 2))
+        .asyncMap(_enrichCleanerOffers);
   }
 
   Stream<List<Map<String, dynamic>>> cleanerShiftsStream() {
@@ -2662,8 +2687,9 @@ class FirestoreDataService {
       return Stream.value(const <Map<String, dynamic>>[]);
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/cleaner/orders'),
-    ).asyncMap(_enrichCleanerAssignments);
+            () => BackendApiService.instance.getList('/cleaner/orders'),
+            interval: const Duration(seconds: 2))
+        .asyncMap(_enrichCleanerAssignments);
   }
 
   Future<List<Map<String, dynamic>>> _enrichCleanerAssignments(
@@ -3172,7 +3198,7 @@ class FirestoreDataService {
         ).compareTo(_timestampMillis(a['createdAt']));
       });
       return items;
-    });
+    }, interval: const Duration(seconds: 2));
   }
 
   Stream<List<Map<String, dynamic>>> customerBonusTransactionsStream() {
@@ -10128,8 +10154,8 @@ class FirestoreDataService {
       return {'ok': true, 'penaltyApplied': false};
     }
     final result = await BackendApiService.instance.postMap(
-      '/orders/$slotId/status',
-      body: {'status': 'cancelled', 'comment': 'Отменено клиентом'},
+      '/orders/$slotId/cancel',
+      body: {'reason': 'Отменено клиентом'},
     );
     return {'ok': true, 'slotId': slotId, 'order': result};
   }

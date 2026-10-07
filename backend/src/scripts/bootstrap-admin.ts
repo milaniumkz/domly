@@ -37,7 +37,7 @@ async function main() {
       bonusPaymentEnabled: true,
       defaultBonusMaxPercent: 50,
       minBookingDate: null,
-      cleanerOfferTtlMinutes: 15,
+      cleanerOfferTtlMinutes: 2,
       cleanerQuietHoursEnabled: false,
       cleanerQuietHoursStart: '23:00',
       cleanerQuietHoursEnd: '07:00',

@@ -148,7 +148,7 @@ workers.push(new Worker('maintenance', async (job) => {
   )).rows;
   const orderIds = [...new Set(expired.map((row) => row.order_id))];
   const settings = await readSettings();
-  const ttlMinutes = Number(settings.cleanerOfferTtlMinutes ?? 15);
+  const ttlMinutes = Number(settings.cleanerOfferTtlMinutes ?? 2);
   for (const orderId of orderIds) {
     const order = (await db.query<{ status: string; cleaner_id: string | null }>(
       `SELECT status, cleaner_id FROM service_orders WHERE id=$1`,

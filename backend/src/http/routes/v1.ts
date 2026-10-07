@@ -1,3 +1,4 @@
+import { transitionOrder } from '../../modules/orderLifecycle';
 import {confirmArea} from '../../modules/areaVerification';
 import { verifyCleaner } from '../../modules/cleanerVerification';
 import { qualifyReferral, referralDiscount } from '../../modules/referrals';
@@ -126,7 +127,7 @@ export function buildV1Router(deps: {
 
   const offerNextCleanerAndNotify = async (orderId: string, excludeCleanerIds: string[] = []) => {
     const settings = await readAppSettings(deps.db);
-    const ttlMinutes = Number(settings.cleanerOfferTtlMinutes ?? 15);
+    const ttlMinutes = Number(settings.cleanerOfferTtlMinutes ?? 2);
     const offer = await deps.scheduling.offerNextCleaner(orderId, excludeCleanerIds, ttlMinutes) as any;
     if (!offer) return null;
     await deps.notifications.create({
@@ -1504,13 +1505,15 @@ export function buildV1Router(deps: {
     ok(res, { order, addons, payments });
   }));
 
-  router.post('/orders/:id/cancel', auth(), asyncHandler(async (req, res) => {
+  const cancelOrder = async (req: any, res: any) => {
+    const previous = await getVisibleOrder(deps.db, String(req.params.id), req.user!);
     const order = first<{ id: string; customer_id: string; cleaner_id: string | null; customer_package_id: string | null; bonus_spent: string }>((await deps.db.query(
       `UPDATE service_orders SET status='cancelled', cancelled_by=$2, cancellation_reason=$3, updated_at=NOW()
        WHERE id=$1 AND status NOT IN ('completed','cancelled') RETURNING *`,
       [req.params.id, req.user!.id, req.body.reason ?? null],
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден или уже отменён.');
+    await deps.db.query(`INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,'cancelled',$3,$4)`, [order.id,(previous as any).status,req.user!.id,req.body.reason ?? null]);
     if (order.customer_package_id) {
       await deps.db.query(
         `UPDATE customer_packages SET available_cleanings=available_cleanings+1, updated_at=NOW() WHERE id=$1`,
@@ -1550,39 +1553,12 @@ export function buildV1Router(deps: {
       dedupeKey: `order-cancelled-${order.id}-admin`,
     });
     ok(res, { order, refundedPayments });
-  }));
+  };
+  router.post('/orders/:id/cancel', auth(), asyncHandler(cancelOrder));
 
   router.post('/orders/:id/confirm-start', auth(['customer']), asyncHandler(async (req, res) => {
-    const order = first<{ id: string; customer_id: string; cleaner_id: string | null; status: string }>((await deps.db.query(
-      `SELECT id, customer_id, cleaner_id, status FROM service_orders WHERE id=$1 AND customer_id=$2`,
-      [req.params.id, req.user!.id],
-    )).rows);
-    if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
-    const confirmed = req.body.confirmed === true;
-    await deps.db.query(
-      `INSERT INTO order_status_history (order_id, old_status, new_status, actor_id, comment)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [
-        order.id,
-        order.status,
-        confirmed ? 'customer_confirmed_start' : 'customer_rejected_start',
-        req.user!.id,
-        confirmed ? 'Клиент подтвердил старт уборки' : 'Клиент не подтвердил старт уборки',
-      ],
-    );
-    if (confirmed && order.status === 'assigned') {
-      await deps.db.query(`UPDATE service_orders SET status='in_progress', updated_at=NOW() WHERE id=$1`, [order.id]);
-    }
-    if (order.cleaner_id) {
-      await deps.notifications.create({
-        userId: order.cleaner_id,
-        titleRu: confirmed ? 'Клиент подтвердил старт' : 'Клиент не подтвердил старт',
-        bodyRu: confirmed ? 'Клиент подтвердил, что уборка началась.' : 'Клиент указал, что уборка не началась.',
-        targetType: 'order',
-        targetId: order.id,
-      });
-    }
-    ok(res, { ok: true, orderId: order.id, confirmed });
+    const order = await transitionOrder(deps.db, deps.notifications, String(req.params.id), req.user!, req.body.confirmed === true ? 'confirm_start' : 'reject_start');
+    ok(res, { ok: true, orderId: order.id, confirmed: req.body.confirmed === true, order });
   }));
 
   router.get('/orders/:id/checklist', auth(), asyncHandler(async (req, res) => {
@@ -1675,6 +1651,7 @@ export function buildV1Router(deps: {
     if (req.user!.role === 'cleaner' && anyOrder.cleaner_id !== req.user!.id) {
       throw new ApiError(403, 'forbidden', 'Фотоотчёт может отправить только назначенная уборщица.');
     }
+    if (anyOrder.status !== 'in_progress') throw new ApiError(409, 'start_not_confirmed', 'Сначала клиент должен подтвердить начало уборки.');
     const photoUrls = Array.isArray(req.body.photoUrls)
       ? req.body.photoUrls.map(String).map((item: string) => item.trim()).filter(Boolean).slice(0, 10)
       : [];
@@ -1704,7 +1681,7 @@ export function buildV1Router(deps: {
     ok(res, row, 201);
   }));
 
-  router.post('/orders/:id/status', auth(['cleaner', 'admin', 'superadmin']), asyncHandler(async (req, res) => {
+  const changeOrderStatus = async (req: any, res: any) => {
     const order = await getVisibleOrder(deps.db, String(req.params.id), req.user!);
     const nextStatus = String(req.body.status ?? '');
     const allowed = ['assigned', 'in_progress', 'completed', 'cancelled'];
@@ -1712,17 +1689,21 @@ export function buildV1Router(deps: {
     if (req.user!.role === 'cleaner' && (order as any).cleaner_id !== req.user!.id) {
       throw new ApiError(403, 'forbidden', 'Этот заказ назначен другой уборщице.');
     }
+    if (nextStatus === 'assigned' && !['pending_assignment', 'waiting_cleaner', 'assigned'].includes((order as any).status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ нельзя назначить повторно.');
     if (nextStatus === 'assigned') {
+      if ((order as any).status === 'assigned' && (!req.body.cleanerId || req.body.cleanerId === (order as any).cleaner_id)) { ok(res, order); return; }
       const cleanerId = req.body.cleanerId ?? (order as any).cleaner_id;
+      if (req.user!.role === 'cleaner' && cleanerId !== req.user!.id) throw new ApiError(403,'forbidden','Нельзя назначить заказ другой уборщице.');
       if (!cleanerId) throw new ApiError(400, 'cleaner_required', 'Выберите уборщицу для назначения заказа.');
       if (cleanerId !== (order as any).cleaner_id) {
         const free = await deps.scheduling.cleanerAvailable(cleanerId, (order as any).scheduled_date, (order as any).start_time, (order as any).end_time);
         if (!free) throw new ApiError(400, 'cleaner_unavailable', 'Уборщица занята на это время. Выберите другую.');
       }
       const row = first((await deps.db.query(
-        `UPDATE service_orders SET cleaner_id=$2, status='assigned', updated_at=NOW() WHERE id=$1 RETURNING *`,
+        `UPDATE service_orders SET cleaner_id=$2, status='assigned', updated_at=NOW() WHERE id=$1 AND status IN ('pending_assignment','waiting_cleaner','assigned') RETURNING *`,
         [req.params.id, cleanerId],
       )).rows);
+      if (!row) throw new ApiError(409,'invalid_transition','Статус заказа уже изменился. Обновите страницу.');
       await deps.db.query(
         `INSERT INTO order_status_history (order_id, old_status, new_status, actor_id, comment)
          VALUES ($1,$2,'assigned',$3,$4)`,
@@ -1735,52 +1716,19 @@ export function buildV1Router(deps: {
         targetType: 'order',
         targetId: String(req.params.id),
       });
+      await deps.notifications.create({userId: (order as any).customer_id, titleRu:'Уборщица назначена', bodyRu:'Уборщица назначена на ваш заказ.', targetType:'order', targetId:String(req.params.id)});
       ok(res, row);
       return;
     }
     if (nextStatus === 'cancelled') {
-      const cancelled = first<{ id: string; customer_id: string; cleaner_id: string | null; customer_package_id: string | null; bonus_spent: string }>((await deps.db.query(
-        `UPDATE service_orders SET status='cancelled', cancelled_by=$2, cancellation_reason=$3, updated_at=NOW()
-         WHERE id=$1 AND status NOT IN ('completed','cancelled') RETURNING *`,
-        [req.params.id, req.user!.id, req.body.comment ?? req.body.reason ?? null],
-      )).rows);
-      if (!cancelled) throw new ApiError(404, 'not_found', 'Заказ не найден или уже отменён.');
-      if (cancelled.customer_package_id) {
-        await deps.db.query(`UPDATE customer_packages SET available_cleanings=available_cleanings+1, updated_at=NOW() WHERE id=$1`, [cancelled.customer_package_id]);
-      }
-      await deps.db.query(`UPDATE order_addons SET payment_status='cancelled' WHERE order_id=$1`, [cancelled.id]);
-      await deps.db.query(`UPDATE order_offers SET status='expired' WHERE order_id=$1 AND status='offered'`, [cancelled.id]);
-      const refundedPayments = await deps.payments.refundOrderPayments(cancelled.id, 'Возврат за отменённый заказ');
-      if (refundedPayments.length === 0 && Number(cancelled.bonus_spent) > 0) {
-        await deps.bonuses.refund(cancelled.customer_id, Number(cancelled.bonus_spent), 'Возврат бонусов за отменённый заказ', cancelled.id);
-      }
-      await deps.db.query(
-        `INSERT INTO order_status_history (order_id, old_status, new_status, actor_id, comment)
-         VALUES ($1,$2,'cancelled',$3,$4)`,
-        [req.params.id, (order as any).status, req.user!.id, req.body.comment ?? null],
-      );
-      await deps.notifications.create({
-        userId: cancelled.customer_id,
-        titleRu: 'Заказ отменён',
-        bodyRu: 'Заказ отменён. Бонусы и доп. услуги обновлены.',
-        targetType: 'order',
-        targetId: cancelled.id,
-        dedupeKey: `order-cancelled-${cancelled.id}-customer`,
-      });
-      ok(res, { order: cancelled, refundedPayments });
+      req.body.reason = req.body.reason ?? req.body.comment;
+      await cancelOrder(req, res);
       return;
     }
-    const row = first((await deps.db.query(
-      `UPDATE service_orders SET status=$2, updated_at=NOW() WHERE id=$1 RETURNING *`,
-      [req.params.id, nextStatus],
-    )).rows);
-    await deps.db.query(
-      `INSERT INTO order_status_history (order_id, old_status, new_status, actor_id, comment)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [req.params.id, (order as any).status, nextStatus, req.user!.id, req.body.comment ?? null],
-    );
+    const row = await transitionOrder(deps.db, deps.notifications, String(req.params.id), req.user!, nextStatus);
     ok(res, row);
-  }));
+  };
+  router.post('/orders/:id/status', auth(['cleaner', 'admin', 'superadmin']), asyncHandler(changeOrderStatus));
 
   router.post('/orders/:id/reschedule', auth(['customer', 'admin', 'superadmin']), asyncHandler(async (req, res) => {
     const admin = ['admin', 'superadmin'].includes(req.user!.role);
@@ -1789,6 +1737,7 @@ export function buildV1Router(deps: {
       [req.params.id, admin, req.user!.id],
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
+    if (!['pending_assignment', 'waiting_cleaner', 'assigned', 'pending_payment'].includes(order.status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ уже нельзя перенести.');
     const date = req.body.date ?? req.body.scheduledDate ?? order.scheduled_date;
     const startTime = req.body.time ?? req.body.startTime ?? order.start_time;
     if (!date || !startTime) throw new ApiError(400, 'invalid_request', 'Выберите дату и время уборки.');
@@ -1803,15 +1752,17 @@ export function buildV1Router(deps: {
     const row = first((await deps.db.query(
       `UPDATE service_orders
        SET scheduled_date=$2, start_time=$3, end_time=$4, updated_at=NOW()
-       WHERE id=$1
+       WHERE id=$1 AND status IN ('pending_assignment','waiting_cleaner','assigned','pending_payment')
        RETURNING *`,
       [req.params.id, date, startTime, endTime],
     )).rows);
+    if (!row) throw new ApiError(409,'invalid_transition','Статус заказа уже изменился. Обновите страницу.');
     await deps.db.query(
       `INSERT INTO order_status_history (order_id, old_status, new_status, actor_id, comment)
        VALUES ($1,$2,$2,$3,$4)`,
       [req.params.id, order.status, req.user!.id, req.body.comment ?? 'Дата и время уборки изменены'],
     );
+    await deps.notifications.create({userId:order.customer_id,titleRu:'Время уборки изменено',bodyRu:'Дата или время вашего заказа изменены.',targetType:'order',targetId:String(req.params.id)});
     if (order.cleaner_id) {
       await deps.notifications.create({
         userId: order.cleaner_id,
@@ -2081,28 +2032,18 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/admin/orders/:id/assign-cleaner', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
-    const order = first<{ scheduled_date: string; start_time: string; end_time: string }>((await deps.db.query(
-      `SELECT * FROM service_orders WHERE id=$1`,
-      [req.params.id],
-    )).rows);
-    if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден. Обновите страницу.');
-    const free = await deps.scheduling.cleanerAvailable(req.body.cleanerId, order.scheduled_date, order.start_time, order.end_time);
-    if (!free) throw new ApiError(400, 'cleaner_unavailable', 'Уборщица занята на это время. Выберите другую.');
-    const row = first((await deps.db.query(
-      `UPDATE service_orders SET cleaner_id=$2, status='assigned', updated_at=NOW() WHERE id=$1 RETURNING *`,
-      [req.params.id, req.body.cleanerId],
-    )).rows);
-    await deps.notifications.create({
-      userId: req.body.cleanerId,
-      titleRu: 'Назначен заказ',
-      bodyRu: 'Вам назначен новый заказ.',
-      targetType: 'order',
-      targetId: String(req.params.id),
-    });
-    ok(res, row);
+    req.body.status = 'assigned';
+    await changeOrderStatus(req, res);
   }));
 
   router.patch('/admin/orders/:id', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    const status = req.body.status ?? req.body.orderStatus;
+    if (status != null) {
+      if (Object.keys(req.body).some(key => !['status','orderStatus','comment','reason','cleanerId'].includes(key))) throw new ApiError(400,'mixed_update','Изменяйте статус отдельно от других полей заказа.');
+      req.body.status = status;
+      await changeOrderStatus(req, res);
+      return;
+    }
     const allowed: Record<string, string> = {
       status: 'status',
       orderStatus: 'status',
@@ -4517,7 +4458,7 @@ export function buildRuntimeConfig(settings: Record<string, any>) {
         requireAvailableCleaner: settings.requireAvailableCleaner ?? true,
         allowCustomTime: settings.allowCustomTime ?? false,
         scrollToPendingAfterAddonSelection: settings.scrollToPendingAfterAddonSelection ?? true,
-        cleanerOfferTtlMinutes: settings.cleanerOfferTtlMinutes ?? 15,
+        cleanerOfferTtlMinutes: settings.cleanerOfferTtlMinutes ?? 2,
         cleanerQuietHoursEnabled: settings.cleanerQuietHoursEnabled ?? false,
         cleanerQuietHoursStart: settings.cleanerQuietHoursStart ?? '23:00',
         cleanerQuietHoursEnd: settings.cleanerQuietHoursEnd ?? '07:00',

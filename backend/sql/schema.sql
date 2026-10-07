@@ -551,7 +551,7 @@ VALUES
     {"tier":"GOD","labelRu":"Бог чистоты","labelKk":"Тазалық құдайы","minMonthlySpent":1500000,"maxMonthlySpent":null,"discountPercent":10,"sortOrder":3}
   ]'::jsonb),
   ('minBookingDate', 'null'::jsonb),
-  ('cleanerOfferTtlMinutes', '15'::jsonb),
+  ('cleanerOfferTtlMinutes', '2'::jsonb),
   ('cleanerQuietHoursEnabled', 'false'::jsonb),
   ('cleanerQuietHoursStart', '"23:00"'::jsonb),
   ('cleanerQuietHoursEnd', '"07:00"'::jsonb),
@@ -702,6 +702,12 @@ CREATE TABLE IF NOT EXISTS service_orders (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS start_requires_customer_confirmation BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS cleaning_start_confirmed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS cleaning_start_rejected BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS order_addons (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

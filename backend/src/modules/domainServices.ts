@@ -461,7 +461,7 @@ export class SchedulingService {
     )).rows;
   }
 
-  async offerNextCleaner(orderId: string, excludeCleanerIds: string[] = [], ttlMinutes = 15) {
+  async offerNextCleaner(orderId: string, excludeCleanerIds: string[] = [], ttlMinutes = 2) {
     const order = first<{ id: string; scheduled_date: string; start_time: string; end_time: string; address_id: string }>((await this.db.query(
       `SELECT id, scheduled_date, start_time, end_time, address_id FROM service_orders WHERE id=$1`,
       [orderId],
@@ -538,6 +538,7 @@ export class SchedulingService {
       if(!current)throw new ApiError(404,'offer_not_found','Предложение заказа уже недоступно.');
       await client.query("UPDATE order_offers SET status='expired' WHERE order_id=$1 AND cleaner_id<>$2",[orderId,cleanerId]);
       await client.query("UPDATE order_offers SET status='accepted' WHERE order_id=$1 AND cleaner_id=$2",[orderId,cleanerId]);
+      await client.query(`INSERT INTO order_status_history(order_id,old_status,new_status,actor_id) VALUES($1,$2,'assigned',$3)`, [orderId,order.status,cleanerId]);
       return first((await client.query("UPDATE service_orders SET cleaner_id=$2,status='assigned',updated_at=NOW() WHERE id=$1 RETURNING *",[orderId,cleanerId])).rows);
     });
   }

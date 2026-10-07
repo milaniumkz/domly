@@ -31,6 +31,9 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
   bool _initialTabApplied = false;
   final Set<String> _acceptingOfferIds = <String>{};
   final Set<String> _rejectingOfferIds = <String>{};
+  final Set<String> _respondedOfferKeys = <String>{};
+  String _offerKey(Map<String, dynamic> offer) =>
+      '${offer['id']}|${offer['expiresAt']}';
 
   @override
   void initState() {
@@ -74,9 +77,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
       initialData: const <String, dynamic>{},
       builder: (context, profileSnap) {
         final profile = profileSnap.data ?? const <String, dynamic>{};
-        final hasServiceAreas = profileSnap.hasError
-            ? true
-            : cleanerHasServiceAreas(profile);
+        final hasServiceAreas =
+            profileSnap.hasError ? true : cleanerHasServiceAreas(profile);
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: _scheduleSlotsStream,
           initialData: const <Map<String, dynamic>>[],
@@ -112,7 +114,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                     : offerSnap.data ?? <Map<String, dynamic>>[];
                 final activeOffers = offers.where((offer) {
                   try {
-                    return _offerSecondsLeft(offer) > 0;
+                    return !_respondedOfferKeys.contains(_offerKey(offer)) &&
+                        _offerSecondsLeft(offer) > 0;
                   } catch (_) {
                     return false;
                   }
@@ -481,8 +484,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                             context,
                             '/chat',
                             arguments: {
-                              'orderId':
-                                  order['chatId'] ??
+                              'orderId': order['chatId'] ??
                                   order['scheduleSlotId'] ??
                                   order['slotId'] ??
                                   order['customerOrderId'] ??
@@ -501,8 +503,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                             context,
                             '/cleaner/checklist',
                             arguments: {
-                              'orderId':
-                                  order['scheduleSlotId'] ??
+                              'orderId': order['scheduleSlotId'] ??
                                   order['slotId'] ??
                                   order['id'] ??
                                   order['customerOrderId'],
@@ -573,8 +574,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     if (detailed is List) {
       for (final item in detailed) {
         if (item is Map) {
-          final label =
-              item['label'] ??
+          final label = item['label'] ??
               item['title'] ??
               item['name'] ??
               item['optionLabel'] ??
@@ -695,7 +695,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
               Expanded(
                 child: DomlySecondaryButton(
                   onPressed: canRespond
-                      ? () => _handleRejectOffer(offerId)
+                      ? () => _handleRejectOffer(offerId, _offerKey(offer))
                       : null,
                   label: isRejecting ? 'Отклоняем...' : 'Отказаться',
                 ),
@@ -705,7 +705,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                 child: DomlyPrimaryButton(
                   label: isAccepting ? 'Принимаем...' : 'Принять',
                   onPressed: canRespond
-                      ? () => _handleAcceptOffer(offerId)
+                      ? () => _handleAcceptOffer(offerId, _offerKey(offer))
                       : null,
                 ),
               ),
@@ -724,13 +724,12 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     final area = _intValue(slot['area']);
     final addonLabels = _formatAddonLabels(slot);
     final canCancelAssignment = _canCleanerCancelAssignment(slot);
-    final orderId =
-        (slot['scheduleSlotId'] ??
-                slot['slotId'] ??
-                slot['id'] ??
-                slot['sourceOrderId'] ??
-                slot['customerOrderId'])
-            .toString();
+    final orderId = (slot['scheduleSlotId'] ??
+            slot['slotId'] ??
+            slot['id'] ??
+            slot['sourceOrderId'] ??
+            slot['customerOrderId'])
+        .toString();
     final chatId = (slot['chatId'] ?? orderId).toString();
     final chatUnread = _chatUnreadCount(chatSummaries, chatId);
     final displayId = orderDisplayId(slot);
@@ -988,8 +987,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                         final item = Map<String, dynamic>.from(
                                           raw,
                                         );
-                                        final key = (item['key'] ?? '')
-                                            .toString();
+                                        final key =
+                                            (item['key'] ?? '').toString();
                                         final quantity = quantities[key] ?? 0;
                                         final hasQuantity =
                                             supportsQuantity[key] == true;
@@ -1031,9 +1030,9 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                                   onPressed: quantity <= 0
                                                       ? null
                                                       : () => setModalState(() {
-                                                          quantities[key] =
-                                                              quantity - 1;
-                                                        }),
+                                                            quantities[key] =
+                                                                quantity - 1;
+                                                          }),
                                                   icon: const Icon(
                                                     Icons.remove_circle_outline,
                                                   ),
@@ -1042,9 +1041,9 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                                 IconButton(
                                                   onPressed: () =>
                                                       setModalState(() {
-                                                        quantities[key] =
-                                                            quantity + 1;
-                                                      }),
+                                                    quantities[key] =
+                                                        quantity + 1;
+                                                  }),
                                                   icon: const Icon(
                                                     Icons.add_circle_outline,
                                                   ),
@@ -1054,10 +1053,9 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                                   value: quantity > 0,
                                                   onChanged: (value) =>
                                                       setModalState(() {
-                                                        quantities[key] = value
-                                                            ? 1
-                                                            : 0;
-                                                      }),
+                                                    quantities[key] =
+                                                        value ? 1 : 0;
+                                                  }),
                                                 ),
                                             ],
                                           ),
@@ -1181,8 +1179,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     }
     final customer = data['customer'];
     if (customer is Map) {
-      final value = (customer['phone'] ?? customer['customerPhone'] ?? '')
-          .toString();
+      final value =
+          (customer['phone'] ?? customer['customerPhone'] ?? '').toString();
       if (value.trim().isNotEmpty) {
         return value.trim();
       }
@@ -1402,8 +1400,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
       }
     }
     final scopeType = (order['scopeType'] ?? '').toString();
-    final looksLikeScheduleSlot =
-        scopeType == 'schedule_slot' ||
+    final looksLikeScheduleSlot = scopeType == 'schedule_slot' ||
         order.containsKey('scheduledDateKey') ||
         order.containsKey('scheduledFor');
     if (looksLikeScheduleSlot) {
@@ -1421,13 +1418,14 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     return '';
   }
 
-  Future<void> _handleAcceptOffer(String offerId) async {
+  Future<void> _handleAcceptOffer(String offerId, String offerKey) async {
     if (_acceptingOfferIds.contains(offerId)) {
       return;
     }
     setState(() => _acceptingOfferIds.add(offerId));
     try {
       await _data.acceptOrderOffer(offerId: offerId);
+      if (mounted) setState(() => _respondedOfferKeys.add(offerKey));
     } catch (error) {
       if (!mounted) {
         return;
@@ -1455,7 +1453,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     );
   }
 
-  Future<void> _handleRejectOffer(String offerId) async {
+  Future<void> _handleRejectOffer(String offerId, String offerKey) async {
     if (_rejectingOfferIds.contains(offerId)) {
       return;
     }
@@ -1482,6 +1480,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     setState(() => _rejectingOfferIds.add(offerId));
     try {
       await _data.rejectOrderOffer(offerId: offerId);
+      if (mounted) setState(() => _respondedOfferKeys.add(offerKey));
     } catch (error) {
       if (!mounted) {
         return;
