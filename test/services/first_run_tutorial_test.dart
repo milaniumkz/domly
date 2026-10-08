@@ -5,9 +5,46 @@ import 'package:domly/ui/tutorial_targets.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:domly/ui/domly_ui.dart';
+import 'package:domly/app/app_config.dart';
+import 'package:domly/app/domly_app.dart';
+import 'package:domly/services/auth_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+      'restored session automatically starts tutorial above startup stack',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    const config = AppConfig(
+        flavor: AppFlavor.pro,
+        title: 'Test',
+        initialRoute: '/welcome',
+        postAuthRoute: '/cleaner/dashboard',
+        deferAuthForCustomerActions: false);
+    final auth = _RestoredAuth(config);
+    final translations = TranslationController.forTesting();
+    await tester.pumpWidget(DomlyApp(
+        config: config,
+        authController: auth,
+        translationController: translations));
+    for (var i = 0; i < 35; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Пропустить'), findsOneWidget);
+    expect(find.text('1 из 7'), findsOneWidget);
+    await tester.tap(find.text('Пропустить'));
+    for (var i = 0; i < 15; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(
+        await DomlyFirstRunTutorial.wasShown(
+            flavor: AppFlavor.pro, userId: 'restored-user'),
+        isTrue);
+    await tester.pumpWidget(const SizedBox());
+    auth.dispose();
+    translations.dispose();
+  });
+
   testWidgets('Pro tutorial shows route-owned menu targets without skipping',
       (tester) async {
     bool? shown;
@@ -136,4 +173,15 @@ void main() {
     await tester.tap(find.text('Пропустить'));
     await tester.pumpAndSettle();
   });
+}
+
+class _RestoredAuth extends AuthController {
+  _RestoredAuth(AppConfig config)
+      : super(AuthService(config: config), config: config);
+  @override
+  bool get initialized => true;
+  @override
+  bool get isAuthenticated => true;
+  @override
+  String? get currentUserId => 'restored-user';
 }

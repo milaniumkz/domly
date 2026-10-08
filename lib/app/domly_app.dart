@@ -461,8 +461,10 @@ class _DomlyAppState extends State<DomlyApp> {
         return;
       }
       final navigator = _navigatorKey.currentState;
-      final context = _navigatorKey.currentContext;
-      if (navigator == null || context == null || navigator.canPop()) {
+      final context = navigator?.overlay?.context;
+      // Named startup routes can have a root page beneath them. Only a
+      // foreground popup should postpone onboarding, not that page stack.
+      if (navigator == null || context == null) {
         _scheduleFirstRunTutorial();
         return;
       }
