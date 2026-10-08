@@ -1036,6 +1036,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                             upcomingSlot: upcomingSlot,
                             userName: userName,
                             planName: effectivePlanName,
+                            allOrders: orders,
                           );
                         }
                         if (hasPendingDateSelection &&
@@ -1060,6 +1061,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                             },
                             userName: userName,
                             planName: effectivePlanName,
+                            allOrders: orders,
                           );
                         }
                         if (pendingHomeOrder != null) {
@@ -1073,12 +1075,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                             order: pendingHomeOrder,
                             userName: userName,
                             planName: effectivePlanName,
+                            allOrders: orders,
                           );
                         }
                         return _buildFigmaHomeEmptyShell(
                           context: context,
                           userName: userName,
                           profile: profile,
+                          allSubscriptions: subscriptions,
+                          allOrders: orders,
                         );
                       },
                     );
@@ -1839,12 +1844,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     required Map<String, dynamic>? upcomingSlot,
     required String userName,
     required String planName,
+    required List<Map<String, dynamic>> allOrders,
   }) {
     if (upcomingSlot == null) {
       return _buildFigmaHomeEmptyShell(
         context: context,
         userName: userName,
         profile: profile,
+        allSubscriptions: allSubscriptions,
+        allOrders: allOrders,
       );
     }
 
@@ -1989,7 +1997,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   onPressed: primaryAction,
                 ),
                 const SizedBox(height: 10),
-                _prelaunchBookingButton(),
+                _prelaunchBookingButton(allSubscriptions, allOrders),
                 const SizedBox(height: 14),
                 const _CompanyPromotionsSection(),
                 const SizedBox(height: 14),
@@ -2038,6 +2046,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     required BuildContext context,
     required String userName,
     required Map<String, dynamic> profile,
+    required List<Map<String, dynamic>> allOrders,
+    required List<Map<String, dynamic>> allSubscriptions,
   }) {
     final houseId = (profile['houseId'] ?? '').toString().trim();
     final houseStatus =
@@ -2124,7 +2134,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         _runProtectedAction(_showHomePackagePicker),
                   ),
                   const SizedBox(height: 10),
-                  _prelaunchBookingButton(),
+                  _prelaunchBookingButton(allSubscriptions, allOrders),
                   const SizedBox(height: 14),
                   const _CompanyPromotionsSection(),
                   const SizedBox(height: 14),
@@ -2196,6 +2206,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     required Map<String, dynamic> order,
     required String userName,
     required String planName,
+    required List<Map<String, dynamic>> allOrders,
   }) {
     final area = profile['area'] ?? order['area'] ?? 100;
     final statusText = _homeOrderStatusText(order);
@@ -2329,7 +2340,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   onPressed: primaryAction,
                 ),
                 const SizedBox(height: 10),
-                _prelaunchBookingButton(),
+                _prelaunchBookingButton(allSubscriptions, allOrders),
                 const SizedBox(height: 14),
                 const _CompanyPromotionsSection(),
                 const SizedBox(height: 14),
@@ -2908,37 +2919,25 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     action();
   }
 
-  Widget _prelaunchBookingButton() {
+  Widget _prelaunchBookingButton(
+    List<Map<String, dynamic>> subscriptions,
+    List<Map<String, dynamic>> orders,
+  ) {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _customerPrelaunchBookings,
       builder: (context, prelaunchSnapshot) {
-        return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _customerSubscriptions,
-          builder: (context, subscriptionsSnapshot) {
-            return StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _customerOrders,
-              builder: (context, ordersSnapshot) {
-                final hasPrelaunch = _hasActivePrelaunchBooking(
-                  prelaunchSnapshot.data,
-                );
-                final hasPackage = _hasAnyPackagePurchase(
-                  subscriptionsSnapshot.data,
-                  ordersSnapshot.data,
-                );
-                if (hasPrelaunch || hasPackage) {
-                  return const SizedBox.shrink();
-                }
-                return _FigmaSecondaryHomeButton(
-                  key: DomlyTutorialTargets.clientPrelaunchButton,
-                  label: 'Предварительная запись',
-                  icon: Icons.event_available_outlined,
-                  onPressed: () => _runProtectedAction(() {
-                    unawaited(_showPrelaunchBookingDialog());
-                  }),
-                );
-              },
-            );
-          },
+        final hasPrelaunch = _hasActivePrelaunchBooking(prelaunchSnapshot.data);
+        final hasPackage = _hasAnyPackagePurchase(subscriptions, orders);
+        if (hasPrelaunch || hasPackage) {
+          return const SizedBox.shrink();
+        }
+        return _FigmaSecondaryHomeButton(
+          key: DomlyTutorialTargets.clientPrelaunchButton,
+          label: 'Предварительная запись',
+          icon: Icons.event_available_outlined,
+          onPressed: () => _runProtectedAction(() {
+            unawaited(_showPrelaunchBookingDialog());
+          }),
         );
       },
     );
