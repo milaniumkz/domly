@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -56,24 +57,45 @@ class DomlyFirstRunTutorial {
     while (index >= 0 && index < steps.length && navigator.mounted) {
       final step = steps[index];
       if (currentRoute != step.routeName) {
-        navigator.pushNamedAndRemoveUntil(step.routeName, (_) => false);
+        final visibleTarget = DomlyTutorialTargets.resolveNavigationTarget(
+                step.targetKey, step.routeName)
+            ?.currentContext;
+        if (visibleTarget == null ||
+            !visibleTarget.mounted ||
+            ModalRoute.of(visibleTarget)?.isCurrent != true) {
+          navigator.pushNamedAndRemoveUntil(step.routeName, (_) => false);
+        }
         currentRoute = step.routeName;
       }
-      await Future<void>.delayed(const Duration(milliseconds: 420));
+      // Wait for layout and the actual page transition, not a fixed pause.
+      await WidgetsBinding.instance.endOfFrame;
+      final pageContext = DomlyTutorialTargets.resolveNavigationTarget(
+              step.targetKey, step.routeName)
+          ?.currentContext;
+      final animation = pageContext == null || !pageContext.mounted
+          ? null
+          : ModalRoute.of(pageContext)?.animation;
+      if (animation != null && animation.status == AnimationStatus.forward) {
+        final ready = Completer<void>();
+        void onStatus(AnimationStatus status) {
+          if (status != AnimationStatus.forward && !ready.isCompleted) {
+            ready.complete();
+          }
+        }
+
+        animation.addStatusListener(onStatus);
+        try {
+          await ready.future
+              .timeout(const Duration(milliseconds: 400), onTimeout: () {});
+        } finally {
+          animation.removeStatusListener(onStatus);
+        }
+        await WidgetsBinding.instance.endOfFrame;
+      }
       if (!navigator.mounted) {
         return shown;
       }
       if (step.targetKey != null) {
-        for (var attempt = 0;
-            attempt < 30 &&
-                DomlyTutorialTargets.resolveNavigationTarget(
-                            step.targetKey, step.routeName)
-                        ?.currentContext ==
-                    null &&
-                navigator.mounted;
-            attempt++) {
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        }
         if (DomlyTutorialTargets.resolveNavigationTarget(
                     step.targetKey, step.routeName)
                 ?.currentContext ==
@@ -90,12 +112,14 @@ class DomlyFirstRunTutorial {
           return shown;
         }
         // ignore: use_build_context_synchronously
-        await Scrollable.ensureVisible(
-          targetContext,
-          duration: const Duration(milliseconds: 260),
-          alignment: 0.35,
-        );
-        await Future<void>.delayed(const Duration(milliseconds: 80));
+        if (step.target != _TutorialTarget.bottomNav) {
+          await Scrollable.ensureVisible(
+            targetContext,
+            duration: const Duration(milliseconds: 120),
+            alignment: 0.35,
+          );
+          await WidgetsBinding.instance.endOfFrame;
+        }
       }
       shown = true;
       final action = await showDialog<_TutorialAction>(

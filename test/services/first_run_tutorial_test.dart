@@ -47,6 +47,10 @@ void main() {
 
   testWidgets('Pro tutorial shows route-owned menu targets without skipping',
       (tester) async {
+    tester.view.physicalSize = const Size(430, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     bool? shown;
     await tester.pumpWidget(MaterialApp(
       home: Builder(
@@ -63,13 +67,22 @@ void main() {
               child: SizedBox.expand())),
     ));
     await tester.tap(find.text('Start'));
-    for (final title in ['Главная', 'Новые заказы', 'Календарь']) {
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
+    for (final title in [
+      'Главная',
+      'Новые заказы',
+      'Календарь',
+      'Чек-лист',
+      'Чат и связь',
+      'Фото и жалобы',
+      'Профиль'
+    ]) {
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
       }
       expect(find.text(title), findsWidgets);
-      expect(find.byKey(const ValueKey('tutorial-highlight')), findsOneWidget);
-      if (title == 'Календарь') {
+      expect(find.byKey(const ValueKey('tutorial-highlight')), findsOneWidget,
+          reason: title);
+      if (title == 'Профиль') {
         await tester.tap(find.text('Пропустить'));
       } else {
         await tester.tap(find.text('Далее'));
