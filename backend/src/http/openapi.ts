@@ -713,6 +713,7 @@ export const openApiSpec = {
       post: { ...secured('Админ: создать акцию'), requestBody: jsonBody({ titleRu: 'Кэшбэк', rewardType: 'percent', rewardValue: 50 }) },
     },
     '/admin/promotions/{id}': {
+      delete: { ...secured('Админ: архивировать акцию без удаления истории начислений'), parameters: [path('id')] },
       patch: { ...secured('Админ: обновить акцию'), parameters: [path('id')], requestBody: jsonBody({ oncePerCustomer: true }) },
     },
     '/admin/content-pages': {

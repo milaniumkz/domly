@@ -65,6 +65,39 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.ok(!(await request('/admin/banners')).json.data.some((row:any)=>row.id===id));
       } finally { await db.query('DELETE FROM banners WHERE id=$1',[id]); }
     });
+    await t.test('promotions accept any package and preserve reward and presentation',async()=>{
+      const packageId=randomUUID();
+      await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Тестовый пакет',1,10000)",[packageId]);
+      const ids:string[]=[];
+      try {
+        assert.equal((await request('/admin/promotions','POST',{titleRu:'',packageId:''})).status,400);
+        assert.equal((await request('/admin/promotions','POST',{titleRu:'Bad',packageId:'invalid'})).status,400);
+        assert.equal((await request('/admin/promotions','POST',{titleRu:'Bad',rewardType:'percent',rewardValue:101})).status,400);
+        assert.equal((await request('/admin/promotions','POST',{titleRu:'No access'},true)).status,403);
+        for(const type of ['fixed','percent']) {
+          const value=type==='fixed'?15000:10;
+          const created=await request('/admin/promotions','POST',{titleRu:'Тест акции',descriptionRu:'Кратко',packageId:'',rewardType:type,rewardValue:value,maxBonusSpendPercent:50,oncePerCustomer:true,active:false,presentation:{fullInfo:'Подробно',features:['Окна'],exclusions:['Балкон'],homeBannerImageUrl:env.minioPublicUrl+'/promo_banners/promotion.jpg',showBannerTitle:false,rewardTarget:'addons'}});
+          assert.equal(created.status,201);
+          const row=created.json.data;ids.push(row.id);
+          assert.equal(row.package_id,null);assert.equal(row.reward_type,type);assert.equal(Number(row.reward_value),value);assert.equal(row.active,false);
+          assert.equal(row.presentation.fullInfo,'Подробно');assert.deepEqual(row.presentation.features,['Окна']);assert.equal(row.presentation.showBannerTitle,false);
+          assert.match(row.presentation.homeBannerImageUrl,/\/api\/v1\/files\/media\?/);
+          assert.ok((await request('/admin/promotions')).json.data.some((item:any)=>item.id===row.id));
+          assert.equal((await request('/admin/promotions/'+row.id,'PATCH',{packageId,active:true})).status,200);
+          assert.equal((await request('/admin/promotions/'+row.id,'PATCH',{packageId:null,descriptionRu:'Обновлено'})).json.data.package_id,null);
+          const updated=(await request('/admin/promotions')).json.data.find((item:any)=>item.id===row.id);
+          assert.equal(updated.presentation.fullInfo,'Подробно');
+          await db.query('INSERT INTO promotion_redemptions(promotion_id,customer_id,reward_amount) VALUES($1,$2,100)',[row.id,customer]);
+          assert.equal((await request('/admin/promotions/'+row.id,'DELETE')).status,200);
+          assert.ok(!(await request('/admin/promotions')).json.data.some((item:any)=>item.id===row.id));
+          assert.equal((await db.query('SELECT id FROM promotion_redemptions WHERE promotion_id=$1',[row.id])).rowCount,1);
+          assert.equal((await request('/admin/promotions/'+row.id+'/active','PATCH',{active:true})).status,404);
+        }
+      } finally {
+        for(const id of ids)await db.query('DELETE FROM promotions WHERE id=$1',[id]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[packageId]);
+      }
+    });
     await t.test('admin session refresh rotates tokens and preserves access after reopening',async()=>{
       const original=signRefreshToken({id:admin,role:'superadmin',phone:'fixture'});
       await db.query("INSERT INTO refresh_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')",[admin,hashToken(original)]);

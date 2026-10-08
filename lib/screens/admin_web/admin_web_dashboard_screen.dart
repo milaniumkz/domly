@@ -12343,6 +12343,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     var showBannerReward = existing?['showBannerReward'] != false;
     var showBannerInfoIcon = existing?['showBannerInfoIcon'] != false;
 
+    var saving = false;
+    var uploading = false;
+    String? errorText;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -12365,8 +12368,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 children: [
                   Text(
                     existing == null
-                        ? 'Новая важная информация'
-                        : 'Редактирование важной информации',
+                        ? 'Новая акция'
+                        : 'Редактирование акции',
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -12420,14 +12423,16 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () async {
-                            final url = await _photoUploadService.pickAndUpload(
-                              folder: 'promotion_home_banners',
-                              filePrefix: 'promotion',
-                            );
-                            if (url == null) return;
-                            setSheetState(
-                              () => homeBannerImageController.text = url,
-                            );
+                            if (uploading || saving) return;
+                            setSheetState(() { uploading = true; errorText = null; });
+                            try {
+                              final url = await _photoUploadService.pickAndUpload(folder: 'promotion_home_banners', filePrefix: 'promotion');
+                              if (url != null && context.mounted) setSheetState(() => homeBannerImageController.text = url);
+                            } catch (error) {
+                              if (context.mounted) setSheetState(() => errorText = UserErrorMessage.message(error));
+                            } finally {
+                              if (context.mounted) setSheetState(() => uploading = false);
+                            }
                           },
                           icon: const Icon(Icons.upload_outlined),
                           label: Text('Загрузить фото баннера'.tr()),
@@ -12589,19 +12594,24 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     onChanged: (value) => setSheetState(() => isActive = value),
                   ),
                   const SizedBox(height: 16),
+                  if (errorText != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(errorText!, style: const TextStyle(color: Colors.red))),
                   Align(
                     alignment: Alignment.centerRight,
                     child: ElevatedButton(
-                      onPressed: () async {
+                      onPressed: saving || uploading ? null : () async {
                         final id = idController.text.trim();
-                        if (id.isEmpty) {
+                        if (id.isEmpty || titleController.text.trim().isEmpty) {
+                          setSheetState(() => errorText = 'Укажите ID и название акции.');
                           return;
                         }
+                        setSheetState(() { saving = true; errorText = null; });
                         final selectedPackage = packages.firstWhere(
                           (item) => (item['id'] ?? '').toString() == packageId,
                           orElse: () => const <String, dynamic>{},
                         );
+                        try {
                         await _data.saveAdminPromotion({
+                          ...?existing,
                           'id': id,
                           'title': titleController.text.trim().isEmpty
                               ? 'Важная информация'
@@ -12657,11 +12667,14 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                           'oncePerCustomer': oncePerCustomer,
                           'isActive': isActive,
                         });
-                        if (context.mounted) {
-                          Navigator.pop(context);
+                        if (context.mounted) Navigator.pop(context);
+                        } catch (error) {
+                          if (context.mounted) setSheetState(() => errorText = UserErrorMessage.message(error));
+                        } finally {
+                          if (context.mounted) setSheetState(() => saving = false);
                         }
                       },
-                      child: Text('Сохранить акцию'.tr()),
+                      child: Text(saving ? 'Сохранение…' : 'Сохранить акцию'.tr()),
                     ),
                   ),
                 ],

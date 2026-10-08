@@ -1,3 +1,4 @@
+import '../utils/promotion_data.dart';
 import '../utils/banner_data.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -2072,7 +2073,8 @@ class FirestoreDataService {
       final items = await BackendApiService.instance.getList(
         '/admin/promotions',
       );
-      items.sort((a, b) {
+      final mapped = items.map(mapBackendPromotion).toList();
+      mapped.sort((a, b) {
         final aActive = a['isActive'] == false ? 1 : 0;
         final bActive = b['isActive'] == false ? 1 : 0;
         if (aActive != bActive) {
@@ -2082,7 +2084,7 @@ class FirestoreDataService {
               (b['title'] ?? b['id']).toString(),
             );
       });
-      return items;
+      return mapped;
     });
   }
 
@@ -13293,21 +13295,7 @@ class FirestoreDataService {
       _notifyDebugStateChanged();
       return;
     }
-    final promotionBody = {
-      'titleRu': data['title'] ?? data['titleRu'] ?? promotionId,
-      'titleKk': data['titleKk'],
-      'descriptionRu': data['description'] ?? data['descriptionRu'],
-      'descriptionKk': data['descriptionKk'],
-      'packageId': data['packageId'],
-      'rewardType': data['rewardType'] ?? data['type'] ?? 'fixed',
-      'rewardValue': data['rewardValue'] ?? data['amount'] ?? 0,
-      'maxBonusSpendPercent': data['maxBonusSpendPercent'],
-      'oncePerCustomer': data['oncePerCustomer'] ?? false,
-      'bannerFileId': data['bannerFileId'],
-      'active': data['active'] ?? true,
-      'startsAt': data['startsAt']?.toString(),
-      'endsAt': data['endsAt']?.toString(),
-    };
+    final promotionBody = promotionRequestBody(data);
     if (_looksLikeUuid(promotionId)) {
       await BackendApiService.instance.patchMap(
         '/admin/promotions/$promotionId',
@@ -13343,10 +13331,7 @@ class FirestoreDataService {
       _notifyDebugStateChanged();
       return;
     }
-    await BackendApiService.instance.patchMap(
-      '/admin/promotions/$normalizedPromotionId/active',
-      body: {'active': false},
-    );
+    await BackendApiService.instance.delete('/admin/promotions/$normalizedPromotionId');
   }
 
   Future<void> updateAdminPolicies(Map<String, dynamic> data) async {

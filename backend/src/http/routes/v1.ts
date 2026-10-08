@@ -1,3 +1,4 @@
+import {validatePromotionBody} from '../../modules/promotionValidation';
 import {saveOrderReview} from '../../modules/orderReviews';
 import {canonicalMediaUrl, mediaLinksMiddleware, verifyMediaLink} from '../../modules/mediaLinks';
 import { transitionOrder, releaseCleanerAssignment } from '../../modules/orderLifecycle';
@@ -3876,33 +3877,35 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/admin/promotions', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    validatePromotionBody(req.body);
     const row = first((await deps.db.query(
       `INSERT INTO promotions
-       (title_ru, title_kk, description_ru, description_kk, package_id, reward_type, reward_value, max_bonus_spend_percent, once_per_customer, banner_file_id, active, starts_at, ends_at)
-       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'fixed'),COALESCE($7,0),$8,COALESCE($9,FALSE),$10,COALESCE($11,TRUE),$12,$13)
+       (title_ru, title_kk, description_ru, description_kk, package_id, reward_type, reward_value, max_bonus_spend_percent, once_per_customer, banner_file_id, active, starts_at, ends_at, presentation)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'fixed'),COALESCE($7,0),$8,COALESCE($9,FALSE),$10,COALESCE($11,TRUE),$12,$13,$14::jsonb)
        RETURNING *`,
-      [req.body.titleRu, req.body.titleKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.packageId ?? null, req.body.rewardType ?? 'fixed', req.body.rewardValue ?? 0, req.body.maxBonusSpendPercent ?? null, req.body.oncePerCustomer ?? false, req.body.bannerFileId ?? null, req.body.active ?? true, req.body.startsAt ?? null, req.body.endsAt ?? null],
+      [req.body.titleRu, req.body.titleKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.packageId || null, req.body.rewardType ?? 'fixed', req.body.rewardValue ?? 0, req.body.maxBonusSpendPercent ?? null, req.body.oncePerCustomer ?? false, req.body.bannerFileId ?? null, req.body.active ?? true, req.body.startsAt ?? null, req.body.endsAt ?? null, JSON.stringify(req.body.presentation ?? {})],
     )).rows);
     ok(res, row, 201);
   }));
 
   router.patch('/admin/promotions/:id', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    validatePromotionBody(req.body,true);
     const row = first((await deps.db.query(
       `UPDATE promotions SET
        title_ru=COALESCE($2,title_ru), title_kk=COALESCE($3,title_kk),
        description_ru=COALESCE($4,description_ru), description_kk=COALESCE($5,description_kk),
-       package_id=COALESCE($6,package_id), reward_type=COALESCE($7,reward_type),
+       package_id=CASE WHEN $15::boolean THEN $6::uuid ELSE package_id END, reward_type=COALESCE($7,reward_type),
        reward_value=COALESCE($8,reward_value), max_bonus_spend_percent=COALESCE($9,max_bonus_spend_percent),
        once_per_customer=COALESCE($10,once_per_customer), banner_file_id=COALESCE($11,banner_file_id),
-       active=COALESCE($12,active), starts_at=COALESCE($13,starts_at), ends_at=COALESCE($14,ends_at), updated_at=NOW()
-       WHERE id=$1 RETURNING *`,
+       active=COALESCE($12,active), starts_at=COALESCE($13,starts_at), ends_at=COALESCE($14,ends_at), presentation=presentation || $16::jsonb, updated_at=NOW()
+       WHERE id=$1 AND deleted_at IS NULL RETURNING *`,
       [
         req.params.id,
         req.body.titleRu ?? null,
         req.body.titleKk ?? null,
         req.body.descriptionRu ?? null,
         req.body.descriptionKk ?? null,
-        req.body.packageId ?? null,
+        req.body.packageId || null,
         req.body.rewardType ?? null,
         req.body.rewardValue ?? null,
         req.body.maxBonusSpendPercent ?? null,
@@ -3911,10 +3914,18 @@ export function buildV1Router(deps: {
         req.body.active ?? null,
         req.body.startsAt ?? null,
         req.body.endsAt ?? null,
+        Object.prototype.hasOwnProperty.call(req.body,'packageId'),
+        JSON.stringify(req.body.presentation ?? {}),
       ],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Акция не найдена.');
     ok(res, row);
+  }));
+
+  router.delete('/admin/promotions/:id', auth(['admin', 'superadmin']), asyncHandler(async (req,res)=>{
+    const result=await deps.db.query('UPDATE promotions SET active=FALSE,deleted_at=NOW(),updated_at=NOW() WHERE id=$1 AND deleted_at IS NULL RETURNING id',[req.params.id]);
+    if(!result.rowCount) throw new ApiError(404,'not_found','Акция не найдена.');
+    ok(res,{deleted:true});
   }));
 
   router.post('/admin/content-pages', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
@@ -3982,7 +3993,7 @@ export function buildV1Router(deps: {
     const updatedTables = new Set(['catalog_packages', 'catalog_addons', 'addon_groups', 'banners', 'promotions', 'content_pages']);
     const setClause = updatedTables.has(table) ? 'active=$2, updated_at=NOW()' : 'active=$2';
     const row = first((await deps.db.query(
-      `UPDATE ${table} SET ${setClause} WHERE id=$1 RETURNING *`,
+      `UPDATE ${table} SET ${setClause} WHERE id=$1 ${req.params.section === 'promotions' ? 'AND deleted_at IS NULL' : ''} RETURNING *`,
       [req.params.id, active],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Запись не найдена.');
@@ -4012,7 +4023,7 @@ export function buildV1Router(deps: {
       addons: { table: 'catalog_addons', search: ['title_ru', 'title_kk', 'description_ru', 'description_kk', 'hint_ru', 'hint_kk'] },
       addonGroups: { table: 'addon_groups', search: ['title_ru', 'title_kk'] },
       banners: { table: 'banners', search: ['title_ru', 'title_kk', 'description_ru', 'description_kk'] },
-      promotions: { table: 'promotions', search: ['title_ru', 'title_kk', 'description_ru', 'description_kk'] },
+      promotions: { table: 'promotions', base: 'deleted_at IS NULL', search: ['title_ru', 'title_kk', 'description_ru', 'description_kk'] },
       promotionRedemptions: { table: 'promotion_redemptions' },
       contentPages: { table: 'content_pages', search: ['slug', 'title_ru', 'title_kk', 'body_ru', 'body_kk', 'kind'] },
       videoViews: { table: 'video_views', search: ['video_id', 'audience_type'] },

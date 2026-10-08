@@ -1,3 +1,4 @@
+import '../utils/promotion_data.dart';
 import '../utils/banner_data.dart';
 import 'dart:async';
 
@@ -557,36 +558,9 @@ class AppConfigService {
   }
 
   List<Map<String, dynamic>> _mapBackendPromotions(dynamic raw) {
-    return (raw as List? ?? const [])
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .where((item) => item['active'] != false)
-        .map(
-          (item) => {
-            'id': item['id'],
-            'title': item['title_ru'] ?? '',
-            'titleKk': item['title_kk'],
-            'description': item['description_ru'] ?? '',
-            'descriptionKk': item['description_kk'],
-            'fullInfo': item['description_ru'] ?? '',
-            'rewardMode': item['reward_type'] == 'percent'
-                ? 'percent'
-                : 'fixed',
-            'rewardAmount': item['reward_type'] == 'fixed'
-                ? _num(item['reward_value'])
-                : 0,
-            'rewardPercent': item['reward_type'] == 'percent'
-                ? _num(item['reward_value'])
-                : 0,
-            'packageId': item['package_id'],
-            'sortOrder': item['sort_order'] ?? item['sortOrder'] ?? 999,
-            'isActive': item['active'] != false,
-            'oncePerCustomer': item['once_per_customer'] == true,
-            'homeBannerImageUrl': item['home_banner_image_url'] ?? '',
-            'bannerImageUrl': item['banner_image_url'] ?? '',
-          },
-        )
-        .toList();
+    return (raw as List? ?? const []).whereType<Map>()
+        .map((item) => mapBackendPromotion(Map<String,dynamic>.from(item)))
+        .where((item) => item['isActive'] != false).toList();
   }
 
   Map<String, dynamic> _mapBackendAddonGroup(Map<String, dynamic> item) {
