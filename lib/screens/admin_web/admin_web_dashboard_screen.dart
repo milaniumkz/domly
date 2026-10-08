@@ -12648,8 +12648,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                           'rewardTarget': rewardTarget,
                           'rewardMode': rewardMode,
                           'rewardAmount': rewardMode == 'fixed'
-                              ? int.tryParse(
-                                    fixedRewardController.text.trim(),
+                              ? num.tryParse(
+                                    fixedRewardController.text.trim().replaceAll(',', '.'),
                                   ) ??
                                   0
                               : 0,
@@ -12662,7 +12662,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                   0
                               : 0,
                           'maxSpendPercent':
-                              int.tryParse(maxSpendController.text.trim()) ??
+                              num.tryParse(maxSpendController.text.trim().replaceAll(',', '.')) ??
                                   50,
                           'oncePerCustomer': oncePerCustomer,
                           'isActive': isActive,
