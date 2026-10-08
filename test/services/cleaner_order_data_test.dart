@@ -2,6 +2,18 @@ import 'package:domly/utils/cleaner_order_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('PostgreSQL numeric area strings are safe for Pro job cards', () {
+    for (final offer in [false, true]) {
+      expect(mapCleanerWorkItem({'area': '110.00'}, offer: offer)['area'], 110);
+      expect(
+          mapCleanerWorkItem({'area': '110.50'}, offer: offer)['area'], 110.5);
+      expect(mapCleanerWorkItem({'area': 110}, offer: offer)['area'], 110);
+      for (final value in [null, '', 'invalid', 'NaN', 'Infinity', -1]) {
+        expect(mapCleanerWorkItem({'area': value}, offer: offer)['area'], 0);
+      }
+    }
+  });
+
   test(
       'backend offer keeps a future expiry and uses order ID for accept and decline',
       () {

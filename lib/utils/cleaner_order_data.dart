@@ -16,6 +16,7 @@ Map<String, dynamic> mapCleanerWorkItem(Map<String, dynamic> row,
     'status': offer && row['status'] == 'offered' ? 'pending' : row['status'],
     'id': orderId,
     'orderId': orderId,
+    'area': _workItemArea(row['area']),
     'startRequiresCustomerConfirmation':
         row['start_requires_customer_confirmation'] == true,
     'cleaningStartConfirmed': row['cleaning_start_confirmed'] == true,
@@ -45,4 +46,9 @@ Map<String, dynamic> mapCleanerWorkItem(Map<String, dynamic> row,
     'totalDurationMinutes':
         row['estimated_duration_minutes'] ?? row['totalDurationMinutes'],
   };
+}
+
+num _workItemArea(dynamic value) {
+  final area = value is num ? value : num.tryParse((value ?? '').toString());
+  return area != null && area.isFinite && area >= 0 ? area : 0;
 }
