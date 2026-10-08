@@ -706,6 +706,7 @@ export const openApiSpec = {
       post: { ...secured('Админ: создать баннер'), requestBody: jsonBody({ placement: 'home_top', imageUrl: 'https://...', titleRu: 'Акция' }) },
     },
     '/admin/banners/{id}': {
+      delete: { ...secured('Админ: удалить баннер'), parameters: [path('id')] },
       patch: { ...secured('Админ: обновить баннер'), parameters: [path('id')], requestBody: jsonBody({ descriptionRu: 'Описание' }) },
     },
     '/admin/promotions': {

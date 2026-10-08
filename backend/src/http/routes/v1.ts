@@ -881,7 +881,7 @@ export function buildV1Router(deps: {
 
   router.get('/catalog/banners', asyncHandler(async (req, res) => {
     ok(res, (await deps.db.query(
-      `SELECT * FROM banners WHERE active=TRUE AND placement=$1 ORDER BY sort_order, created_at DESC`,
+      `SELECT banners.*, COALESCE(banners.image_url,(SELECT public_url FROM files WHERE id=banners.image_file_id)) AS image_url FROM banners WHERE active=TRUE AND placement=$1 ORDER BY sort_order, created_at DESC`,
       [req.query.placement ?? 'home_top'],
     )).rows);
   }));
@@ -1109,7 +1109,7 @@ export function buildV1Router(deps: {
     const packages = (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows;
     const addonGroups = (await deps.db.query(`SELECT * FROM addon_groups WHERE active=TRUE ORDER BY sort_order`)).rows;
     const addons = (await deps.db.query(`SELECT * FROM catalog_addons WHERE active=TRUE ORDER BY sort_order, title_ru`)).rows;
-    const banners = (await deps.db.query(`SELECT * FROM banners WHERE active=TRUE ORDER BY placement, sort_order`)).rows;
+    const banners = (await deps.db.query(`SELECT banners.*, COALESCE(banners.image_url,(SELECT public_url FROM files WHERE id=banners.image_file_id)) AS image_url FROM banners WHERE active=TRUE ORDER BY placement, sort_order`)).rows;
     const promotions = (await deps.db.query(`SELECT * FROM promotions WHERE active=TRUE ORDER BY created_at DESC`)).rows;
     const contentPages = (await deps.db.query(
       `SELECT slug, title_ru, title_kk, kind, updated_at FROM content_pages WHERE active=TRUE ORDER BY kind, slug`,
@@ -1139,7 +1139,7 @@ export function buildV1Router(deps: {
        FROM catalog_addons a LEFT JOIN addon_groups g ON g.id=a.group_id
        WHERE a.active=TRUE ORDER BY g.sort_order, a.sort_order, a.title_ru`,
     )).rows;
-    const banners = (await deps.db.query(`SELECT * FROM banners WHERE active=TRUE ORDER BY placement, sort_order, created_at DESC`)).rows;
+    const banners = (await deps.db.query(`SELECT banners.*, COALESCE(banners.image_url,(SELECT public_url FROM files WHERE id=banners.image_file_id)) AS image_url FROM banners WHERE active=TRUE ORDER BY placement, sort_order, created_at DESC`)).rows;
     const promotions = (await deps.db.query(`SELECT * FROM promotions WHERE active=TRUE ORDER BY created_at DESC`)).rows;
     const contentPages = (await deps.db.query(
       `SELECT slug, title_ru, title_kk, body_ru, body_kk, kind, updated_at
@@ -3842,28 +3842,37 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/admin/banners', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    if (typeof req.body.titleRu !== 'string' || !req.body.titleRu.trim()) throw new ApiError(400, 'invalid_request', 'Укажите заголовок баннера.');
     const row = first((await deps.db.query(
       `INSERT INTO banners
-       (title_ru, title_kk, description_ru, description_kk, image_file_id, target_type, target_value, placement, sort_order, active)
-       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'modal'),$7,COALESCE($8,'home_top'),COALESCE($9,0),COALESCE($10,TRUE))
+       (title_ru, title_kk, description_ru, description_kk, image_file_id, target_type, target_value, placement, sort_order, active, image_url, subtitle_ru, subtitle_kk, cta_label_ru, cta_label_kk)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'modal'),$7,COALESCE($8,'home_top'),COALESCE($9,0),COALESCE($10,TRUE),$11,$12,$13,$14,$15)
        RETURNING *`,
-      [req.body.titleRu, req.body.titleKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.imageFileId ?? null, req.body.targetType ?? 'modal', req.body.targetValue ?? null, req.body.placement ?? 'home_top', req.body.sortOrder ?? 0, req.body.active ?? true],
+      [req.body.titleRu, req.body.titleKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.imageFileId ?? null, req.body.targetType ?? 'modal', req.body.targetValue ?? null, req.body.placement ?? 'home_top', req.body.sortOrder ?? 0, req.body.active ?? true, req.body.imageUrl ?? null, req.body.subtitleRu ?? null, req.body.subtitleKk ?? null, req.body.ctaLabelRu ?? null, req.body.ctaLabelKk ?? null],
     )).rows);
     ok(res, row, 201);
   }));
 
   router.patch('/admin/banners/:id', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    if (req.body.titleRu !== undefined && (typeof req.body.titleRu !== 'string' || !req.body.titleRu.trim())) throw new ApiError(400, 'invalid_request', 'Укажите заголовок баннера.');
     const row = first((await deps.db.query(
       `UPDATE banners SET
        title_ru=COALESCE($2,title_ru), title_kk=COALESCE($3,title_kk),
        description_ru=COALESCE($4,description_ru), description_kk=COALESCE($5,description_kk),
        image_file_id=COALESCE($6,image_file_id), target_type=COALESCE($7,target_type), target_value=COALESCE($8,target_value),
-       placement=COALESCE($9,placement), sort_order=COALESCE($10,sort_order), active=COALESCE($11,active), updated_at=NOW()
+       placement=COALESCE($9,placement), sort_order=COALESCE($10,sort_order), active=COALESCE($11,active),
+       image_url=COALESCE($12,image_url), subtitle_ru=COALESCE($13,subtitle_ru), subtitle_kk=COALESCE($14,subtitle_kk), cta_label_ru=COALESCE($15,cta_label_ru), cta_label_kk=COALESCE($16,cta_label_kk), updated_at=NOW()
        WHERE id=$1 RETURNING *`,
-      [req.params.id, req.body.titleRu ?? null, req.body.titleKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.imageFileId ?? null, req.body.targetType ?? null, req.body.targetValue ?? null, req.body.placement ?? null, req.body.sortOrder ?? null, req.body.active ?? null],
+      [req.params.id, req.body.titleRu ?? null, req.body.titleKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.imageFileId ?? null, req.body.targetType ?? null, req.body.targetValue ?? null, req.body.placement ?? null, req.body.sortOrder ?? null, req.body.active ?? null, req.body.imageUrl ?? null, req.body.subtitleRu ?? null, req.body.subtitleKk ?? null, req.body.ctaLabelRu ?? null, req.body.ctaLabelKk ?? null],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Баннер не найден.');
     ok(res, row);
+  }));
+
+  router.delete('/admin/banners/:id', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    const result = await deps.db.query('DELETE FROM banners WHERE id=$1 RETURNING id', [req.params.id]);
+    if (!result.rowCount) throw new ApiError(404, 'not_found', 'Баннер не найден.');
+    ok(res, {deleted: true});
   }));
 
   router.post('/admin/promotions', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
@@ -4039,7 +4048,7 @@ export function buildV1Router(deps: {
     values.push(limit, offset);
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     ok(res, (await deps.db.query(
-      `SELECT * FROM ${config.table} ${where} ORDER BY created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      `SELECT ${req.params.section === 'banners' ? 'banners.*, COALESCE(banners.image_url,(SELECT public_url FROM files WHERE id=banners.image_file_id)) AS image_url' : '*'} FROM ${config.table} ${where} ORDER BY created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`,
       values,
     )).rows);
   }));

@@ -15,6 +15,7 @@ import '../common/legal_document_screen.dart';
 import 'widgets/verification_document_preview.dart';
 import '../../ui/domly_ui.dart';
 import '../../utils/order_display.dart';
+import '../../utils/user_error_message.dart';
 import 'widgets/osm_point_picker.dart';
 import 'widgets/osm_polygon_picker.dart';
 
@@ -8845,10 +8846,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                         ),
                         TextButton(
                           onPressed: () async {
-                            final updated = List<Map<String, dynamic>>.from(
-                              banners,
-                            )..removeAt(index);
-                            await _data.saveAdminPromoBanners(updated);
+                            await _data.deleteAdminPromoBanner(banner['id'].toString());
                           },
                           child: Text('Удалить'.tr()),
                         ),
@@ -12088,9 +12086,12 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
     bool isActive = existing?['isActive'] != false;
 
+    var saving = false;
+    var uploading = false;
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
         title: Text(index == null ? 'Новый баннер' : 'Редактировать баннер'),
         content: StatefulBuilder(
           builder: (context, setModalState) => SingleChildScrollView(
@@ -12127,12 +12128,16 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () async {
-                          final url = await _photoUploadService.pickAndUpload(
-                            folder: 'promo_banners',
-                            filePrefix: 'banner',
-                          );
-                          if (url == null) return;
-                          setModalState(() => imageController.text = url);
+                          if (uploading || saving) return;
+                          setDialogState(() => uploading = true);
+                          try {
+                            final url = await _photoUploadService.pickAndUpload(folder: 'promo_banners', filePrefix: 'banner');
+                            if (url != null && context.mounted) setModalState(() => imageController.text = url);
+                          } catch (error) {
+                            if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text(UserErrorMessage.message(error))));
+                          } finally {
+                            if (dialogContext.mounted) setDialogState(() => uploading = false);
+                          }
                         },
                         icon: const Icon(Icons.upload_outlined),
                         label: Text('Загрузить фото'.tr()),
@@ -12221,13 +12226,17 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
+            onPressed: saving || uploading ? null : () => Navigator.pop(dialogContext),
             child: Text('Отмена'.tr()),
           ),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: saving || uploading ? null : () async {
+              if (titleController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Укажите заголовок баннера.')));
+                return;
+              }
+              setDialogState(() => saving = true);
               final navigator = Navigator.of(dialogContext);
-              final updated = List<Map<String, dynamic>>.from(banners);
               final rawExternalUrl = externalUrlController.text.trim();
               final externalUrl = rawExternalUrl.isEmpty ||
                       rawExternalUrl.startsWith('http://') ||
@@ -12235,6 +12244,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   ? rawExternalUrl
                   : 'https://$rawExternalUrl';
               final banner = <String, dynamic>{
+                ...?(existing),
                 'id': (existing?['id'] ??
                         'banner_${DateTime.now().millisecondsSinceEpoch}')
                     .toString(),
@@ -12250,18 +12260,21 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     int.tryParse(sortOrderController.text.trim()) ?? 999,
                 'isActive': isActive,
               };
-              if (index != null && index >= 0 && index < updated.length) {
-                updated[index] = banner;
-              } else {
-                updated.add(banner);
+              try {
+                await _data.saveAdminPromoBanner(banner);
+                if (!dialogContext.mounted) return;
+                navigator.pop();
+              } catch (error) {
+                if (!dialogContext.mounted) return;
+                ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text(UserErrorMessage.message(error))));
+              } finally {
+                if (dialogContext.mounted) setDialogState(() => saving = false);
               }
-              await _data.saveAdminPromoBanners(updated);
-              if (!mounted) return;
-              navigator.pop();
             },
-            child: Text('Сохранить'.tr()),
+            child: Text(saving ? 'Сохранение…' : 'Сохранить'.tr()),
           ),
         ],
+      ),
       ),
     );
   }

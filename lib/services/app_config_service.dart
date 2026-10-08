@@ -1,3 +1,4 @@
+import '../utils/banner_data.dart';
 import 'dart:async';
 
 import '../utils/backend_compat.dart';
@@ -524,7 +525,7 @@ class AppConfigService {
     final items =
         (raw as List? ?? const [])
             .whereType<Map>()
-            .map((item) => Map<String, dynamic>.from(item))
+            .map((item) => mapBackendBanner(Map<String, dynamic>.from(item)))
             .where((item) {
               if (item['active'] == false) return false;
               if (placement == null) return true;

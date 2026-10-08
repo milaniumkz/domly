@@ -35,6 +35,36 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('banner creation, metadata, hidden visibility, editing and deletion', async () => {
+      assert.equal((await request('/admin/banners','POST',{titleRu:''})).status,400);
+      assert.equal((await request('/admin/banners','POST',{titleRu:'No access'},true)).status,403);
+      const created=await request('/admin/banners','POST',{
+        titleRu:'Тестовый баннер',subtitleRu:'Краткий текст',descriptionRu:'Подробности',
+        imageUrl:env.minioPublicUrl+'/promo_banners/test.jpg',ctaLabelRu:'Пакеты',
+        targetType:'route',targetValue:'/client/package-selection',active:false,
+      });
+      assert.equal(created.status,201);
+      const id=created.json.data.id;
+      try {
+        assert.equal(created.json.data.placement,'home_top');
+        assert.equal(created.json.data.subtitle_ru,'Краткий текст');
+        assert.equal(created.json.data.cta_label_ru,'Пакеты');
+        assert.match(created.json.data.image_url,/\/api\/v1\/files\/media\?/);
+        assert.ok((await request('/admin/banners')).json.data.some((row:any)=>row.id===id));
+        assert.ok(!(await request('/catalog/banners')).json.data.some((row:any)=>row.id===id));
+        const edited=await request('/admin/banners/'+id,'PATCH',{active:true,targetType:'external',targetValue:'https://domly.kz',ctaLabelRu:'Открыть'});
+        assert.equal(edited.status,200);
+        assert.equal(edited.json.data.subtitle_ru,'Краткий текст');
+        const published=(await request('/catalog/banners')).json.data.find((row:any)=>row.id===id);
+        assert.equal(published.target_value,'https://domly.kz');
+        assert.equal(published.cta_label_ru,'Открыть');
+        assert.match(published.image_url,/\/api\/v1\/files\/media\?/);
+        assert.equal((await request('/admin/banners/'+id,'PATCH',{imageUrl:'',subtitleRu:'',ctaLabelRu:''})).status,200);
+        assert.equal((await request('/admin/banners/'+id,'DELETE',undefined,true)).status,403);
+        assert.equal((await request('/admin/banners/'+id,'DELETE')).status,200);
+        assert.ok(!(await request('/admin/banners')).json.data.some((row:any)=>row.id===id));
+      } finally { await db.query('DELETE FROM banners WHERE id=$1',[id]); }
+    });
     await t.test('admin session refresh rotates tokens and preserves access after reopening',async()=>{
       const original=signRefreshToken({id:admin,role:'superadmin',phone:'fixture'});
       await db.query("INSERT INTO refresh_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')",[admin,hashToken(original)]);

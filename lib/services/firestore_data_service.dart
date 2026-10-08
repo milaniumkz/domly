@@ -1,3 +1,4 @@
+import '../utils/banner_data.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -2037,16 +2038,30 @@ class FirestoreDataService {
   }
 
   Stream<List<Map<String, dynamic>>> adminPromoBannersStream() {
+    if (_isDebugAdmin) return _debugSnapshotStream(_debugAdminPromoBanners);
+    return _backendPollingStream(() async {
+      final items = await BackendApiService.instance.getList('/admin/banners');
+      return items.map(mapBackendBanner).toList();
+    });
+  }
+
+  Future<void> saveAdminPromoBanner(Map<String, dynamic> banner) async {
     if (_isDebugAdmin) {
-      return _debugSnapshotStream(_debugAdminPromoBanners);
+      final items = List<Map<String, dynamic>>.from(_debugAdminPromoBanners());
+      final index = items.indexWhere((item) => item['id'] == banner['id']);
+      if (index < 0) { items.add(banner); } else { items[index] = banner; }
+      await saveAdminPromoBanners(items);
+      return;
     }
-    return _backendPollingStream(
-      () => BackendApiService.instance.getList(
-        '/catalog/banners',
-        query: {'placement': 'home_top'},
-        authenticated: false,
-      ),
-    );
+    await saveAdminPromoBanners([banner]);
+  }
+
+  Future<void> deleteAdminPromoBanner(String id) async {
+    if (_isDebugAdmin) {
+      await saveAdminPromoBanners(_debugAdminPromoBanners().where((item) => item['id'] != id).toList());
+      return;
+    }
+    await BackendApiService.instance.delete('/admin/banners/$id');
   }
 
   Stream<List<Map<String, dynamic>>> adminPromotionsStream() {
@@ -13404,18 +13419,7 @@ class FirestoreDataService {
     }
     for (final banner in banners) {
       final bannerId = (banner['id'] ?? '').toString();
-      final bannerBody = {
-        'titleRu': banner['title'] ?? banner['titleRu'] ?? 'Баннер',
-        'titleKk': banner['titleKk'],
-        'descriptionRu': banner['description'] ?? banner['descriptionRu'],
-        'descriptionKk': banner['descriptionKk'],
-        'imageFileId': banner['imageFileId'],
-        'targetType': banner['targetType'] ?? 'modal',
-        'targetValue': banner['targetValue'],
-        'placement': banner['placement'] ?? 'home_info',
-        'sortOrder': banner['sortOrder'] ?? 0,
-        'active': banner['active'] ?? true,
-      };
+      final bannerBody = bannerRequestBody(banner);
       if (_looksLikeUuid(bannerId)) {
         await BackendApiService.instance.patchMap(
           '/admin/banners/$bannerId',
