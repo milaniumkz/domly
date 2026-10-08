@@ -671,6 +671,7 @@ class FirestoreDataService {
       'type': item['target_type'],
       'targetType': item['target_type'],
       'targetId': item['target_id'],
+      'payload': item['payload'] is Map ? Map<String, dynamic>.from(item['payload'] as Map) : <String, dynamic>{},
       'title': item['title_ru'] ?? item['title'],
       'body': item['body_ru'] ?? item['body'],
       'titleLocales': {

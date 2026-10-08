@@ -1,3 +1,4 @@
+import '../utils/notification_destination.dart';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'domly_links.dart';
@@ -166,6 +167,11 @@ class _DomlyAppState extends State<DomlyApp> {
           '/admin/web',
           (_) => false,
         );
+        return;
+      }
+      final destination = notificationDestination(payload, cleaner: config.flavor == AppFlavor.pro);
+      if (destination != null) {
+        _navigatorKey.currentState?.pushNamed(destination.route, arguments: destination.arguments);
         return;
       }
       if (_isBonusNotificationPayload(payload)) {

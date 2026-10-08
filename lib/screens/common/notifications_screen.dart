@@ -1,3 +1,5 @@
+import 'dart:async';
+import '../../utils/notification_destination.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 
@@ -18,11 +20,12 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final _data = FirestoreDataService.instance;
+  late final _notifications = _data.userNotificationsStream();
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.userNotificationsStream(),
+      stream: _notifications,
       builder: (context, snapshot) {
         final notifications = snapshot.data ?? const <Map<String, dynamic>>[];
         final sortedNotifications = [...notifications]
@@ -322,13 +325,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   ) async {
     final id = (item['id'] ?? '').toString();
     if (id.isNotEmpty && item['read'] != true) {
-      await _data.markNotificationRead(id);
+      // A slow or failed acknowledgement must not block navigation.
+      unawaited(_data.markNotificationRead(id).catchError((Object _) {}));
     }
 
     if (!context.mounted) {
       return;
     }
 
+    final destination = notificationDestination(item,
+      cleaner: widget.surface == NotificationSurface.cleaner);
+    if (destination != null) {
+      Navigator.pushNamed(context, destination.route, arguments: destination.arguments);
+      return;
+    }
     final type = (item['type'] ?? '').toString();
     final videoId = (payload['videoId'] ?? '').toString();
     final orderId = (payload['orderId'] ?? payload['chatId'] ?? '').toString();
@@ -413,7 +423,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     if (type == 'area_recalculation_payment') {
       Navigator.pushNamed(context, '/client/payment-history');
+      return;
     }
+    await showDialog<void>(context: context, builder: (context) => AlertDialog(
+      title: Text((item['title'] ?? 'Уведомление').toString()),
+      content: Text((item['body'] ?? '').toString()),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text('Закрыть'.tr()))],
+    ));
   }
 
   bool _isBonusNotification(
