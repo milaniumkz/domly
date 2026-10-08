@@ -3,9 +3,71 @@ import 'package:domly/app/app_flavor.dart';
 import 'package:domly/ui/first_run_tutorial.dart';
 import 'package:domly/ui/tutorial_targets.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:domly/ui/domly_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('Pro tutorial shows route-owned menu targets without skipping',
+      (tester) async {
+    bool? shown;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+          builder: (context) => TextButton(
+              onPressed: () async {
+                shown = await DomlyFirstRunTutorial.show(context,
+                    flavor: AppFlavor.pro);
+              },
+              child: const Text('Start'))),
+      onGenerateRoute: (settings) => MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const DomlyShell(
+              bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 0),
+              child: SizedBox.expand())),
+    ));
+    await tester.tap(find.text('Start'));
+    for (final title in ['Главная', 'Новые заказы', 'Календарь']) {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text(title), findsWidgets);
+      expect(find.byKey(const ValueKey('tutorial-highlight')), findsOneWidget);
+      if (title == 'Календарь') {
+        await tester.tap(find.text('Пропустить'));
+      } else {
+        await tester.tap(find.text('Далее'));
+      }
+    }
+    await tester.pumpAndSettle();
+    expect(shown, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('Version 6 retries old completion flags and stays user-specific',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'domly_first_run_tutorial_customer_user-a_v5': true,
+    });
+    expect(
+        await DomlyFirstRunTutorial.wasShown(
+            flavor: AppFlavor.customer, userId: 'user-a'),
+        isFalse);
+    await DomlyFirstRunTutorial.markShown(
+        flavor: AppFlavor.customer, userId: 'user-a');
+    expect(
+        await DomlyFirstRunTutorial.wasShown(
+            flavor: AppFlavor.customer, userId: 'user-a'),
+        isTrue);
+    expect(
+        await DomlyFirstRunTutorial.wasShown(
+            flavor: AppFlavor.customer, userId: 'user-b'),
+        isFalse);
+    expect(
+        await DomlyFirstRunTutorial.wasShown(
+            flavor: AppFlavor.pro, userId: 'user-a'),
+        isFalse);
+  });
+
   testWidgets(
       'banner tutorial follows the visible banner inside a narrow web frame',
       (tester) async {

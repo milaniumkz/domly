@@ -476,7 +476,12 @@ class _DomlyAppState extends State<DomlyApp> {
       }
       _firstRunTutorialInFlight = true;
       try {
-        await DomlyFirstRunTutorial.show(context, flavor: config.flavor);
+        final shown = await DomlyFirstRunTutorial.show(
+          context, flavor: config.flavor);
+        if (!shown || !mounted || !authController.isAuthenticated ||
+            authController.currentUserId != userId) {
+          return;
+        }
         await DomlyFirstRunTutorial.markShown(
           flavor: config.flavor,
           userId: userId,

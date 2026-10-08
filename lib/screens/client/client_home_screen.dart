@@ -5638,6 +5638,7 @@ class _FigmaClientBottomNavState extends State<_FigmaClientBottomNav> {
       stream: _unread,
       initialData: 0,
       builder: (context, snapshot) {
+        final navigationKeys = DomlyTutorialTargets.navigationKeys(context);
         final screenWidth = MediaQuery.sizeOf(context).width;
         final sideInset = screenWidth <= 380 ? 10.0 : 16.0;
         return SafeArea(
@@ -5662,28 +5663,28 @@ class _FigmaClientBottomNavState extends State<_FigmaClientBottomNav> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _FigmaNavItem(
-                      key: DomlyTutorialTargets.clientBottomNav[0],
+                      key: navigationKeys[0],
                       label: 'Главная',
                       icon: Icons.home_outlined,
                       selected: currentIndex == 0,
                       onTap: () => _go(context, 0),
                     ),
                     _FigmaNavItem(
-                      key: DomlyTutorialTargets.clientBottomNav[1],
+                      key: navigationKeys[1],
                       label: 'Заказы',
                       icon: Icons.receipt_long_outlined,
                       selected: currentIndex == 1,
                       onTap: () => _go(context, 1),
                     ),
                     _FigmaNavItem(
-                      key: DomlyTutorialTargets.clientBottomNav[2],
+                      key: navigationKeys[2],
                       label: 'Профиль',
                       icon: Icons.person_outline,
                       selected: currentIndex == 2,
                       onTap: () => _go(context, 2),
                     ),
                     _FigmaNavItem(
-                      key: DomlyTutorialTargets.clientBottomNav[3],
+                      key: navigationKeys[3],
                       label: 'Уведомления',
                       icon: Icons.notifications_none,
                       selected: currentIndex == 3,
@@ -5691,7 +5692,7 @@ class _FigmaClientBottomNavState extends State<_FigmaClientBottomNav> {
                       onTap: () => _go(context, 3),
                     ),
                     _FigmaNavItem(
-                      key: DomlyTutorialTargets.clientBottomNav[4],
+                      key: navigationKeys[4],
                       label: 'Настройки',
                       icon: Icons.settings_outlined,
                       selected: currentIndex == 4,

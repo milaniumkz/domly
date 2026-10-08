@@ -7,7 +7,7 @@ import 'domly_ui.dart';
 import 'tutorial_targets.dart';
 
 class DomlyFirstRunTutorial {
-  static const _version = 5;
+  static const _version = 6;
 
   static String storageKey({
     required AppFlavor flavor,
@@ -31,10 +31,11 @@ class DomlyFirstRunTutorial {
     await prefs.setBool(storageKey(flavor: flavor, userId: userId), true);
   }
 
-  static Future<void> show(
+  static Future<bool> show(
     BuildContext context, {
     required AppFlavor flavor,
   }) async {
+    var shown = false;
     final steps = flavor == AppFlavor.pro ? _cleanerSteps : _clientSteps;
     final navigator = Navigator.of(context);
     final title = flavor == AppFlavor.pro
@@ -46,7 +47,7 @@ class DomlyFirstRunTutorial {
     if (flavor != AppFlavor.pro && navigator.mounted) {
       await navigator.pushNamed('/client/training-order');
       if (!navigator.mounted) {
-        return;
+        return shown;
       }
     }
 
@@ -60,25 +61,33 @@ class DomlyFirstRunTutorial {
       }
       await Future<void>.delayed(const Duration(milliseconds: 420));
       if (!navigator.mounted) {
-        return;
+        return shown;
       }
       if (step.targetKey != null) {
         for (var attempt = 0;
             attempt < 30 &&
-                step.targetKey!.currentContext == null &&
+                DomlyTutorialTargets.resolveNavigationTarget(
+                            step.targetKey, step.routeName)
+                        ?.currentContext ==
+                    null &&
                 navigator.mounted;
             attempt++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
         }
-        if (step.targetKey!.currentContext == null) {
+        if (DomlyTutorialTargets.resolveNavigationTarget(
+                    step.targetKey, step.routeName)
+                ?.currentContext ==
+            null) {
           index++;
           continue;
         }
       }
-      final targetContext = step.targetKey?.currentContext;
+      final targetContext = DomlyTutorialTargets.resolveNavigationTarget(
+              step.targetKey, step.routeName)
+          ?.currentContext;
       if (targetContext != null) {
         if (!targetContext.mounted) {
-          return;
+          return shown;
         }
         // ignore: use_build_context_synchronously
         await Scrollable.ensureVisible(
@@ -88,6 +97,7 @@ class DomlyFirstRunTutorial {
         );
         await Future<void>.delayed(const Duration(milliseconds: 80));
       }
+      shown = true;
       final action = await showDialog<_TutorialAction>(
         // ignore: use_build_context_synchronously
         context: navigator.context,
@@ -106,9 +116,10 @@ class DomlyFirstRunTutorial {
       } else if (action == _TutorialAction.next) {
         index++;
       } else {
-        return;
+        return shown;
       }
     }
+    return shown;
   }
 
   static final _clientSteps = [
@@ -368,7 +379,8 @@ class _DomlyCoachTutorialState extends State<_DomlyCoachTutorial> {
 
   Rect _targetRect(Size size, EdgeInsets safe, _TutorialStep step) {
     final keyRect = _rectForKey(
-      DomlyTutorialTargets.resolveNavigationTarget(step.targetKey, step.routeName),
+      DomlyTutorialTargets.resolveNavigationTarget(
+          step.targetKey, step.routeName),
     );
     if (keyRect != null) {
       final inflate = step.target == _TutorialTarget.bottomNav ? 4.0 : 6.0;
