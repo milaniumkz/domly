@@ -34,6 +34,17 @@ class ClientHomeScreen extends StatefulWidget {
 
 class _ClientHomeScreenState extends State<ClientHomeScreen> {
   final _data = FirestoreDataService.instance;
+  late final _customerPackages = _data.customerPackagesStream();
+  late final _customerProfile = _data.customerProfileStream();
+  late final _customerSubscriptions = _data.customerSubscriptionsStream();
+  late final _customerScheduleSlots = _data.customerScheduleSlotsStream();
+  late final _customerOrders = _data.customerOrdersStream();
+  late final _referralStats = _data.referralStatsStream();
+  late final _customerPrelaunchBookings = _data.customerPrelaunchBookingsStream();
+  late final _clientVideos = _data.clientVideosStream();
+  late final _userVideoViews = _data.userVideoViewsStream();
+  late final _userUnreadActivityCount = _data.userUnreadActivityCountStream();
+
   static const List<Map<String, dynamic>> _fallbackHomePackages = [
     {
       'id': 'single',
@@ -154,7 +165,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 ],
               ),
               child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: _data.customerPackagesStream(),
+                stream: _customerPackages,
                 builder: (context, snapshot) {
                   final packages = _mergeHomePackages(
                     snapshot.data ?? const [],
@@ -848,7 +859,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     AppLogger.d('HOME', 'Building client home. authenticated=$isAuthenticated');
 
     return StreamBuilder<Map<String, dynamic>?>(
-      stream: _data.customerProfileStream(),
+      stream: _customerProfile,
       builder: (context, profileSnap) {
         if (profileSnap.hasError) {
           return const DomlyShell(
@@ -869,7 +880,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         }
         final profile = profileSnap.data ?? <String, dynamic>{};
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _data.customerSubscriptionsStream(),
+          stream: _customerSubscriptions,
           builder: (context, subscriptionsSnap) {
             if (subscriptionsSnap.hasError) {
               return const DomlyShell(
@@ -892,7 +903,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 subscriptionsSnap.data ?? <Map<String, dynamic>>[];
 
             return StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _data.customerScheduleSlotsStream(),
+              stream: _customerScheduleSlots,
               builder: (context, slotsSnap) {
                 try {
                   if (slotsSnap.hasError) {
@@ -980,7 +991,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
                   if (_useFigmaHomeDesign()) {
                     return StreamBuilder<List<Map<String, dynamic>>>(
-                      stream: _data.customerOrdersStream(),
+                      stream: _customerOrders,
                       builder: (context, ordersSnap) {
                         final orders = List<Map<String, dynamic>>.from(
                           ordersSnap.data ?? const [],
@@ -2484,7 +2495,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         );
 
         return StreamBuilder<Map<String, dynamic>?>(
-          stream: _data.referralStatsStream(),
+          stream: _referralStats,
           builder: (context, referralSnap) {
             final referralStats =
                 referralSnap.data ?? const <String, dynamic>{};
@@ -2899,13 +2910,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Widget _prelaunchBookingButton() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.customerPrelaunchBookingsStream(),
+      stream: _customerPrelaunchBookings,
       builder: (context, prelaunchSnapshot) {
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _data.customerSubscriptionsStream(),
+          stream: _customerSubscriptions,
           builder: (context, subscriptionsSnapshot) {
             return StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _data.customerOrdersStream(),
+              stream: _customerOrders,
               builder: (context, ordersSnapshot) {
                 final hasPrelaunch = _hasActivePrelaunchBooking(
                   prelaunchSnapshot.data,
@@ -3995,11 +4006,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Widget _videoActionButton() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.clientVideosStream(),
+      stream: _clientVideos,
       builder: (context, videosSnap) {
         final videos = videosSnap.data ?? const <Map<String, dynamic>>[];
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _data.userVideoViewsStream(),
+          stream: _userVideoViews,
           builder: (context, viewsSnap) {
             final viewedIds = (viewsSnap.data ?? const <Map<String, dynamic>>[])
                 .where((view) => (view['completed'] ?? false) == true)
@@ -4023,7 +4034,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Widget _notificationsActionButton() {
     return StreamBuilder<int>(
-      stream: _data.userUnreadActivityCountStream(),
+      stream: _userUnreadActivityCount,
       initialData: 0,
       builder: (context, notificationsSnap) {
         final unreadCount = notificationsSnap.data ?? 0;
@@ -4330,6 +4341,7 @@ class _PromoBannersSection extends StatefulWidget {
 }
 
 class _PromoBannersSectionState extends State<_PromoBannersSection> {
+  late final _banners = AppConfigService.instance.promoBannersStream();
   static const List<Map<String, dynamic>> _fallbackBanners = [
     {
       'id': 'promo_packages',
@@ -4379,11 +4391,10 @@ class _PromoBannersSectionState extends State<_PromoBannersSection> {
   }
 
   void _syncAutoScroll(int count) {
-    if (_bannerCount != count) {
-      _bannerCount = count;
-      if (_currentPage >= count && count > 0) {
-        _currentPage = 0;
-      }
+    if (_bannerCount == count) return;
+    _bannerCount = count;
+    if (_currentPage >= count && count > 0) {
+      _currentPage = 0;
     }
     _autoScrollTimer?.cancel();
     if (count <= 1) {
@@ -4405,7 +4416,7 @@ class _PromoBannersSectionState extends State<_PromoBannersSection> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: AppConfigService.instance.promoBannersStream(),
+      stream: _banners,
       builder: (context, snapshot) {
         final remoteBanners = snapshot.data ?? const <Map<String, dynamic>>[];
         final banners = (remoteBanners.isNotEmpty
@@ -4709,6 +4720,7 @@ class _CompanyPromotionsSection extends StatefulWidget {
 }
 
 class _CompanyPromotionsSectionState extends State<_CompanyPromotionsSection> {
+  late final _promotions = AppConfigService.instance.promotionsStream();
   final PageController _controller = PageController();
   Timer? _autoScrollTimer;
   int _page = 0;
@@ -4722,11 +4734,10 @@ class _CompanyPromotionsSectionState extends State<_CompanyPromotionsSection> {
   }
 
   void _syncAutoScroll(int count) {
-    if (_promotionCount != count) {
-      _promotionCount = count;
-      if (_page >= count && count > 0) {
-        _page = 0;
-      }
+    if (_promotionCount == count) return;
+    _promotionCount = count;
+    if (_page >= count && count > 0) {
+      _page = 0;
     }
     _autoScrollTimer?.cancel();
     if (count <= 1) {
@@ -4748,13 +4759,13 @@ class _CompanyPromotionsSectionState extends State<_CompanyPromotionsSection> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: AppConfigService.instance.promotionsStream(),
+      stream: _promotions,
       builder: (context, snapshot) {
         final promotions = (snapshot.data ?? const <Map<String, dynamic>>[])
             .where((item) => item['isActive'] != false)
             .toList();
         if (promotions.isEmpty) {
-          _autoScrollTimer?.cancel();
+          _syncAutoScroll(0);
           return const SizedBox.shrink();
         }
         _syncAutoScroll(promotions.length);
@@ -5598,7 +5609,7 @@ class _FigmaHomeAction extends StatelessWidget {
   }
 }
 
-class _FigmaClientBottomNav extends StatelessWidget {
+class _FigmaClientBottomNav extends StatefulWidget {
   const _FigmaClientBottomNav({required this.currentIndex});
 
   final int currentIndex;
@@ -5612,9 +5623,19 @@ class _FigmaClientBottomNav extends StatelessWidget {
   ];
 
   @override
+  State<_FigmaClientBottomNav> createState() => _FigmaClientBottomNavState();
+}
+
+class _FigmaClientBottomNavState extends State<_FigmaClientBottomNav> {
+  late final _unread =
+      FirestoreDataService.instance.userUnreadActivityCountStream();
+  int get currentIndex => widget.currentIndex;
+  static const _routes = _FigmaClientBottomNav._routes;
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<int>(
-      stream: FirestoreDataService.instance.userUnreadActivityCountStream(),
+      stream: _unread,
       initialData: 0,
       builder: (context, snapshot) {
         final screenWidth = MediaQuery.sizeOf(context).width;
