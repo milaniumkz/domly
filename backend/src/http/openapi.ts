@@ -777,3 +777,18 @@ function query(name: string, example: string) {
 function path(name: string) {
   return { name, in: 'path', required: true, schema: { type: 'string' } };
 }
+
+// Application assistant endpoints. Provider secrets are server-side only.
+for (const [route, methods] of Object.entries({
+  '/assistant/chat': ['post'],
+  '/assistant/guest-session': ['post'],
+  '/assistant/guest/messages': ['get','post'],
+  '/assistant/guest/device-token': ['post'],
+  '/assistant/guest/bind': ['post'],
+  '/integrations/moon-ai/messages': ['post'],
+  '/integrations/moon-ai/payments/{id}': ['get'],
+})) {
+  const entry:Record<string,unknown>={};
+  for(const method of methods)entry[method]={tags:['Assistant'],summary:'Domly assistant / Moon AI integration',responses:{'200':{description:'Accepted'},'401':{description:'Unauthorized'},'503':{description:'Integration not configured'}}};
+  (openApiSpec.paths as Record<string,unknown>)[route]=entry;
+}

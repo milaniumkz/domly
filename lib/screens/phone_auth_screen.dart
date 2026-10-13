@@ -1,3 +1,4 @@
+import '../app/app_flavor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -328,6 +329,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           label: _isLoading ? 'Отправляем...'.tr() : 'Получить код'.tr(),
           onPressed: _isLoading || !_acceptedTerms ? null : _sendCode,
         ),
+        if (AppScope.of(context).config.flavor == AppFlavor.customer && !AppScope.of(context).config.adminSurface)
+          TextButton(onPressed: () => Navigator.pushNamed(context, '/assistant'), child: const Text('Помощник Domly')),
         if (!_hasValidPhone) ...[
           const SizedBox(height: 10),
           Align(

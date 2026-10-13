@@ -630,6 +630,11 @@ class FirestoreDataService {
       'id': item['id'],
       ...item,
       'customerId': item['customer_id'],
+      'approvalSource': item['approval_source'],
+      'approvedBy': item['approved_by'],
+      'approvedByName': item['approved_by_name'],
+      'approvedAt': item['approved_at'],
+      'invoiceIntegration': (item['payload'] is Map && item['payload']['provider'] == 'moon_ai'),
       'customerName': item['customer_name'],
       'customerPhone': item['customer_phone'],
       'address': [
@@ -7095,7 +7100,7 @@ class FirestoreDataService {
         '/chats/$chatId/messages',
       );
       return items.map(_mapBackendChatMessage).toList();
-    });
+    }, interval: const Duration(seconds: 2));
   }
 
   Future<List<Map<String, dynamic>>> _loadChatMessagesViaCallable(
@@ -7123,7 +7128,7 @@ class FirestoreDataService {
   }) async {
     final chats = await BackendApiService.instance.getList('/chats');
     for (final chat in chats) {
-      if ((chat['order_id'] ?? chat['orderId'] ?? '').toString() == orderId) {
+      if ((chat['order_id'] ?? chat['orderId'] ?? '').toString() == orderId || (chat['id'] ?? '').toString() == orderId) {
         return chat;
       }
     }
@@ -7181,7 +7186,7 @@ class FirestoreDataService {
       'id': item['id'],
       'chatId': item['chat_id'],
       'senderId': item['sender_id'],
-      'senderRole': item['sender_role'],
+      'senderRole': item['sender_role'] ?? item['sender_kind'],
       'senderName': item['sender_name'],
       'senderPhone': item['sender_phone'],
       'text': item['message_ru'] ?? item['message'] ?? '',
@@ -7265,6 +7270,13 @@ class FirestoreDataService {
       body: {'message': text},
     );
     return orderId;
+  }
+
+  Future<String> createOrOpenAssistantChat() async {
+    final chat = await BackendApiService.instance.postMap('/assistant/chat');
+    final id = (chat['id'] ?? '').toString();
+    if (id.isEmpty) throw StateError('Помощник недоступен.');
+    return id;
   }
 
   Future<String> createOrOpenOrderChat({required String orderId}) async {

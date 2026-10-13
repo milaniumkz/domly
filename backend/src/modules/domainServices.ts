@@ -1,3 +1,4 @@
+import {scheduleSignupFollowup, scheduleCheckoutFollowup} from './moonAi';
 import { Queryable } from '../domain/repositories/UnitOfWork';
 import { referralDiscount } from './referrals';
 import crypto from 'crypto';
@@ -72,6 +73,7 @@ export class AuthService {
        VALUES ($1,$2,NOW() + ($3 || ' seconds')::interval)`,
       [user.id, hashToken(refreshToken), env.jwtRefreshTtlSeconds],
     );
+    if(!existingUser && user.role==='customer') await scheduleSignupFollowup(this.db,user.id);
     return { user, accessToken: signAccessToken(user), refreshToken, isNew: !existingUser };
   }
 
@@ -361,8 +363,8 @@ export class PaymentService {
       ? pricing.splitBonus(input.amount, input.requestedBonus ?? input.amount, Number(user?.bonus_balance ?? 0), input.maxBonusPercent ?? 50)
       : { bonus: 0, payable: input.amount };
     const payment = first<{ id: string }>((await this.db.query(
-      `INSERT INTO payments (customer_id, order_id, customer_package_id, provider, status, amount, bonus_amount, invoice_phone, payload)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      `INSERT INTO payments (customer_id, order_id, customer_package_id, provider, status, amount, bonus_amount, invoice_phone, payload, approval_source, approved_at, paid_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CASE WHEN $5='paid' THEN 'bonus' END,CASE WHEN $5='paid' THEN NOW() END,CASE WHEN $5='paid' THEN NOW() END) RETURNING *`,
       [
         input.customerId,
         input.orderId ?? null,
@@ -381,18 +383,22 @@ export class PaymentService {
         await this.db.query(`UPDATE service_orders SET bonus_spent=bonus_spent+$2, payable_amount=$3 WHERE id=$1`, [input.orderId, split.bonus, split.payable]);
       }
     }
+    await scheduleCheckoutFollowup(this.db, payment);
     return { payment, bonusSpent: split.bonus, payableAmount: split.payable };
   }
 
-  async markPaid(paymentId: string) {
+  async markPaid(paymentId: string, approvedBy?: string) {
     return first<{ id: string; customer_id: string; customer_package_id: string | null; order_id: string | null }>((await this.db.query(
       `UPDATE payments
        SET status='paid',
            paid_at=COALESCE(paid_at, NOW()),
+           approval_source=CASE WHEN status='paid' THEN approval_source ELSE 'manual' END,
+           approved_by=CASE WHEN status='paid' THEN approved_by ELSE $2::uuid END,
+           approved_at=CASE WHEN status='paid' THEN approved_at ELSE NOW() END,
            updated_at=NOW()
        WHERE id=$1 AND status NOT IN ('cancelled','refunded')
        RETURNING *`,
-      [paymentId],
+      [paymentId, approvedBy ?? null],
     )).rows);
   }
 

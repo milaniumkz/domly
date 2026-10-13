@@ -1,3 +1,4 @@
+import '../services/assistant_guest_service.dart';
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -186,8 +187,15 @@ void _attachNotificationBootstrap(AppConfig config) {
   Future<void> initializeForResolvedUserId() async {
     final userId =
         AuthService.temporarySessionUid ?? AuthService.restoredSessionUid;
-    if (userId == null || initializedForUserId == userId) {
+    if (userId == null) {
+      if (config.flavor == AppFlavor.customer && !config.adminSurface) {
+        try { await AssistantGuestService.instance.initialize(); } catch (_) {}
+      }
       return;
+    }
+    if (initializedForUserId == userId) return;
+    if (config.flavor == AppFlavor.customer && !config.adminSurface) {
+      await AssistantGuestService.instance.bindToCustomer();
     }
     initializedForUserId = userId;
     try {

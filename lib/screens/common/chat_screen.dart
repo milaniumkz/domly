@@ -86,7 +86,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        unreadCount > 0
+                        summarySnap.data?['type'] == 'assistant'
+                            ? 'Помощник Domly'
+                            : unreadCount > 0
                             ? 'Чат заказа ({count})'.tr(
                                 params: {'count': unreadCount.toString()},
                               )
@@ -175,6 +177,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _chatSubtitle(Map<String, dynamic>? summary) {
+    if (summary?['type'] == 'assistant') return 'Помощь с заказом и оплатой';
     final displayId = orderDisplayId(summary);
     final peerName = _chatPeerName(summary);
     if (peerName.isEmpty) {

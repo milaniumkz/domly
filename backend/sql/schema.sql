@@ -1163,3 +1163,58 @@ $$;
 -- Idempotent rewards: repeated approvals cannot credit the same apartment twice.
 ALTER TABLE bonus_transactions ADD COLUMN IF NOT EXISTS dedupe_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS bonus_transactions_dedupe_key_unique ON bonus_transactions(dedupe_key) WHERE dedupe_key IS NOT NULL;
+
+-- Moon AI conversations are separate from customer/cleaner order chats.
+CREATE TABLE IF NOT EXISTS assistant_installations (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+ key_hash TEXT NOT NULL UNIQUE,
+ customer_id UUID REFERENCES app_users(id),
+ first_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ chat_id UUID REFERENCES chats(id)
+);
+CREATE TABLE IF NOT EXISTS assistant_installation_tokens (
+ installation_id UUID NOT NULL REFERENCES assistant_installations(id) ON DELETE CASCADE,
+ token TEXT NOT NULL UNIQUE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(installation_id,token)
+);
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS installation_id UUID REFERENCES assistant_installations(id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_installation_chat ON chats(installation_id) WHERE type='assistant_guest';
+
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES app_users(id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_customer_chat ON chats(customer_id) WHERE type='assistant';
+ALTER TABLE chat_messages ALTER COLUMN sender_id DROP NOT NULL;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS sender_kind TEXT NOT NULL DEFAULT 'user';
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS external_event_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_external_event ON chat_messages(external_event_id) WHERE external_event_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS moon_ai_outbox (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+ customer_id UUID REFERENCES app_users(id),
+ installation_id UUID REFERENCES assistant_installations(id),
+ chat_id UUID NOT NULL REFERENCES chats(id),
+ payment_id UUID REFERENCES payments(id),
+ kind TEXT NOT NULL CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install')),
+ dedupe_key TEXT NOT NULL UNIQUE,
+ payload JSONB NOT NULL,
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','processing','sent','cancelled','failed','uncertain')),
+ run_after TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ started_at TIMESTAMPTZ,
+ finished_at TIMESTAMPTZ,
+ provider_thread_id TEXT,
+ failure_code TEXT,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_moon_ai_pending ON moon_ai_outbox(run_after) WHERE state='pending';
+
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS approval_source TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES app_users(id);
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+-- Backfill only records with a recorded approval action or provider event.
+UPDATE payments p SET approval_source='manual',
+ approved_by=(SELECT a.actor_id FROM audit_logs a WHERE a.entity_id=p.id::text AND a.action='payment.confirmed' AND a.payload->>'source'='admin' ORDER BY a.created_at LIMIT 1),
+ approved_at=COALESCE(p.paid_at,p.updated_at)
+ WHERE p.status='paid' AND p.approval_source IS NULL AND EXISTS(SELECT 1 FROM audit_logs a WHERE a.entity_id=p.id::text AND a.action='payment.confirmed' AND a.payload->>'source'='admin');
+UPDATE payments p SET approval_source=CASE WHEN p.payload ? 'moonAi' THEN 'moon_ai' ELSE p.provider::text END,
+ approved_at=COALESCE(p.paid_at,p.updated_at)
+ WHERE p.status='paid' AND p.approval_source IS NULL AND (p.provider='bonus' OR p.payload ? 'moonAi' OR EXISTS(SELECT 1 FROM payment_events e WHERE e.payment_id=p.id AND e.status='paid'));

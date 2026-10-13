@@ -33,6 +33,9 @@ NotificationDestination? notificationDestination(Map<String, dynamic> item,
       'audienceType': cleaner ? 'cleaner' : 'client',
     });
   }
+  if (type == 'assistant_chat' && id.isNotEmpty) {
+    return NotificationDestination('/chat', {'chatId': id});
+  }
   if (type == 'chat' || type == 'chat_message') {
     return id.isEmpty
         ? NotificationDestination(cleaner ? '/cleaner/messages' : orders)

@@ -232,7 +232,7 @@ test('PaymentService markPaid does not revive cancelled or refunded payments', a
 
   assert.equal(result, null);
   assert.match(queries[0].sql, /status NOT IN \('cancelled','refunded'\)/);
-  assert.deepEqual(queries[0].params, ['payment-1']);
+  assert.deepEqual(queries[0].params, ['payment-1', null]);
 });
 
 test('AuthService logout revokes sessions and disables device token', async () => {

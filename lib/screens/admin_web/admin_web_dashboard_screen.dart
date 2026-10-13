@@ -1,3 +1,4 @@
+import '../../utils/payment_approval_data.dart';
 import 'dart:math' as math;
 
 import '../../utils/backend_compat.dart';
@@ -3488,6 +3489,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               _adminInfoChip('Тип', paymentTypeLabel),
               _adminInfoChip('KASPI.KZ', (d['kaspiPhone'] ?? '—').toString()),
               _adminInfoChip('Сумма', priceLabel),
+              _adminInfoChip('Подтверждение', paymentApprovalLabel(d)),
+              if (d['approvedAt'] != null) _adminInfoChip('Подтверждено', _formatAdminDateTime(d['approvedAt'])),
+              if (d['approvedBy'] != null) _adminInfoChip('Администратор', (d['approvedByName'] ?? d['approvedBy']).toString()),
               _adminInfoChip('Квадратура', areaStatusLabel),
               if (isAreaRecalculation) ...[
                 _adminInfoChip(
@@ -3627,6 +3631,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               _adminInfoChip('Телефон', customerPhone),
               _adminInfoChip('KASPI.KZ', (d['kaspiPhone'] ?? '—').toString()),
               _adminInfoChip('Сумма', priceLabel),
+              _adminInfoChip('Подтверждение', paymentApprovalLabel(d)),
+              if (d['approvedAt'] != null) _adminInfoChip('Подтверждено', _formatAdminDateTime(d['approvedAt'])),
+              if (d['approvedBy'] != null) _adminInfoChip('Администратор', (d['approvedByName'] ?? d['approvedBy']).toString()),
               _adminInfoChip('Квадратура', areaStatusLabel),
               _adminInfoChip(
                 'Пакет',

@@ -1,120 +1,43 @@
-# Moon AI -> DOMLY: статус счета Kaspi
+# MooonAI, Kaspi Pay и чат DOMLY
 
-## Endpoint
+Firebase используется только для FCM. Счета, сообщения, статусы и задания на напоминания хранятся в PostgreSQL. Миграция добавляется через `sql/schema.sql`.
 
-Тестовый backend:
+## Настройки сервера
 
-```http
-POST https://api.89-126-200-97.sslip.io/api/v1/payments/moon-ai/kaspi-status
-```
+`MOON_AI_ENABLED=true`, `MOON_AI_CHANNEL_URL=https://core.mooonai.com/api/v1/channels/api/messages`, `MOON_AI_CHANNEL_API_KEY` (отдельный ключ API-канала), `MOON_AI_WEBHOOK_TOKEN` (секрет обратных вызовов), `MOON_AI_SOURCE=domly`. Общий ключ организации не требуется приложению или серверу. Не помещать ключи в Flutter, git или логи.
 
-Боевой backend после подключения домена:
+Workflow `Configure Moon AI` переносит настройки в зашифрованном RSA-OAEP/AES-GCM конверте. Сначала `prepare` генерирует одноразовый публичный ключ, затем `apply` принимает только зашифрованный JSON. Старый backend.env сохраняется в закрытом backup, остальные переменные сохраняются. `inspect` выводит только наличие настроек.
 
-```http
-POST https://api.domly.kz/api/v1/payments/moon-ai/kaspi-status
-```
+## Выставление и подтверждение счёта
 
-## Авторизация
+После выбора Kaspi и ввода номера backend берёт сумму из своего платежа и ставит запрос в отдельную очередь `moon-ai`. API-канал получает `thread_id=paymentId`, `source=domly_invoice`. Личный чат использует `thread_id=chatId`, `source=domly`.
 
-Один из вариантов:
+В MooonAI нужны активные функции:
 
-```http
-Authorization: Bearer <MOON_AI_WEBHOOK_TOKEN>
-```
+- `domly_payment_details`: GET `https://domly.kz/api/v1/integrations/moon-ai/payments/{paymentId}`, заголовок `X-MoonAI-Token`. Возвращает серверные сумму, номер и допустимость выставления.
+- `create_order`: интеграция Kaspi Pay `create_payment`, параметры `phone_number`, `payment_sum`, `paymentId`. Одно выставление на платеж; после результата вызывается `set_info`.
+- `set_info`: POST `https://domly.kz/api/v1/payments/moon-ai/kaspi-status`, заголовок `X-MoonAI-Token`, JSON `paymentId`, `invoiceId`, `eventId`, `phone`, `amount`, `status`, `dateTime`. Статусы: `invoice_sent`, `paid`, `rejected`, `cancelled`. Реакции Kaspi Pay на фактическую оплату/отмену вызывают эту функцию.
 
-или:
+Backend сверяет сумму, телефон, привязку invoiceId и ID события. Статус `paid` требует сумму и телефон. Повторы не активируют покупку дважды; поздний `pending` не отменяет оплату. Неоднозначная сетевая ошибка переводит доставку в `uncertain`; автоматического повторного выставления нет, требуется проверка менеджера.
 
-```http
-X-MoonAI-Token: <MOON_AI_WEBHOOK_TOKEN>
-```
+Ручное одобрение в админке сохраняется. `approval_source`, `approved_by`, `approved_at` записывают первое подтверждение: `manual` или `moon_ai` (также `kaspi`, `bcc`, `bonus`). Повторное событие не заменяет источник. В истории и заявках показаны источник, время и администратор. Старые платежи без достоверной информации помечены «Источник подтверждения не указан».
 
-## Headers
+Текст клиента, ответ бота и скриншот чека не считаются банковским подтверждением. Kaspi Receipt не заменяет подтверждение связанного счёта Kaspi Pay. Возврат во внешнем банке требует отдельной согласованной операции; эта интеграция не обещает автоматический банковский возврат.
 
-```http
-Content-Type: application/json
-Authorization: Bearer <MOON_AI_WEBHOOK_TOKEN>
-```
+## Чат и напоминания
 
-## Body
+API-канал отправляет события в POST `https://domly.kz/api/v1/integrations/moon-ai/messages` с `X-MoonAI-Token`. Ответы agent/manager сохраняются один раз по `event_id`, только в известном приватном чате. Эхо пользовательских сообщений и служебные сообщения счетов игнорируются. Уведомление получает только владелец чата.
 
-Обязательные поля:
+Пользователь открывает чат через «Помощник Domly» в настройках; гость — на экране входа. Приватный ключ гостевой установки хранится отдельно от авторизации, на сервере — только SHA-256. При регистрации гостевой доступ и токены отзываются, история гостя остаётся изолированной.
 
-| Поле | Тип | Описание |
-| --- | --- | --- |
-| `paymentId` | string | ID платежа DOMLY, который мы передали Moon AI при запросе счета |
-| `status` | string | Статус счета |
-| `amount` | number | Сумма счета в тенге |
-| `phone` | string | Номер телефона Kaspi, на который выставлен счет |
-| `dateTime` | string | Дата и время события в ISO 8601 |
+Однократные задания через 30 минут:
 
-Дополнительные поля:
+- неоплаченный checkout: помощь с оформлением; отменяется после оплаты/отмены и при новом checkout;
+- новая регистрация без оформления и сообщений: приветствие;
+- первый запуск без регистрации и сообщений: приветствие гостю.
 
-| Поле | Тип | Описание |
-| --- | --- | --- |
-| `invoiceId` | string | ID счета на стороне Moon AI/Kaspi |
-| `eventId` | string | Уникальный ID события для дедупликации |
-| `message` | string | Дополнительный комментарий |
+Само скачивание без запуска приложения не наблюдаемо. Сообщение останется в чате; push возможен только с разрешением пользователя и зарегистрированным FCM-токеном. Задание проверяет актуальное состояние перед отправкой. Рабочая очередь запускается каждые 10 секунд, приложение читает чат каждые 2 секунды.
 
-Допустимые статусы:
+## Проверка
 
-| Moon AI | DOMLY |
-| --- | --- |
-| `created`, `sent`, `issued`, `invoice_requested`, `invoice_sent` | `invoice_requested` |
-| `pending` | `pending` |
-| `paid`, `approved`, `success`, `completed`, `confirmed` | `paid` |
-| `rejected`, `declined`, `failed`, `error` | `rejected` |
-| `cancelled`, `canceled`, `expired` | `cancelled` |
-
-## Пример запроса
-
-```bash
-curl -X POST "https://api.89-126-200-97.sslip.io/api/v1/payments/moon-ai/kaspi-status" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <MOON_AI_WEBHOOK_TOKEN>" \
-  -d '{
-    "paymentId": "12345678-1234-1234-1234-123456789012",
-    "invoiceId": "moon-kaspi-000001",
-    "eventId": "moon-event-000001",
-    "status": "paid",
-    "amount": 11500,
-    "phone": "+77052597368",
-    "dateTime": "2026-09-29T12:30:00+05:00"
-  }'
-```
-
-## Успешный ответ
-
-```json
-{
-  "ok": true,
-  "data": {
-    "accepted": true,
-    "paymentId": "12345678-1234-1234-1234-123456789012",
-    "status": "paid",
-    "amount": 11500,
-    "invoicePhone": "+77052597368"
-  }
-}
-```
-
-## Ошибки
-
-```json
-{
-  "ok": false,
-  "code": "payment_not_found",
-  "message": "Платёж не найден."
-}
-```
-
-Возможные ошибки:
-
-| HTTP | Code | Что делать |
-| --- | --- | --- |
-| 400 | `payment_id_required` | Передать `paymentId` или `invoiceId` |
-| 400 | `invalid_amount` | Передать сумму числом |
-| 400 | `invalid_datetime` | Передать дату в ISO 8601 |
-| 401 | `unauthorized` | Проверить webhook token |
-| 404 | `payment_not_found` | Проверить `paymentId` |
-| 503 | `integration_not_configured` | На backend не задан `MOON_AI_WEBHOOK_TOKEN` |
-
+`npm test` с `DOMLY_INTEGRATION_DATABASE_URL` проверяет реальную PostgreSQL: дедупликацию счета, проверку суммы/номера, источник ручного/автоматического одобрения, изоляцию чатов, отзыв гостевой сессии, 30-минутные задания и отсутствие повторного счета при таймауте. Flutter `flutter test` проверяет маршруты, гостевые сессии и подписи платежей. Реальное выставление/оплата проверяются только на разрешённой покупателем операции; технический чат сам по себе не подтверждает банковскую оплату.

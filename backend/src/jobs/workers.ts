@@ -1,3 +1,4 @@
+import {processMoonOutbox} from '../modules/moonAi';
 import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { env, validateEnvForRuntime } from '../common/env';
@@ -13,6 +14,7 @@ const fcm = new FcmService();
 const scheduling = new SchedulingService(db);
 const connection = new IORedis(env.redisUrl, { maxRetriesPerRequest: null });
 const maintenanceQueue = new Queue('maintenance', { connection });
+const moonQueue = new Queue('moon-ai', { connection });
 configureRealtimeBus(env.redisUrl);
 const workers: Worker[] = [];
 
@@ -196,6 +198,9 @@ void maintenanceQueue.add('expire-order-offers', {}, {
   removeOnComplete: true,
 });
 
+workers.push(new Worker('moon-ai', async()=>{await processMoonOutbox(db);},{connection}));
+void moonQueue.add('moon-ai-outbox', {}, {jobId:'moon-ai-outbox',repeat:{every:10000},removeOnComplete:true});
+
 void maintenanceQueue.add('cleanup-expired-auth', {}, {
   jobId: 'cleanup-expired-auth',
   repeat: { every: 3_600_000 },
@@ -206,6 +211,7 @@ async function shutdown(signal: string) {
   await Promise.all(workers.map((worker) => worker.close().catch(() => undefined)));
   await Promise.all([
     maintenanceQueue.close().catch(() => undefined),
+    moonQueue.close().catch(() => undefined),
     closeRealtimeBus().catch(() => undefined),
     connection.quit().catch(() => undefined),
     db.close().catch(() => undefined),

@@ -1,0 +1,65 @@
+name: Configure Moon AI
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        default: prepare
+        options: [prepare, apply, inspect]
+      encrypted_payload:
+        description: RSA/AES envelope; never plaintext credentials
+        type: string
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  configure:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Prepare encryption
+        if: inputs.mode == 'prepare'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+            "umask 077; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out '$DEPLOY_PATH/shared/moon-config-key.pem' 2>/dev/null && openssl pkey -in '$DEPLOY_PATH/shared/moon-config-key.pem' -pubout"
+      - name: Apply encrypted settings
+        if: inputs.mode == 'apply'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          ENCRYPTED_PAYLOAD: ${{ inputs.encrypted_payload }}
+        run: |
+          set -euo pipefail
+          test -n "$ENCRYPTED_PAYLOAD"
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/configure_moon_ai.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/configure_moon_ai.cjs"
+          printf '%s' "$ENCRYPTED_PAYLOAD" | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+            "set -euo pipefail; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend run -T --rm --no-deps --entrypoint node -v '$DEPLOY_PATH:$DEPLOY_PATH' api '$DEPLOY_PATH/shared/configure_moon_ai.cjs' '$DEPLOY_PATH'; docker compose -p domly-backend up -d --no-build --force-recreate api worker; rm -f '$DEPLOY_PATH/shared/configure_moon_ai.cjs'; for attempt in \$(seq 1 30); do if curl -fsS http://localhost:8080/ready >/dev/null; then echo 'Backend ready after Moon AI configuration'; exit 0; fi; sleep 2; done; exit 1"
+      - name: Inspect integration without secrets
+        if: inputs.mode == 'inspect'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+            "cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T api node -e \"console.log(JSON.stringify({enabled:process.env.MOON_AI_ENABLED==='true',channelUrlConfigured:!!process.env.MOON_AI_CHANNEL_URL,channelKeyConfigured:!!process.env.MOON_AI_CHANNEL_API_KEY,webhookConfigured:!!process.env.MOON_AI_WEBHOOK_TOKEN}))\""

@@ -2,6 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:domly/utils/notification_destination.dart';
 
 void main() {
+  test('bot push opens a chat by its chat ID, without creating an order', () {
+    final link = notificationDestination(
+        {'targetType': 'assistant_chat', 'targetId': 'chat-1'},
+        cleaner: false)!;
+    expect(link.route, '/chat');
+    expect(link.arguments, {'chatId': 'chat-1'});
+  });
+
   test('backend order notification opens and focuses its customer order', () {
     final link = notificationDestination(
         {'type': 'order', 'targetId': 'order-1'},

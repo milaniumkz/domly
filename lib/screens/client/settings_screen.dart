@@ -167,6 +167,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 10),
+                        _SettingsSection(
+                          title: 'Помощь',
+                          subtitle: 'Вопросы по заказам и оплате',
+                          height: 120,
+                          children: [
+                            _SettingsOptionTile(
+                              title: 'Помощник Domly',
+                              subtitle: 'Открыть чат',
+                              indicator: _SettingsTileIndicator.chevron,
+                              onTap: _openAssistant,
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 26),
                         const _AboutAppCard(),
                         const SizedBox(height: 24),
@@ -289,6 +303,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _save(Map<String, dynamic> data) async {
     await _data.updateCustomerSettings(data);
+  }
+
+  Future<void> _openAssistant() async {
+    if (!await AuthGate.ensureAuthorized(context) || !mounted) return;
+    try {
+      final chatId = await _data.createOrOpenAssistantChat();
+      if (!mounted) return;
+      Navigator.pushNamed(context, '/chat', arguments: {'chatId': chatId});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 
   Future<void> _showTutorial() async {

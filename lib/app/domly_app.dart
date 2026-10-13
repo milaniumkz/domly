@@ -1,3 +1,4 @@
+import '../screens/common/assistant_guest_screen.dart';
 import '../utils/notification_destination.dart';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -151,9 +152,12 @@ class _DomlyAppState extends State<DomlyApp> {
 
   void _handleNotificationTap(Map<String, dynamic> payload) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !authController.isAuthenticated) {
+      if (!mounted) return;
+      if (payload['targetType'] == 'assistant_guest' && config.flavor == AppFlavor.customer && !config.adminSurface) {
+        _navigatorKey.currentState?.pushNamed('/assistant');
         return;
       }
+      if (!authController.isAuthenticated) return;
       final type = (payload['type'] ?? '').toString();
       if (config.adminSurface) {
         final route = (payload['route'] ?? '').toString().trim();
@@ -693,6 +697,8 @@ class _DomlyAppState extends State<DomlyApp> {
     }
 
     switch (routeName) {
+      case '/assistant':
+        return config.flavor == AppFlavor.customer && !config.adminSurface ? const AssistantGuestScreen() : _routeFallbackScreen('Помощник доступен в приложении заказчика.');
       case '/':
         return _rootScreen();
       case '/welcome':

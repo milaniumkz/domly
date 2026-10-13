@@ -1,6 +1,7 @@
+import {ensureGuestSession, guestSession, bindGuestSession, acceptMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
 import {validatePromotionBody} from '../../modules/promotionValidation';
 import {saveOrderReview} from '../../modules/orderReviews';
-import {canonicalMediaUrl, mediaLinksMiddleware, verifyMediaLink} from '../../modules/mediaLinks';
+import {canonicalMediaUrl, httpsMediaUrl, mediaLinksMiddleware, verifyMediaLink} from '../../modules/mediaLinks';
 import { transitionOrder, releaseCleanerAssignment } from '../../modules/orderLifecycle';
 import {confirmArea} from '../../modules/areaVerification';
 import { verifyCleaner } from '../../modules/cleanerVerification';
@@ -38,6 +39,76 @@ export function buildV1Router(deps: {
   router.use(mediaLinksMiddleware(deps.db));
   router.use(mobileRouter(deps.db));
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+  const initConfiguredPayment = async (gateway: PaymentGatewayService, result: {payment: unknown; payableAmount: number}, req: any, description: string) => {
+    const payment=result.payment as any;
+    if(env.moonAiEnabled && payment?.provider==='kaspi' && result.payableAmount>0) {
+      if(!payment.invoice_phone) return null;
+      return queueMoonInvoice(deps.db,payment,description);
+    }
+    return initProviderPayment(gateway,result,req,description);
+  };
+  const guestWrites=new Map<string,{at:number;count:number}>();
+  const guestWriteLimit=(req:any) => {
+    const key=String(req.ip ?? 'guest'),now=Date.now();
+    let entry=guestWrites.get(key);
+    if(!entry || now-entry.at>60000) {entry={at:now,count:0};guestWrites.set(key,entry);}
+    if(guestWrites.size>2000)guestWrites.delete(guestWrites.keys().next().value!);
+    if(++entry.count>120)throw new ApiError(429,'rate_limited','Слишком много запросов. Попробуйте позже.');
+  };
+  router.post('/assistant/guest-session',asyncHandler(async(req,res)=>{
+    guestWriteLimit(req);
+    ok(res,await ensureGuestSession(deps.db,String(req.body.installationKey ?? '')));
+  }));
+  router.get('/assistant/guest/messages',asyncHandler(async(req,res)=>{
+    const guest=await guestSession(deps.db,String(req.headers['x-assistant-session'] ?? ''));
+    ok(res,(await deps.db.query('SELECT id,message_ru,sender_kind,created_at FROM chat_messages WHERE chat_id=$1 ORDER BY created_at ASC LIMIT 200',[guest.chat_id])).rows);
+  }));
+  router.post('/assistant/guest/messages',asyncHandler(async(req,res)=>{
+    guestWriteLimit(req);
+    if(!moonAiReady()) throw new ApiError(503,'integration_not_configured','Помощник временно недоступен.');
+    const guest=await guestSession(deps.db,String(req.headers['x-assistant-session'] ?? ''));
+    const text=String(req.body.message ?? '').trim();
+    if(!text || text.length>10000)throw new ApiError(400,'invalid_message','Введите сообщение до 10000 символов.');
+    const message=await deps.db.transaction(async tx=>{
+      const active=(await tx.query('SELECT customer_id FROM assistant_installations WHERE id=$1 FOR UPDATE',[guest.id])).rows[0];
+      if(!active || active.customer_id) throw new ApiError(401,'invalid_session','Войдите в приложение.');
+      const row=(await tx.query("INSERT INTO chat_messages(chat_id,sender_kind,message_ru) VALUES($1,'guest',$2) RETURNING *",[guest.chat_id,text])).rows[0];
+      await tx.query(`INSERT INTO moon_ai_outbox(installation_id,chat_id,kind,dedupe_key,payload)
+        VALUES($1,$2,'message',$3,$4)`,[guest.id,guest.chat_id,`message:${row.id}`,{text}]);
+      await tx.query('UPDATE assistant_installations SET last_activity_at=NOW() WHERE id=$1',[guest.id]);
+      return row;
+    });
+    ok(res,message,201);
+  }));
+  router.post('/assistant/guest/device-token',asyncHandler(async(req,res)=>{
+    guestWriteLimit(req);
+    const guest=await guestSession(deps.db,String(req.headers['x-assistant-session'] ?? ''));
+    const token=String(req.body.token ?? '');
+    if(token.length<20 || token.length>4096)throw new ApiError(400,'invalid_token','Некорректный токен уведомлений.');
+    await deps.db.query('UPDATE device_tokens SET enabled=FALSE WHERE token=$1',[token]);
+    await deps.db.query(`INSERT INTO assistant_installation_tokens(installation_id,token) VALUES($1,$2)
+      ON CONFLICT(token) DO UPDATE SET installation_id=EXCLUDED.installation_id`,[guest.id,token]);
+    ok(res,{saved:true});
+  }));
+  router.post('/assistant/guest/bind',auth(['customer']),asyncHandler(async(req,res)=>{
+    if(!moonAiReady())throw new ApiError(503,'integration_not_configured','Помощник пока не подключён.');
+    ok(res,await bindGuestSession(deps.db,String(req.body.installationKey ?? ''),req.user!.id));
+  }));
+  router.post('/assistant/chat', auth(['customer']), asyncHandler(async(req,res)=>{
+    if(!moonAiReady()) throw new ApiError(503,'integration_not_configured','Помощник пока не подключён.');
+    ok(res,await ensureAssistantChat(deps.db,req.user!.id));
+  }));
+  router.post('/integrations/moon-ai/messages',asyncHandler(async(req,res)=>{
+    verifyMoonToken(req.headers);
+    ok(res,await acceptMoonChatEvent(deps.db,deps.notifications,req.body));
+  }));
+  router.get('/integrations/moon-ai/payments/:id',asyncHandler(async(req,res)=>{
+    verifyMoonToken(req.headers);
+    const payment=first<any>((await deps.db.query('SELECT id,status,amount,invoice_phone FROM payments WHERE id::text=$1',[req.params.id])).rows);
+    if(!payment) throw new ApiError(404,'payment_not_found','Платёж не найден.');
+    ok(res,{paymentId:payment.id,status:payment.status,payment_sum:Number(payment.amount),phone_number:payment.invoice_phone?.replace(/\D/g,''),canCreateInvoice:['pending','invoice_requested'].includes(payment.status)});
+  }));
+
 
   const cleanText = (value: unknown) => {
     const text = String(value ?? '').trim();
@@ -105,7 +176,8 @@ export function buildV1Router(deps: {
     if (['invoice_requested', 'invoice_sent', 'created', 'sent', 'issued'].includes(raw)) return 'invoice_requested';
     if (['rejected', 'declined', 'failed', 'error'].includes(raw)) return 'rejected';
     if (['cancelled', 'canceled', 'expired'].includes(raw)) return 'cancelled';
-    return 'pending';
+    if(raw==='pending') return 'pending';
+    throw new ApiError(400,'invalid_payment_status','Неизвестный статус Moon AI.');
   };
 
   const verifyMoonAiWebhook = (req: any) => {
@@ -1257,7 +1329,7 @@ export function buildV1Router(deps: {
     if (payment.payableAmount === 0) {
       await applyPaidPayment(payment.payment);
     } else {
-      const provider = await initProviderPayment(deps.paymentGateway, payment, req, 'Покупка пакета DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Покупка пакета DOMLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
     }
     ok(res, { customerPackage, ...payment });
@@ -1363,7 +1435,7 @@ export function buildV1Router(deps: {
     if (result.payableAmount === 0) {
       await applyPaidPayment(result.payment);
     } else {
-      const provider = await initProviderPayment(deps.paymentGateway, result, req, 'Оплата заказа DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, result, req, 'Оплата заказа DOMLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (result.payment as any).id, provider);
     }
     ok(res, result);
@@ -2100,7 +2172,7 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/payments/:id/confirm', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
-    const payment = await deps.payments.markPaid(String(req.params.id));
+    const payment = await deps.payments.markPaid(String(req.params.id),req.user!.id);
     if (!payment) throw new ApiError(404, 'not_found', 'Платёж не найден.');
     await recordAudit('payment.confirmed', 'payment', String(req.params.id), { source: 'admin' }, req.user?.id);
     ok(res, await applyPaidPayment(payment));
@@ -2134,11 +2206,12 @@ export function buildV1Router(deps: {
       `UPDATE payments
        SET provider='kaspi', invoice_phone=$2, status='invoice_requested', updated_at=NOW()
        WHERE id=$1 AND status IN ('pending','invoice_requested')
+       AND ($3=FALSE OR status='pending' OR regexp_replace(invoice_phone,'[^0-9]','','g')=regexp_replace($2,'[^0-9]','','g'))
        RETURNING *`,
-      [req.params.id, phone],
+      [req.params.id, phone, env.moonAiEnabled],
     )).rows);
     if (!updated) throw new ApiError(400, 'invalid_payment_status', 'По этому платежу нельзя выставить счёт.');
-    const provider = await initProviderPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DOMLY');
+    const provider = await initConfiguredPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DOMLY');
     if (provider) await updatePaymentProviderPayload(deps.db, String(req.params.id), provider);
     await deps.notifications.createAdminEvent({
       event: 'new_payment',
@@ -2168,7 +2241,7 @@ export function buildV1Router(deps: {
       [req.params.id],
     )).rows);
     if (!updated) throw new ApiError(400, 'invalid_payment_status', 'По этому платежу нельзя открыть онлайн-оплату.');
-    const provider = await initProviderPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DOMLY');
+    const provider = await initConfiguredPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DOMLY');
     if (provider) await updatePaymentProviderPayload(deps.db, String(req.params.id), provider);
     ok(res, { payment: updated, ...provider });
   }));
@@ -2246,6 +2319,8 @@ export function buildV1Router(deps: {
     const payment = first((await deps.db.query(
       `UPDATE payments
        SET status=CASE WHEN status IN ('cancelled','refunded') AND $2='paid' THEN status ELSE $2 END,
+           approval_source=CASE WHEN status<>'paid' AND $2='paid' THEN 'kaspi' ELSE approval_source END,
+           approved_at=CASE WHEN status<>'paid' AND $2='paid' THEN NOW() ELSE approved_at END,
            external_id=COALESCE($3, external_id),
            payload=payload || $4::jsonb,
            updated_at=NOW()
@@ -2291,31 +2366,10 @@ export function buildV1Router(deps: {
         normalizedPhone: invoicePhone,
       },
     };
-    const existingPayment = first((await deps.db.query(
-      `SELECT * FROM payments WHERE id::text=$1 OR external_id=$1 LIMIT 1`,
-      [String(paymentKey)],
-    )).rows);
-    if (!existingPayment) throw new ApiError(404, 'payment_not_found', 'Платёж не найден.');
-    const payment = first((await deps.db.query(
-      `UPDATE payments
-       SET status=CASE WHEN status IN ('cancelled','refunded') AND $2='paid' THEN status ELSE $2::payment_status END,
-           external_id=COALESCE($3, external_id),
-           invoice_phone=COALESCE($4, invoice_phone),
-           paid_at=CASE WHEN $2='paid' THEN COALESCE($5, paid_at, NOW()) ELSE paid_at END,
-           payload=payload || $6::jsonb,
-           updated_at=NOW()
-       WHERE id=$1
-       RETURNING *`,
-      [(existingPayment as any).id, status, externalId, invoicePhone, eventTime?.toISOString() ?? null, payload],
-    )).rows);
-    await recordPaymentEvent(deps.db, {
-      paymentId: payment?.id ?? null,
-      provider: 'kaspi',
-      eventType: 'moon_ai_status',
-      status,
-      externalId,
-      idempotencyKey: req.body.eventId ?? req.body.requestId ?? externalId ?? `${paymentKey}:${status}:${eventTimeRaw ?? ''}`,
-      payload: { ...req.body, normalizedStatus: status, normalizedPhone: invoicePhone, amountMismatch: payment && amount !== null ? Number((payment as any).amount) !== amount : null },
+    const payment=await acceptMoonPaymentStatus(deps.db,{
+      key:String(paymentKey),status,amount,phone:invoicePhone,externalId:externalId ? String(externalId) : null,
+      eventId:String(req.body.eventId ?? req.body.requestId ?? `${paymentKey}:${status}:${externalId ?? ''}:${eventTimeRaw ?? ''}`),
+      eventTime:eventTime?.toISOString() ?? null,payload,
     });
     await recordAudit('payment.webhook.moon_ai_kaspi', 'payment', payment?.id ?? String(paymentKey), {
       status,
@@ -2335,7 +2389,7 @@ export function buildV1Router(deps: {
       });
     }
     if ((payment as any).status === 'paid') await applyPaidPayment(payment);
-    ok(res, { accepted: true, paymentId: (payment as any).id, status, amount, invoicePhone });
+    ok(res, { accepted: true, paymentId: (payment as any).id, status:payment.status, amount, invoicePhone });
   }));
 
   router.post('/payments/bcc/webhook', asyncHandler(async (req, res) => {
@@ -2345,6 +2399,8 @@ export function buildV1Router(deps: {
     const payment = first((await deps.db.query(
       `UPDATE payments
        SET status=CASE WHEN status IN ('cancelled','refunded') AND $2='paid' THEN status ELSE $2 END,
+           approval_source=CASE WHEN status<>'paid' AND $2='paid' THEN 'bcc' ELSE approval_source END,
+           approved_at=CASE WHEN status<>'paid' AND $2='paid' THEN NOW() ELSE approved_at END,
            external_id=COALESCE($3, external_id),
            payload=payload || $4::jsonb,
            updated_at=NOW()
@@ -3056,7 +3112,7 @@ export function buildV1Router(deps: {
              cp.last_read_at,
              COUNT(cm.id)::int AS message_count,
              MAX(cm.created_at) AS last_message_at,
-             COUNT(cm.id) FILTER (WHERE cm.sender_id<>$1 AND (cp.last_read_at IS NULL OR cm.created_at>cp.last_read_at))::int AS unread_count
+             COUNT(cm.id) FILTER (WHERE cm.sender_id IS DISTINCT FROM $1 AND (cp.last_read_at IS NULL OR cm.created_at>cp.last_read_at))::int AS unread_count
            FROM chats c
            JOIN chat_participants cp ON cp.chat_id=c.id AND cp.user_id=$1
            LEFT JOIN chat_messages cm ON cm.chat_id=c.id
@@ -3082,10 +3138,10 @@ export function buildV1Router(deps: {
       [req.params.id, req.user!.id],
     );
     ok(res, (await deps.db.query(
-      `SELECT cm.*, u.full_name AS sender_name, u.phone AS sender_phone, u.role AS sender_role,
+      `SELECT cm.*, COALESCE(u.full_name,'Помощник Domly') AS sender_name, u.phone AS sender_phone, COALESCE(u.role::text,cm.sender_kind) AS sender_role,
               f.public_url AS file_url, f.mime_type AS file_mime_type, f.size_bytes AS file_size_bytes
        FROM chat_messages cm
-       JOIN app_users u ON u.id=cm.sender_id
+       LEFT JOIN app_users u ON u.id=cm.sender_id
        LEFT JOIN files f ON f.id=cm.file_id
        WHERE cm.chat_id=$1
        ORDER BY cm.created_at ASC`,
@@ -3138,6 +3194,8 @@ export function buildV1Router(deps: {
       )).rows);
       if (!participant) throw new ApiError(403, 'forbidden', 'Нет доступа к этому чату.');
     }
+    const currentChat=first<any>((await deps.db.query('SELECT * FROM chats WHERE id=$1',[req.params.id])).rows);
+    if(currentChat?.type==='assistant' && (!moonAiReady() || currentChat.customer_id!==req.user!.id)) throw new ApiError(503,'integration_not_configured','Помощник временно недоступен.');
     const messageRu = String(req.body.messageRu ?? req.body.message ?? '').trim();
     const messageKk = req.body.messageKk ? String(req.body.messageKk).trim() : null;
     let fileId: string | null = req.body.fileId ? String(req.body.fileId) : null;
@@ -3162,12 +3220,18 @@ export function buildV1Router(deps: {
     if (!messageRu && !fileId) {
       throw new ApiError(400, 'message_required', 'Введите сообщение или прикрепите файл.');
     }
-    const row = first((await deps.db.query(
-      `INSERT INTO chat_messages (chat_id, sender_id, message_ru, message_kk, file_id)
-       VALUES ($1,$2,$3,$4,$5)
-       RETURNING *`,
-      [req.params.id, req.user!.id, messageRu || null, messageKk, fileId],
-    )).rows);
+    const row = await deps.db.transaction(async tx => {
+      const message = first<any>((await tx.query(
+        `INSERT INTO chat_messages (chat_id, sender_id, message_ru, message_kk, file_id)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [req.params.id, req.user!.id, messageRu || null, messageKk, fileId],
+      )).rows);
+      if (currentChat?.type === 'assistant') {
+        const fileUrl = fileId ? first<any>((await tx.query('SELECT public_url FROM files WHERE id=$1', [fileId])).rows)?.public_url : undefined;
+        await queueAssistantMessage(tx, String(req.params.id), req.user!.id, message.id, messageRu, fileUrl ? httpsMediaUrl(fileUrl) : undefined);
+      }
+      return message;
+    });
     await deps.db.query(
       `UPDATE chat_participants SET last_read_at=NOW() WHERE chat_id=$1 AND user_id=$2`,
       [req.params.id, req.user!.id],
@@ -3407,7 +3471,7 @@ export function buildV1Router(deps: {
     if (payment.payableAmount === 0) {
       await applyPaidPayment(payment.payment);
     } else {
-      const provider = await initProviderPayment(deps.paymentGateway, payment, req, 'Оплата предварительной записи DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Оплата предварительной записи DOMLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
     }
     ok(res, { preorderId: preorder.id, customerPackage, ...payment });
@@ -3540,7 +3604,8 @@ export function buildV1Router(deps: {
         projectId: env.fcmProjectId || null,
       },
       payments: {
-        kaspiConfigured: Boolean(env.kaspiMerchantId && env.kaspiApiKey && env.kaspiBaseUrl),
+        kaspiConfigured: env.moonAiEnabled ? moonAiReady() : Boolean(env.kaspiMerchantId && env.kaspiApiKey && env.kaspiBaseUrl),
+        moonAiConfigured: moonAiReady(),
         bccConfigured: Boolean(env.bccMerchantId && env.bccTerminalId && env.bccNotifyUrl && env.bccReturnUrl),
       },
       geo: {
@@ -4114,11 +4179,12 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
   if (section === 'payments') {
     addCommon('p', ['p.numeric_id::text', 'u.full_name', 'u.phone', 'o.numeric_id::text', 'pkg.name_ru']);
     return done(
-      `SELECT p.*, u.full_name AS customer_name, u.phone AS customer_phone,
+      `SELECT p.*, approver.full_name AS approved_by_name, u.full_name AS customer_name, u.phone AS customer_phone,
               o.numeric_id AS order_number, cp.id AS package_purchase_id, pkg.name_ru AS package_name_ru,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.area, ca.verified_area
        FROM payments p
        LEFT JOIN app_users u ON u.id=p.customer_id
+       LEFT JOIN app_users approver ON approver.id=p.approved_by
        LEFT JOIN service_orders o ON o.id=p.order_id
        LEFT JOIN customer_packages cp ON cp.id=p.customer_package_id
        LEFT JOIN catalog_packages pkg ON pkg.id=COALESCE(cp.package_id,o.package_id)

@@ -172,6 +172,8 @@ class NotificationService {
     }
   }
 
+  static void forwardNotificationTap(Map<String, dynamic> data) => _emitNotificationTap(data);
+
   static void _emitNotificationTap(Map<String, dynamic> data) {
     if (data.isEmpty || _tapController.isClosed) {
       return;
