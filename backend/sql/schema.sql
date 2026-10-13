@@ -1255,3 +1255,12 @@ WITH corrected AS (
 )
 UPDATE order_offers SET status='expired'
  WHERE order_id IN (SELECT order_id FROM history) AND status='offered';
+
+
+-- Recover missing checkout records without guessing the payer's Kaspi number.
+INSERT INTO payments(customer_id,order_id,provider,status,amount,payload)
+ SELECT o.customer_id,o.id,'kaspi','pending',o.payable_amount,
+   jsonb_build_object('kind','order_payment','recoveredCheckout',true)
+ FROM service_orders o
+ WHERE o.status='pending_payment' AND o.cleaner_id IS NULL AND o.payable_amount>0
+ AND NOT EXISTS(SELECT 1 FROM payments p WHERE p.order_id=o.id);

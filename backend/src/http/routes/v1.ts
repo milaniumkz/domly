@@ -1962,6 +1962,19 @@ export function buildV1Router(deps: {
       invoicePhone: req.body.kaspiPhone ?? null,
       payload: { kind: 'addon_request_payment' },
     });
+    await deps.notifications.createAdminEvent({
+      event: 'new_payment', titleRu: 'Новая заявка на оплату',
+      bodyRu: `Клиент оплачивает допуслуги на сумму ${payment.payableAmount} ₸.`,
+      targetType: 'payment', targetId: (payment.payment as any).id,
+      dedupeKey: `payment-${(payment.payment as any).id}`,
+    });
+    if (payment.payableAmount === 0) {
+      await applyPaidPayment(payment.payment);
+    } else {
+      const invoiceReq = {...req, body: {...req.body, invoicePhone: req.body.kaspiPhone}};
+      const provider = await initConfiguredPayment(deps.paymentGateway, payment, invoiceReq, 'Оплата допуслуг DOMLY');
+      if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
+    }
     ok(res, { requestId: req.params.id, paymentId: (payment as any).payment.id, ...payment });
   }));
 
@@ -2193,10 +2206,10 @@ export function buildV1Router(deps: {
     ok(res, payment);
   }));
 
-  router.post('/payments/:id/kaspi-invoice', auth(['customer']), asyncHandler(async (req, res) => {
+  router.post('/payments/:id/kaspi-invoice', auth(['customer', 'admin', 'superadmin']), asyncHandler(async (req, res) => {
     const payment = first((await deps.db.query(
-      `SELECT * FROM payments WHERE id=$1 AND customer_id=$2`,
-      [req.params.id, req.user!.id],
+      `SELECT * FROM payments WHERE id=$1 AND (customer_id=$2 OR $3::boolean)`,
+      [req.params.id, req.user!.id, ['admin','superadmin'].includes(req.user!.role)],
     )).rows);
     if (!payment) throw new ApiError(404, 'not_found', 'Платёж не найден.');
     if ((payment as any).status === 'paid') {
@@ -2224,6 +2237,7 @@ export function buildV1Router(deps: {
       targetId: String(req.params.id),
       dedupeKey: `kaspi-invoice-${req.params.id}`,
     });
+    if (['admin','superadmin'].includes(req.user!.role)) await recordAudit('payment.invoice_requested', 'payment', String(req.params.id), {source: 'admin'}, req.user!.id);
     ok(res, { payment: updated, kaspiPhone: phone, provider });
   }));
 

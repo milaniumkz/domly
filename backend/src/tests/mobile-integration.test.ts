@@ -299,6 +299,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         const jwt=signAccessToken({id:user,role:'customer',phone:'fixture'});
         const other=signAccessToken({id:stranger,role:'customer',phone:'fixture'});
         assert.equal((await fetch(base+`/chats/${chatId}/messages`,{headers:{Authorization:'Bearer '+other}})).status,403);
+        assert.equal((await fetch(base+`/payments/${paymentId}/kaspi-invoice`,{method:'POST',headers:{Authorization:'Bearer '+other,'Content-Type':'application/json'},body:JSON.stringify({invoicePhone:'+77000000000'})})).status,404);
         const own=await fetch(base+`/chats/${chatId}/messages`,{headers:{Authorization:'Bearer '+jwt}});
         assert.equal(own.status,200);assert.equal((await own.json() as any).data[0].sender_kind,'assistant');
         assert.equal((await fetch(base+'/assistant/guest/messages')).status,401);
@@ -326,6 +327,24 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
           await db.query('DELETE FROM customer_packages WHERE package_id=$1',[pkg]);
           await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
           await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+        }
+        const addonOrder=randomUUID(), addon=randomUUID();
+        try {
+          await db.query("INSERT INTO service_orders(id,customer_id,status,payable_amount) VALUES($1,$2,'pending_payment',1234)",[addonOrder,stranger]);
+          await db.query("INSERT INTO catalog_addons(id,title_ru,price) VALUES($1,'Fixture extra',1234)",[addon]);
+          await db.query("INSERT INTO order_addons(order_id,addon_id,price,payment_status) VALUES($1,$2,1234,'pending')",[addonOrder,addon]);
+          const response=await fetch(base+`/orders/${addonOrder}/addon-requests/approve`,{method:'POST',headers:{Authorization:'Bearer '+other,'Content-Type':'application/json'},body:JSON.stringify({kaspiPhone:'+77000000000',paymentMethod:'kaspi'})});
+          assert.equal(response.status,200);
+          const result=(await response.json() as any).data;
+          const saved=(await db.query('SELECT * FROM payments WHERE id=$1',[result.paymentId])).rows[0];
+          assert.equal(saved.status,'invoice_requested');assert.equal(Number(saved.amount),1234);
+          assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM moon_ai_outbox WHERE payment_id=$1 AND kind='invoice'",[result.paymentId])).rows[0].n,1);
+          assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[addonOrder])).rows[0].status,'pending_payment');
+        } finally {
+          await db.query('DELETE FROM moon_ai_outbox WHERE payment_id IN(SELECT id FROM payments WHERE order_id=$1)',[addonOrder]);
+          await db.query('DELETE FROM payments WHERE order_id=$1',[addonOrder]);
+          await db.query('DELETE FROM service_orders WHERE id=$1',[addonOrder]);
+          await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);
         }
         const ownedToken='moon-registered-token-fixture',guestToken='moon-guest-token-fixture';
         await db.query("INSERT INTO device_tokens(user_id,platform,token) VALUES($1,'web',$2)",[user,ownedToken]);
