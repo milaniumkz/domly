@@ -1197,6 +1197,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ),
               ],
             ),
+            OrderPaymentRetry(order: slot, data: _data),
             if (canEdit) ...[
               const SizedBox(height: 14),
               Wrap(
