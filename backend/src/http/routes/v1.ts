@@ -85,9 +85,16 @@ export function buildV1Router(deps: {
     const guest=await guestSession(deps.db,String(req.headers['x-assistant-session'] ?? ''));
     const token=String(req.body.token ?? '');
     if(token.length<20 || token.length>4096)throw new ApiError(400,'invalid_token','Некорректный токен уведомлений.');
-    await deps.db.query('UPDATE device_tokens SET enabled=FALSE WHERE token=$1',[token]);
-    await deps.db.query(`INSERT INTO assistant_installation_tokens(installation_id,token) VALUES($1,$2)
-      ON CONFLICT(token) DO UPDATE SET installation_id=EXCLUDED.installation_id`,[guest.id,token]);
+    await deps.db.transaction(async tx => {
+      await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`push:${token}`]);
+      const active = (await tx.query('SELECT customer_id FROM assistant_installations WHERE id=$1 FOR UPDATE', [guest.id])).rows[0];
+      if (!active || active.customer_id) throw new ApiError(401,'invalid_session','Войдите в приложение.');
+      if ((await tx.query('SELECT 1 FROM device_tokens WHERE token=$1 AND enabled=TRUE', [token])).rows.length) {
+        throw new ApiError(409,'token_in_use','Уведомления этого устройства уже подключены к аккаунту.');
+      }
+      await tx.query(`INSERT INTO assistant_installation_tokens(installation_id,token) VALUES($1,$2)
+        ON CONFLICT(token) DO UPDATE SET installation_id=EXCLUDED.installation_id`,[guest.id,token]);
+    });
     ok(res,{saved:true});
   }));
   router.post('/assistant/guest/bind',auth(['customer']),asyncHandler(async(req,res)=>{
@@ -462,12 +469,16 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/me/device-tokens', auth(), asyncHandler(async (req, res) => {
-    const row = first((await deps.db.query(
+    const row = await deps.db.transaction(async tx => {
+      await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`push:${req.body.token}`]);
+      await tx.query('DELETE FROM assistant_installation_tokens WHERE token=$1', [req.body.token]);
+      return first((await tx.query(
       `INSERT INTO device_tokens (user_id, platform, token) VALUES ($1,$2,$3)
        ON CONFLICT (token) DO UPDATE SET user_id=$1, platform=$2, enabled=TRUE, updated_at=NOW()
        RETURNING id`,
       [req.user!.id, req.body.platform, req.body.token],
-    )).rows);
+      )).rows);
+    });
     ok(res, row, 201);
   }));
 

@@ -304,6 +304,15 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         assert.equal((await fetch(base+'/assistant/guest/messages',{headers:{'X-Assistant-Session':keys[1]}})).status,200);
         const sent=await fetch(base+'/assistant/guest/messages',{method:'POST',headers:{'X-Assistant-Session':keys[1],'Content-Type':'application/json'},body:JSON.stringify({message:'Привет'})});
         assert.equal(sent.status,201);
+        const ownedToken='moon-registered-token-fixture',guestToken='moon-guest-token-fixture';
+        await db.query("INSERT INTO device_tokens(user_id,platform,token) VALUES($1,'web',$2)",[user,ownedToken]);
+        const guestHeaders={'X-Assistant-Session':keys[1],'Content-Type':'application/json'};
+        const protectedPush=await fetch(base+'/assistant/guest/device-token',{method:'POST',headers:guestHeaders,body:JSON.stringify({token:ownedToken})});assert.equal(protectedPush.status,409);
+        assert.equal((await db.query('SELECT enabled FROM device_tokens WHERE token=$1',[ownedToken])).rows[0].enabled,true);
+        const guestPush=await fetch(base+'/assistant/guest/device-token',{method:'POST',headers:guestHeaders,body:JSON.stringify({token:guestToken})});assert.equal(guestPush.status,200);
+        const ownerPush=await fetch(base+'/me/device-tokens',{method:'POST',headers:{Authorization:'Bearer '+other,'Content-Type':'application/json'},body:JSON.stringify({platform:'web',token:guestToken})});assert.equal(ownerPush.status,201);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM assistant_installation_tokens WHERE token=$1',[guestToken])).rows[0].n,0);
+        assert.equal((await db.query('SELECT user_id FROM device_tokens WHERE token=$1',[guestToken])).rows[0].user_id,stranger);
         const id=randomUUID();await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,invoice_phone,invoice_requested_at) VALUES($1,$2,'kaspi','invoice_requested',99106,'+77000000000',NOW()-INTERVAL '2 minutes')",[id,user]);
         const callback=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':'fixture-hook-key'},body:JSON.stringify({phone:'+77000000000',amount:99106,status:'invoice_sent',dateTime:new Date(Date.now()-60000).toISOString()})});
         assert.equal(callback.status,200);assert.equal((await callback.json() as any).data.resolution,'matched');
@@ -323,6 +332,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
     await db.query("DELETE FROM moon_ai_payment_callbacks WHERE phone='77000000000' AND amount BETWEEN 99101 AND 99106");
     await db.query('DELETE FROM payment_events WHERE payment_id IN(SELECT id FROM payments WHERE customer_id=ANY($1::uuid[]))',[[user,stranger,idle]]);
     await db.query('DELETE FROM payments WHERE customer_id=ANY($1::uuid[])',[[user,stranger,idle]]);
+    await db.query('DELETE FROM device_tokens WHERE user_id=ANY($1::uuid[])',[[user,stranger,idle]]);
     await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[user,stranger,idle]]);
     await db.close();
   }
