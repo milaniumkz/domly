@@ -2351,6 +2351,18 @@ export function buildV1Router(deps: {
         dedupeKey: `moon-match:${result.callbackId}`,
       });
     }
+    const actualStatus = status === 'invoice_sent' ? 'invoice_requested' : status;
+    if (result.payment?.customer_id && result.payment.status === actualStatus && status !== 'paid') {
+      const labels = {
+        invoice_sent: ['Счёт Kaspi выставлен', 'Счёт выставлен на указанный номер. Оплатите его в приложении Kaspi.'],
+        rejected: ['Счёт Kaspi: отказ или ошибка', 'Не удалось провести счёт. Проверьте платёж в истории или обратитесь в поддержку.'],
+        cancelled: ['Счёт Kaspi отменён', 'Счёт отменён или истёк. Оплата не подтверждена.'],
+      } as const;
+      await deps.notifications.create({
+        userId: result.payment.customer_id, titleRu: labels[status][0], bodyRu: labels[status][1],
+        targetType: 'payments', targetId: result.payment.id, dedupeKey: `moon-status:${result.callbackId}`,
+      });
+    }
     if (result.payment?.status === 'paid') await applyPaidPayment(result.payment);
     ok(res, {accepted: true, resolution: result.resolution, duplicate: result.duplicate, status});
   }));

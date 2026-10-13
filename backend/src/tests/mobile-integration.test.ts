@@ -289,7 +289,8 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
     });
     await t.test('HTTP endpoints reject foreign users and isolate guest sessions',async()=>{
       const {buildV1Router}=await import('../http/routes/v1');
-      const app=express();app.use(express.json(),buildV1Router({db,notifications:{create:async()=>{}}} as any),errorHandler);
+      const httpNotifications=new Map<string,any>();
+      const app=express();app.use(express.json(),buildV1Router({db,notifications:{create:async(input:any)=>{httpNotifications.set(input.dedupeKey,input);}}} as any),errorHandler);
       const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
       const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
       try {
@@ -306,6 +307,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         const id=randomUUID();await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,invoice_phone,invoice_requested_at) VALUES($1,$2,'kaspi','invoice_requested',99106,'+77000000000',NOW()-INTERVAL '2 minutes')",[id,user]);
         const callback=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':'fixture-hook-key'},body:JSON.stringify({phone:'+77000000000',amount:99106,status:'invoice_sent',dateTime:new Date(Date.now()-60000).toISOString()})});
         assert.equal(callback.status,200);assert.equal((await callback.json() as any).data.resolution,'matched');
+        assert.equal(httpNotifications.size,1);assert.equal([...httpNotifications.values()][0].userId,user);assert.equal([...httpNotifications.values()][0].targetType,'payments');
         const invalid=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':'fixture-hook-key'},body:JSON.stringify({phone:'+77000000000',amount:99106,status:'success',dateTime:new Date().toISOString()})});assert.equal(invalid.status,400);
         const unsigned=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});assert.equal(unsigned.status,401);
         const legacy=await fetch(base+'/payments/kaspi/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:id,status:'paid'})});assert.equal(legacy.status,409);
