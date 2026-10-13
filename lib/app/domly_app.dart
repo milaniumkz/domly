@@ -77,6 +77,8 @@ class DomlyApp extends StatefulWidget {
 }
 
 class _DomlyAppState extends State<DomlyApp> {
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  StreamSubscription<Map<String, dynamic>>? _foregroundNotificationSubscription;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   late final _DomlyRouteObserver _routeObserver = _DomlyRouteObserver(
     onRouteChanged: _handleRouteChanged,
@@ -105,6 +107,16 @@ class _DomlyAppState extends State<DomlyApp> {
     authController.addListener(_handleAuthStateChanged);
     _notificationTapSubscription =
         NotificationService.notificationTaps.listen(_handleNotificationTap);
+    _foregroundNotificationSubscription =
+        NotificationService.foregroundMessages.listen((message) {
+      if (!mounted || ['/chat', '/assistant'].contains(_currentObservedRoute()))
+        return;
+      _messengerKey.currentState?.showSnackBar(SnackBar(
+        content: Text('${message['title']}: ${message['body']}'),
+        action: SnackBarAction(
+            label: 'Открыть', onPressed: () => _handleNotificationTap(message)),
+      ));
+    });
     _scheduleInitialRouteSync();
     if (!kIsWeb) {
       final links = AppLinks();
@@ -145,6 +157,7 @@ class _DomlyAppState extends State<DomlyApp> {
   @override
   void dispose() {
     _notificationTapSubscription?.cancel();
+    _foregroundNotificationSubscription?.cancel();
     _linkSubscription?.cancel();
     authController.removeListener(_handleAuthStateChanged);
     super.dispose();
@@ -153,7 +166,9 @@ class _DomlyAppState extends State<DomlyApp> {
   void _handleNotificationTap(Map<String, dynamic> payload) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (payload['targetType'] == 'assistant_guest' && config.flavor == AppFlavor.customer && !config.adminSurface) {
+      if (payload['targetType'] == 'assistant_guest' &&
+          config.flavor == AppFlavor.customer &&
+          !config.adminSurface) {
         _navigatorKey.currentState?.pushNamed('/assistant');
         return;
       }
@@ -173,9 +188,11 @@ class _DomlyAppState extends State<DomlyApp> {
         );
         return;
       }
-      final destination = notificationDestination(payload, cleaner: config.flavor == AppFlavor.pro);
+      final destination = notificationDestination(payload,
+          cleaner: config.flavor == AppFlavor.pro);
       if (destination != null) {
-        _navigatorKey.currentState?.pushNamed(destination.route, arguments: destination.arguments);
+        _navigatorKey.currentState
+            ?.pushNamed(destination.route, arguments: destination.arguments);
         return;
       }
       if (_isBonusNotificationPayload(payload)) {
@@ -488,9 +505,11 @@ class _DomlyAppState extends State<DomlyApp> {
       }
       _firstRunTutorialInFlight = true;
       try {
-        final shown = await DomlyFirstRunTutorial.show(
-          context, flavor: config.flavor);
-        if (!shown || !mounted || !authController.isAuthenticated ||
+        final shown =
+            await DomlyFirstRunTutorial.show(context, flavor: config.flavor);
+        if (!shown ||
+            !mounted ||
+            !authController.isAuthenticated ||
             authController.currentUserId != userId) {
           return;
         }
@@ -625,6 +644,7 @@ class _DomlyAppState extends State<DomlyApp> {
               debugShowCheckedModeBanner: false,
               theme: AppTheme.lightTheme,
               navigatorKey: _navigatorKey,
+              scaffoldMessengerKey: _messengerKey,
               navigatorObservers: [_routeObserver],
               initialRoute: materialInitialRoute,
               locale: Locale(translationController.localeCode),
@@ -698,7 +718,9 @@ class _DomlyAppState extends State<DomlyApp> {
 
     switch (routeName) {
       case '/assistant':
-        return config.flavor == AppFlavor.customer && !config.adminSurface ? const AssistantGuestScreen() : _routeFallbackScreen('Помощник доступен в приложении заказчика.');
+        return config.flavor == AppFlavor.customer && !config.adminSurface
+            ? const AssistantGuestScreen()
+            : _routeFallbackScreen('Помощник доступен в приложении заказчика.');
       case '/':
         return _rootScreen();
       case '/welcome':

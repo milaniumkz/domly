@@ -42,6 +42,10 @@ class AssistantGuestService {
     try {
       if (!_listening) {
         _listening = true;
+        FirebaseMessaging.onMessage.listen((message) {
+          if (message.data['targetType'] == 'assistant_guest')
+            NotificationService.forwardForegroundMessage(message);
+        });
         FirebaseMessaging.onMessageOpenedApp.listen((message) {
           if (message.data['targetType'] == 'assistant_guest') {
             NotificationService.forwardNotificationTap(message.data);

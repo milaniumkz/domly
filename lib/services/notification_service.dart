@@ -24,6 +24,25 @@ class NotificationService {
   static Stream<Map<String, dynamic>> get notificationTaps =>
       _tapController.stream;
 
+  static final _foregroundMessages =
+      StreamController<Map<String, dynamic>>.broadcast();
+  static final Set<String> _foregroundIds = {};
+  static Stream<Map<String, dynamic>> get foregroundMessages =>
+      _foregroundMessages.stream;
+  static void forwardForegroundMessage(RemoteMessage message) {
+    if (!['assistant_chat', 'assistant_guest']
+        .contains(message.data['targetType'])) return;
+    final id = message.messageId;
+    if (id != null && !_foregroundIds.add(id)) return;
+    if (_foregroundIds.length > 500)
+      _foregroundIds.remove(_foregroundIds.first);
+    _foregroundMessages.add({
+      ...message.data,
+      'title': message.notification?.title ?? 'Помощник Domly',
+      'body': message.notification?.body ?? 'Новое сообщение от помощника'
+    });
+  }
+
   static const int _androidFlagInsistent = 4;
   static const _orderAlarmSound = RawResourceAndroidNotificationSound(
     'domly_order_alarm',
@@ -40,6 +59,7 @@ class NotificationService {
   ]);
 
   Future<void> _storeInboxMessage(RemoteMessage message) async {
+    forwardForegroundMessage(message);
     // Inbox entries are created by the backend. Firebase remains only the
     // transport for push delivery.
   }
@@ -172,7 +192,8 @@ class NotificationService {
     }
   }
 
-  static void forwardNotificationTap(Map<String, dynamic> data) => _emitNotificationTap(data);
+  static void forwardNotificationTap(Map<String, dynamic> data) =>
+      _emitNotificationTap(data);
 
   static void _emitNotificationTap(Map<String, dynamic> data) {
     if (data.isEmpty || _tapController.isClosed) {
