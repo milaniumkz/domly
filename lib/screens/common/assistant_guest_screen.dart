@@ -1,3 +1,4 @@
+import '../../ui/chat_interaction.dart';
 import 'package:flutter/material.dart';
 import '../../app/app_scope.dart';
 import '../../services/assistant_guest_service.dart';
@@ -12,6 +13,7 @@ class AssistantGuestScreen extends StatefulWidget {
 
 class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
   final _text = TextEditingController();
+  final _interaction = ChatInteraction();
   Stream<List<Map<String, dynamic>>>? _messages;
   String? _error;
   bool _sending = false;
@@ -46,6 +48,7 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
 
   @override
   void dispose() {
+    _interaction.dispose();
     _text.dispose();
     super.dispose();
   }
@@ -54,16 +57,20 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
     final text = _text.text.trim();
     if (_sending || text.isEmpty) return;
     setState(() => _sending = true);
+    _interaction.focusInput();
     try {
       await AssistantGuestService.instance.send(text);
-      _text.clear();
+      if (_text.text.trim() == text) _text.clear();
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) {
+        setState(() => _sending = false);
+        _interaction.focusInput();
+      }
     }
   }
 
@@ -106,18 +113,23 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
                                     'Не удалось загрузить сообщения. Попробуйте позже.'));
                           }
                           final messages = snapshot.data ?? [];
+                          if (snapshot.hasData)
+                            _interaction.update(context, messages,
+                                incoming: (m) => m['sender_kind'] != 'guest');
                           if (messages.isEmpty) {
                             return const Center(
                                 child: Text(
                                     'Задайте вопрос о заказе или уборке.'));
                           }
                           return ListView.builder(
+                              controller: _interaction.scroll,
+                              reverse: true,
                               padding: const EdgeInsets.all(16),
                               itemCount: messages.length,
                               itemBuilder: (context, index) {
-                                final message = messages[index],
-                                    mine = messages[index]['sender_kind'] ==
-                                        'guest';
+                                final message =
+                                        messages[messages.length - 1 - index],
+                                    mine = message['sender_kind'] == 'guest';
                                 return Align(
                                     alignment: mine
                                         ? Alignment.centerRight
@@ -141,11 +153,11 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
             padding: const EdgeInsets.all(16),
             child: Row(children: [
               Expanded(
-                  child: TextField(
+                  child: ChatComposerField(
                       controller: _text,
-                      maxLength: 10000,
-                      decoration: const InputDecoration(
-                          hintText: 'Сообщение', counterText: ''))),
+                      focusNode: _interaction.inputFocus,
+                      onSend: _send,
+                      hint: 'Сообщение')),
               IconButton(
                   onPressed: _messages == null || _sending ? null : _send,
                   icon: const Icon(Icons.send))

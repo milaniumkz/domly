@@ -1,3 +1,4 @@
+import '../../ui/chat_interaction.dart';
 import 'package:flutter/material.dart';
 import '../../utils/backend_compat.dart';
 
@@ -26,6 +27,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _textController = TextEditingController();
+  final _interaction = ChatInteraction();
   final _data = FirestoreDataService.instance;
   bool _markingRead = false;
   bool _initializing = true;
@@ -56,6 +58,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _interaction.dispose();
     _textController.dispose();
     super.dispose();
   }
@@ -68,8 +71,7 @@ class _ChatScreenState extends State<ChatScreen> {
         final unreadCount = widget.readOnly
             ? 0
             : (summarySnap.data?['unreadCount'] as num?)?.toInt() ?? 0;
-        final chatClosed =
-            widget.readOnly ||
+        final chatClosed = widget.readOnly ||
             (summarySnap.data?['status'] ?? '').toString() == 'closed';
         return DomlyShell(
           child: SafeArea(
@@ -89,10 +91,10 @@ class _ChatScreenState extends State<ChatScreen> {
                         summarySnap.data?['type'] == 'assistant'
                             ? 'Помощник Domly'
                             : unreadCount > 0
-                            ? 'Чат заказа ({count})'.tr(
-                                params: {'count': unreadCount.toString()},
-                              )
-                            : 'Чат заказа'.tr(),
+                                ? 'Чат заказа ({count})'.tr(
+                                    params: {'count': unreadCount.toString()},
+                                  )
+                                : 'Чат заказа'.tr(),
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
@@ -131,15 +133,11 @@ class _ChatScreenState extends State<ChatScreen> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Expanded(
-                                  child: TextField(
+                                  child: ChatComposerField(
                                     controller: _textController,
-                                    minLines: 1,
-                                    maxLines: 4,
-                                    textInputAction: TextInputAction.send,
-                                    onSubmitted: (_) => _send(),
-                                    decoration: InputDecoration(
-                                      hintText: 'Введите сообщение'.tr(),
-                                    ),
+                                    focusNode: _interaction.inputFocus,
+                                    onSend: _send,
+                                    hint: 'Введите сообщение'.tr(),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -157,8 +155,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                             strokeWidth: 2,
                                             valueColor:
                                                 AlwaysStoppedAnimation<Color>(
-                                                  Colors.white,
-                                                ),
+                                              Colors.white,
+                                            ),
                                           ),
                                         )
                                       : const Icon(Icons.send),
@@ -254,6 +252,9 @@ class _ChatScreenState extends State<ChatScreen> {
         final remoteMessages = snapshot.data ?? <Map<String, dynamic>>[];
         final messages = _mergeMessages(remoteMessages);
         _markAsReadIfNeeded(messages);
+        if (snapshot.hasData)
+          _interaction.update(context, messages,
+              incoming: (m) => m['senderId'] != widget.senderId);
         if (messages.isEmpty) {
           return const Center(
             child: Padding(
@@ -267,10 +268,12 @@ class _ChatScreenState extends State<ChatScreen> {
           );
         }
         return ListView.builder(
+          controller: _interaction.scroll,
+          reverse: true,
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
           itemCount: messages.length,
           itemBuilder: (context, index) {
-            final m = messages[index];
+            final m = messages[messages.length - 1 - index];
             final isMine = m['senderId'] == widget.senderId;
             final isSystem = (m['type'] ?? 'text') == 'system';
             final isPending = m['pending'] == true;
@@ -316,9 +319,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isMine
-                      ? DomlyColors.primary
-                      : DomlyColors.backgroundSoft,
+                  color:
+                      isMine ? DomlyColors.primary : DomlyColors.backgroundSoft,
                   borderRadius: BorderRadius.circular(18),
                   border: isMine ? null : Border.all(color: DomlyColors.border),
                 ),
@@ -350,8 +352,8 @@ class _ChatScreenState extends State<ChatScreen> {
                             isPending
                                 ? 'Отправляем...'.tr()
                                 : isReadByOther
-                                ? 'Прочитано'.tr()
-                                : 'Доставлено'.tr(),
+                                    ? 'Прочитано'.tr()
+                                    : 'Доставлено'.tr(),
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.white70,
@@ -372,7 +374,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _send() async {
     final text = _textController.text.trim();
-    if (text.isEmpty) {
+    if (_sending || widget.readOnly || text.isEmpty) {
       return;
     }
     setState(() {
@@ -391,6 +393,7 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     });
     _textController.clear();
+    _interaction.focusInput();
     try {
       final pendingId = _pendingMessages.isNotEmpty
           ? (_pendingMessages.last['id'] ?? '').toString()
@@ -416,11 +419,13 @@ class _ChatScreenState extends State<ChatScreen> {
           }
         }
       });
+      _interaction.focusInput();
     } catch (error) {
       if (!mounted) {
         return;
       }
-      _textController.text = text;
+      if (_textController.text.isEmpty) _textController.text = text;
+      _interaction.focusInput();
       setState(() {
         _sending = false;
         _pendingMessages.removeWhere(
@@ -562,6 +567,7 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     _activeOrderId = normalized;
+    _interaction.reset();
     _lastReadSignature = null;
     if (clearPending) {
       _pendingMessages.clear();
