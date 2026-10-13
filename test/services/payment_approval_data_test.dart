@@ -30,4 +30,17 @@ void main() {
         }),
         'Интеграция: нужна ручная проверка');
   });
+  test('manual confirmation remains available after integration errors', () {
+    for (final status in [
+      'pending',
+      'invoice_requested',
+      'rejected',
+      'failed'
+    ]) {
+      expect(paymentNeedsManualReview({'status': status}), isTrue);
+    }
+    for (final status in ['paid', 'cancelled', 'refunded']) {
+      expect(paymentNeedsManualReview({'status': status}), isFalse);
+    }
+  });
 }

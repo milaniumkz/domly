@@ -32,3 +32,18 @@ String paymentApprovalLabel(Map<String, dynamic> payment) {
       ? 'Источник подтверждения не указан'
       : 'Ожидает подтверждения';
 }
+
+bool paymentNeedsManualReview(Map<String, dynamic> payment) {
+  final status = (payment['status'] ?? payment['paymentStatus'] ?? '')
+      .toString()
+      .trim()
+      .toLowerCase();
+  return const {
+    'pending',
+    'invoice_requested',
+    'pending_invoice',
+    'initiated',
+    'rejected',
+    'failed'
+  }.contains(status);
+}

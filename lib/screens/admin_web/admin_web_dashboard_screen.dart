@@ -2766,7 +2766,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'Заявки KASPI.KZ'.tr(),
+                      'Заявки на подтверждение'.tr(),
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -3683,15 +3683,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     return 'Платёж';
   }
 
-  bool _isAdminPaymentActionRequired(Map<String, dynamic> data) {
-    final status = (data['status'] ?? data['paymentStatus'] ?? '')
-        .toString()
-        .toLowerCase()
-        .trim();
-    return status == 'invoice_requested' ||
-        status == 'pending_invoice' ||
-        status == 'initiated';
-  }
+  bool _isAdminPaymentActionRequired(Map<String, dynamic> data) =>
+      paymentNeedsManualReview(data);
 
   Widget _adminInfoChip(String label, String value) {
     return Container(
