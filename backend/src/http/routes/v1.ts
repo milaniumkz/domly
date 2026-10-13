@@ -1780,6 +1780,7 @@ export function buildV1Router(deps: {
     if (req.user!.role === 'cleaner' && (order as any).cleaner_id !== req.user!.id) {
       throw new ApiError(403, 'forbidden', 'Этот заказ назначен другой уборщице.');
     }
+    if (nextStatus === 'assigned' && Number((order as any).payable_amount) > 0) throw new ApiError(409, 'payment_required', 'Сначала оплатите допуслуги.');
     if (nextStatus === 'assigned' && !['pending_assignment', 'waiting_cleaner', 'assigned'].includes((order as any).status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ нельзя назначить повторно.');
     if (nextStatus === 'assigned') {
       if ((order as any).status === 'assigned' && (!req.body.cleanerId || req.body.cleanerId === (order as any).cleaner_id)) { ok(res, order); return; }

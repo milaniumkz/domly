@@ -1240,3 +1240,18 @@ CREATE TABLE IF NOT EXISTS moon_ai_payment_callbacks (
  payload JSONB NOT NULL DEFAULT '{}',
  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+
+-- Restore the payment gate for outstanding, unassigned legacy orders.
+WITH corrected AS (
+ UPDATE service_orders SET status='pending_payment', updated_at=NOW()
+ WHERE status IN ('pending_assignment','waiting_cleaner') AND cleaner_id IS NULL
+   AND payable_amount>0
+ RETURNING id
+), history AS (
+ INSERT INTO order_status_history(order_id,new_status,comment)
+ SELECT id,'pending_payment','Восстановлено ожидание оплаты неоплаченных допуслуг' FROM corrected
+ RETURNING order_id
+)
+UPDATE order_offers SET status='expired'
+ WHERE order_id IN (SELECT order_id FROM history) AND status='offered';
