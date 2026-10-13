@@ -61,5 +61,6 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
         run: |
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/inspect_moon_ai.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/inspect_moon_ai.cjs"
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
-            "cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T api node -e \"console.log(JSON.stringify({enabled:process.env.MOON_AI_ENABLED==='true',channelUrlConfigured:!!process.env.MOON_AI_CHANNEL_URL,channelKeyConfigured:!!process.env.MOON_AI_CHANNEL_API_KEY,webhookConfigured:!!process.env.MOON_AI_WEBHOOK_TOKEN}))\""
+            "set -e; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T api node < '$DEPLOY_PATH/shared/inspect_moon_ai.cjs'; rm -f '$DEPLOY_PATH/shared/inspect_moon_ai.cjs'"
