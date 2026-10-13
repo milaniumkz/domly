@@ -29,7 +29,7 @@ export async function queueMoonInvoice(db: Database, payment: any, description: 
   if(!/^7\d{10}$/.test(phone)) throw new ApiError(400,'invalid_phone','Укажите корректный номер Kaspi.');
   if(!['pending','invoice_requested'].includes(payment.status) || Number(payment.amount)<=0) throw new ApiError(409,'invalid_payment_status','Счёт уже обработан.');
   const chat=await ensureAssistantChat(db,payment.customer_id);
-  const text=`Запрос счета Kaspi от приложения DOMLY. phone_number=${phone}; payment_sum=${Number(payment.amount)} KZT; описание: ${description}. Используй подключённую функцию create_order. Не меняй номер, сумму . Не создавай повторный счёт для этого paymentId. Результат и статус оплаты отправляй в DOMLY через настроенный Custom API: phone, amount, status, dateTime; без ID платежа. Сообщи клиенту фактический результат.`;
+  const text=`Запрос счета Kaspi от приложения DOMLY. phone_number=${phone}; payment_sum=${Number(payment.amount)} KZT; описание: ${description}. Используй подключённую функцию create_order. Не меняй номер или сумму. Не создавай повторный счёт в этом служебном треде. Результат и статус оплаты отправляй в DOMLY через настроенный Custom API: phone, amount, status, dateTime; без ID платежа. Сообщи клиенту фактический результат.`;
   await db.transaction(async tx=>{
     const current=(await tx.query('SELECT * FROM payments WHERE id=$1 FOR UPDATE',[payment.id])).rows[0];
     if(!current || current.customer_id!==payment.customer_id || !['pending','invoice_requested'].includes(current.status)) throw new ApiError(409,'invalid_payment_status','Счёт уже обработан.');
