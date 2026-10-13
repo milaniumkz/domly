@@ -634,6 +634,8 @@ class FirestoreDataService {
       'approvedBy': item['approved_by'],
       'approvedByName': item['approved_by_name'],
       'approvedAt': item['approved_at'],
+      'integrationReview': item['payload'] is Map ? item['payload']['moonAiReview'] : null,
+      'integrationStatus': item['payload'] is Map && item['payload']['moonAi'] is Map ? item['payload']['moonAi']['status'] : null,
       'invoiceIntegration': (item['payload'] is Map && item['payload']['provider'] == 'moon_ai'),
       'customerName': item['customer_name'],
       'customerPhone': item['customer_phone'],

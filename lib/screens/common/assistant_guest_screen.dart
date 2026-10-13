@@ -26,17 +26,19 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
       if (AppScope.of(context).authController.isAuthenticated) {
         final id =
             await FirestoreDataService.instance.createOrOpenAssistantChat();
-        if (mounted)
+        if (mounted) {
           Navigator.pushReplacementNamed(context, '/chat',
               arguments: {'chatId': id});
+        }
         return;
       }
       await AssistantGuestService.instance.initialize();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _messages = AssistantGuestService.instance.messages();
           _error = null;
         });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     }
@@ -56,9 +58,10 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
       await AssistantGuestService.instance.send(text);
       _text.clear();
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -77,9 +80,10 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
               try {
                 await AssistantGuestService.instance.enablePush();
               } catch (error) {
-                if (context.mounted)
+                if (context.mounted) {
                   ScaffoldMessenger.of(context)
                       .showSnackBar(SnackBar(content: Text(error.toString())));
+                }
               }
             },
             child: const Text('Включить уведомления о новых сообщениях')),
@@ -96,15 +100,17 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
                     : StreamBuilder<List<Map<String, dynamic>>>(
                         stream: _messages,
                         builder: (context, snapshot) {
-                          if (snapshot.hasError)
+                          if (snapshot.hasError) {
                             return const Center(
                                 child: Text(
                                     'Не удалось загрузить сообщения. Попробуйте позже.'));
+                          }
                           final messages = snapshot.data ?? [];
-                          if (messages.isEmpty)
+                          if (messages.isEmpty) {
                             return const Center(
                                 child: Text(
                                     'Задайте вопрос о заказе или уборке.'));
+                          }
                           return ListView.builder(
                               padding: const EdgeInsets.all(16),
                               itemCount: messages.length,

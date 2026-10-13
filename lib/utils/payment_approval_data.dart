@@ -13,8 +13,21 @@ String paymentApprovalLabel(Map<String, dynamic> payment) {
     case 'bonus':
       return 'Платёж проведён бонусами';
   }
-  if (payment['invoiceIntegration'] == true)
+  if (payment['integrationReview'] != null) {
+    return 'Интеграция: нужна ручная проверка';
+  }
+  if (payment['integrationStatus'] == 'invoice_sent') {
+    return 'Счёт выставлен через интеграцию MooonAI / Kaspi';
+  }
+  if (payment['integrationStatus'] == 'rejected') {
+    return 'Интеграция: отказ или ошибка';
+  }
+  if (payment['integrationStatus'] == 'cancelled') {
+    return 'Интеграция: счёт отменён или истёк';
+  }
+  if (payment['invoiceIntegration'] == true) {
     return 'Счёт через интеграцию MooonAI / Kaspi';
+  }
   return (payment['status'] ?? payment['paymentStatus']) == 'paid'
       ? 'Источник подтверждения не указан'
       : 'Ожидает подтверждения';

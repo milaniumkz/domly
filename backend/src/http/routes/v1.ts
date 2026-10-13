@@ -1,4 +1,4 @@
-import {ensureGuestSession, guestSession, bindGuestSession, acceptMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
+import {ensureGuestSession, guestSession, bindGuestSession, matchMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
 import {validatePromotionBody} from '../../modules/promotionValidation';
 import {saveOrderReview} from '../../modules/orderReviews';
 import {canonicalMediaUrl, httpsMediaUrl, mediaLinksMiddleware, verifyMediaLink} from '../../modules/mediaLinks';
@@ -102,12 +102,7 @@ export function buildV1Router(deps: {
     verifyMoonToken(req.headers);
     ok(res,await acceptMoonChatEvent(deps.db,deps.notifications,req.body));
   }));
-  router.get('/integrations/moon-ai/payments/:id',asyncHandler(async(req,res)=>{
-    verifyMoonToken(req.headers);
-    const payment=first<any>((await deps.db.query('SELECT id,status,amount,invoice_phone FROM payments WHERE id::text=$1',[req.params.id])).rows);
-    if(!payment) throw new ApiError(404,'payment_not_found','Платёж не найден.');
-    ok(res,{paymentId:payment.id,status:payment.status,payment_sum:Number(payment.amount),phone_number:payment.invoice_phone?.replace(/\D/g,''),canCreateInvoice:['pending','invoice_requested'].includes(payment.status)});
-  }));
+
 
 
   const cleanText = (value: unknown) => {
@@ -171,13 +166,9 @@ export function buildV1Router(deps: {
   };
 
   const normalizeMoonAiKaspiStatus = (payload: Record<string, unknown>) => {
-    const raw = String(payload.status ?? payload.paymentStatus ?? payload.invoiceStatus ?? '').toLowerCase();
-    if (['paid', 'approved', 'success', 'completed', 'confirmed'].includes(raw)) return 'paid';
-    if (['invoice_requested', 'invoice_sent', 'created', 'sent', 'issued'].includes(raw)) return 'invoice_requested';
-    if (['rejected', 'declined', 'failed', 'error'].includes(raw)) return 'rejected';
-    if (['cancelled', 'canceled', 'expired'].includes(raw)) return 'cancelled';
-    if(raw==='pending') return 'pending';
-    throw new ApiError(400,'invalid_payment_status','Неизвестный статус Moon AI.');
+    const raw = String(payload.status ?? '').toLowerCase().trim();
+    if (!['invoice_sent','paid','rejected','cancelled'].includes(raw)) throw new ApiError(400,'invalid_payment_status','Неизвестный статус Moon AI.');
+    return raw as 'invoice_sent'|'paid'|'rejected'|'cancelled';
   };
 
   const verifyMoonAiWebhook = (req: any) => {
@@ -2204,7 +2195,7 @@ export function buildV1Router(deps: {
     if (!phone) throw new ApiError(400, 'phone_required', 'Укажите номер KASPI.KZ.');
     const updated = first((await deps.db.query(
       `UPDATE payments
-       SET provider='kaspi', invoice_phone=$2, status='invoice_requested', updated_at=NOW()
+       SET provider='kaspi', invoice_phone=$2, status='invoice_requested', invoice_requested_at=COALESCE(invoice_requested_at,NOW()), updated_at=NOW()
        WHERE id=$1 AND status IN ('pending','invoice_requested')
        AND ($3=FALSE OR status='pending' OR regexp_replace(invoice_phone,'[^0-9]','','g')=regexp_replace($2,'[^0-9]','','g'))
        RETURNING *`,
@@ -2314,13 +2305,14 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/payments/kaspi/webhook', asyncHandler(async (req, res) => {
+    if(env.moonAiEnabled) throw new ApiError(409,'use_signed_callback','Используйте защищённый callback MooonAI для оплаты Kaspi.');
     const status = normalizeKaspiPaymentStatus(req.body);
     const paymentId = req.body.paymentId ?? req.body.orderId ?? req.body.id;
     const payment = first((await deps.db.query(
       `UPDATE payments
-       SET status=CASE WHEN status IN ('cancelled','refunded') AND $2='paid' THEN status ELSE $2 END,
-           approval_source=CASE WHEN status<>'paid' AND $2='paid' THEN 'kaspi' ELSE approval_source END,
-           approved_at=CASE WHEN status<>'paid' AND $2='paid' THEN NOW() ELSE approved_at END,
+       SET status=CASE WHEN status IN ('paid','cancelled','refunded') THEN status ELSE $2 END,
+           approval_source=CASE WHEN status NOT IN ('paid','cancelled','refunded') AND $2='paid' THEN 'kaspi' ELSE approval_source END,
+           approved_at=CASE WHEN status NOT IN ('paid','cancelled','refunded') AND $2='paid' THEN NOW() ELSE approved_at END,
            external_id=COALESCE($3, external_id),
            payload=payload || $4::jsonb,
            updated_at=NOW()
@@ -2342,54 +2334,25 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/payments/moon-ai/kaspi-status', asyncHandler(async (req, res) => {
-    verifyMoonAiWebhook(req);
-    const paymentKey = req.body.paymentId ?? req.body.orderId ?? req.body.externalId ?? req.body.invoiceId ?? req.body.id;
-    if (!paymentKey) throw new ApiError(400, 'payment_id_required', 'Передайте paymentId или invoiceId платежа.');
+    verifyMoonToken(req.headers);
     const status = normalizeMoonAiKaspiStatus(req.body);
-    const externalId = req.body.externalId ?? req.body.invoiceId ?? req.body.providerPaymentId ?? null;
-    const invoicePhoneRaw = req.body.invoicePhone ?? req.body.kaspiPhone ?? req.body.phone ?? null;
-    const invoicePhone = invoicePhoneRaw ? normalizePhone(String(invoicePhoneRaw)) : null;
-    const amount = req.body.amount == null ? null : Number(req.body.amount);
-    if (amount !== null && !Number.isFinite(amount)) {
-      throw new ApiError(400, 'invalid_amount', 'Сумма платежа должна быть числом.');
-    }
-    const eventTimeRaw = req.body.dateTime ?? req.body.eventTime ?? req.body.paidAt ?? req.body.createdAt ?? null;
-    const eventTime = eventTimeRaw ? new Date(String(eventTimeRaw)) : null;
-    if (eventTime && Number.isNaN(eventTime.getTime())) {
-      throw new ApiError(400, 'invalid_datetime', 'Дата и время должны быть в формате ISO 8601.');
-    }
-    const payload = {
-      moonAi: {
-        ...req.body,
-        receivedAt: new Date().toISOString(),
-        normalizedStatus: status,
-        normalizedPhone: invoicePhone,
-      },
-    };
-    const payment=await acceptMoonPaymentStatus(deps.db,{
-      key:String(paymentKey),status,amount,phone:invoicePhone,externalId:externalId ? String(externalId) : null,
-      eventId:String(req.body.eventId ?? req.body.requestId ?? `${paymentKey}:${status}:${externalId ?? ''}:${eventTimeRaw ?? ''}`),
-      eventTime:eventTime?.toISOString() ?? null,payload,
+    const result = await matchMoonPaymentStatus(deps.db, {
+      phone: String(req.body.phone ?? ''), amount: Number(req.body.amount), status,
+      dateTime: String(req.body.dateTime ?? ''),
     });
-    await recordAudit('payment.webhook.moon_ai_kaspi', 'payment', payment?.id ?? String(paymentKey), {
-      status,
-      amount,
-      invoicePhone,
-      externalId,
-      found: Boolean(payment),
+    await recordAudit('payment.webhook.moon_ai_kaspi', 'payment', result.payment?.id ?? null, {
+      status, resolution: result.resolution, duplicate: result.duplicate,
     });
-    if (amount !== null && Number((payment as any).amount) !== amount) {
+    if (result.resolution !== 'matched') {
       await deps.notifications.createAdminEvent({
-        event: 'new_payment',
-        titleRu: 'Платёж Moon AI: сумма не совпала',
-        bodyRu: `Moon AI прислал ${amount} ₸, в DOMLY ожидается ${(payment as any).amount} ₸.`,
-        targetType: 'payment',
-        targetId: String((payment as any).id),
-        dedupeKey: `moon-ai-amount-mismatch-${(payment as any).id}-${amount}`,
+        event: 'new_payment', titleRu: 'Платёж MooonAI: нужна ручная проверка',
+        bodyRu: result.resolution === 'ambiguous' ? 'Номер, сумма и время подходят нескольким платежам. Автоматическое подтверждение не выполнено.' : 'Подходящий платёж не найден. Автоматическое подтверждение не выполнено.',
+        targetType: 'payment', targetId: result.candidateIds[0] ?? null,
+        dedupeKey: `moon-match:${result.callbackId}`,
       });
     }
-    if ((payment as any).status === 'paid') await applyPaidPayment(payment);
-    ok(res, { accepted: true, paymentId: (payment as any).id, status:payment.status, amount, invoicePhone });
+    if (result.payment?.status === 'paid') await applyPaidPayment(result.payment);
+    ok(res, {accepted: true, resolution: result.resolution, duplicate: result.duplicate, status});
   }));
 
   router.post('/payments/bcc/webhook', asyncHandler(async (req, res) => {
@@ -2398,9 +2361,9 @@ export function buildV1Router(deps: {
     const externalId = req.body.orderId ?? req.body.externalId ?? req.body.RRN ?? req.body.rrn ?? req.body.INT_REF ?? req.body.intRef ?? null;
     const payment = first((await deps.db.query(
       `UPDATE payments
-       SET status=CASE WHEN status IN ('cancelled','refunded') AND $2='paid' THEN status ELSE $2 END,
-           approval_source=CASE WHEN status<>'paid' AND $2='paid' THEN 'bcc' ELSE approval_source END,
-           approved_at=CASE WHEN status<>'paid' AND $2='paid' THEN NOW() ELSE approved_at END,
+       SET status=CASE WHEN status IN ('paid','cancelled','refunded') THEN status ELSE $2 END,
+           approval_source=CASE WHEN status NOT IN ('paid','cancelled','refunded') AND $2='paid' THEN 'bcc' ELSE approval_source END,
+           approved_at=CASE WHEN status NOT IN ('paid','cancelled','refunded') AND $2='paid' THEN NOW() ELSE approved_at END,
            external_id=COALESCE($3, external_id),
            payload=payload || $4::jsonb,
            updated_at=NOW()

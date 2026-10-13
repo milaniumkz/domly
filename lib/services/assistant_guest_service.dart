@@ -43,8 +43,9 @@ class AssistantGuestService {
       if (!_listening) {
         _listening = true;
         FirebaseMessaging.onMessageOpenedApp.listen((message) {
-          if (message.data['targetType'] == 'assistant_guest')
+          if (message.data['targetType'] == 'assistant_guest') {
             NotificationService.forwardNotificationTap(message.data);
+          }
         });
         FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
           if (_key == null || AuthService.restoredSessionUid != null) return;
@@ -54,16 +55,18 @@ class AssistantGuestService {
           } catch (_) {}
         });
         final initial = await FirebaseMessaging.instance.getInitialMessage();
-        if (initial?.data['targetType'] == 'assistant_guest')
+        if (initial?.data['targetType'] == 'assistant_guest') {
           NotificationService.forwardNotificationTap(initial!.data);
+        }
       }
     } catch (_) {/* Push support must not block the guest chat. */}
     try {
       final settings =
           await FirebaseMessaging.instance.getNotificationSettings();
       if (settings.authorizationStatus == AuthorizationStatus.authorized ||
-          settings.authorizationStatus == AuthorizationStatus.provisional)
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
         await _savePushToken();
+      }
     } catch (_) {}
   }
 
@@ -83,8 +86,9 @@ class AssistantGuestService {
 
   Future<void> enablePush() async {
     final settings = await FirebaseMessaging.instance.requestPermission();
-    if (settings.authorizationStatus == AuthorizationStatus.denied)
+    if (settings.authorizationStatus == AuthorizationStatus.denied) {
       throw StateError('Уведомления запрещены в настройках устройства.');
+    }
     await _savePushToken();
   }
 
@@ -94,8 +98,9 @@ class AssistantGuestService {
         vapidKey: AppEnv.firebaseMessagingVapidKey.isEmpty
             ? null
             : AppEnv.firebaseMessagingVapidKey);
-    if (token != null)
+    if (token != null) {
       await _request('/assistant/guest/device-token', body: {'token': token});
+    }
   }
 
   Future<dynamic> _request(String path, {Map<String, dynamic>? body}) async {
@@ -113,11 +118,12 @@ class AssistantGuestService {
             .post(uri, headers: headers, body: jsonEncode(body))
             .timeout(const Duration(seconds: 15));
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    if (response.statusCode >= 400)
+    if (response.statusCode >= 400) {
       throw StateError((json['message'] ??
               (json['error'] is Map ? json['error']['message'] : null) ??
               'Помощник временно недоступен.')
           .toString());
+    }
     return json['data'];
   }
 
@@ -132,10 +138,11 @@ class AssistantGuestService {
           loading = true;
           try {
             final data = await _request('/assistant/guest/messages');
-            if (!closed)
+            if (!closed) {
               controller.add((data as List)
                   .map((item) => Map<String, dynamic>.from(item as Map))
                   .toList());
+            }
           } catch (error) {
             if (!closed) controller.addError(error);
           } finally {

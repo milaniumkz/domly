@@ -1218,3 +1218,25 @@ UPDATE payments p SET approval_source='manual',
 UPDATE payments p SET approval_source=CASE WHEN p.payload ? 'moonAi' THEN 'moon_ai' ELSE p.provider::text END,
  approved_at=COALESCE(p.paid_at,p.updated_at)
  WHERE p.status='paid' AND p.approval_source IS NULL AND (p.provider='bonus' OR p.payload ? 'moonAi' OR EXISTS(SELECT 1 FROM payment_events e WHERE e.payment_id=p.id AND e.status='paid'));
+
+-- Match MooonAI's phone/amount/status/time contract without an external payment ID.
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS invoice_requested_at TIMESTAMPTZ;
+UPDATE payments SET invoice_requested_at=created_at
+ WHERE provider='kaspi' AND invoice_phone IS NOT NULL AND invoice_requested_at IS NULL
+ AND status IN ('invoice_requested','paid','rejected','cancelled');
+CREATE INDEX IF NOT EXISTS idx_payments_moon_match
+ ON payments((regexp_replace(invoice_phone,'[^0-9]','','g')),amount,invoice_requested_at)
+ WHERE provider='kaspi';
+CREATE TABLE IF NOT EXISTS moon_ai_payment_callbacks (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+ fingerprint TEXT NOT NULL UNIQUE,
+ phone TEXT NOT NULL,
+ amount NUMERIC(14,2) NOT NULL,
+ status TEXT NOT NULL CHECK(status IN ('invoice_sent','paid','rejected','cancelled')),
+ event_time TIMESTAMPTZ NOT NULL,
+ payment_id UUID REFERENCES payments(id),
+ resolution TEXT NOT NULL CHECK(resolution IN ('matched','not_found','ambiguous')),
+ candidate_ids UUID[] NOT NULL DEFAULT '{}',
+ payload JSONB NOT NULL DEFAULT '{}',
+ received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

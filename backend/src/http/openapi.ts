@@ -435,10 +435,8 @@ export const openApiSpec = {
     '/payments/moon-ai/kaspi-status': {
       post: {
         summary: 'Webhook Moon AI: статус выставленного счёта Kaspi',
-        description: 'Moon AI отправляет статус, сумму, телефон и дату/время по счёту Kaspi. Защита: Authorization: Bearer <MOON_AI_WEBHOOK_TOKEN> или X-MoonAI-Token.',
+        description: 'Moon AI отправляет только status, amount, phone, dateTime; ID не нужен. Единственное совпадение телефона/суммы/времени обрабатывается автоматически, неоднозначное — вручную. Статусы invoice_sent, paid, rejected, cancelled. Защита: Authorization: Bearer <MOON_AI_WEBHOOK_TOKEN> или X-MoonAI-Token.',
         requestBody: jsonBody({
-          paymentId: '12345678-1234-1234-1234-123456789012',
-          invoiceId: 'moon-kaspi-000001',
           status: 'paid',
           amount: 11500,
           phone: '+77052597368',
@@ -786,7 +784,6 @@ for (const [route, methods] of Object.entries({
   '/assistant/guest/device-token': ['post'],
   '/assistant/guest/bind': ['post'],
   '/integrations/moon-ai/messages': ['post'],
-  '/integrations/moon-ai/payments/{id}': ['get'],
 })) {
   const entry:Record<string,unknown>={};
   for(const method of methods)entry[method]={tags:['Assistant'],summary:'Domly assistant / Moon AI integration',responses:{'200':{description:'Accepted'},'401':{description:'Unauthorized'},'503':{description:'Integration not configured'}}};

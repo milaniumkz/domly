@@ -137,7 +137,7 @@ test('temporary delivery fallback completes backend login and the code is single
 test('Moon AI invoices, signed events, guest isolation and thirty-minute campaigns', {skip: !process.env.DOMLY_INTEGRATION_DATABASE_URL}, async t => {
   const {env}=await import('../common/env');
   const {ensureAssistantChat,queueMoonInvoice,scheduleCheckoutFollowup,scheduleSignupFollowup,processMoonOutbox,
-    acceptMoonChatEvent,acceptMoonPaymentStatus,ensureGuestSession,guestSession,bindGuestSession}=await import('../modules/moonAi');
+    acceptMoonChatEvent,acceptMoonPaymentStatus,matchMoonPaymentStatus,ensureGuestSession,guestSession,bindGuestSession}=await import('../modules/moonAi');
   const previous={moonAiEnabled:env.moonAiEnabled,moonAiChannelUrl:env.moonAiChannelUrl,moonAiChannelApiKey:env.moonAiChannelApiKey,moonAiWebhookToken:env.moonAiWebhookToken,moonAiSource:env.moonAiSource};
   Object.assign(env,{moonAiEnabled:true,moonAiChannelUrl:'https://core.mooonai.com/api/v1/channels/api/messages',moonAiChannelApiKey:'fixture-channel-key',moonAiWebhookToken:'fixture-hook-key',moonAiSource:'domly'});
   const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
@@ -165,7 +165,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
       assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM moon_ai_outbox WHERE payment_id=$1 AND kind='invoice'",[paymentId])).rows[0].n,1);
       await assert.rejects(queueMoonInvoice(db,{...payment,invoice_phone:'123'},'Bad'));
       await processMoonOutbox(db,send);assert.equal(sent.length,1);
-      assert.equal(sent[0].thread_id,paymentId);assert.equal(sent[0].source,'domly_invoice');assert.equal(sent[0].from_type,'user');
+      assert.notEqual(sent[0].thread_id,paymentId);assert.equal(sent[0].data.text.includes('paymentId='),false);assert.equal(sent[0].source,'domly_invoice');assert.equal(sent[0].from_type,'user');
       assert.ok(sent[0].data.text.includes('payment_sum=22000'));assert.ok(sent[0].data.text.includes('phone_number=77000000000'));
       await processMoonOutbox(db,send);assert.equal(sent.length,1);
     });
@@ -204,6 +204,50 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
       await service.markPaid(manualId, user);
       const after = (await db.query('SELECT approval_source,approved_by,approved_at FROM payments WHERE id=$1', [manualId])).rows[0];
       assert.deepEqual(after, before);
+    });
+    await t.test('ID-free callbacks match phone, amount and original event time', async () => {
+      const id=randomUUID(),requestTime=new Date(Date.now()-120000).toISOString(),eventTime=new Date(Date.now()-60000).toISOString();
+      await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,invoice_phone,invoice_requested_at) VALUES($1,$2,'kaspi','invoice_requested',99101,'+77000000000',$3)",[id,user,requestTime]);
+      const invoice={phone:'+7 (700) 000-00-00',amount:99101,status:'invoice_sent' as const,dateTime:eventTime};
+      const sent=await matchMoonPaymentStatus(db,invoice);
+      assert.equal(sent.resolution,'matched');assert.equal(sent.payment?.id,id);assert.equal(sent.payment?.status,'invoice_requested');
+      assert.equal(sent.payment?.payload.moonAi.status,'invoice_sent');
+      const paid={...invoice,status:'paid' as const,dateTime:new Date(Date.now()-30000).toISOString()};
+      const concurrent=await Promise.all([matchMoonPaymentStatus(db,paid),matchMoonPaymentStatus(db,paid)]);
+      assert.equal(concurrent.filter(r=>r.duplicate).length,1);
+      assert.equal(concurrent[0].payment?.approval_source,'moon_ai');
+      const futureId=randomUUID();await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,invoice_phone,invoice_requested_at) VALUES($1,$2,'kaspi','invoice_requested',99101,'+77000000000',NOW())",[futureId,user]);
+      const retry=await matchMoonPaymentStatus(db,paid);assert.equal(retry.payment?.id,id);
+      assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[futureId])).rows[0].status,'invoice_requested');
+      await assert.rejects(matchMoonPaymentStatus(db,{...paid,dateTime:''}));
+      await assert.rejects(matchMoonPaymentStatus(db,{...paid,phone:'123'}));
+      await assert.rejects(matchMoonPaymentStatus(db,{...paid,amount:NaN}));
+      const noMatch=await matchMoonPaymentStatus(db,{...paid,amount:99102});assert.equal(noMatch.resolution,'not_found');assert.equal(noMatch.payment,null);
+    });
+    await t.test('ambiguous phone/amount callbacks never confirm either payment', async () => {
+      const ids=[randomUUID(),randomUUID()],dateTime=new Date(Date.now()-30000).toISOString();
+      for(const id of ids) await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,invoice_phone,invoice_requested_at) VALUES($1,$2,'kaspi','invoice_requested',99103,'+77000000000',NOW()-INTERVAL '2 minutes')",[id,user]);
+      const result=await matchMoonPaymentStatus(db,{phone:'+77000000000',amount:99103,status:'paid',dateTime});
+      assert.equal(result.resolution,'ambiguous');assert.equal(result.payment,null);assert.equal(result.candidateIds.length,2);
+      const rows=(await db.query('SELECT status,payload FROM payments WHERE id=ANY($1::uuid[])',[ids])).rows;
+      for(const row of rows){assert.equal(row.status,'invoice_requested');assert.equal(row.payload.moonAiReview.reason,'ambiguous');}
+    });
+    await t.test('ID-free rejection, cancellation and manual confirmation keep their meaning', async () => {
+      const {PaymentService,BonusService}=await import('../modules/domainServices');
+      const service=new PaymentService(db,new BonusService(db));
+      const dateTime=new Date(Date.now()-30000).toISOString();
+      for(const [amount,status] of [[99104,'rejected'],[99105,'cancelled']] as const){
+        const id=randomUUID();await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,invoice_phone,invoice_requested_at) VALUES($1,$2,'kaspi','invoice_requested',$3,'+77000000000',NOW()-INTERVAL '2 minutes')",[id,user,amount]);
+        const result=await matchMoonPaymentStatus(db,{phone:'+77000000000',amount,status,dateTime});assert.equal(result.payment?.status,status);
+        if(status==='rejected'){
+          await service.markPaid(id,stranger);
+          const bank=await matchMoonPaymentStatus(db,{phone:'+77000000000',amount,status:'paid',dateTime:new Date(Date.now()-15000).toISOString()});
+          assert.equal(bank.payment?.approval_source,'manual');assert.equal(bank.payment?.approved_by,stranger);
+        } else {
+          const late=await matchMoonPaymentStatus(db,{phone:'+77000000000',amount,status:'paid',dateTime:new Date(Date.now()-15000).toISOString()});
+          assert.equal(late.payment?.status,'cancelled');
+        }
+      }
     });
     await t.test('assistant replies are stored once and notified only to the owner',async()=>{
       const events=new Map<string,any>();
@@ -259,6 +303,12 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         assert.equal((await fetch(base+'/assistant/guest/messages',{headers:{'X-Assistant-Session':keys[1]}})).status,200);
         const sent=await fetch(base+'/assistant/guest/messages',{method:'POST',headers:{'X-Assistant-Session':keys[1],'Content-Type':'application/json'},body:JSON.stringify({message:'Привет'})});
         assert.equal(sent.status,201);
+        const id=randomUUID();await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,invoice_phone,invoice_requested_at) VALUES($1,$2,'kaspi','invoice_requested',99106,'+77000000000',NOW()-INTERVAL '2 minutes')",[id,user]);
+        const callback=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':'fixture-hook-key'},body:JSON.stringify({phone:'+77000000000',amount:99106,status:'invoice_sent',dateTime:new Date(Date.now()-60000).toISOString()})});
+        assert.equal(callback.status,200);assert.equal((await callback.json() as any).data.resolution,'matched');
+        const invalid=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':'fixture-hook-key'},body:JSON.stringify({phone:'+77000000000',amount:99106,status:'success',dateTime:new Date().toISOString()})});assert.equal(invalid.status,400);
+        const unsigned=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});assert.equal(unsigned.status,401);
+        const legacy=await fetch(base+'/payments/kaspi/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:id,status:'paid'})});assert.equal(legacy.status,409);
         assert.equal((await fetch(base+'/integrations/moon-ai/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
       }finally{await new Promise<void>((r,e)=>server.close(err=>err?e(err):r()));}
     });
@@ -268,6 +318,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
     for(const g of guests){await db.query('DELETE FROM moon_ai_outbox WHERE installation_id=$1',[g.id]);await db.query('UPDATE assistant_installations SET chat_id=NULL WHERE id=$1',[g.id]);await db.query('DELETE FROM chats WHERE id=$1',[g.chat_id]);await db.query('DELETE FROM assistant_installations WHERE id=$1',[g.id]);}
     await db.query('DELETE FROM moon_ai_outbox WHERE customer_id=ANY($1::uuid[])',[[user,stranger,idle]]);
     await db.query('DELETE FROM chats WHERE customer_id=ANY($1::uuid[])',[[user,stranger,idle]]);
+    await db.query("DELETE FROM moon_ai_payment_callbacks WHERE phone='77000000000' AND amount BETWEEN 99101 AND 99106");
     await db.query('DELETE FROM payment_events WHERE payment_id IN(SELECT id FROM payments WHERE customer_id=ANY($1::uuid[]))',[[user,stranger,idle]]);
     await db.query('DELETE FROM payments WHERE customer_id=ANY($1::uuid[])',[[user,stranger,idle]]);
     await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[user,stranger,idle]]);

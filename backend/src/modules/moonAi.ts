@@ -29,7 +29,7 @@ export async function queueMoonInvoice(db: Database, payment: any, description: 
   if(!/^7\d{10}$/.test(phone)) throw new ApiError(400,'invalid_phone','Укажите корректный номер Kaspi.');
   if(!['pending','invoice_requested'].includes(payment.status) || Number(payment.amount)<=0) throw new ApiError(409,'invalid_payment_status','Счёт уже обработан.');
   const chat=await ensureAssistantChat(db,payment.customer_id);
-  const text=`Запрос счета Kaspi от приложения DOMLY. paymentId=${payment.id}; phone_number=${phone}; payment_sum=${Number(payment.amount)} KZT; описание: ${description}. Используй подключённую функцию create_order. Не меняй номер, сумму или paymentId. Не создавай повторный счёт для этого paymentId. Результат и статус оплаты отправляй в DOMLY через настроенный Custom API. Сообщи клиенту фактический результат.`;
+  const text=`Запрос счета Kaspi от приложения DOMLY. phone_number=${phone}; payment_sum=${Number(payment.amount)} KZT; описание: ${description}. Используй подключённую функцию create_order. Не меняй номер, сумму . Не создавай повторный счёт для этого paymentId. Результат и статус оплаты отправляй в DOMLY через настроенный Custom API: phone, amount, status, dateTime; без ID платежа. Сообщи клиенту фактический результат.`;
   await db.transaction(async tx=>{
     const current=(await tx.query('SELECT * FROM payments WHERE id=$1 FOR UPDATE',[payment.id])).rows[0];
     if(!current || current.customer_id!==payment.customer_id || !['pending','invoice_requested'].includes(current.status)) throw new ApiError(409,'invalid_payment_status','Счёт уже обработан.');
@@ -37,7 +37,7 @@ export async function queueMoonInvoice(db: Database, payment: any, description: 
     const existing=(await tx.query('SELECT id FROM moon_ai_outbox WHERE dedupe_key=$1',[`invoice:${payment.id}`])).rows[0];
     if(!existing) await tx.query(`INSERT INTO moon_ai_outbox(customer_id,chat_id,payment_id,kind,dedupe_key,payload)
       VALUES($1,$2,$3,'invoice',$4,$5)`,[payment.customer_id,chat.id,payment.id,`invoice:${payment.id}`,{text}]);
-    await tx.query("UPDATE payments SET status='invoice_requested',updated_at=NOW() WHERE id=$1 AND status='pending'",[payment.id]);
+    await tx.query("UPDATE payments SET status='invoice_requested',invoice_requested_at=COALESCE(invoice_requested_at,NOW()),updated_at=NOW() WHERE id=$1",[payment.id]);
   });
   const delivery=(await db.query('SELECT state FROM moon_ai_outbox WHERE dedupe_key=$1',[`invoice:${payment.id}`])).rows[0];
   if(['uncertain','failed'].includes(delivery?.state)) throw new ApiError(503,'invoice_delivery_unknown','Не удалось подтвердить выставление счёта. Обратитесь в поддержку, чтобы избежать повторного счёта.');
@@ -48,7 +48,7 @@ export async function scheduleCheckoutFollowup(db: Database, payment: any) {
   const chat=await ensureAssistantChat(db,payment.customer_id);
   await db.query(`INSERT INTO moon_ai_outbox(customer_id,chat_id,payment_id,kind,dedupe_key,payload,run_after)
     VALUES($1,$2,$3,'abandoned_checkout',$4,$5,NOW()+INTERVAL '30 minutes') ON CONFLICT(dedupe_key) DO NOTHING`,
-    [payment.customer_id,chat.id,payment.id,`followup:${payment.id}`,{text:`Служебное событие DOMLY: клиент начал оформление покупки, но не завершил оплату за 30 минут. paymentId=${payment.id}. Вежливо уточни, нужна ли помощь с оформлением или оплатой. Не создавай новый счёт без запроса клиента и не утверждай, что покупка оплачена.`}]);
+    [payment.customer_id,chat.id,payment.id,`followup:${payment.id}`,{text:`Служебное событие DOMLY: клиент начал оформление покупки, но не завершил оплату за 30 минут. Вежливо уточни, нужна ли помощь с оформлением или оплатой. Не создавай новый счёт без запроса клиента и не утверждай, что покупка оплачена.`}]);
 }
 export async function queueAssistantMessage(db: Queryable, chatId: string, customerId: string, messageId: string, text: string, fileUrl?: string) {
   if(!moonAiReady()) throw new ApiError(503,'integration_not_configured','Помощник временно недоступен.');
@@ -95,7 +95,7 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch) 
     });
     if(!row)break;if(row.cancelled || row.busy)continue;
     try {
-      const externalThread=row.kind==='invoice'?row.payment_id:row.chat_id;
+      const externalThread=row.kind==='invoice'?row.id:row.chat_id;
       const source=row.kind==='invoice'?`${env.moonAiSource}_invoice`:env.moonAiSource;
       const body:any={thread_id:externalThread,source,from_type:row.kind==='message'?'user':'manager',message_type:'text',data:{text:row.payload.text}};
       // API-channel manager messages are delivered to the conversation. Agent
@@ -140,11 +140,14 @@ export async function acceptMoonChatEvent(db: Database, notifications: Pick<Noti
   return {accepted:true,duplicate:!message};
 }
 
-export async function acceptMoonPaymentStatus(db: Database, input: {
+type MoonPaymentStatusInput = {
  key: string; status: string; amount: number|null; phone: string|null;
  externalId: string|null; eventId: string; eventTime: string|null; payload: any;
-}) {
-  return db.transaction(async tx=>{
+};
+export async function acceptMoonPaymentStatus(db: Database, input: MoonPaymentStatusInput) {
+  return db.transaction(tx => applyMoonPaymentStatus(tx, input));
+}
+async function applyMoonPaymentStatus(tx: Queryable, input: MoonPaymentStatusInput) {
     const p=(await tx.query('SELECT * FROM payments WHERE id::text=$1 OR external_id=$1 LIMIT 1 FOR UPDATE',[input.key])).rows[0];
     if(!p) throw new ApiError(404,'payment_not_found','Платёж не найден.');
     if(p.provider!=='kaspi') throw new ApiError(409,'invalid_provider','Платёж не относится к Kaspi.');
@@ -172,6 +175,49 @@ export async function acceptMoonPaymentStatus(db: Database, input: {
       [p.id,input.status,input.externalId,input.eventTime,{moonAi:input.payload}])).rows[0];
     if(input.status==='paid') await tx.query("UPDATE moon_ai_outbox SET state='cancelled',finished_at=NOW() WHERE customer_id=$1 AND kind='abandoned_checkout' AND state='pending'",[p.customer_id]);
     return updated;
+}
+
+
+export async function matchMoonPaymentStatus(db: Database, input: {
+  phone: string; amount: number; status: 'invoice_sent'|'paid'|'rejected'|'cancelled'; dateTime: string;
+}) {
+  const phone = input.phone.replace(/\D/g, '');
+  if (!/^7\d{10}$/.test(phone)) throw new ApiError(400, 'invalid_phone', 'Нужен корректный номер Kaspi.');
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new ApiError(400, 'invalid_amount', 'Нужна положительная сумма платежа.');
+  if (!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(input.dateTime)) throw new ApiError(400, 'invalid_datetime', 'Передайте дату и время события ISO 8601 с часовым поясом.');
+  const time = new Date(input.dateTime);
+  if (Number.isNaN(time.getTime()) || time.getTime() > Date.now() + 300000) throw new ApiError(400, 'invalid_datetime', 'Некорректное время события.');
+  const amount = Math.round(input.amount * 100) / 100;
+  const eventTime = time.toISOString();
+  const fingerprint = createHash('sha256').update(JSON.stringify([phone, amount, input.status, eventTime])).digest('hex');
+  return db.transaction(async tx => {
+    // Serialize all callbacks sharing this matching key, including duplicates.
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`moon:${phone}:${amount}`]);
+    const old = (await tx.query('SELECT * FROM moon_ai_payment_callbacks WHERE fingerprint=$1', [fingerprint])).rows[0];
+    if (old) {
+      const payment = old.payment_id ? (await tx.query('SELECT * FROM payments WHERE id=$1', [old.payment_id])).rows[0] : null;
+      return {resolution: old.resolution as string, duplicate: true, callbackId: old.id as string, candidateIds: old.candidate_ids as string[], payment};
+    }
+    // Use the original event time, not delivery time: delayed retries cannot
+    // confirm a new invoice created after the bank event.
+    const candidates = (await tx.query(`SELECT * FROM payments
+      WHERE provider='kaspi' AND regexp_replace(invoice_phone,'[^0-9]','','g')=$1 AND amount=$2
+        AND invoice_requested_at IS NOT NULL
+        AND invoice_requested_at<=$3::timestamptz+INTERVAL '1 second'
+        AND invoice_requested_at>=$3::timestamptz-CASE WHEN $4='invoice_sent' THEN INTERVAL '20 minutes' ELSE INTERVAL '72 hours' END
+      ORDER BY invoice_requested_at DESC FOR UPDATE`, [phone, amount, eventTime, input.status])).rows;
+    const candidateIds = candidates.map(p => String(p.id));
+    const resolution = candidates.length === 1 ? 'matched' : candidates.length ? 'ambiguous' : 'not_found';
+    const payload = {phone, amount, status: input.status, dateTime: eventTime};
+    const callback = (await tx.query(`INSERT INTO moon_ai_payment_callbacks(fingerprint,phone,amount,status,event_time,payment_id,resolution,candidate_ids,payload)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, [fingerprint, phone, amount, input.status, eventTime, resolution==='matched'?candidates[0].id:null, resolution, candidateIds, payload])).rows[0];
+    if (resolution !== 'matched') {
+      if (candidateIds.length) await tx.query(`UPDATE payments SET payload=payload || jsonb_build_object('moonAiReview',$2::jsonb) WHERE id=ANY($1::uuid[])`, [candidateIds, {reason: resolution, callbackId: callback.id, ...payload}]);
+      return {resolution, duplicate: false, callbackId: callback.id as string, candidateIds, payment: null};
+    }
+    const payment = await applyMoonPaymentStatus(tx, {key: candidates[0].id, status: input.status==='invoice_sent'?'invoice_requested':input.status,
+      amount, phone, externalId: null, eventId: `moon:${fingerprint}`, eventTime, payload});
+    return {resolution, duplicate: false, callbackId: callback.id as string, candidateIds, payment};
   });
 }
 
