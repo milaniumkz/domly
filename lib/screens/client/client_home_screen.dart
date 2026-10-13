@@ -1,3 +1,4 @@
+import '../common/order_payment_retry.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -1990,6 +1991,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                           )
                       : null,
                 ),
+                OrderPaymentRetry(order: upcomingSlot, data: _data),
                 const SizedBox(height: 12),
                 _FigmaPrimaryHomeButton(
                   key: DomlyTutorialTargets.clientOrderButton,

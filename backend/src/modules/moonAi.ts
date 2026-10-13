@@ -203,6 +203,10 @@ export async function matchMoonPaymentStatus(db: Database, input: {
     const candidates = (await tx.query(`SELECT * FROM payments
       WHERE provider='kaspi' AND regexp_replace(invoice_phone,'[^0-9]','','g')=$1 AND amount=$2
         AND invoice_requested_at IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM payments retry
+          WHERE retry.payload->>'retryOfPaymentId'=payments.id::text
+          AND regexp_replace(retry.invoice_phone,'[^0-9]','','g')=$1 AND retry.amount=$2
+          AND retry.invoice_requested_at<=$3::timestamptz)
         AND invoice_requested_at<=$3::timestamptz+INTERVAL '1 second'
         AND invoice_requested_at>=$3::timestamptz-CASE WHEN $4='invoice_sent' THEN INTERVAL '20 minutes' ELSE INTERVAL '72 hours' END
       ORDER BY invoice_requested_at DESC FOR UPDATE`, [phone, amount, eventTime, input.status])).rows;

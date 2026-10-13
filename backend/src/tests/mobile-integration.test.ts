@@ -340,8 +340,24 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
           assert.equal(saved.status,'invoice_requested');assert.equal(Number(saved.amount),1234);
           assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM moon_ai_outbox WHERE payment_id=$1 AND kind='invoice'",[result.paymentId])).rows[0].n,1);
           assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[addonOrder])).rows[0].status,'pending_payment');
+          await db.query("UPDATE payments SET status='cancelled' WHERE id=$1",[result.paymentId]);
+          const retried=await fetch(base+`/orders/${addonOrder}/pay`,{method:'POST',headers:{Authorization:'Bearer '+other,'Content-Type':'application/json'},body:JSON.stringify({provider:'kaspi',invoicePhone:'+77000000000'})});
+          assert.equal(retried.status,200);
+          const retry=(await retried.json() as any).data.payment;
+          assert.notEqual(retry.id,result.paymentId);assert.equal(Number(retry.amount),1234);
+          const storedRetry=(await db.query('SELECT * FROM payments WHERE id=$1',[retry.id])).rows[0];
+          assert.equal(storedRetry.payload.retryOfPaymentId,result.paymentId);
+          const matched=await matchMoonPaymentStatus(db,{phone:'+77000000000',amount:1234,status:'invoice_sent',dateTime:new Date().toISOString()});
+          assert.equal(matched.resolution,'matched');assert.equal(matched.payment?.id,retry.id);
+          const duplicateAttempt=await fetch(base+`/orders/${addonOrder}/pay`,{method:'POST',headers:{Authorization:'Bearer '+other,'Content-Type':'application/json'},body:JSON.stringify({provider:'kaspi',invoicePhone:'+77000000001'})});
+          assert.equal(duplicateAttempt.status,409);
+          const paidRetry=await matchMoonPaymentStatus(db,{phone:'+77000000000',amount:1234,status:'paid',dateTime:new Date().toISOString()});
+          assert.equal(paidRetry.payment?.id,retry.id);assert.equal(paidRetry.payment?.status,'paid');
+
         } finally {
           await db.query('DELETE FROM moon_ai_outbox WHERE payment_id IN(SELECT id FROM payments WHERE order_id=$1)',[addonOrder]);
+          await db.query('DELETE FROM moon_ai_payment_callbacks WHERE payment_id IN(SELECT id FROM payments WHERE order_id=$1)',[addonOrder]);
+          await db.query('DELETE FROM payment_events WHERE payment_id IN(SELECT id FROM payments WHERE order_id=$1)',[addonOrder]);
           await db.query('DELETE FROM payments WHERE order_id=$1',[addonOrder]);
           await db.query('DELETE FROM service_orders WHERE id=$1',[addonOrder]);
           await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);

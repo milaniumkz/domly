@@ -250,130 +250,135 @@ Future<KaspiInvoiceRequestResult?> showKaspiInvoiceRequestOptionsDialog(
               borderRadius: BorderRadius.circular(24),
             ),
             contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Введите номер KASPI.KZ'.tr(),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: DomlyColors.foreground,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'На этот номер будет выставлен счёт на оплату.'.tr(),
-                  ),
-                  if (paymentAmount > 0) ...[
-                    const SizedBox(height: 10),
-                    Builder(builder: (_) {
-                      final bonusAmount =
-                          useBonus ? availableBonus.clamp(0, paymentAmount) : 0;
-                      final payable =
-                          (paymentAmount - bonusAmount).clamp(0, paymentAmount);
-                      final bonusText =
-                          bonusAmount > 0 ? ' · бонусами $bonusAmount ₸' : '';
-                      return Text(
-                        'Сумма счёта: $payable ₸$bonusText'.tr(),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: DomlyColors.foreground,
-                        ),
-                      );
-                    }),
-                  ],
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'[0-9+()\-\s]'),
+            content: SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 88).clamp(0.0, 340.0),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Введите номер KASPI.KZ'.tr(),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: DomlyColors.foreground,
                       ),
-                    ],
-                    decoration: InputDecoration(
-                      labelText: 'Номер телефона'.tr(),
-                      hintText: '+7 777 000 00 00'.tr(),
-                      errorText: errorText,
                     ),
-                  ),
-                  if (availableBonus > 0) ...[
-                    const SizedBox(height: 12),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () => setState(() => useBonus = !useBonus),
-                      child: Row(
-                        children: [
-                          Checkbox(
-                            value: useBonus,
-                            onChanged: (value) {
-                              setState(() => useBonus = value ?? false);
-                            },
-                            activeColor: DomlyColors.primary,
+                    const SizedBox(height: 10),
+                    Text(
+                      'На этот номер будет выставлен счёт на оплату.'.tr(),
+                    ),
+                    if (paymentAmount > 0) ...[
+                      const SizedBox(height: 10),
+                      Builder(builder: (_) {
+                        final bonusAmount = useBonus
+                            ? availableBonus.clamp(0, paymentAmount)
+                            : 0;
+                        final payable = (paymentAmount - bonusAmount)
+                            .clamp(0, paymentAmount);
+                        final bonusText =
+                            bonusAmount > 0 ? ' · бонусами $bonusAmount ₸' : '';
+                        return Text(
+                          'Сумма счёта: $payable ₸$bonusText'.tr(),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: DomlyColors.foreground,
                           ),
-                          Expanded(
-                            child: Text(
-                              'Оплатить бонусами: доступно $availableBonus ₸'
-                                  .tr(),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: DomlyColors.foreground,
+                        );
+                      }),
+                    ],
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[0-9+()\-\s]'),
+                        ),
+                      ],
+                      decoration: InputDecoration(
+                        labelText: 'Номер телефона'.tr(),
+                        hintText: '+7 777 000 00 00'.tr(),
+                        errorText: errorText,
+                      ),
+                    ),
+                    if (availableBonus > 0) ...[
+                      const SizedBox(height: 12),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => setState(() => useBonus = !useBonus),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: useBonus,
+                              onChanged: (value) {
+                                setState(() => useBonus = value ?? false);
+                              },
+                              activeColor: DomlyColors.primary,
+                            ),
+                            Expanded(
+                              child: Text(
+                                'Оплатить бонусами: доступно $availableBonus ₸'
+                                    .tr(),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: DomlyColors.foreground,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                    ],
+                    const SizedBox(height: 18),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final stackVertically = constraints.maxWidth < 320;
+                        final secondaryButton = SizedBox(
+                          width: stackVertically ? double.infinity : 132,
+                          child: DomlySecondaryButton(
+                            label: 'Отмена'.tr(),
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                          ),
+                        );
+                        final primaryButton = SizedBox(
+                          width: stackVertically ? double.infinity : 156,
+                          child: DomlyPrimaryButton(
+                            label: 'Выставить счёт',
+                            onPressed: () {
+                              final normalized =
+                                  normalizePhone(controller.text);
+                              if (normalized.isEmpty) {
+                                setState(() {
+                                  errorText = 'Введите номер полностью'.tr();
+                                });
+                                return;
+                              }
+                              Navigator.of(dialogContext).pop(
+                                KaspiInvoiceRequestResult(
+                                  phone: normalized,
+                                  useBonus: useBonus,
+                                ),
+                              );
+                            },
+                          ),
+                        );
+
+                        return Wrap(
+                          alignment: WrapAlignment.end,
+                          runAlignment: WrapAlignment.end,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [secondaryButton, primaryButton],
+                        );
+                      },
                     ),
                   ],
-                  const SizedBox(height: 18),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final stackVertically = constraints.maxWidth < 320;
-                      final secondaryButton = SizedBox(
-                        width: stackVertically ? double.infinity : 132,
-                        child: DomlySecondaryButton(
-                          label: 'Отмена'.tr(),
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                        ),
-                      );
-                      final primaryButton = SizedBox(
-                        width: stackVertically ? double.infinity : 156,
-                        child: DomlyPrimaryButton(
-                          label: 'Выставить счёт',
-                          onPressed: () {
-                            final normalized = normalizePhone(controller.text);
-                            if (normalized.isEmpty) {
-                              setState(() {
-                                errorText = 'Введите номер полностью'.tr();
-                              });
-                              return;
-                            }
-                            Navigator.of(dialogContext).pop(
-                              KaspiInvoiceRequestResult(
-                                phone: normalized,
-                                useBonus: useBonus,
-                              ),
-                            );
-                          },
-                        ),
-                      );
-
-                      return Wrap(
-                        alignment: WrapAlignment.end,
-                        runAlignment: WrapAlignment.end,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [secondaryButton, primaryButton],
-                      );
-                    },
-                  ),
-                ],
+                ),
               ),
             ),
           );

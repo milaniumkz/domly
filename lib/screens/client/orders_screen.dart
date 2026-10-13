@@ -1,3 +1,4 @@
+import '../common/order_payment_retry.dart';
 import 'dart:async';
 
 import '../../utils/backend_compat.dart';
@@ -1411,6 +1412,7 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   int _pendingOrderAmount(Map<String, dynamic> order) {
     for (final key in const [
+      'payableAmount',
       'amount',
       'price',
       'total',
@@ -1583,6 +1585,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   ),
                 ),
           ],
+          OrderPaymentRetry(order: order, data: _data),
           if (kaspiPhone.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
@@ -1666,6 +1669,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ),
               ),
               if (status == 'pending_payment' ||
+                  status == 'pending_invoice' ||
                   status == 'invoice_requested' ||
                   status == 'initiated')
                 Padding(
@@ -1699,6 +1703,7 @@ class _OrdersScreenState extends State<OrdersScreen>
             ],
           ),
           if (status == 'pending_payment' ||
+              status == 'pending_invoice' ||
               status == 'invoice_requested' ||
               status == 'initiated') ...[
             const SizedBox(height: 14),

@@ -1396,6 +1396,8 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/orders/:id/pay', auth(['customer']), asyncHandler(async (req, res) => {
+    await deps.db.transaction(async tx => {
+      await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`order-payment:${req.params.id}`]);
     const order = first<{
       id: string;
       customer_id: string;
@@ -1415,7 +1417,13 @@ export function buildV1Router(deps: {
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
     if (Number(order.payable_amount) <= 0) throw new ApiError(409,'already_paid','Нет услуг к оплате.');
-    const result = await deps.payments.createPayment({
+    const previousPayment = (await deps.db.query('SELECT * FROM payments WHERE order_id=$1 ORDER BY created_at DESC LIMIT 1',[order.id])).rows[0];
+    if (previousPayment?.status === 'invoice_requested') throw new ApiError(409,'invoice_active','Предыдущий счёт ещё активен. Отмените его в Kaspi перед повторной оплатой.');
+    const resumed = previousPayment?.status === 'pending' ? (await deps.db.query(
+      "UPDATE payments SET provider=$2,invoice_phone=$3,updated_at=NOW() WHERE id=$1 AND status='pending' RETURNING *",
+      [previousPayment.id, req.body.provider ?? 'kaspi', req.body.invoicePhone ?? null],
+    )).rows[0] : null;
+    const result = resumed ? {payment: resumed, payableAmount: Number(resumed.amount), bonusSpent: Number(resumed.bonus_amount)} : await deps.payments.createPayment({
       customerId: req.user!.id,
       orderId: order.id,
       provider: req.body.provider ?? 'kaspi',
@@ -1424,7 +1432,8 @@ export function buildV1Router(deps: {
       requestedBonus: Number(req.body.requestedBonus ?? 0),
       maxBonusPercent: Number(req.body.maxBonusPercent ?? 50),
       invoicePhone: req.body.invoicePhone,
-      payload: { kind: 'order_payment', mInfo: formatPaymentAddress(order) },
+      applyReferralDiscount: false,
+      payload: { kind: 'order_payment', mInfo: formatPaymentAddress(order), ...(previousPayment && ['cancelled','rejected'].includes(previousPayment.status) ? {retryOfPaymentId: previousPayment.id} : {}) },
     });
     await deps.notifications.createAdminEvent({
       event: 'new_payment',
@@ -1441,6 +1450,7 @@ export function buildV1Router(deps: {
       if (provider) await updatePaymentProviderPayload(deps.db, (result.payment as any).id, provider);
     }
     ok(res, result);
+    });
   }));
 
   router.post('/orders/:id/offer-next-cleaner', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
@@ -1548,7 +1558,7 @@ export function buildV1Router(deps: {
   router.get('/orders', auth(), asyncHandler(async (req, res) => {
     const where = req.user!.role === 'cleaner' ? 'o.cleaner_id=$1' : 'o.customer_id=$1';
     ok(res, (await deps.db.query(
-      `SELECT o.*, p.name_ru AS package_name_ru, p.name_kk AS package_name_kk,
+      `SELECT o.*, (SELECT status FROM payments WHERE order_id=o.id ORDER BY created_at DESC LIMIT 1) AS latest_payment_status, p.name_ru AS package_name_ru, p.name_kk AS package_name_kk,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.area,
               cu.full_name AS customer_name, cu.phone AS customer_phone,
               cl.full_name AS cleaner_name, cl.phone AS cleaner_phone,

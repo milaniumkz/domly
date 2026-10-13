@@ -590,6 +590,7 @@ class FirestoreDataService {
       'number': item['numeric_id'],
       'status': item['status'],
       'orderStatus': item['status'],
+      'latestPaymentStatus': item['latest_payment_status'],
       'startRequiresCustomerConfirmation':
           item['start_requires_customer_confirmation'] == true,
       'cleaningStartConfirmed': item['cleaning_start_confirmed'] == true,
@@ -11264,6 +11265,15 @@ class FirestoreDataService {
     }
     return {...result, 'ok': true, 'slotId': slotId};
   }
+
+  Future<Map<String, dynamic>> retryOrderPayment({
+    required String orderId,
+    required String provider,
+    String? invoicePhone,
+  }) => BackendApiService.instance.postMap('/orders/$orderId/pay', body: {
+    'provider': provider,
+    if (invoicePhone != null) 'invoicePhone': invoicePhone,
+  });
 
   Future<Map<String, dynamic>> submitKaspiInvoiceRequest({
     required String orderId,
