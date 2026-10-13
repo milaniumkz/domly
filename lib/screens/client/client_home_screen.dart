@@ -3324,6 +3324,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   }
 
   String _slotCleanerDisplayName(Map<String, dynamic> slot) {
+    if (slot['status'] == 'pending_payment' ||
+        slot['orderStatus'] == 'pending_payment' ||
+        slot['paymentStatus'] == 'pending_invoice') {
+      return 'Ожидание оплаты';
+    }
     final status = (slot['status'] ?? '').toString().trim().toLowerCase();
     final cleanerName = (slot['cleanerName'] ?? '').toString().trim();
     final assignmentStatus =

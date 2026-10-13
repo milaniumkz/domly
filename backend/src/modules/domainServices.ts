@@ -473,7 +473,7 @@ export class SchedulingService {
         `SELECT * FROM service_orders WHERE id=$1 FOR UPDATE`,
         [orderId],
       )).rows);
-      if (!order || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status)) return null;
+      if (!order || Number(order.payable_amount ?? 0) > 0 || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status)) return null;
       if (!order?.scheduled_date || !order.start_time || !order.end_time) {
         throw new ApiError(400, 'invalid_order_time', 'У заказа не указаны дата и время.');
       }
@@ -504,7 +504,7 @@ export class SchedulingService {
        JOIN app_users u ON u.id=o.customer_id
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
        LEFT JOIN catalog_packages pkg ON pkg.id=o.package_id
-       WHERE oo.cleaner_id=$1 AND oo.status='offered' AND oo.expires_at > NOW() AND o.cleaner_id IS NULL AND o.status IN ('pending_assignment','waiting_cleaner')
+       WHERE oo.cleaner_id=$1 AND oo.status='offered' AND oo.expires_at > NOW() AND o.cleaner_id IS NULL AND o.status IN ('pending_assignment','waiting_cleaner') AND o.payable_amount <= 0
        ORDER BY oo.created_at ASC`,
       [cleanerId],
     )).rows;
@@ -539,7 +539,7 @@ export class SchedulingService {
       await client.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[cleanerId]);
       const order=first<any>((await client.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[orderId])).rows);
       if(!order)throw new ApiError(404,'not_found','Заказ не найден.');
-      if(order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status))throw new ApiError(409,'order_unavailable','Заказ уже недоступен для принятия.');
+      if(Number(order.payable_amount ?? 0) > 0 || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status))throw new ApiError(409,'order_unavailable','Заказ уже недоступен для принятия.');
       const overlap=(await client.query(`SELECT id FROM service_orders WHERE cleaner_id=$1 AND scheduled_date=$2
         AND status NOT IN ('cancelled','completed') AND start_time<$4::time AND end_time>$3::time AND id<>$5 LIMIT 1`,[cleanerId,order.scheduled_date,order.start_time,order.end_time,orderId])).rows;
       if(overlap.length)throw new ApiError(400,'cleaner_unavailable','Это время уже занято другим заказом.');

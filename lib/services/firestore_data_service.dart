@@ -1,3 +1,4 @@
+import '../utils/booking_addon_data.dart';
 import '../utils/promotion_data.dart';
 import '../utils/banner_data.dart';
 import 'dart:async';
@@ -10964,13 +10965,7 @@ class FirestoreDataService {
       if (dateKey.isEmpty || startTime.isEmpty) {
         continue;
       }
-      final addonIds =
-          _normalizeSelectionAddonsDetailed(selection['addonsDetailed'])
-              .map(
-                (addon) => (addon['id'] ?? addon['addonId'] ?? '').toString(),
-              )
-              .where((id) => id.isNotEmpty)
-              .toList();
+      final addonIds = bookingAddonIds(selection);
       final created = await BackendApiService.instance.postMap(
         '/orders',
         body: {
@@ -11007,6 +11002,11 @@ class FirestoreDataService {
       'scheduledCount': backendScheduledCount,
       'orders': createdOrders,
       'payments': paymentResults,
+      'addonPaymentIds': paymentResults
+          .map((result) => result['payment'])
+          .whereType<Map>()
+          .map((payment) => payment['id'].toString())
+          .toList(),
       'backend': true,
     };
   }

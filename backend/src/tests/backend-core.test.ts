@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import { ApiError, errorHandler } from '../common/api';
 import { auth, signAccessToken, signRefreshToken, verifyRefreshToken, verifyAccessToken } from '../common/auth';
 import { env, validateEnvConfig } from '../common/env';
-import { AuthService, normalizePhone, NotificationService, PaymentService, PricingService } from '../modules/domainServices';
+import { AuthService, normalizePhone, NotificationService, PaymentService, PricingService, SchedulingService } from '../modules/domainServices';
 import { FcmService, normalizeText, PaymentGatewayService, toLatin, WapiOtpService } from '../modules/integrations';
 import { acquirePaymentApplication, buildRuntimeConfig, buildRuntimeSettingsMeta, recordPaymentEvent, updatePaymentProviderPayload } from '../http/routes/v1';
 import { openApiSpec } from '../http/openapi';
@@ -829,4 +829,21 @@ test('signed media URLs preserve storage references, expire and reject tampering
   const mapped=mapMediaValues({photos:[raw],created_at:date},httpsMediaUrl);
   assert.equal(mapped.photos[0],link.toString());
   assert.equal(mapped.created_at,date);
+});
+
+
+test('unpaid extras block cleaner dispatch and acceptance even with stale assignment status', async () => {
+  let reads = 0;
+  const db = {transaction: async (fn: any) => fn({query: async (sql: string) => {
+    if (sql.includes('FROM service_orders')) {
+      reads++;
+      return {rows: [{id: 'order', status: 'pending_assignment', payable_amount: '1500.00'}]};
+    }
+    if (sql.includes('FROM app_users')) return {rows: [{id: 'cleaner'}]};
+    throw new Error('Unpaid order must not reach assignment queries');
+  }})};
+  const scheduling = new SchedulingService(db as any);
+  assert.equal(await scheduling.offerNextCleaner('order'), null);
+  await assert.rejects(scheduling.acceptOffer('order', 'cleaner'), (error: any) => error.code === 'order_unavailable');
+  assert.equal(reads, 2);
 });
