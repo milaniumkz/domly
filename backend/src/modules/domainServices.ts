@@ -364,7 +364,7 @@ export class PaymentService {
       : { bonus: 0, payable: input.amount };
     const payment = first<{ id: string }>((await this.db.query(
       `INSERT INTO payments (customer_id, order_id, customer_package_id, provider, status, amount, bonus_amount, invoice_phone, payload, approval_source, approved_at, paid_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CASE WHEN $5='paid' THEN 'bonus' END,CASE WHEN $5='paid' THEN NOW() END,CASE WHEN $5='paid' THEN NOW() END) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5::payment_status,$6,$7,$8,$9,CASE WHEN $5::payment_status='paid' THEN 'bonus' END,CASE WHEN $5::payment_status='paid' THEN NOW() END,CASE WHEN $5::payment_status='paid' THEN NOW() END) RETURNING *`,
       [
         input.customerId,
         input.orderId ?? null,

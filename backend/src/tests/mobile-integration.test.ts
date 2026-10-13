@@ -289,8 +289,10 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
     });
     await t.test('HTTP endpoints reject foreign users and isolate guest sessions',async()=>{
       const {buildV1Router}=await import('../http/routes/v1');
+      const {PaymentService,BonusService}=await import('../modules/domainServices');
+      const realPayments=new PaymentService(db,new BonusService(db));
       const httpNotifications=new Map<string,any>();
-      const app=express();app.use(express.json(),buildV1Router({db,notifications:{create:async(input:any)=>{httpNotifications.set(input.dedupeKey,input);}}} as any),errorHandler);
+      const app=express();app.use(express.json(),buildV1Router({db,payments:realPayments,notifications:{create:async(input:any)=>{httpNotifications.set(input.dedupeKey,input);},createAdminEvent:async()=>{}}} as any),errorHandler);
       const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
       const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
       try {
@@ -304,6 +306,27 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         assert.equal((await fetch(base+'/assistant/guest/messages',{headers:{'X-Assistant-Session':keys[1]}})).status,200);
         const sent=await fetch(base+'/assistant/guest/messages',{method:'POST',headers:{'X-Assistant-Session':keys[1],'Content-Type':'application/json'},body:JSON.stringify({message:'Привет'})});
         assert.equal(sent.status,201);
+        const pkg=randomUUID(),address=randomUUID();
+        try {
+          await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price,price_per_m2,months) VALUES($1,'HTTP purchase regression',1,0,220,1)",[pkg]);
+          await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Тестовая','1',100)",[address,stranger]);
+          const purchase=await fetch(base+'/packages/purchase',{method:'POST',headers:{Authorization:'Bearer '+other,'Content-Type':'application/json'},body:JSON.stringify({packageId:pkg,addressId:address,provider:'kaspi'})});
+          const body=await purchase.json() as any;assert.equal(purchase.status,200,JSON.stringify(body));
+          assert.equal(body.data.customerPackage.status,'pending_payment');assert.equal(body.data.payment.status,'pending');assert.equal(Number(body.data.payment.amount),22000);
+          assert.equal(body.data.payment.approval_source,null);assert.equal(body.data.payment.paid_at,null);
+          const invoiced=await fetch(base+'/packages/purchase',{method:'POST',headers:{Authorization:'Bearer '+other,'Content-Type':'application/json'},body:JSON.stringify({packageId:pkg,addressId:address,provider:'kaspi',invoicePhone:'+77000000000'})});
+          const invoiceBody=await invoiced.json() as any;assert.equal(invoiced.status,200,JSON.stringify(invoiceBody));
+          assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[invoiceBody.data.payment.id])).rows[0].status,'invoice_requested');
+          assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM moon_ai_outbox WHERE payment_id=$1 AND kind='invoice'",[invoiceBody.data.payment.id])).rows[0].n,1);
+          const zero=await realPayments.createPayment({customerId:stranger,amount:0,provider:'kaspi',applyReferralDiscount:false});
+          const bonus=zero.payment as any;assert.equal(bonus.status,'paid');assert.equal(bonus.approval_source,'bonus');assert.ok(bonus.approved_at);assert.ok(bonus.paid_at);
+        } finally {
+          await db.query('DELETE FROM moon_ai_outbox WHERE payment_id IN(SELECT id FROM payments WHERE customer_package_id IN(SELECT id FROM customer_packages WHERE package_id=$1))',[pkg]);
+          await db.query('DELETE FROM payments WHERE customer_package_id IN(SELECT id FROM customer_packages WHERE package_id=$1)',[pkg]);
+          await db.query('DELETE FROM customer_packages WHERE package_id=$1',[pkg]);
+          await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+          await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+        }
         const ownedToken='moon-registered-token-fixture',guestToken='moon-guest-token-fixture';
         await db.query("INSERT INTO device_tokens(user_id,platform,token) VALUES($1,'web',$2)",[user,ownedToken]);
         const guestHeaders={'X-Assistant-Session':keys[1],'Content-Type':'application/json'};
