@@ -55,7 +55,7 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
 
   Future<void> _send() async {
     final text = _text.text.trim();
-    if (_sending || text.isEmpty) return;
+    if (_messages == null || _sending || text.isEmpty) return;
     setState(() => _sending = true);
     _interaction.focusInput();
     try {
