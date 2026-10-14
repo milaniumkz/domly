@@ -93,7 +93,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  test('Version 6 retries old completion flags and stays user-specific',
+  test(
+      'Completion survives application version changes and stays user-specific',
       () async {
     SharedPreferences.setMockInitialValues({
       'domly_first_run_tutorial_customer_user-a_v5': true,
@@ -101,7 +102,7 @@ void main() {
     expect(
         await DomlyFirstRunTutorial.wasShown(
             flavor: AppFlavor.customer, userId: 'user-a'),
-        isFalse);
+        isTrue);
     await DomlyFirstRunTutorial.markShown(
         flavor: AppFlavor.customer, userId: 'user-a');
     expect(

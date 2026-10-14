@@ -1,3 +1,4 @@
+import '../localization/translation_controller.dart';
 import 'backend_api_service.dart';
 
 class AddressSearchBias {
@@ -19,6 +20,8 @@ class AddressSuggestion {
     required this.placeId,
     this.residentialComplex = '',
     this.addressLine = '',
+    this.street = '',
+    this.house = '',
     this.isResidentialComplex = false,
     this.lat,
     this.lng,
@@ -32,6 +35,8 @@ class AddressSuggestion {
   final String placeId;
   final String residentialComplex;
   final String addressLine;
+  final String street;
+  final String house;
   final bool isResidentialComplex;
   final double? lat;
   final double? lng;
@@ -69,6 +74,8 @@ class AddressSearchService {
         title: address.isEmpty ? (row['label'] ?? '').toString() : address,
         subtitle: (row['city'] ?? '').toString(),
         addressLine: address,
+        street: street,
+        house: house,
         placeId: (row['id'] ?? '${row['source']}:${row['lat']},${row['lng']}')
             .toString(),
         residentialComplex: (row['residentialComplex'] ?? '').toString(),
@@ -86,6 +93,7 @@ class AddressSearchService {
     final data = await BackendApiService.instance
         .getMap('/geo/address-suggestions', authenticated: false, query: {
       'search': query.trim(),
+      'lang': TranslationController.active?.localeCode ?? 'ru',
       'city': city,
       'lat': bias?.lat.toString(),
       'lng': bias?.lng.toString(),
@@ -98,8 +106,12 @@ class AddressSearchService {
   }
 
   Future<AddressSuggestion?> reverse(double lat, double lng) async {
-    final data = await BackendApiService.instance.getMap('/geo/reverse',
-        authenticated: false, query: {'lat': '$lat', 'lng': '$lng'});
+    final data = await BackendApiService.instance
+        .getMap('/geo/reverse', authenticated: false, query: {
+      'lat': '$lat',
+      'lng': '$lng',
+      'lang': TranslationController.active?.localeCode ?? 'ru'
+    });
     final row = data['suggestion'];
     return row is Map ? _map(Map<String, dynamic>.from(row)) : null;
   }

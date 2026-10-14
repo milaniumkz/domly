@@ -1,3 +1,4 @@
+import '../../services/ui_preferences.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
@@ -15,16 +16,36 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  static const _background = Color(0xFFF2FAF7);
-  static const _foreground = Color(0xFF20382F);
-  static const _muted = Color(0xFF6C8A7B);
-  static const _border = Color(0xFFDDEAE3);
-  static const _green = Color(0xFF4EA16C);
-  static const _button = Color(0xFFC86A4A);
+  static Color get _background =>
+      UiPreferences.instance.darkMode ? Color(0xFF121C17) : Color(0xFFF2FAF7);
+  static Color get _foreground =>
+      UiPreferences.instance.darkMode ? Colors.white : Color(0xFF20382F);
+  static Color get _muted =>
+      UiPreferences.instance.darkMode ? Color(0xFFBDCEBF) : Color(0xFF6C8A7B);
+  static Color get _border =>
+      UiPreferences.instance.darkMode ? Color(0xFF3B5242) : Color(0xFFDDEAE3);
+  static final _green = Color(0xFF4EA16C);
+  static final _button = Color(0xFFC86A4A);
 
   final _data = FirestoreDataService.instance;
   bool _isSigningOut = false;
   bool _isDeletingAccount = false;
+
+  @override
+  void initState() {
+    super.initState();
+    UiPreferences.instance.addListener(_refreshAppearance);
+  }
+
+  void _refreshAppearance() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    UiPreferences.instance.removeListener(_refreshAppearance);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +56,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       stream: _data.customerSettingsStream(),
       builder: (context, snap) {
         if (snap.hasError) {
-          return const DomlyShell(
+          return DomlyShell(
             bottomNavigationBar: DomlyClientBottomNav(currentIndex: 4),
             child: SafeArea(
               child: Center(
@@ -59,29 +80,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
             settings['sound'] == true || settings['emailNotifications'] == true;
         final vibration =
             settings['vibration'] == true || settings['notifications'] == true;
-        final darkMode = settings['darkMode'] == true;
-        final animations = settings['animations'] != false;
+        final darkMode = UiPreferences.instance.darkMode;
+        final animations = UiPreferences.instance.animations;
         final translationController =
             AppScope.of(context).translationController;
         final language =
             TranslationController.localeLabel(translationController.localeCode);
 
         return DomlyShell(
-          bottomNavigationBar: const DomlyClientBottomNav(currentIndex: 4),
+          bottomNavigationBar: DomlyClientBottomNav(currentIndex: 4),
           child: ColoredBox(
             color: _background,
             child: SafeArea(
               bottom: false,
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 390),
+                  constraints: BoxConstraints(maxWidth: 390),
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(15, 0, 15, 118),
+                    padding: EdgeInsets.fromLTRB(15, 0, 15, 118),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const _SettingsHeader(),
-                        const SizedBox(height: 22),
+                        _SettingsHeader(),
+                        SizedBox(height: 22),
                         _SettingsSection(
                           title: 'Оформление',
                           subtitle: 'Параметры интерфейса',
@@ -93,7 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               indicator: _SettingsTileIndicator.chevron,
                               onTap: () => _save({'darkMode': !darkMode}),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             _SettingsOptionTile(
                               title: 'Анимации',
                               subtitle: animations ? 'Включены' : 'Выключены',
@@ -102,7 +123,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10),
                         _SettingsSection(
                           title: 'Язык',
                           subtitle: 'Русский по умолчанию',
@@ -116,7 +137,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10),
                         _SettingsSection(
                           title: 'Уведомления',
                           subtitle: 'Push, звук, вибрация',
@@ -132,7 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 'notifications': !push,
                               }),
                             ),
-                            const SizedBox(height: 6),
+                            SizedBox(height: 6),
                             _SettingsOptionTile(
                               title: 'Звук',
                               subtitle: sound ? 'Включен' : 'Выключен',
@@ -143,7 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 'emailNotifications': !sound,
                               }),
                             ),
-                            const SizedBox(height: 6),
+                            SizedBox(height: 6),
                             _SettingsOptionTile(
                               title: 'Вибрация',
                               subtitle: vibration ? 'Включена' : 'Выключена',
@@ -153,7 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10),
                         _SettingsSection(
                           title: 'Обучение',
                           subtitle: 'Пошаговые подсказки по приложению',
@@ -167,7 +188,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10),
                         _SettingsSection(
                           title: 'Помощь',
                           subtitle: 'Вопросы по заказам и оплате',
@@ -181,9 +202,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 26),
-                        const _AboutAppCard(),
-                        const SizedBox(height: 24),
+                        SizedBox(height: 26),
+                        _AboutAppCard(),
+                        SizedBox(height: 24),
                         if (isAuthenticated)
                           _LogoutButton(
                             label: _isSigningOut
@@ -199,7 +220,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               });
                               final navigator = Navigator.of(context);
                               await authController.signOut().timeout(
-                                    const Duration(seconds: 5),
+                                    Duration(seconds: 5),
                                     onTimeout: () {},
                                   );
                               if (!mounted) {
@@ -220,7 +241,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             },
                           ),
                         if (isAuthenticated) ...[
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           _LogoutButton(
                             label: _isDeletingAccount
                                 ? 'Удаляем...'
@@ -230,7 +251,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onTap: _deleteAccount,
                           ),
                         ],
-                        const SizedBox(height: 92),
+                        SizedBox(height: 92),
                       ],
                     ),
                   ),
@@ -251,10 +272,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) {
         return SafeArea(
           child: Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+            margin: EdgeInsets.all(12),
+            padding: EdgeInsets.fromLTRB(18, 18, 18, 20),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: UiPreferences.instance.darkMode
+                  ? Color(0xFF203127)
+                  : Colors.white,
               borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
@@ -269,10 +292,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 12),
-                ...const ['Русский', 'Қазақша'].map(
+                SizedBox(height: 12),
+                ...['Русский', 'Қазақша'].map(
                   (language) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: EdgeInsets.only(bottom: 8),
                     child: _LanguageChoice(
                       label: language,
                       selected: language == current,
@@ -313,7 +336,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Navigator.pushNamed(context, '/chat', arguments: {'chatId': chatId});
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -374,14 +398,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 class _SettingsHeader extends StatelessWidget {
-  const _SettingsHeader();
+  _SettingsHeader();
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 130,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: [Color(0xFF439F73), Color(0xFF80D4B0)],
         ),
         borderRadius: BorderRadius.circular(28),
@@ -414,30 +438,7 @@ class _SettingsHeader extends StatelessWidget {
             ),
           ),
           Positioned(
-            left: 8,
-            top: 20,
-            child: Material(
-              color: const Color(0xFFF5F5F5),
-              borderRadius: BorderRadius.circular(12),
-              elevation: 4,
-              shadowColor: Colors.black.withValues(alpha: 0.25),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => Navigator.maybePop(context),
-                child: const SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: Icon(
-                    Icons.arrow_back,
-                    color: Color(0xFF2E7D5B),
-                    size: 22,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 52,
+            left: 24,
             top: 17,
             right: 20,
             child: Column(
@@ -446,7 +447,9 @@ class _SettingsHeader extends StatelessWidget {
                 Text(
                   'Настройки'.tr(),
                   style: TextStyle(
-                    color: Colors.white,
+                    color: UiPreferences.instance.darkMode
+                        ? Color(0xFF203127)
+                        : Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                     height: 31 / 20,
@@ -471,7 +474,7 @@ class _SettingsHeader extends StatelessWidget {
 }
 
 class _SettingsSection extends StatelessWidget {
-  const _SettingsSection({
+  _SettingsSection({
     required this.title,
     required this.subtitle,
     required this.height,
@@ -487,9 +490,10 @@ class _SettingsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: height,
-      padding: const EdgeInsets.fromLTRB(25, 10, 52, 16),
+      padding: EdgeInsets.fromLTRB(25, 10, 52, 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color:
+            UiPreferences.instance.darkMode ? Color(0xFF203127) : Colors.white,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: _SettingsScreenState._border),
       ),
@@ -498,22 +502,22 @@ class _SettingsSection extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               color: _SettingsScreenState._foreground,
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 5),
+          SizedBox(height: 5),
           Text(
             subtitle,
-            style: const TextStyle(
+            style: TextStyle(
               color: _SettingsScreenState._muted,
               fontSize: 12,
               fontWeight: FontWeight.w400,
             ),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           ...children,
         ],
       ),
@@ -524,7 +528,7 @@ class _SettingsSection extends StatelessWidget {
 enum _SettingsTileIndicator { chevron, dot }
 
 class _SettingsOptionTile extends StatelessWidget {
-  const _SettingsOptionTile({
+  _SettingsOptionTile({
     required this.title,
     required this.subtitle,
     required this.indicator,
@@ -541,14 +545,14 @@ class _SettingsOptionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: UiPreferences.instance.darkMode ? Color(0xFF203127) : Colors.white,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Container(
           height: 44,
-          padding: const EdgeInsets.fromLTRB(18, 5, 12, 5),
+          padding: EdgeInsets.fromLTRB(18, 5, 12, 5),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: _SettingsScreenState._border),
@@ -564,7 +568,7 @@ class _SettingsOptionTile extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: _SettingsScreenState._foreground,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -574,7 +578,7 @@ class _SettingsOptionTile extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: _SettingsScreenState._muted,
                         fontSize: 12,
                         fontWeight: FontWeight.w400,
@@ -584,7 +588,7 @@ class _SettingsOptionTile extends StatelessWidget {
                 ),
               ),
               if (indicator == _SettingsTileIndicator.chevron)
-                const Text(
+                Text(
                   '›',
                   style: TextStyle(
                     color: _SettingsScreenState._green,
@@ -612,15 +616,16 @@ class _SettingsOptionTile extends StatelessWidget {
 }
 
 class _AboutAppCard extends StatelessWidget {
-  const _AboutAppCard();
+  _AboutAppCard();
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 70,
-      padding: const EdgeInsets.fromLTRB(33, 8, 24, 8),
+      padding: EdgeInsets.fromLTRB(33, 8, 24, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color:
+            UiPreferences.instance.darkMode ? Color(0xFF203127) : Colors.white,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: _SettingsScreenState._border),
       ),
@@ -658,7 +663,7 @@ class _AboutAppCard extends StatelessWidget {
 }
 
 class _LogoutButton extends StatelessWidget {
-  const _LogoutButton({
+  _LogoutButton({
     required this.label,
     required this.onTap,
     this.loading = false,
@@ -673,9 +678,9 @@ class _LogoutButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: EdgeInsets.symmetric(horizontal: 8),
       child: Material(
-        color: danger ? const Color(0xFFB84545) : _SettingsScreenState._button,
+        color: danger ? Color(0xFFB84545) : _SettingsScreenState._button,
         borderRadius: BorderRadius.circular(14),
         elevation: 4,
         shadowColor: Colors.black.withValues(alpha: 0.25),
@@ -689,20 +694,24 @@ class _LogoutButton extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (loading) ...[
-                    const SizedBox(
+                    SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: UiPreferences.instance.darkMode
+                            ? Color(0xFF203127)
+                            : Colors.white,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                   ],
                   Text(
                     label,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: UiPreferences.instance.darkMode
+                          ? Color(0xFF203127)
+                          : Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -718,7 +727,7 @@ class _LogoutButton extends StatelessWidget {
 }
 
 class _LanguageChoice extends StatelessWidget {
-  const _LanguageChoice({
+  _LanguageChoice({
     required this.label,
     required this.selected,
   });

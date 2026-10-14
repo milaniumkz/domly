@@ -414,7 +414,7 @@ export function buildV1Router(deps: {
   router.get('/me', auth(), asyncHandler(async (req, res) => {
     const user = first((await deps.db.query(`SELECT * FROM app_users WHERE id=$1`, [req.user!.id])).rows);
     const addresses = (await deps.db.query(
-      `SELECT * FROM customer_addresses WHERE user_id=$1 ORDER BY is_primary DESC, created_at DESC`,
+      `SELECT a.*, EXISTS (SELECT 1 FROM quality_check_requests q WHERE q.address_id=a.id AND q.document_file_id IS NOT NULL AND q.status IN ('pending','approved')) AS area_proof_submitted FROM customer_addresses a WHERE user_id=$1 ORDER BY is_primary DESC, created_at DESC`,
       [req.user!.id],
     )).rows;
     const safeUser = {...(user as any)};
@@ -438,34 +438,23 @@ export function buildV1Router(deps: {
   }));
 
   router.get('/me/settings', auth(), asyncHandler(async (req, res) => {
-    const user = first<{ language: string }>((await deps.db.query(
-      `SELECT language FROM app_users WHERE id=$1`,
-      [req.user!.id],
-    )).rows);
-    ok(res, {
-      userId: req.user!.id,
-      language: user?.language ?? 'ru',
-      notificationsEnabled: true,
-      bonusNotificationsEnabled: true,
-      orderNotificationsEnabled: true,
-    });
+    const user = (await deps.db.query('SELECT language,settings FROM app_users WHERE id=$1',[req.user!.id])).rows[0];
+    ok(res, {userId:req.user!.id, notificationsEnabled:true, bonusNotificationsEnabled:true,
+      orderNotificationsEnabled:true, darkMode:false, animations:true, ...user?.settings, language:user?.language ?? 'ru'});
   }));
 
   router.patch('/me/settings', auth(), asyncHandler(async (req, res) => {
-    const language = req.body.language ? String(req.body.language) : null;
-    const row = language
-      ? first((await deps.db.query(
-        `UPDATE app_users SET language=$2, updated_at=NOW() WHERE id=$1 RETURNING language`,
-        [req.user!.id, language],
-      )).rows)
-      : { language: 'ru' };
-    ok(res, {
-      userId: req.user!.id,
-      language: (row as any)?.language ?? 'ru',
-      notificationsEnabled: req.body.notificationsEnabled ?? true,
-      bonusNotificationsEnabled: req.body.bonusNotificationsEnabled ?? true,
-      orderNotificationsEnabled: req.body.orderNotificationsEnabled ?? true,
-    });
+    const values: Record<string,any> = {};
+    for (const key of ['darkMode','animations','vibration','notificationsEnabled','bonusNotificationsEnabled',
+      'orderNotificationsEnabled','messagesNotificationsEnabled','tutorialCompleted_customer','tutorialCompleted_pro']) {
+      if (typeof req.body[key] === 'boolean') values[key] = req.body[key];
+    }
+    const rawLanguage = String(req.body.language ?? '').toLowerCase();
+    const language = rawLanguage ? (['kk','қазақша','казахский'].includes(rawLanguage) ? 'kk' : 'ru') : null;
+    const user = (await deps.db.query(`UPDATE app_users SET settings=settings || $2::jsonb,
+      language=COALESCE($3,language),updated_at=NOW() WHERE id=$1 RETURNING language,settings`,
+      [req.user!.id,values,language])).rows[0];
+    ok(res, {userId:req.user!.id,...user?.settings,language:user?.language ?? 'ru'});
   }));
 
   router.post('/me/device-tokens', auth(), asyncHandler(async (req, res) => {
@@ -678,7 +667,7 @@ export function buildV1Router(deps: {
 
   router.get('/addresses', auth(['customer']), asyncHandler(async (req, res) => {
     ok(res, (await deps.db.query(
-      `SELECT * FROM customer_addresses WHERE user_id=$1 ORDER BY is_primary DESC, created_at DESC`,
+      `SELECT a.*, EXISTS (SELECT 1 FROM quality_check_requests q WHERE q.address_id=a.id AND q.document_file_id IS NOT NULL AND q.status IN ('pending','approved')) AS area_proof_submitted FROM customer_addresses a WHERE user_id=$1 ORDER BY is_primary DESC, created_at DESC`,
       [req.user!.id],
     )).rows);
   }));
@@ -843,8 +832,8 @@ export function buildV1Router(deps: {
     }
     const profile = first((await client.query(
       `INSERT INTO cleaner_profiles
-       (user_id, city, registration_status, verification_status, monthly_area_limit, daily_work_limit_minutes, sound_enabled, sound_volume, sound_key)
-       VALUES ($1,COALESCE($2,'Астана'),'pending','pending',COALESCE($3,220),COALESCE($4,540),COALESCE($5,TRUE),COALESCE($6,100),COALESCE($7,'system'))
+       (user_id, city, registration_status, verification_status, monthly_area_limit, daily_work_limit_minutes, sound_enabled, sound_volume, sound_key, home_address, emergency_contact_phone, emergency_contact_relation)
+       VALUES ($1,COALESCE($2,'Астана'),'pending','pending',COALESCE($3,220),COALESCE($4,540),COALESCE($5,TRUE),COALESCE($6,100),COALESCE($7,'system'),$8,$9,$10)
        ON CONFLICT (user_id) DO UPDATE SET
          city=COALESCE($2,cleaner_profiles.city),
          monthly_area_limit=COALESCE($3,cleaner_profiles.monthly_area_limit),
@@ -852,6 +841,9 @@ export function buildV1Router(deps: {
          sound_enabled=COALESCE($5,cleaner_profiles.sound_enabled),
          sound_volume=COALESCE($6,cleaner_profiles.sound_volume),
          sound_key=COALESCE($7,cleaner_profiles.sound_key),
+         home_address=COALESCE($8,cleaner_profiles.home_address),
+         emergency_contact_phone=COALESCE($9,cleaner_profiles.emergency_contact_phone),
+         emergency_contact_relation=COALESCE($10,cleaner_profiles.emergency_contact_relation),
          updated_at=NOW()
        RETURNING *`,
       [
@@ -862,6 +854,9 @@ export function buildV1Router(deps: {
         req.body.soundEnabled ?? null,
         req.body.soundVolume ?? null,
         req.body.soundKey ?? null,
+        req.body.homeAddress ?? null,
+        req.body.emergencyContactPhone ?? null,
+        req.body.emergencyContactRelation ?? null,
       ],
     )).rows);
     return profile;
@@ -1004,6 +999,7 @@ export function buildV1Router(deps: {
       ok(res, { suggestions: [], source: 'empty' });
       return;
     }
+    const lang = String(req.query.lang ?? 'ru') === 'kk' ? 'kk' : 'ru';
     const city = req.query.city ? String(req.query.city) : null;
     const lat = req.query.lat ? Number(req.query.lat) : null;
     const lng = req.query.lng ? Number(req.query.lng) : null;
@@ -1040,11 +1036,11 @@ export function buildV1Router(deps: {
         source: house.active ? 'connected_house' : 'address_directory',
         connected: house.active,
         id: house.id,
-        label: formatHouseLabel(house),
+        label: formatHouseLabel(lang === 'kk' ? { ...house, street_ru: house.street_kk ?? house.street_ru, residential_complex_ru: house.residential_complex_kk ?? house.residential_complex_ru } : house),
         city: house.city,
-        street: house.street_ru ?? house.street_kk,
+        street: lang === 'kk' ? (house.street_kk ?? house.street_ru) : (house.street_ru ?? house.street_kk),
         house: house.house,
-        residentialComplex: house.residential_complex_ru ?? house.residential_complex_kk,
+        residentialComplex: lang === 'kk' ? (house.residential_complex_kk ?? house.residential_complex_ru) : (house.residential_complex_ru ?? house.residential_complex_kk),
         entranceCount: house.entrance_count,
         zoneId: house.zone_id,
         zoneNameRu: house.zone_name_ru,
@@ -1058,6 +1054,7 @@ export function buildV1Router(deps: {
     }
     const externalRows = await deps.addressSearch.externalSuggestions({
       query,
+      lang,
       city,
       lat,
       lng,
@@ -1291,7 +1288,12 @@ export function buildV1Router(deps: {
     ok(res, await packageQuote(deps.db, {...req.body, customerId: req.user?.id}));
   }));
 
+  router.get('/payments/methods', asyncHandler(async (_req, res) => {
+    ok(res, { kaspi: Boolean(env.moonAiEnabled && env.moonAiChannelUrl && env.moonAiChannelApiKey), online: bccReady() });
+  }));
+
   router.post('/packages/purchase', auth(['customer']), asyncHandler(async (req, res) => {
+    if (req.body.paymentMethod === 'online' && !bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
     const pkg = first<{ id: string; base_price: string; price_per_m2: string; cleaning_count: number; months: number }>((await deps.db.query(
       `SELECT * FROM catalog_packages WHERE id=$1 AND active=TRUE`,
       [req.body.packageId],
@@ -1347,11 +1349,22 @@ export function buildV1Router(deps: {
     if (customerPackage.available_cleanings <= 0) throw new ApiError(400, 'no_cleanings_left', 'В пакете не осталось доступных уборок.');
     const prepaid = (customerPackage.purchase_config?.addons ?? []) as any[];
     const prepaidIds = new Set(prepaid.map(item=>item.id));
-    const addonIds = (Array.isArray(req.body.addonIds) ? req.body.addonIds : []).filter((id: string)=>!prepaidIds.has(id));
-    const addons = addonIds.length
-      ? (await deps.db.query<{ id: string; price: string; duration_minutes: number }>(`SELECT * FROM catalog_addons WHERE id = ANY($1::uuid[])`, [addonIds])).rows
-      : [];
-    const addonAmount = addons.reduce((sum: number, row) => sum + Number(row.price), 0);
+    const requestedAddons = Array.isArray(req.body.addonsDetailed) && req.body.addonsDetailed.length
+      ? req.body.addonsDetailed : (Array.isArray(req.body.addonIds) ? req.body.addonIds.map((id: string)=>({id})) : []);
+    const catalogAddons = requestedAddons.length
+      ? (await deps.db.query<{ id: string; title_ru: string; title_kk: string | null; price: string; duration_minutes: number }>(
+        'SELECT id,title_ru,title_kk,price,duration_minutes FROM catalog_addons WHERE active=TRUE')).rows : [];
+    const addons = requestedAddons.map((item: any) => {
+      const requestedId = String(item.id ?? item.addonId ?? '').trim();
+      const label = normalizeText(String(item.label ?? item.title ?? '').trim());
+      const addon = catalogAddons.find(row => row.id===requestedId || (label &&
+        [row.title_ru,row.title_kk].some(title=>title && normalizeText(title)===label)));
+      if (!addon) throw new ApiError(400,'unknown_addon','Доп. услуга не найдена в каталоге. Обновите страницу и выберите её снова.');
+      const quantity = Number(item.quantity ?? 1);
+      if (!Number.isInteger(quantity) || quantity<1 || quantity>50) throw new ApiError(400,'invalid_quantity','Проверьте количество доп. услуг.');
+      return {...addon,quantity};
+    }).filter(addon=>!prepaidIds.has(addon.id));
+    const addonAmount = addons.reduce((sum: number, row) => sum + Number(row.price)*row.quantity, 0);
     const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes ?? 0),0);
     const end = addMinutes(String(req.body.startTime), duration);
     const initialStatus = addonAmount > 0 ? 'pending_payment' : 'pending_assignment';
@@ -1372,8 +1385,8 @@ export function buildV1Router(deps: {
       )).rows);
       for (const addon of addons) {
         await tx.query(
-          `INSERT INTO order_addons (order_id, addon_id, price, duration_minutes, payment_status) VALUES ($1,$2,$3,$4,'pending')`,
-          [created!.id, addon.id, addon.price, addon.duration_minutes ?? 0],
+          `INSERT INTO order_addons (order_id, addon_id, quantity, price, duration_minutes, payment_status) VALUES ($1,$2,$3,$4,$5,'pending')`,
+          [created!.id, addon.id, addon.quantity, addon.price, Number(addon.duration_minutes ?? 0)*addon.quantity],
         );
       }
       for (const addon of prepaid) {
@@ -1396,6 +1409,7 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/orders/:id/pay', auth(['customer']), asyncHandler(async (req, res) => {
+    if (req.body.provider === 'bcc' && !bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
     await deps.db.transaction(async tx => {
       await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`order-payment:${req.params.id}`]);
     const order = first<{
@@ -1557,7 +1571,7 @@ export function buildV1Router(deps: {
 
   router.get('/orders', auth(), asyncHandler(async (req, res) => {
     const where = req.user!.role === 'cleaner' ? 'o.cleaner_id=$1' : 'o.customer_id=$1';
-    ok(res, (await deps.db.query(
+    const orders = (await deps.db.query(
       `SELECT o.*, (SELECT status FROM payments WHERE order_id=o.id ORDER BY created_at DESC LIMIT 1) AS latest_payment_status, p.name_ru AS package_name_ru, p.name_kk AS package_name_kk,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.area,
               cu.full_name AS customer_name, cu.phone AS customer_phone,
@@ -1573,7 +1587,21 @@ export function buildV1Router(deps: {
        WHERE ${where}
        ORDER BY o.created_at DESC`,
       [req.user!.id],
-    )).rows);
+    )).rows;
+    if (req.user!.role === 'customer') {
+      const purchases = (await deps.db.query(`SELECT pay.id, pay.customer_id, pay.customer_package_id,
+        pay.status AS latest_payment_status, CASE WHEN pay.status='paid' THEN 'pending_assignment' ELSE 'pending_payment' END AS status,
+        pay.amount AS total_amount, pay.amount AS payable_amount, pay.created_at, pay.updated_at,
+        pkg.name_ru AS package_name_ru, ca.city, ca.street, ca.house, ca.apartment, ca.area,
+        'package_purchase' AS view_kind
+        FROM customer_packages cp JOIN catalog_packages pkg ON pkg.id=cp.package_id
+        JOIN LATERAL(SELECT * FROM payments WHERE customer_package_id=cp.id ORDER BY created_at DESC LIMIT 1) pay ON TRUE
+        LEFT JOIN customer_addresses ca ON ca.id=cp.address_id
+        WHERE cp.customer_id=$1 AND NOT EXISTS(SELECT 1 FROM service_orders WHERE customer_package_id=cp.id AND status<>'cancelled')
+        AND pay.status NOT IN ('cancelled','refunded') ORDER BY pay.created_at DESC`,[req.user!.id])).rows;
+      orders.push(...purchases);
+    }
+    ok(res, orders);
   }));
 
   router.get('/orders/:id/details', auth(), asyncHandler(async (req, res) => {
@@ -1961,6 +1989,7 @@ export function buildV1Router(deps: {
     )).rows);
     const amount = Number(addonTotal?.amount ?? 0);
     if (!Number.isFinite(amount) || amount <= 0) throw new ApiError(400, 'invalid_amount', 'Нет доп. услуг к оплате.');
+    if (req.body.paymentMethod === 'online' && !bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
     const payment = await deps.payments.createPayment({
       customerId: order.customer_id,
       orderId: order.id,
@@ -2122,7 +2151,8 @@ export function buildV1Router(deps: {
     const payout = first((await deps.db.query(
       `SELECT p.*, u.numeric_id AS cleaner_number, u.full_name AS cleaner_name, u.phone AS cleaner_phone,
               u.email AS cleaner_email, u.rating AS cleaner_rating, cp.city, cp.registration_status,
-              cp.verification_status, cp.monthly_area_limit, cp.daily_work_limit_minutes, cp.verified_at
+              cp.verification_status, cp.monthly_area_limit, cp.daily_work_limit_minutes, cp.verified_at,
+              cp.home_address, cp.emergency_contact_phone, cp.emergency_contact_relation
        FROM payouts p
        JOIN app_users u ON u.id=p.cleaner_id
        LEFT JOIN cleaner_profiles cp ON cp.user_id=u.id
@@ -2252,6 +2282,7 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/payments/:id/bcc-session', auth(['customer']), asyncHandler(async (req, res) => {
+    if (!bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
     const payment = first((await deps.db.query(
       `SELECT * FROM payments WHERE id=$1 AND customer_id=$2`,
       [req.params.id, req.user!.id],
@@ -2533,7 +2564,8 @@ export function buildV1Router(deps: {
   router.get('/admin/cleaners/:id/details', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const cleaner = first((await deps.db.query(
       `SELECT u.*, cp.city, cp.registration_status, cp.verification_status, cp.work_start_date,
-              cp.monthly_area_limit, cp.daily_work_limit_minutes, cp.verified_at
+              cp.monthly_area_limit, cp.daily_work_limit_minutes, cp.verified_at,
+              cp.home_address, cp.emergency_contact_phone, cp.emergency_contact_relation
        FROM app_users u
        LEFT JOIN cleaner_profiles cp ON cp.user_id=u.id
        WHERE u.id=$1 AND u.role='cleaner'`,
@@ -2831,35 +2863,54 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/quality-checks', auth(['customer']), upload.single('document'), asyncHandler(async (req, res) => {
-    if (!req.body.area || !req.file) throw new ApiError(400, 'invalid_request', 'Укажите площадь и загрузите документ.');
-    const ext = extensionFromMime(req.file.mimetype);
-    const objectKey = `quality_checks/${req.user!.id}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${ext}`;
-    const publicUrl = await deps.storage.uploadBuffer(objectKey, req.file.buffer, req.file.mimetype);
-    const file = first((await deps.db.query(
-      `INSERT INTO files (owner_id, bucket, object_key, mime_type, size_bytes, public_url)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [req.user!.id, env.minioBucket, objectKey, req.file.mimetype, req.file.size, publicUrl],
-    )).rows);
-    const row = first((await deps.db.query(
-      `INSERT INTO quality_check_requests (customer_id, address_id, requested_area, status, document_file_id)
-       VALUES ($1,$2,$3,'pending',$4) RETURNING *`,
-      [req.user!.id, req.body.addressId ?? null, req.body.area, (file as any).id],
-    )).rows);
-    await deps.notifications.createAdminEvent({
+    const area = Number(req.body.area);
+    if (!Number.isFinite(area) || area <= 0 || !req.file) throw new ApiError(400, 'invalid_request', 'Укажите площадь и загрузите документ.');
+    const result = await deps.db.transaction(async tx => {
+      await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+        [`quality-check:${req.user!.id}:${req.body.addressId ?? ''}`]);
+      if (req.body.addressId) {
+        const address = first((await tx.query('SELECT id FROM customer_addresses WHERE id=$1 AND user_id=$2 FOR UPDATE',
+          [req.body.addressId,req.user!.id])).rows);
+        if (!address) throw new ApiError(404,'not_found','Адрес не найден.');
+      }
+      const existing = first<any>((await tx.query(
+        `SELECT * FROM quality_check_requests WHERE customer_id=$1 AND address_id IS NOT DISTINCT FROM $2::uuid
+         AND status IN ('pending','scheduled') ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+        [req.user!.id,req.body.addressId ?? null],
+      )).rows);
+      if (existing?.document_file_id) return {row:existing,file:null,notify:false};
+      const ext = extensionFromMime(req.file!.mimetype);
+      const objectKey = `quality_checks/${req.user!.id}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${ext}`;
+      const publicUrl = await deps.storage.uploadBuffer(objectKey,req.file!.buffer,req.file!.mimetype);
+      const file = first<any>((await tx.query(
+        `INSERT INTO files (owner_id,bucket,object_key,mime_type,size_bytes,public_url)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [req.user!.id,env.minioBucket,objectKey,req.file!.mimetype,req.file!.size,publicUrl],
+      )).rows);
+      const row = existing
+        ? first((await tx.query(`UPDATE quality_check_requests SET requested_area=$2,document_file_id=$3,updated_at=NOW() WHERE id=$1 RETURNING *`,
+          [existing.id,area,file.id])).rows)
+        : first((await tx.query(`INSERT INTO quality_check_requests (customer_id,address_id,requested_area,status,document_file_id)
+          VALUES ($1,$2,$3,'pending',$4) RETURNING *`,[req.user!.id,req.body.addressId ?? null,area,file.id])).rows);
+      return {row,file,notify:true};
+    });
+    if (result.notify) await deps.notifications.createAdminEvent({
       event: 'quality_check',
       titleRu: 'Проверка площади',
       bodyRu: 'Клиент отправил документы на проверку площади.',
       targetType: 'quality_check',
-      targetId: (row as { id: string }).id,
-      dedupeKey: `quality-check-${(row as { id: string }).id}`,
+      targetId: (result.row as { id: string }).id,
+      dedupeKey: `quality-check-${(result.row as { id: string }).id}`,
     });
-    ok(res, { request: row, file }, 201);
+    ok(res, { request: result.row, file: result.file }, 201);
   }));
 
   router.post('/quality-checks/from-file', auth(['customer']), asyncHandler(async (req, res) => {
     const area = Number(req.body.area ?? req.body.actualArea ?? req.body.requestedArea ?? 0);
     if (!Number.isFinite(area) || area <= 0) throw new ApiError(400, 'invalid_area', 'Укажите площадь.');
-    const row = await deps.db.transaction(async (tx) => {
+    const result = await deps.db.transaction(async (tx) => {
+      await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+        [`quality-check:${req.user!.id}:${req.body.addressId ?? ''}`]);
       if (req.body.addressId) {
         const address = first((await tx.query(
           'SELECT id FROM customer_addresses WHERE id=$1 AND user_id=$2 FOR UPDATE',
@@ -2867,6 +2918,12 @@ export function buildV1Router(deps: {
         )).rows);
         if (!address) throw new ApiError(404, 'not_found', 'Адрес не найден.');
       }
+      const existing = first<any>((await tx.query(
+        `SELECT * FROM quality_check_requests WHERE customer_id=$1 AND address_id IS NOT DISTINCT FROM $2::uuid
+         AND status IN ('pending','scheduled') ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+        [req.user!.id, req.body.addressId ?? null],
+      )).rows);
+      if (existing?.document_file_id) return {row: existing, notify: false};
       let fileId: string | null = null;
       if (req.body.fileId || req.body.fileUrl) {
         const file = first((await tx.query(
@@ -2878,14 +2935,19 @@ export function buildV1Router(deps: {
         if (!file) throw new ApiError(404, 'file_not_found', 'Загрузите фото повторно.');
         fileId = file.id;
       }
-      return first((await tx.query(
-        `INSERT INTO quality_check_requests
-         (customer_id, address_id, requested_area, status, document_file_id)
-         VALUES ($1,$2,$3,'pending',$4) RETURNING *`,
-        [req.user!.id, req.body.addressId ?? null, area, fileId],
-      )).rows);
+      const row = existing
+        ? first((await tx.query(
+          `UPDATE quality_check_requests SET requested_area=$2, document_file_id=COALESCE($3,document_file_id), updated_at=NOW()
+           WHERE id=$1 RETURNING *`, [existing.id,area,fileId])).rows)
+        : first((await tx.query(
+          `INSERT INTO quality_check_requests
+           (customer_id, address_id, requested_area, status, document_file_id)
+           VALUES ($1,$2,$3,'pending',$4) RETURNING *`,
+          [req.user!.id, req.body.addressId ?? null, area, fileId])).rows);
+      return {row, notify: Boolean(fileId) || !existing};
     });
-    await deps.notifications.createAdminEvent({
+    const row = result.row;
+    if (result.notify) await deps.notifications.createAdminEvent({
       event: 'quality_check',
       titleRu: 'Проверка площади',
       bodyRu: 'Клиент отправил документы на проверку площади.',
@@ -2944,14 +3006,17 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/admin/quality-checks/:id/approve', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
-    const row = await deps.db.transaction(async client=>{
+    const approval = await deps.db.transaction(async client=>{
       const current=first<any>((await client.query('SELECT * FROM quality_check_requests WHERE id=$1 FOR UPDATE',[req.params.id])).rows);
       if (!current) throw new ApiError(404,'not_found','Заявка проверки площади не найдена.');
       const area=Number(req.body.approvedArea??current.approved_area??current.requested_area);
+      if (current.status === 'approved' && Number(current.approved_area) === area) return {row:current, changed:false};
       await confirmArea(client,current.customer_id,current.address_id,area);
-      return first<any>((await client.query(`UPDATE quality_check_requests SET status='approved',approved_area=$2,admin_id=$3,recalculation_amount=COALESCE($4,0),updated_at=NOW() WHERE id=$1 RETURNING *`,[req.params.id,area,req.user!.id,req.body.recalculationAmount??0])).rows)!;
+      const row=first<any>((await client.query(`UPDATE quality_check_requests SET status='approved',approved_area=$2,admin_id=$3,recalculation_amount=COALESCE($4,0),updated_at=NOW() WHERE id=$1 RETURNING *`,[req.params.id,area,req.user!.id,req.body.recalculationAmount??0])).rows)!;
+      return {row, changed:true};
     });
-    await deps.notifications.create({
+    const row=approval.row;
+    if (approval.changed) await deps.notifications.create({
       userId: row.customer_id,
       titleRu: Number(req.body.recalculationAmount ?? 0) > 0 ? 'Перерасчёт площади' : 'Площадь подтверждена',
       bodyRu: Number(req.body.recalculationAmount ?? 0) > 0
@@ -4318,6 +4383,7 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
     return {
       sql: `SELECT u.id, u.numeric_id, u.full_name, u.phone, u.email, u.status, u.rating, u.created_at,
                    cp.city, cp.registration_status, cp.verification_status, cp.verified_at,cp.work_start_date,
+                   cp.home_address, cp.emergency_contact_phone, cp.emergency_contact_relation,
                    (SELECT COALESCE(jsonb_agg(jsonb_build_object('id',d.id,'type',d.type,'url',f.public_url,'status',d.status) ORDER BY d.created_at DESC),'[]'::jsonb)
                     FROM cleaner_documents d LEFT JOIN files f ON f.id=d.file_id WHERE d.cleaner_id=u.id) AS documents,
                    COUNT(DISTINCT o.id)::int AS orders_count
@@ -4688,9 +4754,10 @@ async function ensurePackageQualityCheck(db: Database, notifications: Notificati
   if (!row || row.verified_area) return null;
   const existing = first((await db.query(
     `SELECT * FROM quality_check_requests
-     WHERE customer_package_id=$1 AND status IN ('pending','scheduled')
+     WHERE customer_id=$1 AND address_id IS NOT DISTINCT FROM $2::uuid
+       AND status IN ('pending','scheduled')
      ORDER BY created_at DESC LIMIT 1`,
-    [customerPackageId],
+    [row.customer_id, row.address_id],
   )).rows);
   const qualityCheck = existing ?? first((await db.query(
     `INSERT INTO quality_check_requests (customer_id, address_id, customer_package_id, requested_area, status)
@@ -4699,6 +4766,7 @@ async function ensurePackageQualityCheck(db: Database, notifications: Notificati
     [row.customer_id, row.address_id, customerPackageId, row.area],
   )).rows);
   if (!qualityCheck) return null;
+  if (existing) return qualityCheck;
   await notifications.create({
     userId: row.customer_id,
     titleRu: settings.qualityCheckNotificationTitleRu ?? 'Назначена проверка площади',
@@ -4966,4 +5034,8 @@ function parseBackupStamp(value: string) {
   }
   const [, year, month, day, hour, minute, second] = match;
   return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)));
+}
+
+function bccReady(): boolean {
+  return Boolean(env.bccMerchantId && env.bccTerminalId && env.bccPrivateKey && env.bccPublicKey && env.bccNotifyUrl && env.bccReturnUrl);
 }

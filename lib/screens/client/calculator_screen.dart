@@ -495,7 +495,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
           : 'Стоимость по выбранному пакету';
     }
     final parts = <String>[
-      '${_formatMoney(perCleaningPrice)} за 1 уборку',
+      '${_formatMoney(cleaningCount > 0 ? (_displayQuoteTotal / cleaningCount).round() : perCleaningPrice)} за 1 уборку',
       '$cleaningCount ${_cleaningsWord(cleaningCount)}',
     ];
     if (addonTotal > 0) {
@@ -705,6 +705,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                     groups: _addonGroups,
                     total: quoteTotal > 0 ? quoteTotal : addonTotalPrice,
                     caption: _displayQuoteCaption,
+                    discount: (_quote['discountAmount'] as num?)?.toInt() ?? 0,
                     details: _displayQuoteDetails,
                     loading: _loadingQuote,
                     buildGroup: _buildFigmaAddonGroup,
@@ -2080,6 +2081,7 @@ class _FigmaAddonCard extends StatelessWidget {
     required this.groups,
     required this.total,
     required this.caption,
+    this.discount = 0,
     required this.details,
     required this.loading,
     required this.buildGroup,
@@ -2087,6 +2089,7 @@ class _FigmaAddonCard extends StatelessWidget {
 
   final List<_AddonGroupDef> groups;
   final int total;
+  final int discount;
   final String caption;
   final String? details;
   final bool loading;
@@ -2116,6 +2119,19 @@ class _FigmaAddonCard extends StatelessWidget {
           const SizedBox(height: 24),
           ...groups.map(buildGroup),
           const SizedBox(height: 4),
+          if (discount > 0 && !loading) ...[
+            Center(
+                child: Text('${total + discount} ₸',
+                    style: const TextStyle(
+                        decoration: TextDecoration.lineThrough,
+                        color: Colors.grey,
+                        fontSize: 18))),
+            Center(
+                child: Text('Выгода $discount ₸',
+                    style: const TextStyle(
+                        color: Color(0xFF328965),
+                        fontWeight: FontWeight.w700))),
+          ],
           Center(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
@@ -2162,9 +2178,9 @@ class _FigmaAddonCard extends StatelessWidget {
               details!,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Color(0xFF94AA9D),
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
+                color: Color(0xFF328965),
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
                 height: 15 / 11,
               ),
             ),

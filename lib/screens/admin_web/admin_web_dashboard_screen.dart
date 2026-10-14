@@ -1,3 +1,4 @@
+import '../../utils/payment_filter.dart';
 import '../../utils/payment_approval_data.dart';
 import 'dart:math' as math;
 
@@ -2705,6 +2706,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
   }
 
+  String _paymentTab = 'all';
+
   Widget _payments() {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _data.adminPaymentsStream(),
@@ -2723,82 +2726,105 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               .toLowerCase()
               .contains(query);
         });
-        final docs = _sortRecordsByDate(filteredPayments);
+        final allPayments = _sortRecordsByDate(filteredPayments);
+        final docs = allPayments
+            .where((row) =>
+                paymentMatchesTab(row['status'].toString(), _paymentTab))
+            .toList();
         final invoiceRequests =
             docs.where(_isAdminPaymentActionRequired).toList();
         final otherPayments =
             docs.where((doc) => !_isAdminPaymentActionRequired(doc)).toList();
-        return _sectionScaffold(
-          child: docs.isEmpty
-              ? _emptyState(
-                  'Платежи не найдены',
-                  'Проверьте строку поиска или период в данных.',
-                )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _metricTile(
-                              'Заявки на оплату',
-                              '${invoiceRequests.length}',
-                              Icons.payments_outlined,
+        return Column(children: [
+          Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final tab in const {
+                  'all': 'Все',
+                  'waiting': 'Ожидает оплату',
+                  'paid': 'Оплаченные',
+                  'cancelled': 'Отменённые',
+                  'errors': 'Ошибки'
+                }.entries)
+                  ChoiceChip(
+                      label: Text(
+                          '${tab.value} (${allPayments.where((row) => paymentMatchesTab(row['status'].toString(), tab.key)).length})'),
+                      selected: _paymentTab == tab.key,
+                      onSelected: (_) => setState(() => _paymentTab = tab.key)),
+              ])),
+          Expanded(
+              child: _sectionScaffold(
+            child: docs.isEmpty
+                ? _emptyState(
+                    'Платежи не найдены',
+                    'Проверьте строку поиска или период в данных.',
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _metricTile(
+                                'Заявки на оплату',
+                                '${invoiceRequests.length}',
+                                Icons.payments_outlined,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _metricTile(
-                              'Всего платежей',
-                              '${docs.length}',
-                              Icons.receipt_long_outlined,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _metricTile(
+                                'Всего платежей',
+                                '${docs.length}',
+                                Icons.receipt_long_outlined,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'Заявки на подтверждение'.tr(),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF111827),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Заявки на подтверждение'.tr(),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (invoiceRequests.isEmpty)
-                      _emptyInlineCard(
-                        'Сейчас нет заявок на подтверждение оплаты.',
-                      )
-                    else
-                      ...invoiceRequests.map(_paymentRequestCard),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Остальные платежи'.tr(),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF111827),
+                      const SizedBox(height: 12),
+                      if (invoiceRequests.isEmpty)
+                        _emptyInlineCard(
+                          'Сейчас нет заявок на подтверждение оплаты.',
+                        )
+                      else
+                        ...invoiceRequests.map(_paymentRequestCard),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Остальные платежи'.tr(),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (otherPayments.isEmpty)
-                      _emptyInlineCard(
-                        'Других платежей по текущему фильтру нет.',
-                      )
-                    else
-                      ...otherPayments.map(_paymentHistoryCard),
-                  ],
-                ),
-        );
+                      const SizedBox(height: 12),
+                      if (otherPayments.isEmpty)
+                        _emptyInlineCard(
+                          'Других платежей по текущему фильтру нет.',
+                        )
+                      else
+                        ...otherPayments.map(_paymentHistoryCard),
+                    ],
+                  ),
+          )),
+        ]);
       },
     );
   }
@@ -3490,8 +3516,12 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               _adminInfoChip('KASPI.KZ', (d['kaspiPhone'] ?? '—').toString()),
               _adminInfoChip('Сумма', priceLabel),
               _adminInfoChip('Подтверждение', paymentApprovalLabel(d)),
-              if (d['approvedAt'] != null) _adminInfoChip('Подтверждено', _formatAdminDateTime(d['approvedAt'])),
-              if (d['approvedBy'] != null) _adminInfoChip('Администратор', (d['approvedByName'] ?? d['approvedBy']).toString()),
+              if (d['approvedAt'] != null)
+                _adminInfoChip(
+                    'Подтверждено', _formatAdminDateTime(d['approvedAt'])),
+              if (d['approvedBy'] != null)
+                _adminInfoChip('Администратор',
+                    (d['approvedByName'] ?? d['approvedBy']).toString()),
               _adminInfoChip('Квадратура', areaStatusLabel),
               if (isAreaRecalculation) ...[
                 _adminInfoChip(
@@ -3632,8 +3662,12 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               _adminInfoChip('KASPI.KZ', (d['kaspiPhone'] ?? '—').toString()),
               _adminInfoChip('Сумма', priceLabel),
               _adminInfoChip('Подтверждение', paymentApprovalLabel(d)),
-              if (d['approvedAt'] != null) _adminInfoChip('Подтверждено', _formatAdminDateTime(d['approvedAt'])),
-              if (d['approvedBy'] != null) _adminInfoChip('Администратор', (d['approvedByName'] ?? d['approvedBy']).toString()),
+              if (d['approvedAt'] != null)
+                _adminInfoChip(
+                    'Подтверждено', _formatAdminDateTime(d['approvedAt'])),
+              if (d['approvedBy'] != null)
+                _adminInfoChip('Администратор',
+                    (d['approvedByName'] ?? d['approvedBy']).toString()),
               _adminInfoChip('Квадратура', areaStatusLabel),
               _adminInfoChip(
                 'Пакет',
@@ -6846,6 +6880,20 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                   _adminInfoChip('Cleaner ID', cleanerId),
                                   _adminInfoChip('Телефон', cleanerPhone),
                                   _adminInfoChip('Кластер', cleanerCluster),
+                                  _adminInfoChip(
+                                      'Адрес',
+                                      (cleaner['homeAddress'] ?? 'Не заполнен')
+                                          .toString()),
+                                  _adminInfoChip(
+                                      'Второй телефон',
+                                      (cleaner['emergencyContactPhone'] ??
+                                              'Не заполнен')
+                                          .toString()),
+                                  _adminInfoChip(
+                                      'Кем приходится',
+                                      (cleaner['emergencyContactRelation'] ??
+                                              'Не заполнено')
+                                          .toString()),
                                 ],
                               ),
                               if (documentUrls.isNotEmpty) ...[
@@ -7596,19 +7644,32 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     try {
       final cities = await _data.adminCities();
       if (!mounted) return;
-      await showDialog<void>(context: context, builder: (context) => AlertDialog(
-        title: Text('Города Казахстана: ${cities.length}'),
-        content: SizedBox(width: 480, height: 500, child: ListView.builder(
-          itemCount: cities.length,
-          itemBuilder: (_, index) => ListTile(
-            title: Text((cities[index]['name_ru'] ?? '').toString()),
-            subtitle: Text('${cities[index]['name_kk'] ?? ''} · ${cities[index]['region'] ?? ''}'),
-          ),
-        )),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Закрыть'))],
-      ));
+      await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: Text('Города Казахстана: ${cities.length}'),
+                content: SizedBox(
+                    width: 480,
+                    height: 500,
+                    child: ListView.builder(
+                      itemCount: cities.length,
+                      itemBuilder: (_, index) => ListTile(
+                        title:
+                            Text((cities[index]['name_ru'] ?? '').toString()),
+                        subtitle: Text(
+                            '${cities[index]['name_kk'] ?? ''} · ${cities[index]['region'] ?? ''}'),
+                      ),
+                    )),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Закрыть'))
+                ],
+              ));
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось загрузить города. Попробуйте ещё раз.')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Не удалось загрузить города. Попробуйте ещё раз.')));
     }
   }
 
@@ -8846,7 +8907,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                         ),
                         TextButton(
                           onPressed: () async {
-                            await _data.deleteAdminPromoBanner(banner['id'].toString());
+                            await _data.deleteAdminPromoBanner(
+                                banner['id'].toString());
                           },
                           child: Text('Удалить'.tr()),
                         ),
@@ -10504,46 +10566,28 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     BuildContext context,
     Map<String, dynamic> report,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
     final reportId = (report['id'] ?? '').toString();
-    final userId = (report['userId'] ?? report['customerId'] ?? '').toString();
-    final actualArea =
-        ((report['actualArea'] ?? report['area']) as num?)?.toInt() ??
-            int.tryParse(
-              (report['actualArea'] ?? report['area'] ?? '').toString(),
-            ) ??
-            0;
-    if (reportId.isEmpty || userId.isEmpty || actualArea <= 0) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Укажите корректную площадь.'.tr())),
-      );
+    final area = num.tryParse((report['actualArea'] ?? report['area'] ?? '')
+                .toString()
+                .replaceAll(',', '.'))
+            ?.ceil() ??
+        0;
+    if (reportId.isEmpty || area <= 0) {
+      showDomlySnackBar(context,
+          title: 'Укажите корректную площадь.', type: DomlySnackBarType.error);
       return;
     }
     try {
-      await _data.confirmApartmentAreaByQualityControl(
-        userId: userId,
-        actualArea: actualArea,
-      );
-      final amountDue = await _applyAreaRecalculationForReport(
-        report,
-        actualArea,
-      );
-      await _data.resolveAreaMismatchReport(reportId);
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            amountDue > 0
-                ? 'Площадь подтверждена. Создана доплата: $amountDue ₸.'
-                : 'Площадь подтверждена.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Не удалось закрыть кейс: $e'.tr())),
-      );
+      await _data.approveAreaMismatchReport(
+          reportId: reportId, actualArea: area);
+      if (!context.mounted) return;
+      showDomlySnackBar(context, title: 'Площадь подтверждена.');
+    } catch (error) {
+      if (!context.mounted) return;
+      showDomlySnackBar(context,
+          title: 'Не удалось подтвердить площадь',
+          subtitle: '$error',
+          type: DomlySnackBarType.error);
     }
   }
 
@@ -10604,75 +10648,27 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     if (confirmed != true) {
       return;
     }
-    final actualArea = int.tryParse(areaController.text.trim()) ?? 0;
-    if (reportId.isEmpty || userId.isEmpty || actualArea <= 0) {
+    final actualArea =
+        num.tryParse(areaController.text.trim().replaceAll(',', '.'))?.ceil() ??
+            0;
+    if (reportId.isEmpty || actualArea <= 0) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Укажите корректную площадь.'.tr())),
-      );
+          SnackBar(content: Text('Укажите корректную площадь.'.tr())));
       return;
     }
     try {
-      await _data.confirmApartmentAreaByQualityControl(
-        userId: userId,
-        actualArea: actualArea,
-      );
-      await _data.updateAreaMismatchReport(reportId, {
-        'actualArea': actualArea,
-        'difference':
-            actualArea - ((report['initialArea'] as num?)?.toInt() ?? 0),
-        'reviewStatus': 'verified',
-        'confirmedByQualityControl': true,
-      });
-      final orderId =
-          (report['orderId'] ?? order?['orderId'] ?? order?['id'] ?? '')
-              .toString();
-      if (orderId.isNotEmpty && order != null && order.isNotEmpty) {
-        final recalculation = _qualityControlOrderRecalculation(
-          order,
-          actualArea,
-        );
-        await _data.updateCustomerOrder(orderId, recalculation);
-        final amountDue =
-            (recalculation['areaAdjustmentAmount'] as num?)?.toInt() ?? 0;
-        if (amountDue > 0) {
-          await _data.createAreaRecalculationPayment(
-            orderId: orderId,
-            order: order,
-            previousArea: (recalculation['previousArea'] as num?)?.toInt() ?? 0,
-            actualArea: actualArea,
-            previousPaidAmount:
-                (recalculation['previousPaidAmount'] as num?)?.toInt() ?? 0,
-            recalculatedAmount:
-                (recalculation['areaRecalculatedPrice'] as num?)?.toInt() ?? 0,
-            amountDue: amountDue,
-            reportId: reportId,
-          );
-        }
-      }
-      await _data.resolveAreaMismatchReport(reportId);
+      await _data.approveAreaMismatchReport(
+          reportId: reportId, actualArea: actualArea);
       if (!mounted) return;
-      final amountDue = order == null
-          ? 0
-          : (_qualityControlOrderRecalculation(
-              order,
-              actualArea,
-            )['areaAdjustmentAmount'] as num?)
-              ?.toInt();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            amountDue != null && amountDue > 0
-                ? 'Площадь подтверждена. Создана доплата: $amountDue ₸.'
-                : 'Площадь подтверждена.',
-          ),
-        ),
-      );
-    } catch (e) {
+      messenger
+          .showSnackBar(SnackBar(content: Text('Площадь подтверждена.'.tr())));
+    } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Не удалось подтвердить площадь: $e'.tr())),
-      );
+      messenger.showSnackBar(SnackBar(
+          content: Text('Не удалось подтвердить площадь: $error'.tr())));
+    } finally {
+      areaController.dispose();
     }
   }
 
@@ -10759,6 +10755,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final cleanerEmail = (cleaner['email'] ?? '—').toString();
     final cleanerAddress =
         (cleaner['homeAddress'] ?? cleaner['address'] ?? '—').toString();
+    final secondPhone = (cleaner['emergencyContactPhone'] ?? '—').toString();
+    final secondRelation =
+        (cleaner['emergencyContactRelation'] ?? '—').toString();
     final cleanerRegisteredAt = _firstAdminDateTime(cleaner, const [
       'registeredAt',
       'createdAt',
@@ -10858,6 +10857,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                   'Кластер': cleanerCluster,
                                   'Статус в системе': cleanerStatus,
                                   'Адрес': cleanerAddress,
+                                  'Второй телефон': secondPhone,
+                                  'Кем приходится': secondRelation,
                                   'Дата регистрации': cleanerRegisteredAt,
                                 },
                               ),
@@ -12092,189 +12093,212 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-        title: Text(index == null ? 'Новый баннер' : 'Редактировать баннер'),
-        content: StatefulBuilder(
-          builder: (context, setModalState) => SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Заголовок'),
-                ),
-                TextField(
-                  controller: subtitleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Краткое описание на баннере',
+          title: Text(index == null ? 'Новый баннер' : 'Редактировать баннер'),
+          content: StatefulBuilder(
+            builder: (context, setModalState) => SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'Заголовок'),
                   ),
-                ),
-                TextField(
-                  controller: fullInfoController,
-                  maxLines: 5,
-                  decoration: const InputDecoration(
-                    labelText: 'Описание в модальном окне',
-                    hintText: 'Что входит, условия, подробности акции',
+                  TextField(
+                    controller: subtitleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Краткое описание на баннере',
+                    ),
                   ),
-                ),
-                TextField(
-                  controller: imageController,
-                  decoration: const InputDecoration(
-                    labelText: 'Ссылка на картинку',
+                  TextField(
+                    controller: fullInfoController,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      labelText: 'Описание в модальном окне',
+                      hintText: 'Что входит, условия, подробности акции',
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          if (uploading || saving) return;
-                          setDialogState(() => uploading = true);
-                          try {
-                            final url = await _photoUploadService.pickAndUpload(folder: 'promo_banners', filePrefix: 'banner');
-                            if (url != null && context.mounted) setModalState(() => imageController.text = url);
-                          } catch (error) {
-                            if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text(UserErrorMessage.message(error))));
-                          } finally {
-                            if (dialogContext.mounted) setDialogState(() => uploading = false);
-                          }
-                        },
-                        icon: const Icon(Icons.upload_outlined),
-                        label: Text('Загрузить фото'.tr()),
+                  TextField(
+                    controller: imageController,
+                    decoration: const InputDecoration(
+                      labelText: 'Ссылка на картинку',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            if (uploading || saving) return;
+                            setDialogState(() => uploading = true);
+                            try {
+                              final url =
+                                  await _photoUploadService.pickAndUpload(
+                                      folder: 'promo_banners',
+                                      filePrefix: 'banner');
+                              if (url != null && context.mounted)
+                                setModalState(() => imageController.text = url);
+                            } catch (error) {
+                              if (dialogContext.mounted)
+                                ScaffoldMessenger.of(dialogContext)
+                                    .showSnackBar(SnackBar(
+                                        content: Text(
+                                            UserErrorMessage.message(error))));
+                            } finally {
+                              if (dialogContext.mounted)
+                                setDialogState(() => uploading = false);
+                            }
+                          },
+                          icon: const Icon(Icons.upload_outlined),
+                          label: Text('Загрузить фото'.tr()),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (imageController.text.trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        imageController.text.trim(),
+                        height: 140,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ],
-                ),
-                if (imageController.text.trim().isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      imageController.text.trim(),
-                      height: 140,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
+                  TextField(
+                    controller: ctaLabelController,
+                    decoration:
+                        const InputDecoration(labelText: 'Текст кнопки'),
                   ),
-                ],
-                TextField(
-                  controller: ctaLabelController,
-                  decoration: const InputDecoration(labelText: 'Текст кнопки'),
-                ),
-                SizedBox(height: 12),
-                SegmentedButton<String>(
-                  segments: [
-                    ButtonSegment<String>(
-                      value: 'route',
-                      label: Text('Страница'.tr()),
-                      icon: Icon(Icons.apps_outlined),
-                    ),
-                    ButtonSegment<String>(
-                      value: 'external',
-                      label: Text('Ссылка'.tr()),
-                      icon: Icon(Icons.open_in_new),
-                    ),
-                  ],
-                  selected: {targetMode},
-                  onSelectionChanged: (value) {
-                    setModalState(() => targetMode = value.first);
-                  },
-                ),
-                if (targetMode == 'route') ...[
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedRoute,
-                    decoration: const InputDecoration(
-                      labelText: 'Страница приложения',
-                    ),
-                    items: targetOptions
-                        .map(
-                          (item) => DropdownMenuItem<String>(
-                            value: item['route'] ?? '',
-                            child: Text(item['label'] ?? ''),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      setModalState(() => selectedRoute = value ?? '');
+                  SizedBox(height: 12),
+                  SegmentedButton<String>(
+                    segments: [
+                      ButtonSegment<String>(
+                        value: 'route',
+                        label: Text('Страница'.tr()),
+                        icon: Icon(Icons.apps_outlined),
+                      ),
+                      ButtonSegment<String>(
+                        value: 'external',
+                        label: Text('Ссылка'.tr()),
+                        icon: Icon(Icons.open_in_new),
+                      ),
+                    ],
+                    selected: {targetMode},
+                    onSelectionChanged: (value) {
+                      setModalState(() => targetMode = value.first);
                     },
                   ),
-                ] else ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: externalUrlController,
-                    keyboardType: TextInputType.url,
-                    decoration: const InputDecoration(
-                      labelText: 'Ссылка на сторонний сайт',
-                      hintText: 'https://example.com',
+                  if (targetMode == 'route') ...[
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedRoute,
+                      decoration: const InputDecoration(
+                        labelText: 'Страница приложения',
+                      ),
+                      items: targetOptions
+                          .map(
+                            (item) => DropdownMenuItem<String>(
+                              value: item['route'] ?? '',
+                              child: Text(item['label'] ?? ''),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setModalState(() => selectedRoute = value ?? '');
+                      },
                     ),
+                  ] else ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: externalUrlController,
+                      keyboardType: TextInputType.url,
+                      decoration: const InputDecoration(
+                        labelText: 'Ссылка на сторонний сайт',
+                        hintText: 'https://example.com',
+                      ),
+                    ),
+                  ],
+                  TextField(
+                    controller: sortOrderController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Порядок'),
+                  ),
+                  SwitchListTile(
+                    value: isActive,
+                    onChanged: (value) => setModalState(() => isActive = value),
+                    title: Text('Активен'.tr()),
                   ),
                 ],
-                TextField(
-                  controller: sortOrderController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Порядок'),
-                ),
-                SwitchListTile(
-                  value: isActive,
-                  onChanged: (value) => setModalState(() => isActive = value),
-                  title: Text('Активен'.tr()),
-                ),
-              ],
+              ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: saving || uploading
+                  ? null
+                  : () => Navigator.pop(dialogContext),
+              child: Text('Отмена'.tr()),
+            ),
+            ElevatedButton(
+              onPressed: saving || uploading
+                  ? null
+                  : () async {
+                      if (titleController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                            const SnackBar(
+                                content: Text('Укажите заголовок баннера.')));
+                        return;
+                      }
+                      setDialogState(() => saving = true);
+                      final navigator = Navigator.of(dialogContext);
+                      final rawExternalUrl = externalUrlController.text.trim();
+                      final externalUrl = rawExternalUrl.isEmpty ||
+                              rawExternalUrl.startsWith('http://') ||
+                              rawExternalUrl.startsWith('https://')
+                          ? rawExternalUrl
+                          : 'https://$rawExternalUrl';
+                      final banner = <String, dynamic>{
+                        ...?(existing),
+                        'id': (existing?['id'] ??
+                                'banner_${DateTime.now().millisecondsSinceEpoch}')
+                            .toString(),
+                        'title': titleController.text.trim(),
+                        'subtitle': subtitleController.text.trim(),
+                        'description': fullInfoController.text.trim(),
+                        'fullInfo': fullInfoController.text.trim(),
+                        'imageUrl': imageController.text.trim(),
+                        'ctaLabel': ctaLabelController.text.trim(),
+                        'route':
+                            targetMode == 'route' ? selectedRoute.trim() : '',
+                        'externalUrl':
+                            targetMode == 'external' ? externalUrl : '',
+                        'sortOrder':
+                            int.tryParse(sortOrderController.text.trim()) ??
+                                999,
+                        'isActive': isActive,
+                      };
+                      try {
+                        await _data.saveAdminPromoBanner(banner);
+                        if (!dialogContext.mounted) return;
+                        navigator.pop();
+                      } catch (error) {
+                        if (!dialogContext.mounted) return;
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                            SnackBar(
+                                content:
+                                    Text(UserErrorMessage.message(error))));
+                      } finally {
+                        if (dialogContext.mounted)
+                          setDialogState(() => saving = false);
+                      }
+                    },
+              child: Text(saving ? 'Сохранение…' : 'Сохранить'.tr()),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: saving || uploading ? null : () => Navigator.pop(dialogContext),
-            child: Text('Отмена'.tr()),
-          ),
-          ElevatedButton(
-            onPressed: saving || uploading ? null : () async {
-              if (titleController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Укажите заголовок баннера.')));
-                return;
-              }
-              setDialogState(() => saving = true);
-              final navigator = Navigator.of(dialogContext);
-              final rawExternalUrl = externalUrlController.text.trim();
-              final externalUrl = rawExternalUrl.isEmpty ||
-                      rawExternalUrl.startsWith('http://') ||
-                      rawExternalUrl.startsWith('https://')
-                  ? rawExternalUrl
-                  : 'https://$rawExternalUrl';
-              final banner = <String, dynamic>{
-                ...?(existing),
-                'id': (existing?['id'] ??
-                        'banner_${DateTime.now().millisecondsSinceEpoch}')
-                    .toString(),
-                'title': titleController.text.trim(),
-                'subtitle': subtitleController.text.trim(),
-                'description': fullInfoController.text.trim(),
-                'fullInfo': fullInfoController.text.trim(),
-                'imageUrl': imageController.text.trim(),
-                'ctaLabel': ctaLabelController.text.trim(),
-                'route': targetMode == 'route' ? selectedRoute.trim() : '',
-                'externalUrl': targetMode == 'external' ? externalUrl : '',
-                'sortOrder':
-                    int.tryParse(sortOrderController.text.trim()) ?? 999,
-                'isActive': isActive,
-              };
-              try {
-                await _data.saveAdminPromoBanner(banner);
-                if (!dialogContext.mounted) return;
-                navigator.pop();
-              } catch (error) {
-                if (!dialogContext.mounted) return;
-                ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text(UserErrorMessage.message(error))));
-              } finally {
-                if (dialogContext.mounted) setDialogState(() => saving = false);
-              }
-            },
-            child: Text(saving ? 'Сохранение…' : 'Сохранить'.tr()),
-          ),
-        ],
-      ),
       ),
     );
   }
@@ -12367,9 +12391,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    existing == null
-                        ? 'Новая акция'
-                        : 'Редактирование акции',
+                    existing == null ? 'Новая акция' : 'Редактирование акции',
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -12424,14 +12446,25 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                         child: OutlinedButton.icon(
                           onPressed: () async {
                             if (uploading || saving) return;
-                            setSheetState(() { uploading = true; errorText = null; });
+                            setSheetState(() {
+                              uploading = true;
+                              errorText = null;
+                            });
                             try {
-                              final url = await _photoUploadService.pickAndUpload(folder: 'promotion_home_banners', filePrefix: 'promotion');
-                              if (url != null && context.mounted) setSheetState(() => homeBannerImageController.text = url);
+                              final url =
+                                  await _photoUploadService.pickAndUpload(
+                                      folder: 'promotion_home_banners',
+                                      filePrefix: 'promotion');
+                              if (url != null && context.mounted)
+                                setSheetState(
+                                    () => homeBannerImageController.text = url);
                             } catch (error) {
-                              if (context.mounted) setSheetState(() => errorText = UserErrorMessage.message(error));
+                              if (context.mounted)
+                                setSheetState(() => errorText =
+                                    UserErrorMessage.message(error));
                             } finally {
-                              if (context.mounted) setSheetState(() => uploading = false);
+                              if (context.mounted)
+                                setSheetState(() => uploading = false);
                             }
                           },
                           icon: const Icon(Icons.upload_outlined),
@@ -12594,87 +12627,109 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     onChanged: (value) => setSheetState(() => isActive = value),
                   ),
                   const SizedBox(height: 16),
-                  if (errorText != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(errorText!, style: const TextStyle(color: Colors.red))),
+                  if (errorText != null)
+                    Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(errorText!,
+                            style: const TextStyle(color: Colors.red))),
                   Align(
                     alignment: Alignment.centerRight,
                     child: ElevatedButton(
-                      onPressed: saving || uploading ? null : () async {
-                        final id = idController.text.trim();
-                        if (id.isEmpty || titleController.text.trim().isEmpty) {
-                          setSheetState(() => errorText = 'Укажите ID и название акции.');
-                          return;
-                        }
-                        setSheetState(() { saving = true; errorText = null; });
-                        final selectedPackage = packages.firstWhere(
-                          (item) => (item['id'] ?? '').toString() == packageId,
-                          orElse: () => const <String, dynamic>{},
-                        );
-                        try {
-                        await _data.saveAdminPromotion({
-                          ...?existing,
-                          'id': id,
-                          'title': titleController.text.trim().isEmpty
-                              ? 'Важная информация'
-                              : titleController.text.trim(),
-                          'shortInfo': shortInfoController.text.trim(),
-                          'description': shortInfoController.text.trim(),
-                          'fullInfo': fullInfoController.text.trim(),
-                          'longDescription': fullInfoController.text.trim(),
-                          'homeBannerImageUrl':
-                              homeBannerImageController.text.trim(),
-                          'bannerImageUrl':
-                              homeBannerImageController.text.trim(),
-                          'showBannerTitle': showBannerTitle,
-                          'showBannerShortInfo': showBannerShortInfo,
-                          'showBannerReward': showBannerReward,
-                          'showBannerInfoIcon': showBannerInfoIcon,
-                          'features': featuresController.text
-                              .split('\n')
-                              .map((item) => item.trim())
-                              .where((item) => item.isNotEmpty)
-                              .toList(),
-                          'exclusions': exclusionsController.text
-                              .split('\n')
-                              .map((item) => item.trim())
-                              .where((item) => item.isNotEmpty)
-                              .toList(),
-                          'type': 'package_purchase_bonus',
-                          'packageId': packageId,
-                          'packageName': packageId.isEmpty
-                              ? 'Любой пакет'
-                              : (selectedPackage['name'] ?? packageId)
-                                  .toString(),
-                          'rewardType': 'bonus_points',
-                          'rewardTarget': rewardTarget,
-                          'rewardMode': rewardMode,
-                          'rewardAmount': rewardMode == 'fixed'
-                              ? num.tryParse(
-                                    fixedRewardController.text.trim().replaceAll(',', '.'),
-                                  ) ??
-                                  0
-                              : 0,
-                          'rewardPercent': rewardMode == 'percent'
-                              ? double.tryParse(
-                                    percentRewardController.text
-                                        .trim()
-                                        .replaceAll(',', '.'),
-                                  ) ??
-                                  0
-                              : 0,
-                          'maxSpendPercent':
-                              num.tryParse(maxSpendController.text.trim().replaceAll(',', '.')) ??
-                                  50,
-                          'oncePerCustomer': oncePerCustomer,
-                          'isActive': isActive,
-                        });
-                        if (context.mounted) Navigator.pop(context);
-                        } catch (error) {
-                          if (context.mounted) setSheetState(() => errorText = UserErrorMessage.message(error));
-                        } finally {
-                          if (context.mounted) setSheetState(() => saving = false);
-                        }
-                      },
-                      child: Text(saving ? 'Сохранение…' : 'Сохранить акцию'.tr()),
+                      onPressed: saving || uploading
+                          ? null
+                          : () async {
+                              final id = idController.text.trim();
+                              if (id.isEmpty ||
+                                  titleController.text.trim().isEmpty) {
+                                setSheetState(() =>
+                                    errorText = 'Укажите ID и название акции.');
+                                return;
+                              }
+                              setSheetState(() {
+                                saving = true;
+                                errorText = null;
+                              });
+                              final selectedPackage = packages.firstWhere(
+                                (item) =>
+                                    (item['id'] ?? '').toString() == packageId,
+                                orElse: () => const <String, dynamic>{},
+                              );
+                              try {
+                                await _data.saveAdminPromotion({
+                                  ...?existing,
+                                  'id': id,
+                                  'title': titleController.text.trim().isEmpty
+                                      ? 'Важная информация'
+                                      : titleController.text.trim(),
+                                  'shortInfo': shortInfoController.text.trim(),
+                                  'description':
+                                      shortInfoController.text.trim(),
+                                  'fullInfo': fullInfoController.text.trim(),
+                                  'longDescription':
+                                      fullInfoController.text.trim(),
+                                  'homeBannerImageUrl':
+                                      homeBannerImageController.text.trim(),
+                                  'bannerImageUrl':
+                                      homeBannerImageController.text.trim(),
+                                  'showBannerTitle': showBannerTitle,
+                                  'showBannerShortInfo': showBannerShortInfo,
+                                  'showBannerReward': showBannerReward,
+                                  'showBannerInfoIcon': showBannerInfoIcon,
+                                  'features': featuresController.text
+                                      .split('\n')
+                                      .map((item) => item.trim())
+                                      .where((item) => item.isNotEmpty)
+                                      .toList(),
+                                  'exclusions': exclusionsController.text
+                                      .split('\n')
+                                      .map((item) => item.trim())
+                                      .where((item) => item.isNotEmpty)
+                                      .toList(),
+                                  'type': 'package_purchase_bonus',
+                                  'packageId': packageId,
+                                  'packageName': packageId.isEmpty
+                                      ? 'Любой пакет'
+                                      : (selectedPackage['name'] ?? packageId)
+                                          .toString(),
+                                  'rewardType': 'bonus_points',
+                                  'rewardTarget': rewardTarget,
+                                  'rewardMode': rewardMode,
+                                  'rewardAmount': rewardMode == 'fixed'
+                                      ? num.tryParse(
+                                            fixedRewardController.text
+                                                .trim()
+                                                .replaceAll(',', '.'),
+                                          ) ??
+                                          0
+                                      : 0,
+                                  'rewardPercent': rewardMode == 'percent'
+                                      ? double.tryParse(
+                                            percentRewardController.text
+                                                .trim()
+                                                .replaceAll(',', '.'),
+                                          ) ??
+                                          0
+                                      : 0,
+                                  'maxSpendPercent': num.tryParse(
+                                          maxSpendController.text
+                                              .trim()
+                                              .replaceAll(',', '.')) ??
+                                      50,
+                                  'oncePerCustomer': oncePerCustomer,
+                                  'isActive': isActive,
+                                });
+                                if (context.mounted) Navigator.pop(context);
+                              } catch (error) {
+                                if (context.mounted)
+                                  setSheetState(() => errorText =
+                                      UserErrorMessage.message(error));
+                              } finally {
+                                if (context.mounted)
+                                  setSheetState(() => saving = false);
+                              }
+                            },
+                      child:
+                          Text(saving ? 'Сохранение…' : 'Сохранить акцию'.tr()),
                     ),
                   ),
                 ],
@@ -13276,7 +13331,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   TextField(
                     controller: priceController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Цена за м² за одну уборку, ₸'),
+                    decoration: const InputDecoration(
+                        labelText: 'Цена за м² за одну уборку, ₸'),
                   ),
                   TextField(
                     controller: sortOrderController,

@@ -1,3 +1,4 @@
+import '../services/ui_preferences.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -245,21 +246,27 @@ class DomlyShell extends StatelessWidget {
     final shouldShowBackButton =
         showBackButton ?? _shouldShowShellBackButton(context);
     return Scaffold(
-      backgroundColor: DomlyColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final width =
               constraints.maxWidth > 430 ? 430.0 : constraints.maxWidth;
           return Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  DomlyColors.background,
-                  DomlyColors.backgroundSoft,
-                  DomlyColors.backgroundSoft2,
-                ],
+                colors: Theme.of(context).brightness == Brightness.dark
+                    ? const [
+                        Color(0xFF121C17),
+                        Color(0xFF17271D),
+                        Color(0xFF203127)
+                      ]
+                    : const [
+                        DomlyColors.background,
+                        DomlyColors.backgroundSoft,
+                        DomlyColors.backgroundSoft2,
+                      ],
               ),
             ),
             child: Align(
@@ -287,6 +294,8 @@ class DomlyShell extends StatelessWidget {
     if (routeName.isEmpty) {
       return Navigator.of(context).canPop();
     }
+    if (routeName == '/notifications' &&
+        AppScope.of(context).config.flavor.name == 'customer') return false;
     const rootRoutes = {
       '/',
       '/welcome',
@@ -581,7 +590,9 @@ class _DomlyBottomNavBar extends StatelessWidget {
                           borderRadius: BorderRadius.circular(16),
                           onTap: () => onSelected(index),
                           child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 140),
+                            duration: UiPreferences.instance.animations
+                                ? const Duration(milliseconds: 140)
+                                : Duration.zero,
                             decoration: BoxDecoration(
                               color: selected
                                   ? DomlyColors.buttonSoft
@@ -930,7 +941,9 @@ class _DomlyPrimaryButtonState extends State<DomlyPrimaryButton> {
       width: double.infinity,
       child: AnimatedScale(
         scale: _isPressed && enabled ? 0.985 : 1,
-        duration: const Duration(milliseconds: 110),
+        duration: UiPreferences.instance.animations
+            ? const Duration(milliseconds: 110)
+            : Duration.zero,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? _handlePressed : null,
@@ -1076,7 +1089,9 @@ class _DomlySecondaryButtonState extends State<DomlySecondaryButton> {
     final enabled = widget.onPressed != null && !showLoading;
     return AnimatedScale(
       scale: _isPressed && enabled ? 0.985 : 1,
-      duration: const Duration(milliseconds: 110),
+      duration: UiPreferences.instance.animations
+          ? const Duration(milliseconds: 110)
+          : Duration.zero,
       child: Listener(
         onPointerDown:
             enabled ? (_) => setState(() => _isPressed = true) : null,
@@ -1111,7 +1126,9 @@ class _DomlySecondaryButtonState extends State<DomlySecondaryButton> {
               return null;
             }),
             splashFactory: InkRipple.splashFactory,
-            animationDuration: const Duration(milliseconds: 140),
+            animationDuration: UiPreferences.instance.animations
+                ? const Duration(milliseconds: 140)
+                : Duration.zero,
           ),
           child: _DomlySecondaryButtonContent(
             label: widget.label,
@@ -1188,19 +1205,24 @@ Widget domlyTopIconButton({
   Color foreground = Colors.white,
   Color background = const Color(0x33FFFFFF),
 }) {
-  return Material(
-    color: background,
-    borderRadius: BorderRadius.circular(15),
-    child: InkWell(
+  return Builder(builder: (context) {
+    if (icon == Icons.arrow_back &&
+        !DomlyShell._shouldShowShellBackButton(context))
+      return const SizedBox.shrink();
+    return Material(
+      color: background,
       borderRadius: BorderRadius.circular(15),
-      onTap: onPressed,
-      child: SizedBox(
-        width: 34,
-        height: 34,
-        child: Icon(icon, color: foreground, size: 17),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(15),
+        onTap: onPressed,
+        child: SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(icon, color: foreground, size: 17),
+        ),
       ),
-    ),
-  );
+    );
+  });
 }
 
 Widget domlyTopBadgeIconButton({

@@ -1,3 +1,5 @@
+import '../services/realtime_updates.dart';
+import '../services/ui_preferences.dart';
 import '../screens/common/assistant_guest_screen.dart';
 import '../utils/notification_destination.dart';
 import 'package:app_links/app_links.dart';
@@ -77,6 +79,9 @@ class DomlyApp extends StatefulWidget {
 }
 
 class _DomlyAppState extends State<DomlyApp> {
+  final _realtimeUpdates = RealtimeUpdates();
+  StreamSubscription<Map<String, dynamic>?>? _appearanceSubscription;
+  String? _appearanceUser;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   StreamSubscription<Map<String, dynamic>>? _foregroundNotificationSubscription;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
@@ -102,6 +107,7 @@ class _DomlyAppState extends State<DomlyApp> {
   @override
   void initState() {
     super.initState();
+    unawaited(UiPreferences.instance.load());
     _bootRequestedRoute = _incomingRequestedRoute();
     _lastAuthenticated = authController.isAuthenticated;
     authController.addListener(_handleAuthStateChanged);
@@ -117,6 +123,7 @@ class _DomlyAppState extends State<DomlyApp> {
             label: 'Открыть', onPressed: () => _handleNotificationTap(message)),
       ));
     });
+    _bindAccountUpdates();
     _scheduleInitialRouteSync();
     if (!kIsWeb) {
       final links = AppLinks();
@@ -158,6 +165,8 @@ class _DomlyAppState extends State<DomlyApp> {
   void dispose() {
     _notificationTapSubscription?.cancel();
     _foregroundNotificationSubscription?.cancel();
+    _realtimeUpdates.stop();
+    _appearanceSubscription?.cancel();
     _linkSubscription?.cancel();
     authController.removeListener(_handleAuthStateChanged);
     super.dispose();
@@ -241,7 +250,24 @@ class _DomlyAppState extends State<DomlyApp> {
     return searchable.contains('bonus') || searchable.contains('бонус');
   }
 
+  void _bindAccountUpdates() {
+    final user =
+        authController.isAuthenticated ? authController.currentUserId : null;
+    _realtimeUpdates.start(user);
+    if (_appearanceUser == user) return;
+    _appearanceUser = user;
+    _appearanceSubscription?.cancel();
+    if (user != null)
+      _appearanceSubscription = FirestoreDataService.instance
+          .customerSettingsStream()
+          .listen((settings) {
+        if (mounted && _appearanceUser == user && settings != null)
+          unawaited(UiPreferences.instance.update(settings));
+      }, onError: (_) {});
+  }
+
   void _handleAuthStateChanged() {
+    _bindAccountUpdates();
     final becameAuthenticated =
         authController.isAuthenticated && !_lastAuthenticated;
     _lastAuthenticated = authController.isAuthenticated;
@@ -624,7 +650,8 @@ class _DomlyAppState extends State<DomlyApp> {
   Widget build(BuildContext context) {
     final materialInitialRoute = _materialInitialRoute();
     return AnimatedBuilder(
-      animation: translationController,
+      animation:
+          Listenable.merge([translationController, UiPreferences.instance]),
       builder: (context, _) => AppScope(
         config: config,
         authController: authController,
@@ -643,6 +670,18 @@ class _DomlyAppState extends State<DomlyApp> {
               title: config.title,
               debugShowCheckedModeBanner: false,
               theme: AppTheme.lightTheme,
+              themeAnimationDuration: UiPreferences.instance.animations
+                  ? const Duration(milliseconds: 200)
+                  : Duration.zero,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: UiPreferences.instance.darkMode
+                  ? ThemeMode.dark
+                  : ThemeMode.light,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                    disableAnimations: !UiPreferences.instance.animations),
+                child: child ?? const SizedBox.shrink(),
+              ),
               navigatorKey: _navigatorKey,
               scaffoldMessengerKey: _messengerKey,
               navigatorObservers: [_routeObserver],
@@ -685,6 +724,12 @@ class _DomlyAppState extends State<DomlyApp> {
       name: _normalizedRouteName(settings.name),
       arguments: settings.arguments,
     );
+    if (!UiPreferences.instance.animations)
+      return PageRouteBuilder<void>(
+          settings: routeSettings,
+          pageBuilder: (context, animation, secondaryAnimation) => page,
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero);
     return MaterialPageRoute<void>(
       builder: (_) => page,
       settings: routeSettings,
@@ -1920,13 +1965,47 @@ class _CustomerAddressGateState extends State<_CustomerAddressGate> {
     _promptDismissedForSession = false;
   }
 
+  bool _tutorialReady = false;
+  String? _tutorialUser;
+  @override
+  void initState() {
+    super.initState();
+    DomlyFirstRunTutorial.completionRevision.addListener(_checkTutorial);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _checkTutorial();
+  }
+
+  Future<void> _checkTutorial() async {
+    final user = AppScope.of(context).authController.currentUserId;
+    if (user == null) return;
+    if (_tutorialUser != user) {
+      _tutorialUser = user;
+      _tutorialReady = false;
+    }
+    final ready = await DomlyFirstRunTutorial.wasShown(
+        flavor: AppFlavor.customer, userId: user);
+    if (mounted && _tutorialUser == user && ready != _tutorialReady)
+      setState(() => _tutorialReady = ready);
+  }
+
+  @override
+  void dispose() {
+    DomlyFirstRunTutorial.completionRevision.removeListener(_checkTutorial);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: FirestoreDataService.instance.customerProfileStream(),
       builder: (context, snapshot) {
         final profile = snapshot.data ?? const <String, dynamic>{};
-        if (snapshot.hasData &&
+        if (_tutorialReady &&
+            snapshot.hasData &&
             !_hasCustomerAddress(profile) &&
             !_promptInFlight &&
             !_promptDismissedForSession) {
@@ -1941,13 +2020,38 @@ class _CustomerAddressGateState extends State<_CustomerAddressGate> {
               FirestoreDataService.instance,
               profile,
               requireCompletion: true,
-            ).whenComplete(() {
-              _promptDismissedForSession = true;
+              stayInCurrentFlow: true,
+            ).then((saved) async {
               _promptInFlight = false;
+              _promptDismissedForSession = saved;
+              if (!saved || !context.mounted) return;
+              await Navigator.of(context)
+                  .pushNamed('/client/area-confirmation');
+              if (context.mounted)
+                Navigator.of(context)
+                    .pushNamedAndRemoveUntil('/client/home', (_) => false);
             });
           });
         }
 
+        if (_tutorialReady &&
+            snapshot.hasData &&
+            _hasCustomerAddress(profile) &&
+            profile['areaVerified'] != true &&
+            profile['areaProofSubmitted'] != true &&
+            !_promptInFlight &&
+            !_promptDismissedForSession) {
+          _promptInFlight = true;
+          _promptDismissedForSession = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (!context.mounted) return;
+            await Navigator.of(context).pushNamed('/client/area-confirmation');
+            _promptInFlight = false;
+            if (context.mounted)
+              Navigator.of(context)
+                  .pushNamedAndRemoveUntil('/client/home', (_) => false);
+          });
+        }
         return widget.child;
       },
     );

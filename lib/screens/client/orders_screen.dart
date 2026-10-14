@@ -1586,7 +1586,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                   ),
                 ),
           ],
-          OrderPaymentRetry(order: order, data: _data),
+          if (order['type'] != 'package_purchase')
+            OrderPaymentRetry(order: order, data: _data),
           if (kaspiPhone.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
@@ -1618,7 +1619,8 @@ class _OrdersScreenState extends State<OrdersScreen>
     final isCombinedPaidPackages = order['combinedPaidPackages'] == true;
     final combinedPackageCount =
         (order['combinedPackageCount'] as num?)?.toInt() ?? 1;
-    final canCancelPendingOrder = paymentStatus != 'paid';
+    final canCancelPendingOrder =
+        paymentStatus != 'paid' && order['type'] != 'package_purchase';
     final orderId = (order['id'] ?? order['orderId'] ?? '').toString().trim();
     final subscriptionId = (order['subscriptionId'] ?? '').toString().trim();
     final schedulingSubscriptionId =
@@ -3865,30 +3867,7 @@ class _OrdersFigmaHeader extends StatelessWidget {
             ),
           ),
           Positioned(
-            left: 8,
-            top: 20,
-            child: Material(
-              color: const Color(0xFFF5F5F5),
-              borderRadius: BorderRadius.circular(12),
-              elevation: 4,
-              shadowColor: Colors.black.withValues(alpha: 0.25),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => Navigator.maybePop(context),
-                child: const SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: Icon(
-                    Icons.arrow_back,
-                    color: Color(0xFF2E7D5B),
-                    size: 22,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 52,
+            left: 24,
             top: 17,
             right: 20,
             child: Column(

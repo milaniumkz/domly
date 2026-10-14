@@ -41,7 +41,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   late final _customerScheduleSlots = _data.customerScheduleSlotsStream();
   late final _customerOrders = _data.customerOrdersStream();
   late final _referralStats = _data.referralStatsStream();
-  late final _customerPrelaunchBookings = _data.customerPrelaunchBookingsStream();
+  late final _customerPrelaunchBookings =
+      _data.customerPrelaunchBookingsStream();
   late final _clientVideos = _data.clientVideosStream();
   late final _userVideoViews = _data.userVideoViewsStream();
   late final _userUnreadActivityCount = _data.userUnreadActivityCountStream();
@@ -1907,6 +1908,17 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   key: DomlyTutorialTargets.clientHomeTop,
                   userName: userName,
                 ),
+                if (profile['areaVerified'] != true &&
+                    profile['areaProofSubmitted'] != true &&
+                    (profile['addresses'] as List?)?.isNotEmpty == true)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.square_foot),
+                        label: Text('Подтвердить площадь'.tr()),
+                        onPressed: () => Navigator.pushNamed(
+                            context, '/client/area-confirmation'),
+                      )),
                 if (_pendingConnectionAddresses(profile).isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Padding(
@@ -2071,6 +2083,17 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   key: DomlyTutorialTargets.clientHomeTop,
                   userName: userName,
                 ),
+                if (profile['areaVerified'] != true &&
+                    profile['areaProofSubmitted'] != true &&
+                    (profile['addresses'] as List?)?.isNotEmpty == true)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.square_foot),
+                        label: Text('Подтвердить площадь'.tr()),
+                        onPressed: () => Navigator.pushNamed(
+                            context, '/client/area-confirmation'),
+                      )),
                 if (_pendingConnectionAddresses(profile).isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Padding(
@@ -2266,6 +2289,17 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   key: DomlyTutorialTargets.clientHomeTop,
                   userName: userName,
                 ),
+                if (profile['areaVerified'] != true &&
+                    profile['areaProofSubmitted'] != true &&
+                    (profile['addresses'] as List?)?.isNotEmpty == true)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.square_foot),
+                        label: Text('Подтвердить площадь'.tr()),
+                        onPressed: () => Navigator.pushNamed(
+                            context, '/client/area-confirmation'),
+                      )),
                 if (_pendingConnectionAddresses(profile).isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Padding(

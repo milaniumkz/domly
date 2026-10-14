@@ -1,13 +1,19 @@
 Map<String, dynamic> mapAdminCleaner(Map<String, dynamic> row) {
   final fullName =
       (row['full_name'] ?? row['fullName'] ?? '').toString().trim();
-  final status = (row['verification_status'] ?? row['status'] ?? 'new').toString();
+  final status =
+      (row['verification_status'] ?? row['status'] ?? 'new').toString();
   final result = <String, dynamic>{
     ...row,
     'cleanerId': row['id'] ?? row['user_id'],
     'name': fullName.isEmpty ? 'Уборщица' : fullName,
     'fullName': fullName,
     'numericId': row['numeric_id'],
+    'homeAddress': row['home_address'] ?? row['homeAddress'],
+    'emergencyContactPhone':
+        row['emergency_contact_phone'] ?? row['emergencyContactPhone'],
+    'emergencyContactRelation':
+        row['emergency_contact_relation'] ?? row['emergencyContactRelation'],
     'verificationStatus': row['verification_status'] ?? 'pending',
     'registrationStatus': row['registration_status'] ?? 'pending',
     'cleanerStatusLabel': {

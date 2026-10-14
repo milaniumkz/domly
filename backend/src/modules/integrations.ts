@@ -194,6 +194,7 @@ export type AddressSuggestion = {
 export class AddressSearchService {
   async externalSuggestions(input: {
     query: string;
+    lang?: string;
     city?: string | null;
     lat?: number | null;
     lng?: number | null;
@@ -229,6 +230,7 @@ export class AddressSearchService {
 
   private async searchOsm(input: {
     query: string;
+    lang?: string;
     city?: string | null;
     lat?: number | null;
     lng?: number | null;
@@ -240,6 +242,8 @@ export class AddressSearchService {
       q: input.query,
       format: 'jsonv2',
       addressdetails: '1',
+      namedetails: '1',
+      'accept-language': input.lang === 'kk' ? 'kk' : 'ru',
       limit: String(input.limit),
       countrycodes: 'kz',
     });
@@ -356,7 +360,7 @@ export function normalizeText(value: string): string {
     .replace(/[қ]/g, 'к')
     .replace(/[ө]/g, 'о')
     .replace(/[һ]/g, 'х')
-    .replace(/[ы]/g, '')
+    .replace(/[ы]/g, 'и')
     .replace(/ё/g, 'е')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();

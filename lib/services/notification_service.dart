@@ -59,6 +59,7 @@ class NotificationService {
   ]);
 
   Future<void> _storeInboxMessage(RemoteMessage message) async {
+    BackendApiService.instance.dataRevision.value++;
     forwardForegroundMessage(message);
     // Inbox entries are created by the backend. Firebase remains only the
     // transport for push delivery.

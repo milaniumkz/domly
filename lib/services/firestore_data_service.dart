@@ -1,3 +1,5 @@
+import '../utils/address_payload.dart';
+import 'ui_preferences.dart';
 import '../utils/booking_addon_data.dart';
 import '../utils/promotion_data.dart';
 import '../utils/banner_data.dart';
@@ -455,6 +457,7 @@ class FirestoreDataService {
       'language': user['language'] ?? 'ru',
       'rating': _num(user['rating']),
       'bonusBalance': _num(user['bonus_balance']).round(),
+      'bonusPoints': _num(user['bonus_balance']).round(),
       'bonuses': _num(user['bonus_balance']).round(),
       'status': user['status'],
       'createdAt': user['created_at'],
@@ -493,6 +496,7 @@ class FirestoreDataService {
       'area': _num(item['area']),
       'verifiedArea': _num(item['verified_area']),
       'areaVerified': item['verified_area'] != null,
+      'areaProofSubmitted': item['area_proof_submitted'] == true,
       'areaStatus': item['verified_area'] != null ? 'VERIFIED' : 'UNVERIFIED',
       'latitude': _numOrNull(item['latitude']),
       'longitude': _numOrNull(item['longitude']),
@@ -586,6 +590,10 @@ class FirestoreDataService {
     return {
       'id': item['id'],
       'orderId': item['id'],
+      if (item['view_kind'] == 'package_purchase') ...{
+        'subscriptionId': item['customer_package_id'],
+        'type': 'package_purchase',
+      },
       'addonsDetailed': item['addons'] ?? const [],
       'number': item['numeric_id'],
       'status': item['status'],
@@ -597,8 +605,11 @@ class FirestoreDataService {
       'cleaningStartRejected': item['cleaning_start_rejected'] == true,
       'startedAt': item['started_at'],
       'completedAt': item['completed_at'],
-      'paymentStatus':
-          item['status'] == 'pending_payment' ? 'pending_invoice' : 'paid',
+      'paymentStatus': item['view_kind'] == 'package_purchase'
+          ? (item['latest_payment_status'] == 'pending'
+              ? 'pending_invoice'
+              : item['latest_payment_status'])
+          : (item['status'] == 'pending_payment' ? 'pending_invoice' : 'paid'),
       'customerId': item['customer_id'],
       'cleanerId': item['cleaner_id'],
       'customerName': item['customer_name'],
@@ -636,9 +647,14 @@ class FirestoreDataService {
       'approvedBy': item['approved_by'],
       'approvedByName': item['approved_by_name'],
       'approvedAt': item['approved_at'],
-      'integrationReview': item['payload'] is Map ? item['payload']['moonAiReview'] : null,
-      'integrationStatus': item['payload'] is Map && item['payload']['moonAi'] is Map ? item['payload']['moonAi']['status'] : null,
-      'invoiceIntegration': (item['payload'] is Map && item['payload']['provider'] == 'moon_ai'),
+      'integrationReview':
+          item['payload'] is Map ? item['payload']['moonAiReview'] : null,
+      'integrationStatus':
+          item['payload'] is Map && item['payload']['moonAi'] is Map
+              ? item['payload']['moonAi']['status']
+              : null,
+      'invoiceIntegration':
+          (item['payload'] is Map && item['payload']['provider'] == 'moon_ai'),
       'customerName': item['customer_name'],
       'customerPhone': item['customer_phone'],
       'address': [
@@ -680,7 +696,9 @@ class FirestoreDataService {
       'type': item['target_type'],
       'targetType': item['target_type'],
       'targetId': item['target_id'],
-      'payload': item['payload'] is Map ? Map<String, dynamic>.from(item['payload'] as Map) : <String, dynamic>{},
+      'payload': item['payload'] is Map
+          ? Map<String, dynamic>.from(item['payload'] as Map)
+          : <String, dynamic>{},
       'title': item['title_ru'] ?? item['title'],
       'body': item['body_ru'] ?? item['body'],
       'titleLocales': {
@@ -764,6 +782,9 @@ class FirestoreDataService {
       'phone': profile['phone'],
       'email': profile['email'],
       'city': profile['city'],
+      'homeAddress': profile['home_address'],
+      'emergencyContactPhone': profile['emergency_contact_phone'],
+      'emergencyContactRelation': profile['emergency_contact_relation'],
       'status': profile['status'],
       'rating': _num(profile['rating']),
       'verificationStatus':
@@ -2060,7 +2081,11 @@ class FirestoreDataService {
     if (_isDebugAdmin) {
       final items = List<Map<String, dynamic>>.from(_debugAdminPromoBanners());
       final index = items.indexWhere((item) => item['id'] == banner['id']);
-      if (index < 0) { items.add(banner); } else { items[index] = banner; }
+      if (index < 0) {
+        items.add(banner);
+      } else {
+        items[index] = banner;
+      }
       await saveAdminPromoBanners(items);
       return;
     }
@@ -2069,7 +2094,8 @@ class FirestoreDataService {
 
   Future<void> deleteAdminPromoBanner(String id) async {
     if (_isDebugAdmin) {
-      await saveAdminPromoBanners(_debugAdminPromoBanners().where((item) => item['id'] != id).toList());
+      await saveAdminPromoBanners(
+          _debugAdminPromoBanners().where((item) => item['id'] != id).toList());
       return;
     }
     await BackendApiService.instance.delete('/admin/banners/$id');
@@ -2178,6 +2204,10 @@ class FirestoreDataService {
     }
     return _backendPollingStream(
       () async => (await BackendApiService.instance.getList('/admin/quality'))
+          .where((row) => !(row['status'] == 'cancelled' &&
+              (row['admin_comment'] ?? '')
+                  .toString()
+                  .contains('duplicate_auto_closed')))
           .map((row) => <String, dynamic>{
                 ...row,
                 'userId': row['customer_id'],
@@ -3404,6 +3434,7 @@ class FirestoreDataService {
       return;
     }
     await BackendApiService.instance.patchMap('/me/settings', body: data);
+    await UiPreferences.instance.update(data);
   }
 
   Future<void> updateCustomerProfile(Map<String, dynamic> data) async {
@@ -3486,14 +3517,8 @@ class FirestoreDataService {
             '')
         .toString()
         .trim();
-    final parsedHouse = RegExp(
-      r'(\d+[А-Яа-яA-Za-z/-]*)\s*$',
-    ).firstMatch(streetLine)?.group(1);
-    final parsedStreet = parsedHouse == null
-        ? streetLine
-        : streetLine
-            .substring(0, streetLine.length - parsedHouse.length)
-            .trim();
+    final parsed = streetAndHouse(
+        {...address, if (address['address'] == null) 'address': streetLine});
     final hasAddress = streetLine.isNotEmpty ||
         address['city'] != null ||
         address['area'] != null ||
@@ -3505,16 +3530,22 @@ class FirestoreDataService {
     final payload = <String, dynamic>{
       'city': address['city'] ?? data['city'] ?? 'Астана',
       'settlement': address['settlement'],
-      'street': address['street'] ?? parsedStreet,
-      'house': address['house'] ?? parsedHouse,
+      'street': parsed['street'],
+      'house': parsed['house'],
       'apartment': address['apartment'] ?? data['apartment'],
       'entrance': address['entrance'] ?? data['entrance'],
       'floor': address['floor'] ?? data['floor'],
       'intercom': address['intercom'] ?? data['intercom'],
       'accessComment': address['accessComment'] ?? data['accessComment'],
       'area': address['area'] ?? data['area'] ?? data['apartmentArea'],
-      'latitude': address['latitude'] ?? data['latitude'],
-      'longitude': address['longitude'] ?? data['longitude'],
+      'latitude': address['latitude'] ??
+          address['addressLat'] ??
+          data['latitude'] ??
+          data['addressLat'],
+      'longitude': address['longitude'] ??
+          address['addressLng'] ??
+          data['longitude'] ??
+          data['addressLng'],
     }..removeWhere((_, value) => value == null || value.toString().isEmpty);
 
     if (payload['street'] == null || payload['house'] == null) {
@@ -3654,6 +3685,11 @@ class FirestoreDataService {
         if (data['soundVolume'] != null) 'soundVolume': data['soundVolume'],
         if (data['soundKey'] != null) 'soundKey': data['soundKey'],
         if (data['serviceAreaIds'] != null) 'zoneIds': data['serviceAreaIds'],
+        if (data['homeAddress'] != null) 'homeAddress': data['homeAddress'],
+        if (data['emergencyContactPhone'] != null)
+          'emergencyContactPhone': data['emergencyContactPhone'],
+        if (data['emergencyContactRelation'] != null)
+          'emergencyContactRelation': data['emergencyContactRelation'],
       },
     );
   }
@@ -7132,7 +7168,8 @@ class FirestoreDataService {
   }) async {
     final chats = await BackendApiService.instance.getList('/chats');
     for (final chat in chats) {
-      if ((chat['order_id'] ?? chat['orderId'] ?? '').toString() == orderId || (chat['id'] ?? '').toString() == orderId) {
+      if ((chat['order_id'] ?? chat['orderId'] ?? '').toString() == orderId ||
+          (chat['id'] ?? '').toString() == orderId) {
         return chat;
       }
     }
@@ -9500,6 +9537,19 @@ class FirestoreDataService {
     );
   }
 
+  Future<void> approveAreaMismatchReport({
+    required String reportId,
+    required int actualArea,
+  }) async {
+    if (reportId.trim().isEmpty || actualArea <= 0) {
+      throw FlutterError('Укажите корректную площадь.');
+    }
+    await BackendApiService.instance.postMap(
+      '/admin/quality-checks/$reportId/approve',
+      body: {'approvedArea': actualArea},
+    );
+  }
+
   Future<void> confirmApartmentAreaByQualityControl({
     required String userId,
     required int actualArea,
@@ -10967,25 +11017,39 @@ class FirestoreDataService {
         continue;
       }
       final addonIds = bookingAddonIds(selection);
+      final addonDetails = <Map<String, dynamic>>[
+        ...(selection['newAddonsDetailed'] as List? ?? const [])
+            .whereType<Map>().map((item) => Map<String, dynamic>.from(item)),
+      ];
+      final bonusToSpend = math.max(
+        0,
+        (selection['bonusToSpend'] as num?)?.toInt() ?? 0,
+      );
+      final kaspiPhone = (selection['kaspiPhone'] ?? '').toString().trim();
+      final quotedAddons = addonDetails.fold<int>(0,(total,item)=>total+
+        (_num(item['price'])*(item['quantity'] is num ? (item['quantity'] as num).toInt() : 1)).round());
+      if (addonDetails.isNotEmpty && kaspiPhone.isEmpty && bonusToSpend < quotedAddons) {
+        throw FlutterError('Укажите номер Kaspi для оплаты доп. услуг.');
+      }
       final created = await BackendApiService.instance.postMap(
         '/orders',
         body: {
           'customerPackageId': subscriptionId,
           'date': dateKey,
           'startTime': startTime,
-          if (addonIds.isNotEmpty) 'addonIds': addonIds,
+          if (addonDetails.isNotEmpty) 'addonsDetailed': addonDetails,
+          if (addonDetails.isEmpty && addonIds.isNotEmpty) 'addonIds': addonIds,
         },
       );
       createdOrders.add(created);
       backendScheduledCount++;
       final order = created['order'];
       final orderId = order is Map ? (order['id'] ?? '').toString() : '';
-      final bonusToSpend = math.max(
-        0,
-        (selection['bonusToSpend'] as num?)?.toInt() ?? 0,
-      );
-      final kaspiPhone = (selection['kaspiPhone'] ?? '').toString().trim();
-      if (orderId.isNotEmpty && (addonIds.isNotEmpty || bonusToSpend > 0)) {
+      final addonAmount = order is Map ? _num(order['addon_amount']) : 0;
+      if (orderId.isNotEmpty && addonAmount > 0) {
+        if (kaspiPhone.isEmpty && bonusToSpend < addonAmount) {
+          throw FlutterError('Укажите номер Kaspi для оплаты доп. услуг.');
+        }
         final payment = await BackendApiService.instance.postMap(
           '/orders/$orderId/pay',
           body: {
@@ -11270,10 +11334,11 @@ class FirestoreDataService {
     required String orderId,
     required String provider,
     String? invoicePhone,
-  }) => BackendApiService.instance.postMap('/orders/$orderId/pay', body: {
-    'provider': provider,
-    if (invoicePhone != null) 'invoicePhone': invoicePhone,
-  });
+  }) =>
+      BackendApiService.instance.postMap('/orders/$orderId/pay', body: {
+        'provider': provider,
+        if (invoicePhone != null) 'invoicePhone': invoicePhone,
+      });
 
   Future<Map<String, dynamic>> submitKaspiInvoiceRequest({
     required String orderId,
@@ -13356,7 +13421,8 @@ class FirestoreDataService {
       _notifyDebugStateChanged();
       return;
     }
-    await BackendApiService.instance.delete('/admin/promotions/$normalizedPromotionId');
+    await BackendApiService.instance
+        .delete('/admin/promotions/$normalizedPromotionId');
   }
 
   Future<void> updateAdminPolicies(Map<String, dynamic> data) async {

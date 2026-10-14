@@ -1157,7 +1157,7 @@ ON CONFLICT(name_ru) DO NOTHING;
 
 CREATE OR REPLACE FUNCTION domly_normalize_address(value TEXT) RETURNS TEXT
 LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS $$
- SELECT trim(regexp_replace(translate(lower(value),'әіңғүұқөһёы','аингуукохе'),'[^[:alnum:]]+',' ','g'));
+ SELECT trim(regexp_replace(translate(lower(value),'әіңғүұқөһёы','аингуукохеи'),'[^[:alnum:]]+',' ','g'));
 $$;
 
 -- Idempotent rewards: repeated approvals cannot credit the same apartment twice.
@@ -1264,3 +1264,37 @@ INSERT INTO payments(customer_id,order_id,provider,status,amount,payload)
  FROM service_orders o
  WHERE o.status='pending_payment' AND o.cleaner_id IS NULL AND o.payable_amount>0
  AND NOT EXISTS(SELECT 1 FROM payments p WHERE p.order_id=o.id);
+
+
+-- Preserve Kazakh names; populate Russian-script display fallbacks.
+CREATE OR REPLACE FUNCTION domly_russian_address(value TEXT) RETURNS TEXT
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS $$
+ SELECT translate(value,'ӘәІіҢңҒғҮүҰұҚқӨөҺһ','АаИиНнГгУуУуКкОоХх');
+$$;
+UPDATE connected_houses SET street_ru=domly_russian_address(COALESCE(NULLIF(street_ru,''),street_kk)),
+ residential_complex_ru=domly_russian_address(COALESCE(NULLIF(residential_complex_ru,''),residential_complex_kk))
+ WHERE street_ru IS NULL OR street_ru='' OR street_ru ~ '[ӘәІіҢңҒғҮүҰұҚқӨөҺһ]'
+ OR residential_complex_ru ~ '[ӘәІіҢңҒғҮүҰұҚқӨөҺһ]'
+ OR (residential_complex_ru IS NULL AND residential_complex_kk IS NOT NULL);
+
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- Cleaner verification contact information (safe to rerun on existing databases).
+ALTER TABLE cleaner_profiles ADD COLUMN IF NOT EXISTS home_address TEXT;
+ALTER TABLE cleaner_profiles ADD COLUMN IF NOT EXISTS emergency_contact_phone TEXT;
+ALTER TABLE cleaner_profiles ADD COLUMN IF NOT EXISTS emergency_contact_relation TEXT;
+
+-- Keep every historical record, but only one live quality review per address.
+WITH ranked AS (
+ SELECT id, ROW_NUMBER() OVER (
+   PARTITION BY customer_id, address_id
+   ORDER BY (document_file_id IS NOT NULL) DESC, (status='scheduled') DESC, created_at DESC, id DESC
+ ) AS position
+ FROM quality_check_requests WHERE status IN ('pending','scheduled')
+)
+UPDATE quality_check_requests q SET status='cancelled',
+ admin_comment=CONCAT_WS(' ', NULLIF(q.admin_comment,''), 'duplicate_auto_closed'), updated_at=NOW()
+FROM ranked r WHERE q.id=r.id AND r.position>1;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_quality_active_customer_address
+ ON quality_check_requests(customer_id, (COALESCE(address_id::text, '')))
+ WHERE status IN ('pending','scheduled');

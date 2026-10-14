@@ -1,3 +1,5 @@
+import '../services/backend_api_service.dart';
+import '../services/auth_service.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +11,8 @@ import 'tutorial_targets.dart';
 
 class DomlyFirstRunTutorial {
   static const _version = 6;
+  static final completionRevision = ValueNotifier<int>(0);
+  static final Set<String> _legacySyncStarted = <String>{};
 
   static String storageKey({
     required AppFlavor flavor,
@@ -21,7 +25,39 @@ class DomlyFirstRunTutorial {
     required String userId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(storageKey(flavor: flavor, userId: userId)) ?? false;
+    final prefix = 'domly_first_run_tutorial_${flavor.name}_${userId}_';
+    final local = prefs
+        .getKeys()
+        .any((key) => key.startsWith(prefix) && prefs.getBool(key) == true);
+    if (local) {
+      final syncKey = '${flavor.name}:$userId';
+      if (AuthService.restoredSessionUid == userId &&
+          _legacySyncStarted.add(syncKey)) {
+        unawaited(_syncLegacyCompletion(flavor, userId, syncKey));
+      }
+      return true;
+    }
+    if (AuthService.restoredSessionUid == userId) {
+      try {
+        final settings =
+            await BackendApiService.instance.getMap('/me/settings');
+        if (settings['tutorialCompleted_${flavor.name}'] == true) {
+          await prefs.setBool(storageKey(flavor: flavor, userId: userId), true);
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  static Future<void> _syncLegacyCompletion(
+      AppFlavor flavor, String userId, String syncKey) async {
+    try {
+      await BackendApiService.instance.patchMap('/me/settings',
+          body: {'tutorialCompleted_${flavor.name}': true});
+    } catch (_) {
+      _legacySyncStarted.remove(syncKey);
+    }
   }
 
   static Future<void> markShown({
@@ -30,6 +66,13 @@ class DomlyFirstRunTutorial {
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(storageKey(flavor: flavor, userId: userId), true);
+    completionRevision.value++;
+    if (AuthService.restoredSessionUid == userId) {
+      try {
+        await BackendApiService.instance.patchMap('/me/settings',
+            body: {'tutorialCompleted_${flavor.name}': true});
+      } catch (_) {}
+    }
   }
 
   static Future<bool> show(

@@ -1,3 +1,4 @@
+import '../../services/backend_api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -47,7 +48,14 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
   int bonusBalance = 0,
   int maxBonusToSpend = 0,
   int paymentAmount = 0,
-}) {
+}) async {
+  bool onlineAvailable = false;
+  try {
+    onlineAvailable = (await BackendApiService.instance
+            .getMap('/payments/methods', authenticated: false))['online'] ==
+        true;
+  } catch (_) {}
+  if (!context.mounted) return null;
   final availableBonus =
       bonusBalance.clamp(0, maxBonusToSpend).clamp(0, paymentAmount).toInt();
   final canPayFullyWithBonus =
@@ -63,12 +71,15 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
           required String title,
           required String subtitle,
           required DomlyPaymentMethod method,
+          bool enabled = true,
         }) {
           return InkWell(
             borderRadius: BorderRadius.circular(18),
-            onTap: () => Navigator.of(dialogContext).pop(
-              DomlyPaymentSelection(method: method, useBonus: useBonus),
-            ),
+            onTap: enabled
+                ? () => Navigator.of(dialogContext).pop(
+                      DomlyPaymentSelection(method: method, useBonus: useBonus),
+                    )
+                : null,
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -190,7 +201,10 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
               option(
                 icon: Icons.credit_card,
                 title: 'Онлайн-платёж',
-                subtitle: 'Оплата картой внутри приложения',
+                subtitle: onlineAvailable
+                    ? 'Оплата картой внутри приложения'
+                    : 'Временно недоступно: банк не настроен на сервере',
+                enabled: onlineAvailable,
                 method: DomlyPaymentMethod.online,
               ),
               const SizedBox(height: 10),

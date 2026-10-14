@@ -20,8 +20,9 @@ test('normalizePhone returns Kazakhstan E.164 phone', () => {
 });
 
 test('normalizeText matches Russian and Kazakh address variants', () => {
-  assert.equal(normalizeText('Сыдық 39'), normalizeText('Сдык 39'));
+  assert.equal(normalizeText('Сыдық 39'), normalizeText('Сидик 39'));
   assert.ok(normalizeText('Тәуелсіздік даңғылы').includes('тауелсиздик'));
+  assert.equal(normalizeText('Тауелсиздык 29/2'), normalizeText('Тәуелсіздік 29/2'));
 });
 
 test('migration status normalization matches backend canonical statuses', () => {

@@ -66,8 +66,8 @@ class ProfileScreen extends StatelessWidget {
                 ),
               );
             }
-            final loading =
-                profileSnap.connectionState == ConnectionState.waiting &&
+            final loading = profileSnap.connectionState ==
+                    ConnectionState.waiting &&
                 !profileSnap.hasData &&
                 subscriptionsSnap.connectionState == ConnectionState.waiting &&
                 !subscriptionsSnap.hasData;
@@ -85,23 +85,22 @@ class ProfileScreen extends StatelessWidget {
             final profile = profileSnap.data ?? <String, dynamic>{};
             final subscriptions =
                 subscriptionsSnap.data ?? <Map<String, dynamic>>[];
-            final activeSubscription = subscriptions
-                .cast<Map<String, dynamic>?>()
-                .firstWhere(
-                  (item) =>
-                      (item?['status'] ?? '').toString().toLowerCase() ==
-                      'active',
-                  orElse: () => null,
-                );
+            final activeSubscription =
+                subscriptions.cast<Map<String, dynamic>?>().firstWhere(
+                      (item) =>
+                          (item?['status'] ?? '').toString().toLowerCase() ==
+                          'active',
+                      orElse: () => null,
+                    );
             final monthlySpent =
                 (profile['monthly_spent'] as num?)?.toDouble() ?? 0;
             final nextTierThreshold =
                 (profile['next_tier_threshold'] as num?)?.toDouble() ?? 0;
             final tierProgress =
                 ((profile['tier_progress'] as num?)?.toDouble() ?? 0).clamp(
-                  0.0,
-                  1.0,
-                );
+              0.0,
+              1.0,
+            );
             final tierDiscountPercent =
                 (profile['tier_discount_percent'] as num?)?.toInt() ?? 0;
             final addressMissing = !_hasAddress(profile);
@@ -427,15 +426,16 @@ class ProfileScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 11),
                                   _RequiredProfileTile(
-                                    title: 'Площадь квартиры *',
+                                    title: profile['areaVerified'] == true
+                                        ? 'Площадь квартиры *'
+                                        : 'Подтвердить площадь',
                                     subtitle:
                                         '${profile['area'] ?? 0} м² · ${_areaStatusText(profile)}',
                                     onTap: () => Navigator.pushNamed(
                                       context,
                                       '/client/area-confirmation',
                                       arguments: {
-                                        'area':
-                                            profile['area'] ??
+                                        'area': profile['area'] ??
                                             profile['apartmentArea'] ??
                                             profile['actualArea'] ??
                                             profile['initialArea'],
@@ -445,8 +445,7 @@ class ProfileScreen extends StatelessWidget {
                                   const SizedBox(height: 11),
                                   _RequiredProfileTile(
                                     title: 'Телефон *',
-                                    subtitle:
-                                        (profile['phone'] ?? '')
+                                    subtitle: (profile['phone'] ?? '')
                                             .toString()
                                             .trim()
                                             .isEmpty
@@ -458,14 +457,13 @@ class ProfileScreen extends StatelessWidget {
                                   const SizedBox(height: 11),
                                   _RequiredProfileTile(
                                     title: 'Кто вас пригласил',
-                                    subtitle:
-                                        (profile['referredByCode'] ?? '')
+                                    subtitle: (profile['referredByCode'] ?? '')
                                             .toString()
                                             .trim()
                                             .isEmpty
                                         ? 'Код не указан'
                                         : (profile['referredByCode'] ?? '')
-                                              .toString(),
+                                            .toString(),
                                     onTap: () => _openReferrerCodeEditor(
                                       context,
                                       data,
@@ -566,8 +564,7 @@ class ProfileScreen extends StatelessWidget {
             .trim()
             .toLowerCase();
     final isQuarterly = packageId == 'quarter' || packageName.contains('кварт');
-    final isOneTime =
-        packageId == 'general_cleaning' ||
+    final isOneTime = packageId == 'general_cleaning' ||
         packageId == 'post_renovation' ||
         packageId == 'single' ||
         packageId == 'one_time' ||
@@ -838,6 +835,9 @@ class ProfileScreen extends StatelessWidget {
     bool requireCompletion = false,
     bool stayInCurrentFlow = false,
   }) async {
+    final pageContext = context;
+    var saving = false;
+    var savedSuccessfully = false;
     final nameController = TextEditingController(
       text: _editableName(profile['name'] ?? profile['fullName']),
     );
@@ -864,13 +864,12 @@ class ProfileScreen extends StatelessWidget {
     try {
       final houses = await data.getAvailableHouses();
       addressOptions = houses.map((house) {
-        final residential =
-            (house['residentialComplex'] ??
-                    house['title'] ??
-                    house['address'] ??
-                    '')
-                .toString()
-                .trim();
+        final residential = (house['residentialComplex'] ??
+                house['title'] ??
+                house['address'] ??
+                '')
+            .toString()
+            .trim();
         final address = (house['address'] ?? residential).toString().trim();
         return AddressSuggestion(
           title: residential.isEmpty ? address : residential,
@@ -898,10 +897,8 @@ class ProfileScreen extends StatelessWidget {
       if (normalized.isEmpty) {
         return const <AddressSuggestion>[];
       }
-      final queryTokens = normalized
-          .split(' ')
-          .where((token) => token.length > 1)
-          .toList();
+      final queryTokens =
+          normalized.split(' ').where((token) => token.length > 1).toList();
       final items = addressOptions.where((item) {
         final itemCity = _normalizeAddressQuery(item.city);
         if (normalizedCity.isNotEmpty &&
@@ -916,12 +913,9 @@ class ProfileScreen extends StatelessWidget {
         final haystack = _normalizeAddressQuery(
           '${item.title} ${item.subtitle} ${item.residentialComplex} ${item.addressLine}',
         );
-        final tokens = normalized
-            .split(' ')
-            .where((token) => token.length > 1)
-            .toList();
-        final complexMatched =
-            complexText.contains(normalized) ||
+        final tokens =
+            normalized.split(' ').where((token) => token.length > 1).toList();
+        final complexMatched = complexText.contains(normalized) ||
             looseComplexText.contains(looseNormalized) ||
             queryTokens.every((token) => complexText.contains(token));
         return complexMatched ||
@@ -1042,544 +1036,518 @@ class ProfileScreen extends StatelessWidget {
       return items.take(10).toList();
     }
 
-    final saved =
-        await showModalBottomSheet<bool>(
-          context: context,
-          isScrollControlled: true,
-          isDismissible: !requireCompletion,
-          enableDrag: !requireCompletion,
-          showDragHandle: true,
-          builder: (context) {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: !requireCompletion,
+      enableDrag: !requireCompletion,
+      showDragHandle: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            unawaited(detectCityFromLocation(setModalState));
             return PopScope(
-              canPop: !requireCompletion,
-              child: StatefulBuilder(
-                builder: (context, setModalState) {
-                  unawaited(detectCityFromLocation(setModalState));
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      left: 24,
-                      right: 24,
-                      top: 12,
-                      bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-                    ),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Данные аккаунта'.tr(),
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                            ),
+                canPop: !requireCompletion || savedSuccessfully,
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: 24,
+                    right: 24,
+                    top: 12,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Данные аккаунта'.tr(),
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Поля с * обязательны для работы аккаунта.'.tr(),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: DomlyColors.muted,
-                            ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Поля с * обязательны для работы аккаунта.'.tr(),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: DomlyColors.muted,
                           ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: nameController,
-                            decoration: const InputDecoration(
-                              labelText: 'ФИО',
-                              hintText: 'Введите ФИО',
-                            ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'ФИО',
+                            hintText: 'Введите ФИО',
                           ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: residentialController,
-                            onChanged: (value) {
-                              final requestId = ++addressLookupRequestId;
-                              final localItems = filterAddressOptions(value);
-                              setModalState(() {
-                                selectedAddress = null;
-                                filteredAddressOptions = localItems;
-                                addressLookupLoading = value.trim().length >= 3;
-                              });
-                              if (value.trim().length < 3) {
-                                setModalState(
-                                  () => addressLookupLoading = false,
-                                );
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: residentialController,
+                          onChanged: (value) {
+                            final requestId = ++addressLookupRequestId;
+                            final localItems = filterAddressOptions(value);
+                            setModalState(() {
+                              selectedAddress = null;
+                              filteredAddressOptions = localItems;
+                              addressLookupLoading = value.trim().length >= 3;
+                            });
+                            if (value.trim().length < 3) {
+                              setModalState(
+                                () => addressLookupLoading = false,
+                              );
+                              return;
+                            }
+                            AddressSearchService.instance
+                                .search(value, city: detectedCity)
+                                .then((remoteItems) {
+                              if (!context.mounted ||
+                                  requestId != addressLookupRequestId) {
                                 return;
                               }
-                              AddressSearchService.instance
-                                  .search(value, city: detectedCity)
-                                  .then((remoteItems) {
-                                    if (!context.mounted ||
-                                        requestId != addressLookupRequestId) {
-                                      return;
-                                    }
-                                    setModalState(() {
-                                      filteredAddressOptions =
-                                          mergeAddressSuggestions(
-                                            localItems,
-                                            remoteItems,
-                                          );
-                                      if (remoteItems.isNotEmpty &&
-                                          remoteItems.first.city
-                                              .trim()
-                                              .isNotEmpty) {
-                                        detectedCity = remoteItems.first.city
-                                            .trim();
-                                      }
-                                      addressLookupLoading = false;
-                                    });
-                                  })
-                                  .catchError((_) {
-                                    if (!context.mounted ||
-                                        requestId != addressLookupRequestId) {
-                                      return;
-                                    }
-                                    setModalState(
-                                      () => addressLookupLoading = false,
-                                    );
-                                  });
-                            },
-                            decoration: InputDecoration(
-                              labelText: 'Мой адрес *',
-                              hintText:
-                                  'Начните вводить ЖК, улицу или номер дома',
-                              suffixIcon: addressLookupLoading
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(14),
-                                      child: SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
+                              setModalState(() {
+                                filteredAddressOptions =
+                                    mergeAddressSuggestions(
+                                  localItems,
+                                  remoteItems,
+                                );
+                                if (remoteItems.isNotEmpty &&
+                                    remoteItems.first.city.trim().isNotEmpty) {
+                                  detectedCity = remoteItems.first.city.trim();
+                                }
+                                addressLookupLoading = false;
+                              });
+                            }).catchError((_) {
+                              if (!context.mounted ||
+                                  requestId != addressLookupRequestId) {
+                                return;
+                              }
+                              setModalState(
+                                () => addressLookupLoading = false,
+                              );
+                            });
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'Мой адрес *',
+                            hintText:
+                                'Начните вводить ЖК, улицу или номер дома',
+                            suffixIcon: addressLookupLoading
+                                ? const Padding(
+                                    padding: EdgeInsets.all(14),
+                                    child: SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
                                       ),
-                                    )
-                                  : const Icon(Icons.search),
+                                    ),
+                                  )
+                                : const Icon(Icons.search),
+                          ),
+                        ),
+                        if (filteredAddressOptions.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            constraints: const BoxConstraints(maxHeight: 220),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(color: DomlyColors.border),
+                            ),
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filteredAddressOptions.length,
+                              separatorBuilder: (_, __) => const Divider(
+                                height: 1,
+                                color: DomlyColors.border,
+                              ),
+                              itemBuilder: (context, index) {
+                                final item = filteredAddressOptions[index];
+                                return ListTile(
+                                  dense: true,
+                                  leading: const Icon(
+                                    Icons.location_on_outlined,
+                                    color: DomlyColors.buttonPrimary,
+                                  ),
+                                  title: Text(
+                                    item.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  subtitle: item.subtitle.isEmpty
+                                      ? null
+                                      : Text(
+                                          item.subtitle,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                  onTap: () {
+                                    setModalState(() {
+                                      selectedAddress = item;
+                                      residentialController.text =
+                                          item.fullText;
+                                      filteredAddressOptions =
+                                          const <AddressSuggestion>[];
+                                    });
+                                  },
+                                );
+                              },
                             ),
                           ),
-                          if (filteredAddressOptions.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Container(
-                              constraints: const BoxConstraints(maxHeight: 220),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(color: DomlyColors.border),
-                              ),
-                              child: ListView.separated(
-                                shrinkWrap: true,
-                                itemCount: filteredAddressOptions.length,
-                                separatorBuilder: (_, __) => const Divider(
-                                  height: 1,
-                                  color: DomlyColors.border,
+                        ] else if (residentialController.text.trim().length >=
+                                2 &&
+                            selectedAddress == null) ...[
+                          const SizedBox(height: 8),
+                          DomlyCard(
+                            color: DomlyColors.backgroundSoft,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Адрес не найден среди подключенных домов'
+                                      .tr(),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: DomlyColors.foreground,
+                                  ),
                                 ),
-                                itemBuilder: (context, index) {
-                                  final item = filteredAddressOptions[index];
-                                  return ListTile(
-                                    dense: true,
-                                    leading: const Icon(
-                                      Icons.location_on_outlined,
-                                      color: DomlyColors.buttonPrimary,
-                                    ),
-                                    title: Text(
-                                      item.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    subtitle: item.subtitle.isEmpty
-                                        ? null
-                                        : Text(
-                                            item.subtitle,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                    onTap: () {
-                                      setModalState(() {
-                                        selectedAddress = item;
-                                        residentialController.text =
-                                            item.fullText;
-                                        filteredAddressOptions =
-                                            const <AddressSuggestion>[];
-                                      });
-                                    },
-                                  );
-                                },
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Запросите подключение: отметьте дом на карте, и адрес попадет в лист ожидания.'
+                                      .tr(),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: DomlyColors.muted,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                DomlySecondaryButton(
+                                  label: 'Запросить подключение',
+                                  onPressed: () async {
+                                    final requested =
+                                        await _openAddressConnectionRequest(
+                                      context,
+                                      data,
+                                      initialAddress:
+                                          residentialController.text.trim(),
+                                      initialCity: detectedCity,
+                                      entrance: entranceController.text.trim(),
+                                      apartment:
+                                          apartmentController.text.trim(),
+                                      area: (_parseArea(
+                                                areaController.text,
+                                              ) ??
+                                              0)
+                                          .ceil(),
+                                    );
+                                    if (requested == null || !context.mounted) {
+                                      return;
+                                    }
+                                    final houseId =
+                                        (requested['houseId'] ?? '').toString();
+                                    final addressText =
+                                        (requested['address'] ?? '').toString();
+                                    final residentialText =
+                                        (requested['residentialComplex'] ??
+                                                addressText)
+                                            .toString();
+                                    final nextAddress = AddressSuggestion(
+                                      title: residentialText,
+                                      subtitle: addressText == residentialText
+                                          ? ''
+                                          : addressText,
+                                      placeId: houseId,
+                                      residentialComplex: residentialText,
+                                      addressLine: addressText,
+                                      isResidentialComplex: true,
+                                      lat: _readDouble(requested['lat']),
+                                      lng: _readDouble(requested['lng']),
+                                      city:
+                                          (requested['city'] ?? '').toString(),
+                                    );
+                                    setModalState(() {
+                                      selectedAddress = nextAddress;
+                                      residentialController.text =
+                                          nextAddress.fullText;
+                                      filteredAddressOptions =
+                                          const <AddressSuggestion>[];
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: entranceController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Подъезд',
+                                ),
                               ),
                             ),
-                          ] else if (residentialController.text.trim().length >=
-                                  2 &&
-                              selectedAddress == null) ...[
-                            const SizedBox(height: 8),
-                            DomlyCard(
-                              color: DomlyColors.backgroundSoft,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Адрес не найден среди подключенных домов'
-                                        .tr(),
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: DomlyColors.foreground,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Запросите подключение: отметьте дом на карте, и адрес попадет в лист ожидания.'
-                                        .tr(),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: DomlyColors.muted,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  DomlySecondaryButton(
-                                    label: 'Запросить подключение',
-                                    onPressed: () async {
-                                      final requested =
-                                          await _openAddressConnectionRequest(
-                                            context,
-                                            data,
-                                            initialAddress:
-                                                residentialController.text
-                                                    .trim(),
-                                            initialCity: detectedCity,
-                                            entrance: entranceController.text
-                                                .trim(),
-                                            apartment: apartmentController.text
-                                                .trim(),
-                                            area:
-                                                (_parseArea(
-                                                          areaController.text,
-                                                        ) ??
-                                                        0)
-                                                    .ceil(),
-                                          );
-                                      if (requested == null ||
-                                          !context.mounted) {
-                                        return;
-                                      }
-                                      final houseId =
-                                          (requested['houseId'] ?? '')
-                                              .toString();
-                                      final addressText =
-                                          (requested['address'] ?? '')
-                                              .toString();
-                                      final residentialText =
-                                          (requested['residentialComplex'] ??
-                                                  addressText)
-                                              .toString();
-                                      final nextAddress = AddressSuggestion(
-                                        title: residentialText,
-                                        subtitle: addressText == residentialText
-                                            ? ''
-                                            : addressText,
-                                        placeId: houseId,
-                                        residentialComplex: residentialText,
-                                        addressLine: addressText,
-                                        isResidentialComplex: true,
-                                        lat: _readDouble(requested['lat']),
-                                        lng: _readDouble(requested['lng']),
-                                        city: (requested['city'] ?? '')
-                                            .toString(),
-                                      );
-                                      setModalState(() {
-                                        selectedAddress = nextAddress;
-                                        residentialController.text =
-                                            nextAddress.fullText;
-                                        filteredAddressOptions =
-                                            const <AddressSuggestion>[];
-                                      });
-                                    },
-                                  ),
-                                ],
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: apartmentController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Квартира',
+                                ),
                               ),
                             ),
                           ],
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: entranceController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Подъезд',
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: TextField(
-                                  controller: apartmentController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Квартира',
-                                  ),
-                                ),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: areaController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
                           ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: areaController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            decoration: const InputDecoration(
-                              labelText: 'Площадь квартиры *',
-                            ),
+                          decoration: const InputDecoration(
+                            labelText: 'Площадь квартиры *',
                           ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: phoneController,
-                            keyboardType: TextInputType.phone,
-                            decoration: const InputDecoration(
-                              labelText: 'Телефон *',
-                              hintText: '+7 777 000 00 00',
-                            ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                            labelText: 'Телефон *',
+                            hintText: '+7 777 000 00 00',
                           ),
-                          const SizedBox(height: 16),
-                          DomlyPrimaryButton(
-                            label: 'Сохранить',
-                            onPressed: () async {
-                              final residential = residentialController.text
-                                  .trim();
-                              final phone = phoneController.text.trim();
-                              final area = _parseArea(areaController.text) ?? 0;
-                              final previousArea =
-                                  (_readDouble(profile['apartmentArea']) ??
-                                  _readDouble(profile['area']) ??
-                                  0);
-                              final shouldConfirmAreaDocuments =
-                                  area > 0 &&
-                                  (previousArea != area ||
-                                      profile['areaVerified'] != true);
-                              if (residential.isEmpty ||
-                                  area <= 0 ||
-                                  phone.isEmpty) {
-                                showDomlySnackBar(
-                                  context,
-                                  title: 'Заполните обязательные поля',
-                                  subtitle: 'Нужны адрес, площадь и телефон.',
-                                  type: DomlySnackBarType.error,
+                        ),
+                        const SizedBox(height: 16),
+                        DomlyPrimaryButton(
+                          label: saving ? 'Сохраняем...' : 'Сохранить',
+                          onPressed: () async {
+                            if (saving) return;
+                            final residential =
+                                residentialController.text.trim();
+                            final phone = phoneController.text.trim();
+                            final area = _parseArea(areaController.text) ?? 0;
+                            final previousArea =
+                                (_readDouble(profile['apartmentArea']) ??
+                                    _readDouble(profile['area']) ??
+                                    0);
+                            final shouldConfirmAreaDocuments = area > 0 &&
+                                (previousArea != area ||
+                                    profile['areaVerified'] != true);
+                            if (residential.isEmpty ||
+                                area <= 0 ||
+                                phone.isEmpty) {
+                              showDomlySnackBar(
+                                context,
+                                title: 'Заполните обязательные поля',
+                                subtitle: 'Нужны адрес, площадь и телефон.',
+                                type: DomlySnackBarType.error,
+                              );
+                              return;
+                            }
+                            setModalState(() => saving = true);
+                            try {
+                              var address = selectedAddress;
+                              final existingHouseId =
+                                  (profile['houseId'] ?? '').toString().trim();
+                              final addressUnchanged =
+                                  residential == initialResidentialText;
+                              if (address == null &&
+                                  existingHouseId.isNotEmpty &&
+                                  addressUnchanged) {
+                                address = AddressSuggestion(
+                                  title: (profile['residentialComplex'] ??
+                                          profile['address'] ??
+                                          residential)
+                                      .toString(),
+                                  subtitle:
+                                      (profile['address'] ?? '').toString(),
+                                  placeId: existingHouseId,
+                                  residentialComplex:
+                                      (profile['residentialComplex'] ??
+                                              residential)
+                                          .toString(),
+                                  addressLine:
+                                      (profile['address'] ?? residential)
+                                          .toString(),
+                                  isResidentialComplex: true,
+                                  lat: _readDouble(profile['addressLat']),
+                                  lng: _readDouble(profile['addressLng']),
                                 );
-                                return;
                               }
+                              address ??= resolveTypedAddress(residential);
+                              address ??= AddressSuggestion(
+                                  title: residential,
+                                  subtitle: detectedCity,
+                                  placeId: '',
+                                  addressLine: residential,
+                                  city: detectedCity);
+                              final addressText =
+                                  address.addressText.trim().isNotEmpty == true
+                                      ? address.addressText
+                                      : residential;
+                              final residentialText =
+                                  address.selectionText.trim().isNotEmpty ==
+                                          true
+                                      ? address.selectionText
+                                      : residential;
+                              final cityText = address.city.trim().isNotEmpty
+                                  ? address.city.trim()
+                                  : detectedCity;
+                              Map<String, dynamic>? house;
                               try {
-                                var address = selectedAddress;
-                                final existingHouseId =
-                                    (profile['houseId'] ?? '')
-                                        .toString()
-                                        .trim();
-                                final addressUnchanged =
-                                    residential == initialResidentialText;
-                                if (address == null &&
-                                    existingHouseId.isNotEmpty &&
-                                    addressUnchanged) {
-                                  address = AddressSuggestion(
-                                    title:
-                                        (profile['residentialComplex'] ??
-                                                profile['address'] ??
-                                                residential)
-                                            .toString(),
-                                    subtitle: (profile['address'] ?? '')
-                                        .toString(),
-                                    placeId: existingHouseId,
-                                    residentialComplex:
-                                        (profile['residentialComplex'] ??
-                                                residential)
-                                            .toString(),
-                                    addressLine:
-                                        (profile['address'] ?? residential)
-                                            .toString(),
-                                    isResidentialComplex: true,
-                                    lat: _readDouble(profile['addressLat']),
-                                    lng: _readDouble(profile['addressLng']),
-                                  );
-                                }
-                                address ??= resolveTypedAddress(residential);
-                                if (address == null) {
-                                  showDomlySnackBar(
-                                    context,
-                                    title: 'Выберите адрес из списка',
-                                    subtitle:
-                                        'Доступны только дома и районы, добавленные в админке.',
-                                    type: DomlySnackBarType.error,
-                                  );
-                                  return;
-                                }
-                                final addressText =
-                                    address.addressText.trim().isNotEmpty ==
-                                        true
-                                    ? address.addressText
-                                    : residential;
-                                final residentialText =
-                                    address.selectionText.trim().isNotEmpty ==
-                                        true
-                                    ? address.selectionText
-                                    : residential;
-                                final cityText = address.city.trim().isNotEmpty
-                                    ? address.city.trim()
-                                    : detectedCity;
-                                final house = await data.resolveHouseForAddress(
+                                house = await data.resolveHouseForAddress(
                                   residentialComplex: residentialText,
                                   addressLine: addressText,
                                   placeId: address.placeId.isNotEmpty
                                       ? address.placeId
                                       : (profile['addressPlaceId'] ?? '')
-                                            .toString(),
-                                  lat:
-                                      address.lat ??
+                                          .toString(),
+                                  lat: address.lat ??
                                       _readDouble(profile['addressLat']),
-                                  lng:
-                                      address.lng ??
+                                  lng: address.lng ??
                                       _readDouble(profile['addressLng']),
                                 );
-                                var houseId = (house?['id'] ?? '').toString();
-                                var houseStatus = (house?['status'] ?? '')
-                                    .toString();
-                                if (houseId.isEmpty) {
-                                  if (!context.mounted) {
-                                    return;
-                                  }
-                                  showDomlySnackBar(
-                                    context,
-                                    title: 'Адрес недоступен',
-                                    subtitle:
-                                        'Выберите дом из списка, который добавлен в админке.',
-                                    type: DomlySnackBarType.error,
-                                  );
-                                  return;
-                                }
-                                await data.updateCustomerProfile({
-                                  'name': nameController.text.trim(),
-                                  'initialArea': area,
-                                  'actualArea': area,
-                                  'residentialComplex': residentialText,
-                                  'address': addressText,
-                                  'addressPlaceId': address.placeId.isNotEmpty
-                                      ? address.placeId
-                                      : (profile['addressPlaceId'] ?? '')
+                              } catch (_) {
+                                // Directory lookup is optional when saving the address.
+                              }
+                              var houseId = (house?['id'] ?? '').toString();
+                              var houseStatus =
+                                  (house?['status'] ?? '').toString();
+                              await data.updateCustomerProfile({
+                                'name': nameController.text.trim(),
+                                'initialArea': area,
+                                'actualArea': area,
+                                'residentialComplex': residentialText,
+                                'address': addressText,
+                                'addressPlaceId': address.placeId.isNotEmpty
+                                    ? address.placeId
+                                    : (profile['addressPlaceId'] ?? '')
+                                        .toString(),
+                                'addressLat': address.lat ??
+                                    _readDouble(profile['addressLat']),
+                                'addressLng': address.lng ??
+                                    _readDouble(profile['addressLng']),
+                                if (houseId.isNotEmpty) 'houseId': houseId,
+                                if (houseStatus.isNotEmpty)
+                                  'houseStatus': houseStatus,
+                                if (cityText.isNotEmpty) 'city': cityText,
+                                'entrance': entranceController.text.trim(),
+                                'apartment': apartmentController.text.trim(),
+                                'area': area,
+                                'phone': phone,
+                                'addresses': [
+                                  {
+                                    'address': address.addressText,
+                                    if (address.street.isNotEmpty)
+                                      'street': address.street,
+                                    if (address.house.isNotEmpty)
+                                      'house': address.house,
+                                    'residentialComplex': residentialText,
+                                    'addressPlaceId': address.placeId.isNotEmpty
+                                        ? address.placeId
+                                        : (profile['addressPlaceId'] ?? '')
                                             .toString(),
-                                  'addressLat':
-                                      address.lat ??
-                                      _readDouble(profile['addressLat']),
-                                  'addressLng':
-                                      address.lng ??
-                                      _readDouble(profile['addressLng']),
-                                  if (houseId.isNotEmpty) 'houseId': houseId,
-                                  if (houseStatus.isNotEmpty)
+                                    'addressLat': address.lat ??
+                                        _readDouble(profile['addressLat']),
+                                    'addressLng': address.lng ??
+                                        _readDouble(profile['addressLng']),
+                                    'houseId': houseId,
                                     'houseStatus': houseStatus,
-                                  if (cityText.isNotEmpty) 'city': cityText,
-                                  'entrance': entranceController.text.trim(),
-                                  'apartment': apartmentController.text.trim(),
-                                  'area': area,
-                                  'phone': phone,
-                                  'addresses': [
-                                    {
-                                      'address': addressText,
-                                      'residentialComplex': residentialText,
-                                      'addressPlaceId':
-                                          address.placeId.isNotEmpty
-                                          ? address.placeId
-                                          : (profile['addressPlaceId'] ?? '')
-                                                .toString(),
-                                      'addressLat':
-                                          address.lat ??
-                                          _readDouble(profile['addressLat']),
-                                      'addressLng':
-                                          address.lng ??
-                                          _readDouble(profile['addressLng']),
-                                      'houseId': houseId,
-                                      'houseStatus': houseStatus,
-                                      if (cityText.isNotEmpty) 'city': cityText,
-                                      'entrance': entranceController.text
-                                          .trim(),
-                                      'apartment': apartmentController.text
-                                          .trim(),
-                                      'area': area,
-                                      'phone': phone,
-                                      'isPrimary': true,
-                                    },
-                                  ],
-                                });
-                                if (!context.mounted) {
-                                  return;
-                                }
-                                Navigator.pop(context, true);
-                                if (stayInCurrentFlow) {
-                                  return;
-                                }
-                                final normalizedHouseStatus = houseStatus
-                                    .trim()
-                                    .toUpperCase();
-                                showDomlySnackBar(
-                                  context,
-                                  title: 'Профиль сохранён',
-                                  subtitle: shouldConfirmAreaDocuments
-                                      ? 'Подтвердите площадь документом.'
-                                      : normalizedHouseStatus == 'ACTIVE'
-                                      ? 'Дом подключен. Можно выбрать пакет.'
-                                      : 'Адрес сохранён. Откроем экран подключения дома.',
-                                  type: DomlySnackBarType.success,
+                                    if (cityText.isNotEmpty) 'city': cityText,
+                                    'entrance': entranceController.text.trim(),
+                                    'apartment':
+                                        apartmentController.text.trim(),
+                                    'area': area,
+                                    'phone': phone,
+                                    'isPrimary': true,
+                                  },
+                                ],
+                              });
+                              if (!context.mounted) {
+                                return;
+                              }
+                              setModalState(() => savedSuccessfully = true);
+                              await WidgetsBinding.instance.endOfFrame;
+                              if (!context.mounted) return;
+                              Navigator.pop(context, true);
+                              if (stayInCurrentFlow) {
+                                return;
+                              }
+                              final normalizedHouseStatus =
+                                  houseStatus.trim().toUpperCase();
+                              showDomlySnackBar(
+                                pageContext,
+                                title: 'Профиль сохранён',
+                                subtitle: shouldConfirmAreaDocuments
+                                    ? 'Подтвердите площадь документом.'
+                                    : normalizedHouseStatus == 'ACTIVE'
+                                        ? 'Дом подключен. Можно выбрать пакет.'
+                                        : 'Адрес сохранён.',
+                                type: DomlySnackBarType.success,
+                              );
+                              if (shouldConfirmAreaDocuments) {
+                                Navigator.pushNamed(
+                                  pageContext,
+                                  '/client/area-confirmation',
+                                  arguments: {
+                                    'initialArea': area,
+                                    'actualArea': area,
+                                    'forceTechPlanPrompt': true,
+                                  },
                                 );
-                                if (shouldConfirmAreaDocuments) {
-                                  Navigator.pushNamed(
-                                    context,
-                                    '/client/area-confirmation',
-                                    arguments: {
-                                      'initialArea': area,
-                                      'actualArea': area,
-                                      'forceTechPlanPrompt': true,
-                                    },
-                                  );
-                                  return;
-                                }
-                                if (normalizedHouseStatus == 'ACTIVE') {
-                                  Navigator.pushNamed(
-                                    context,
-                                    '/client/packages',
-                                  );
-                                } else {
-                                  Navigator.pushNamed(
-                                    context,
-                                    '/client/house-waitlist',
-                                    arguments: {'houseId': houseId},
-                                  );
-                                }
-                              } catch (error) {
-                                if (!context.mounted) {
-                                  return;
-                                }
-                                showDomlySnackBar(
-                                  context,
-                                  title: 'Ошибка сохранения',
-                                  subtitle: '$error',
-                                  type: DomlySnackBarType.error,
+                                return;
+                              }
+                              if (normalizedHouseStatus == 'ACTIVE') {
+                                Navigator.pushNamed(
+                                  pageContext,
+                                  '/client/home',
+                                );
+                              } else {
+                                Navigator.pushNamed(
+                                  pageContext,
+                                  '/client/home',
+                                  arguments: {'houseId': houseId},
                                 );
                               }
-                            },
-                          ),
-                        ],
-                      ),
+                            } catch (error) {
+                              if (!context.mounted) {
+                                return;
+                              }
+                              showDomlySnackBar(
+                                context,
+                                title: 'Ошибка сохранения',
+                                subtitle: '$error',
+                                type: DomlySnackBarType.error,
+                              );
+                            } finally {
+                              if (context.mounted)
+                                setModalState(() => saving = false);
+                            }
+                          },
+                        ),
+                      ],
                     ),
-                  );
-                },
-              ),
-            );
+                  ),
+                ));
           },
-        ).whenComplete(() {
-          nameController.dispose();
-          residentialController.dispose();
-          entranceController.dispose();
-          apartmentController.dispose();
-          areaController.dispose();
-          phoneController.dispose();
-        });
+        );
+      },
+    ).whenComplete(() {
+      nameController.dispose();
+      residentialController.dispose();
+      entranceController.dispose();
+      apartmentController.dispose();
+      areaController.dispose();
+      phoneController.dispose();
+    });
     return saved == true;
   }
 
@@ -1811,8 +1779,10 @@ class ProfileScreen extends StatelessWidget {
                       controller: cityController,
                       onChanged: (value) async {
                         try {
-                          final cities = await AddressSearchService.instance.searchCities(value);
-                          if (!context.mounted || cityController.text != value) return;
+                          final cities = await AddressSearchService.instance
+                              .searchCities(value);
+                          if (!context.mounted || cityController.text != value)
+                            return;
                           setModalState(() => citySuggestions = cities);
                         } catch (_) {
                           if (context.mounted && cityController.text == value) {
@@ -2067,9 +2037,8 @@ class ProfileScreen extends StatelessWidget {
             !_isAddressNumberToken(token) &&
             !_addressNoiseTokens.contains(token),
       )) {
-        final maxDistance = queryToken.length <= 4 || houseToken.length <= 4
-            ? 1
-            : 2;
+        final maxDistance =
+            queryToken.length <= 4 || houseToken.length <= 4 ? 1 : 2;
         if (_tokenLooksLikePart(queryToken, houseToken, maxDistance)) {
           return true;
         }

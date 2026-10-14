@@ -18,7 +18,7 @@ class TranslationController extends ChangeNotifier {
   }) : _preferences = preferences;
 
   TranslationController.forTesting({this.fallbackLocale = 'ru'})
-    : _preferences = null;
+      : _preferences = null;
 
   static const List<String> supportedLocales = <String>['ru', 'kk'];
   static const String _preferencesKey = 'domly_locale';
@@ -112,9 +112,9 @@ class TranslationController extends ChangeNotifier {
     }
     final key = translationKey(normalized);
     final entry = _entries[key];
-    final translated =
-        entry?.localized(_localeCode, fallbackLocale) ??
+    final translated = entry?.locales[_localeCode] ??
         kBuiltinTranslations[normalized]?[_localeCode] ??
+        entry?.localized(_localeCode, fallbackLocale) ??
         normalized;
     return _applyParams(translated, params);
   }

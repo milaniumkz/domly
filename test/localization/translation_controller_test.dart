@@ -39,7 +39,7 @@ void main() {
       );
       expect(
         controller.translate('Получить код'),
-        'Получить код',
+        'Код алу',
       );
     });
   });

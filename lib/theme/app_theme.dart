@@ -11,6 +11,16 @@ class AppTheme {
   static const Color darkText = Color(0xFF20382B);
   static const Color mutedText = Color(0xFF5E7B69);
 
+  static final ThemeData darkTheme = ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    fontFamily: 'Inter',
+    colorScheme: ColorScheme.fromSeed(
+        seedColor: primaryGreen, brightness: Brightness.dark),
+    scaffoldBackgroundColor: const Color(0xFF121C17),
+    cardTheme: const CardThemeData(color: Color(0xFF203127)),
+  );
+
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     colorScheme: const ColorScheme.light(

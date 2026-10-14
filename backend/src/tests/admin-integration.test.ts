@@ -21,7 +21,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
   let failPush=false;
   const notifications=new NotificationService(db,{send:async()=>{if(failPush)throw Error('Provider offline');return {sent:0};}} as any);
   const app=express();
-  app.use(express.json(),buildV1Router({db,notifications,payments:{refundOrderPayments:async()=>[]},scheduling:new SchedulingService(db),storage:{uploadBuffer:async(key:string)=>env.minioPublicUrl.replace(/\/$/,'')+'/'+key,client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
+  app.use(express.json(),buildV1Router({db,notifications,payments:{refundOrderPayments:async()=>[]},scheduling:new SchedulingService(db),addressSearch:{externalSuggestions:async()=>[]},storage:{uploadBuffer:async(key:string)=>env.minioPublicUrl.replace(/\/$/,'')+'/'+key,client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
   const server=app.listen(0,'127.0.0.1');
   await new Promise<void>(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
@@ -35,6 +35,82 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('cleaner verification keeps address and emergency contact private to staff', async () => {
+      const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});
+      const saved=await fetch(base+'/cleaner/profile',{method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({homeAddress:'Тәуелсіздік 29/2',emergencyContactPhone:'+77000000000',emergencyContactRelation:'Сестра'})});
+      assert.equal(saved.status,200);
+      const own=await fetch(base+'/cleaner/profile',{headers:{Authorization:'Bearer '+token}});
+      assert.equal((await own.json()).data.profile.home_address,'Тәуелсіздік 29/2');
+      const list=await request('/admin/cleaners');
+      const row=list.json.data.find((item:any)=>item.id===cleaner);
+      assert.equal(row.emergency_contact_phone,'+77000000000');
+      const details=await request('/admin/cleaners/'+cleaner+'/details');
+      assert.equal(details.json.data.cleaner.emergency_contact_relation,'Сестра');
+      assert.equal((await request('/admin/cleaners','GET',undefined,true)).status,403);
+    });
+    await t.test('customer settings and address search persist across requests', async () => {
+      const updated=await request('/me/settings','PATCH',{language:'kk',darkMode:true,animations:false,tutorialCompleted_customer:true},true);
+      assert.equal(updated.status,200);
+      const current=await request('/me/settings','GET',undefined,true);
+      assert.equal(current.json.data.language,'kk');
+      assert.equal(current.json.data.darkMode,true);
+      assert.equal(current.json.data.animations,false);
+      assert.equal(current.json.data.tutorialCompleted_customer,true);
+      const address=await request('/addresses','POST',{city:'Астана',street:'Тәуелсіздік',house:'29/2',area:100},true);
+      assert.equal(address.status,201);
+      const addresses=await request('/addresses','GET',undefined,true);
+      assert.ok(addresses.json.data.some((item:any)=>item.id===address.json.data.id && item.house==='29/2'));
+    });
+    await t.test('Russian and Kazakh searches find the same Astana address in the chosen language', async () => {
+      const id=randomUUID(), house='29/2-'+id.slice(0,6);
+      await db.query("INSERT INTO connected_houses(id,city,street_ru,street_kk,house,active) VALUES($1,'Астана','Тауелсиздик','Тәуелсіздік',$2,FALSE)",[id,house]);
+      for(const [search,lang,street] of [['тауелсиздык','ru','Тауелсиздик'],['Тәуелсіздік','kk','Тәуелсіздік']]) {
+        const result=await request('/geo/address-suggestions?city='+encodeURIComponent('Астана')+'&search='+encodeURIComponent(search+' '+house)+'&lang='+lang);
+        assert.equal(result.status,200);
+        assert.equal(result.json.data.suggestions.find((row:any)=>row.id===id)?.street,street);
+      }
+      await db.query('DELETE FROM connected_houses WHERE id=$1',[id]);
+    });
+    await t.test('priced add-ons keep a booking awaiting payment before cleaner search',async()=>{
+      const packageId=randomUUID(),purchaseId=randomUUID(),addonId=randomUUID();
+      await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Пакет допов',4,1,4000,100)",[packageId]);
+      await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes) VALUES($1,'Проверочная допуслуга',4300,15)",[addonId]);
+      await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,4,4,'active')",[purchaseId,customer,packageId]);
+      try {
+        const unknown=await request('/orders','POST',{customerPackageId:purchaseId,date:'2032-10-14',startTime:'10:00',addonsDetailed:[{label:'Несуществующая услуга',quantity:1}]},true);
+        assert.equal(unknown.status,400);
+        const created=await request('/orders','POST',{customerPackageId:purchaseId,date:'2032-10-14',startTime:'10:00',addonsDetailed:[{label:'Проверочная допуслуга',quantity:2}]},true);
+        assert.equal(created.status,201);
+        const order=created.json.data.order;
+        assert.equal(order.status,'pending_payment');
+        assert.equal(Number(order.addon_amount),8600);
+        assert.equal(created.json.data.offer,null);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM order_offers WHERE order_id=$1',[order.id])).rows[0].n,0);
+        const lines=(await db.query('SELECT quantity,payment_status FROM order_addons WHERE order_id=$1',[order.id])).rows;
+        assert.equal(Number(lines[0].quantity),2);
+        assert.equal(lines[0].payment_status,'pending');
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order.id]);
+      } finally {
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchaseId]);
+        await db.query('DELETE FROM catalog_addons WHERE id=$1',[addonId]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[packageId]);
+      }
+    });
+    await t.test('unbooked package purchase appears in customer orders while awaiting payment and after approval', async () => {
+      const pkgId=randomUUID(), purchaseId=randomUUID(), payId=randomUUID();
+      await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Пакет проверки',4,1,4000,100)",[pkgId]);
+      await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings) VALUES($1,$2,$3,4,4)",[purchaseId,customer,pkgId]);
+      await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,status,amount) VALUES($1,$2,$3,'kaspi','invoice_requested',4000)",[payId,customer,purchaseId]);
+      const pending=await request('/orders','GET',undefined,true);
+      assert.equal(pending.status,200);
+      assert.equal(pending.json.data.find((item:any)=>item.id===payId)?.status,'pending_payment');
+      await db.query("UPDATE payments SET status='paid' WHERE id=$1",[payId]);
+      const paid=await request('/orders','GET',undefined,true);
+      assert.equal(paid.json.data.find((item:any)=>item.id===payId)?.status,'pending_assignment');
+      await db.query('DELETE FROM payments WHERE id=$1',[payId]);
+      await db.query('DELETE FROM customer_packages WHERE id=$1',[purchaseId]);
+      await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkgId]);
+    });
     await t.test('banner creation, metadata, hidden visibility, editing and deletion', async () => {
       assert.equal((await request('/admin/banners','POST',{titleRu:''})).status,400);
       assert.equal((await request('/admin/banners','POST',{titleRu:'No access'},true)).status,403);
@@ -337,7 +413,11 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       try {
         await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area,is_primary) VALUES($1,$2,'Астана','Test','1',90,TRUE)",[address,customer]);
         await db.query("INSERT INTO quality_check_requests(id,customer_id,address_id,requested_area) VALUES($1,$2,$3,100)",[check,customer,address]);
+        const repeatedRequests=await Promise.all(Array.from({length:3},()=>request('/quality-checks/from-file','POST',{addressId:address,actualArea:100},true)));
+        assert.ok(repeatedRequests.every(result=>result.status===201 && result.json.data.request.id===check));
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM quality_check_requests WHERE customer_id=$1 AND address_id=$2 AND status IN ('pending','scheduled')",[customer,address])).rows[0].n),1);
         assert.equal((await request('/admin/quality-checks/'+check,'PATCH',{status:'approved',approvedArea:100})).status,200);
+        assert.equal((await request('/admin/quality-checks/'+check,'PATCH',{actualArea:100,difference:10,reviewStatus:'verified',confirmedByQualityControl:true})).status,200);
         assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),initial+2000);
         assert.equal(Number((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area),100);
         const repeated=await Promise.all([request('/admin/quality-checks/'+check+'/approve','POST',{approvedArea:100}),request('/admin/users/'+customer+'/confirm-area','POST',{actualArea:100})]);

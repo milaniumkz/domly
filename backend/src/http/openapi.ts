@@ -397,6 +397,7 @@ export const openApiSpec = {
     '/cleaner/offers': { get: secured('Активные предложения уборщицы') },
     '/cleaner/offers/{id}/accept': { post: { ...secured('Принять предложение'), parameters: [path('id')] } },
     '/cleaner/offers/{id}/decline': { post: { ...secured('Отклонить предложение'), parameters: [path('id')] } },
+    '/payments/methods': { get: { summary: 'Доступные способы оплаты', responses: okError() } },
     '/payments/my': { get: secured('Клиент: история своих платежей') },
     '/payments': { get: secured('Админ: платежи с данными клиента/заказа') },
     '/payouts': {
