@@ -79,7 +79,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       try {
         const unknown=await request('/orders','POST',{customerPackageId:purchaseId,date:'2032-10-14',startTime:'10:00',addonsDetailed:[{label:'Несуществующая услуга',quantity:1}]},true);
         assert.equal(unknown.status,400);
-        const created=await request('/orders','POST',{customerPackageId:purchaseId,date:'2032-10-14',startTime:'10:00',addonsDetailed:[{label:'Проверочная допуслуга',quantity:2}]},true);
+        const created=await request('/orders','POST',{customerPackageId:purchaseId,date:'2032-10-14',startTime:'10:00',addonsDetailed:[{key:addonId,label:'Проверочная допуслуга',quantity:2}]},true);
         assert.equal(created.status,201);
         const order=created.json.data.order;
         assert.equal(order.status,'pending_payment');

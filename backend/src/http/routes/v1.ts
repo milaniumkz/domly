@@ -1355,7 +1355,7 @@ export function buildV1Router(deps: {
       ? (await deps.db.query<{ id: string; title_ru: string; title_kk: string | null; price: string; duration_minutes: number }>(
         'SELECT id,title_ru,title_kk,price,duration_minutes FROM catalog_addons WHERE active=TRUE')).rows : [];
     const addons = requestedAddons.map((item: any) => {
-      const requestedId = String(item.id ?? item.addonId ?? '').trim();
+      const requestedId = String(item.id ?? item.addonId ?? item.key ?? '').trim();
       const label = normalizeText(String(item.label ?? item.title ?? '').trim());
       const addon = catalogAddons.find(row => row.id===requestedId || (label &&
         [row.title_ru,row.title_kk].some(title=>title && normalizeText(title)===label)));
