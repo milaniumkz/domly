@@ -144,6 +144,9 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
 
   static String _paymentTitle(Map<String, dynamic> order) {
     final status = (order['paymentStatus'] ?? '').toString().toLowerCase();
+    if (order['bccTestMode'] == true && status != 'paid') {
+      return order['bccBankStatus'] == 'paid' ? 'Тест BCC выполнен' : 'Тестовая оплата BCC';
+    }
     final orderStatus = (order['orderStatus'] ?? '').toString().toLowerCase();
     if (status == 'paid') {
       return 'Оплачено';
@@ -164,6 +167,9 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
 
   static String _paymentSubtitle(Map<String, dynamic> order) {
     final status = (order['paymentStatus'] ?? '').toString().toLowerCase();
+    if (order['bccTestMode'] == true && status != 'paid') {
+      return 'Реальная покупка ещё не оплачена';
+    }
     final price =
         (order['price'] as num?)?.toInt() ??
         (order['amount'] as num?)?.toInt() ??

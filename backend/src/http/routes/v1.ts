@@ -8,7 +8,7 @@ import { verifyCleaner } from '../../modules/cleanerVerification';
 import { qualifyReferral, referralDiscount } from '../../modules/referrals';
 import { packageQuote } from '../../modules/packageQuote';
 import { mobileRouter } from './mobile';
-import { Router } from 'express';
+import { Router, urlencoded } from 'express';
 import fs from 'fs/promises';
 import multer from 'multer';
 import path from 'path';
@@ -21,6 +21,8 @@ import { AuthService, BonusService, hashToken, normalizePhone, NotificationServi
 import { defaultTranslations } from '../../modules/defaultTranslations';
 import { AddressSearchService, normalizeText, PaymentGatewayService, StorageService, toLatin, WapiOtpService } from '../../modules/integrations';
 import { createHash, randomUUID } from 'crypto';
+import { bccConfig, bccReady, bccResultStatus, postBccFields } from '../../modules/bcc';
+import { reconcileBccPayment } from '../../modules/bccPayments';
 
 export function buildV1Router(deps: {
   db: Database;
@@ -36,11 +38,26 @@ export function buildV1Router(deps: {
   wapi: WapiOtpService;
 }) {
   const router = Router();
+  router.use('/payments/bcc', urlencoded({extended:false,limit:'32kb'}));
   router.use(mediaLinksMiddleware(deps.db));
   router.use(mobileRouter(deps.db));
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
   const initConfiguredPayment = async (gateway: PaymentGatewayService, result: {payment: unknown; payableAmount: number}, req: any, description: string) => {
     const payment=result.payment as any;
+    if (payment?.provider==='bcc' && result.payableAmount>0) {
+      const config=bccConfig();
+      if (config.test && Number(payment.bonus_amount)>0) throw new ApiError(409,'bcc_test_bonus','В тестовой оплате бонусы не используются. Выберите Kaspi для оплаты бонусами.');
+      const existing=payment.payload;
+      if (existing?.paymentHtml && existing.bccTestMode===config.test && existing.providerPayload?.TERMINAL===config.terminalId
+        && Date.now()-Date.parse(existing.bccSessionCreatedAt ?? '')<45*60000) {
+        return {paymentHtml:existing.paymentHtml,actionUrl:existing.actionUrl,providerPayload:existing.providerPayload,
+          externalOrderId:existing.externalOrderId,testMode:config.test,bccTestMode:config.test,orderId:payment.id};
+      }
+      const reference=(await deps.db.query("SELECT nextval('bcc_order_reference_seq')::text AS reference")).rows[0].reference;
+      return gateway.createBccPayment({paymentId:payment.id,externalOrderId:reference,amount:result.payableAmount,
+        description,clientIp:req.ip,language:req.user?.language ?? req.body.language ?? 'ru',
+        mInfo:payment.payload?.mInfo,customerPhone:req.user?.phone});
+    }
     if(env.moonAiEnabled && payment?.provider==='kaspi' && result.payableAmount>0) {
       if(!payment.invoice_phone) return null;
       return queueMoonInvoice(deps.db,payment,description);
@@ -188,15 +205,6 @@ export function buildV1Router(deps: {
     if (token !== env.moonAiWebhookToken) {
       throw new ApiError(401, 'unauthorized', 'Неверный токен webhook.');
     }
-  };
-
-  const normalizeBccPaymentStatus = (payload: Record<string, unknown>) => {
-    const raw = String(payload.status ?? payload.STATUS ?? payload.result ?? payload.RESULT ?? payload.ACTION ?? '').toLowerCase();
-    const response = String(payload.response ?? payload.RESPONSE ?? payload.rc ?? payload.RC ?? '');
-    if (['approved', 'paid', 'success', 'completed', '0', '00'].includes(raw) || response === '00') return 'paid';
-    if (['rejected', 'declined', 'failed', 'error'].includes(raw)) return 'rejected';
-    if (['cancelled', 'canceled', 'expired'].includes(raw)) return 'cancelled';
-    return 'pending';
   };
 
   const offerNextCleanerAndNotify = async (orderId: string, excludeCleanerIds: string[] = []) => {
@@ -1289,7 +1297,7 @@ export function buildV1Router(deps: {
   }));
 
   router.get('/payments/methods', asyncHandler(async (_req, res) => {
-    ok(res, { kaspi: Boolean(env.moonAiEnabled && env.moonAiChannelUrl && env.moonAiChannelApiKey), online: bccReady() });
+    ok(res, { kaspi: Boolean(env.moonAiEnabled && env.moonAiChannelUrl && env.moonAiChannelApiKey), online: bccReady(),onlineTest:bccConfig().test });
   }));
 
   router.post('/packages/purchase', auth(['customer']), asyncHandler(async (req, res) => {
@@ -2307,6 +2315,12 @@ export function buildV1Router(deps: {
   router.post('/payments/:id/status-check', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const payment = first((await deps.db.query(`SELECT * FROM payments WHERE id=$1`, [req.params.id])).rows);
     if (!payment) throw new ApiError(404, 'not_found', 'Платёж не найден.');
+    if ((payment as any).provider==='bcc') {
+      const result=await reconcileBccPayment(deps.db,deps.paymentGateway,payment);
+      if (!result.testMode && result.payment.status==='paid') await applyPaidPayment(result.payment);
+      ok(res,result);
+      return;
+    }
     const provider = (payment as any).provider === 'bcc'
       ? await deps.paymentGateway.createBccStatusCheck({
         paymentId: String(req.params.id),
@@ -2334,23 +2348,36 @@ export function buildV1Router(deps: {
       amount: string;
       bonus_amount: string;
       external_id: string | null;
+      payload: any;
     }>((await deps.db.query(`SELECT * FROM payments WHERE id=$1`, [req.params.id])).rows);
     if (!payment) throw new ApiError(404, 'not_found', 'Платёж не найден.');
     if (!['paid', 'pending', 'invoice_requested'].includes(payment.status)) {
       throw new ApiError(400, 'invalid_payment_status', 'Этот платёж нельзя вернуть в текущем статусе.');
     }
     const amount = Math.min(Number(req.body.amount ?? payment.amount), Number(payment.amount));
-    if (Number(payment.bonus_amount) > 0) {
-      await deps.bonuses.refund(payment.customer_id, Number(payment.bonus_amount), 'Возврат по платежу', payment.order_id ?? undefined, payment.id);
-    }
+    if (!Number.isFinite(amount) || amount<=0) throw new ApiError(400,'invalid_amount','Укажите корректную сумму возврата.');
+    if (payment.provider==='bcc' && (payment.status!=='paid' || !payment.payload?.bccBankResult?.RRN || !payment.payload?.bccBankResult?.INT_REF))
+      throw new ApiError(409,'bcc_refund_reference_missing','Банк ещё не подтвердил платёж или не передал реквизиты возврата.');
     const provider = payment.provider === 'bcc' && amount > 0
       ? await deps.paymentGateway.createBccRefund({
         paymentId: payment.id,
         amount,
-        referenceId: payment.external_id,
+        referenceId: payment.payload?.bccBankResult?.RRN,
+        intRef: payment.payload?.bccBankResult?.INT_REF,
+        externalOrderId: payment.payload?.providerPayload?.ORDER,
+        merchRnId: payment.payload?.providerPayload?.MERCH_RN_ID,
+        originalAmount: Number(payment.amount),
         language: req.body.language ?? 'ru',
       })
       : { providerPayload: { provider: payment.provider, paymentId: payment.id, amount }, providerResponse: null, paymentUrl: null };
+    if (payment.provider==='bcc') {
+      const result=await postBccFields(provider.providerPayload);
+      if (bccResultStatus(result)!=='paid') throw new ApiError(502,'bcc_refund_failed','Банк не подтвердил возврат. Платёж сохранён без изменений.');
+      (provider as any).providerResponse=result;
+    }
+    if (Number(payment.bonus_amount) > 0) {
+      await deps.bonuses.refund(payment.customer_id, Number(payment.bonus_amount), 'Возврат по платежу', payment.order_id ?? undefined, payment.id);
+    }
     const updated = first((await deps.db.query(
       `UPDATE payments SET status='refunded', payload=payload || $2::jsonb, updated_at=NOW() WHERE id=$1 RETURNING *`,
       [payment.id, { refund: provider, refundReason: req.body.reason ?? null, refundedBy: req.user?.id }],
@@ -2434,35 +2461,49 @@ export function buildV1Router(deps: {
     ok(res, {accepted: true, resolution: result.resolution, duplicate: result.duplicate, status});
   }));
 
-  router.post('/payments/bcc/webhook', asyncHandler(async (req, res) => {
-    const status = normalizeBccPaymentStatus(req.body);
-    const paymentId = req.body.paymentId ?? req.body.ORDER ?? req.body.order;
-    const externalId = req.body.orderId ?? req.body.externalId ?? req.body.RRN ?? req.body.rrn ?? req.body.INT_REF ?? req.body.intRef ?? null;
-    const payment = first((await deps.db.query(
-      `UPDATE payments
-       SET status=CASE WHEN status IN ('paid','cancelled','refunded') THEN status ELSE $2 END,
-           approval_source=CASE WHEN status NOT IN ('paid','cancelled','refunded') AND $2='paid' THEN 'bcc' ELSE approval_source END,
-           approved_at=CASE WHEN status NOT IN ('paid','cancelled','refunded') AND $2='paid' THEN NOW() ELSE approved_at END,
-           external_id=COALESCE($3, external_id),
-           payload=payload || $4::jsonb,
-           updated_at=NOW()
-       WHERE id::text=$1 OR external_id=$1 OR external_id=$3
-       RETURNING *`,
-      [paymentId ?? null, status, externalId, req.body],
-    )).rows);
-    await recordPaymentEvent(deps.db, {
-      paymentId: payment?.id ?? null,
-      provider: 'bcc',
-      eventType: 'webhook',
-      status,
-      externalId,
-      idempotencyKey: req.body.EVENT_ID ?? req.body.eventId ?? req.body.NONCE ?? req.body.ORDER ?? paymentId ?? null,
-      payload: req.body,
+  const checkBccAndNotify = async (payment:any) => {
+    const result=await reconcileBccPayment(deps.db,deps.paymentGateway,payment);
+    if (!result.testMode && result.payment.status==='paid') await applyPaidPayment(result.payment);
+    if (result.changed && result.bankStatus!=='pending') await deps.notifications.create({
+      userId:payment.customer_id,
+      titleRu:result.testMode ? 'Результат тестовой оплаты BCC' : result.bankStatus==='paid' ? 'Оплата подтверждена' : 'Онлайн-оплата не завершена',
+      bodyRu:result.testMode ? `Тест BCC: ${result.bankStatus==='paid' ? 'успешно' : 'отказ или отмена'}. Покупка не оплачена настоящими деньгами.`
+        : result.bankStatus==='paid' ? 'Банк подтвердил платёж.' : 'Попробуйте оплатить снова или выберите Kaspi.',
+      targetType:'payments',targetId:payment.id,dedupeKey:`bcc:${payment.id}:${result.testMode}:${result.bankStatus}`,
     });
-    await recordAudit('payment.webhook.bcc', 'payment', payment?.id ?? paymentId ?? null, { status, payload: req.body });
-  if (payment?.status === 'paid') await applyPaidPayment(payment);
-    ok(res, { accepted: true, payment });
+    return result;
+  };
+  router.post('/payments/bcc/webhook', asyncHandler(async (req,res)=>{
+    guestWriteLimit(req);
+    if (!bccReady()) throw new ApiError(503,'bcc_not_configured','BCC не настроен.');
+    const credentials=Buffer.from(`${env.bccNotifyUser}:${env.bccNotifyPassword}`).toString('base64');
+    if ((!env.bccNotifyUser || !env.bccNotifyPassword) && !bccConfig().test)
+      throw new ApiError(503,'bcc_callback_not_configured','Не настроена авторизация уведомлений BCC.');
+    if (env.bccNotifyUser && env.bccNotifyPassword && hashToken(String(req.headers.authorization ?? '').replace(/^Basic /i,''))!==hashToken(credentials))
+      throw new ApiError(401,'unauthorized','Неверная авторизация BCC.');
+    const payment=first<any>((await deps.db.query("SELECT * FROM payments WHERE provider='bcc' AND external_id=$1",[String(req.body.ORDER ?? '')])).rows);
+    if (!payment) throw new ApiError(404,'not_found','Платёж не найден.');
+    const result=await checkBccAndNotify(payment);
+    await recordPaymentEvent(deps.db,{paymentId:payment.id,provider:'bcc',eventType:'verified_status',status:result.bankStatus,
+      idempotencyKey:`bcc:${payment.id}:${result.bankStatus}`,payload:{testMode:result.testMode}});
+    ok(res,{accepted:true,testMode:result.testMode,bankStatus:result.bankStatus});
   }));
+  const returnFromBcc=asyncHandler(async (req,res)=>{
+    guestWriteLimit(req);
+    const id=String(req.query.paymentId ?? req.body?.paymentId ?? '');
+    if (/^[a-f0-9-]{36}$/i.test(id)) {
+      const payment=first<any>((await deps.db.query("SELECT * FROM payments WHERE id=$1 AND provider='bcc'",[id])).rows);
+      if (payment) {
+        try { await checkBccAndNotify(payment); }
+        catch (_) { await recordAudit('payment.bcc.return_check_failed','payment',payment.id,{testMode:bccConfig().test}); }
+      }
+    }
+    const target=new URL(env.bccReturnUrl || 'https://domly.kz/customer/#/client/payment-history');
+    target.searchParams.set('bcc_return','1');
+    res.redirect(303,target.toString());
+  });
+  router.get('/payments/bcc/return',returnFromBcc);
+  router.post('/payments/bcc/return',returnFromBcc);
 
   router.get('/payments/my', auth(['customer']), asyncHandler(async (req, res) => {
     const { limit, offset } = pageParams(req.query);
@@ -3682,7 +3723,8 @@ export function buildV1Router(deps: {
       payments: {
         kaspiConfigured: env.moonAiEnabled ? moonAiReady() : Boolean(env.kaspiMerchantId && env.kaspiApiKey && env.kaspiBaseUrl),
         moonAiConfigured: moonAiReady(),
-        bccConfigured: Boolean(env.bccMerchantId && env.bccTerminalId && env.bccNotifyUrl && env.bccReturnUrl),
+        bccConfigured: bccReady(),
+        bccTestMode: bccConfig().test,
       },
       geo: {
         osmConfigured: Boolean(env.osmNominatimUrl),
@@ -5034,8 +5076,4 @@ function parseBackupStamp(value: string) {
   }
   const [, year, month, day, hour, minute, second] = match;
   return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)));
-}
-
-function bccReady(): boolean {
-  return Boolean(env.bccMerchantId && env.bccTerminalId && env.bccPrivateKey && env.bccPublicKey && env.bccNotifyUrl && env.bccReturnUrl);
 }

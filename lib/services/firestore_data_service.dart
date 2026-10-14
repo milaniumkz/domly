@@ -644,6 +644,8 @@ class FirestoreDataService {
       ...item,
       'customerId': item['customer_id'],
       'approvalSource': item['approval_source'],
+      'bccTestMode': item['payload'] is Map && item['payload']['bccTestMode'] == true,
+      'bccBankStatus': item['payload'] is Map ? item['payload']['bccBankStatus'] : null,
       'approvedBy': item['approved_by'],
       'approvedByName': item['approved_by_name'],
       'approvedAt': item['approved_at'],

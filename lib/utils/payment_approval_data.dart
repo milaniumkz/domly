@@ -13,6 +13,11 @@ String paymentApprovalLabel(Map<String, dynamic> payment) {
     case 'bonus':
       return 'Платёж проведён бонусами';
   }
+  if (payment['bccTestMode'] == true) {
+    return payment['bccBankStatus'] == 'paid'
+        ? 'Тест BCC успешен; настоящая оплата не подтверждена'
+        : 'Тестовый платёж BCC — реальные деньги не списываются';
+  }
   if (payment['integrationReview'] != null) {
     return 'Интеграция: нужна ручная проверка';
   }

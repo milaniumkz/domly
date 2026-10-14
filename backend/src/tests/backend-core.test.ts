@@ -371,6 +371,9 @@ test('errorHandler returns localized friendly error payload without stack traces
 });
 
 test('PaymentGatewayService builds BCC payload with required fields', async () => {
+  const previous={bccMode:env.bccMode,bccNotifyUrl:env.bccNotifyUrl,publicApiUrl:env.publicApiUrl};
+  Object.assign(env,{bccMode:'test',bccNotifyUrl:'https://domly.kz:443/api/v1/payments/bcc/webhook',publicApiUrl:'https://domly.kz'});
+  try {
   const gateway = new PaymentGatewayService();
   const result = await gateway.createBccPayment({
     paymentId: '12345678-1234-1234-1234-123456789012',
@@ -382,14 +385,19 @@ test('PaymentGatewayService builds BCC payload with required fields', async () =
   });
   const payload = result.providerPayload as Record<string, unknown>;
   assert.equal(payload.TRTYPE, '1');
-  assert.equal(payload.AMOUNT, 7500);
-  assert.equal(payload.CURRENCY, 'KZT');
+  assert.equal(payload.AMOUNT, '7500.00');
+  assert.equal(payload.CURRENCY, '398');
   assert.equal(payload.CLIENT_IP, '127.0.0.1');
   assert.equal(payload.LANG, 'ru');
   assert.equal(payload.DESC, 'Оплата заказа DOMLY');
-  assert.equal(payload.M_INFO, 'Astana, Tauelsizdik 39');
+  assert.equal(JSON.parse(Buffer.from(String(payload.M_INFO),'base64').toString()).billAddrLine1, 'Kazakhstan');
+  assert.match(String(payload.ORDER),/^\d{7,32}$/);
+  assert.match(String(payload.P_SIGN),/^[A-F0-9]{40}$/);
+  assert.match(result.paymentHtml,/<form[^>]+method="get"/);
+  assert.equal(result.testMode,true);
   assert.ok(String(payload.ORDER).length >= 6);
   assert.equal((result as any).externalOrderId, payload.ORDER);
+  } finally {Object.assign(env,previous);}
 });
 
 test('updatePaymentProviderPayload stores BCC ORDER as payment external id', async () => {
@@ -417,6 +425,8 @@ test('updatePaymentProviderPayload stores BCC ORDER as payment external id', asy
 });
 
 test('PaymentGatewayService builds BCC refund/status/connection payloads', async () => {
+  const previous=env.bccMode;env.bccMode='test';
+  try {
   const gateway = new PaymentGatewayService();
   const refund = await gateway.createBccRefund({
     paymentId: '12345678-1234-1234-1234-123456789012',
@@ -448,6 +458,7 @@ test('PaymentGatewayService builds BCC refund/status/connection payloads', async
   assert.equal(Object.hasOwn(connectionPayload, 'TIMESTAMP'), false);
   assert.equal(Object.hasOwn(connectionPayload, 'NONCE'), false);
   assert.equal(Object.hasOwn(connectionPayload, 'P_SIGN'), false);
+  } finally {env.bccMode=previous;}
 });
 
 test('recordPaymentEvent stores idempotent payment provider events', async () => {

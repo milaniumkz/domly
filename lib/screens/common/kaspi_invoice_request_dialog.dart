@@ -50,10 +50,11 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
   int paymentAmount = 0,
 }) async {
   bool onlineAvailable = false;
+  bool onlineTest = false;
   try {
-    onlineAvailable = (await BackendApiService.instance
-            .getMap('/payments/methods', authenticated: false))['online'] ==
-        true;
+    final methods = await BackendApiService.instance.getMap('/payments/methods', authenticated: false);
+    onlineAvailable = methods['online'] == true;
+    onlineTest = methods['onlineTest'] == true;
   } catch (_) {}
   if (!context.mounted) return null;
   final availableBonus =
@@ -77,7 +78,7 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
             borderRadius: BorderRadius.circular(18),
             onTap: enabled
                 ? () => Navigator.of(dialogContext).pop(
-                      DomlyPaymentSelection(method: method, useBonus: useBonus),
+                      DomlyPaymentSelection(method: method, useBonus: method == DomlyPaymentMethod.online && onlineTest ? false : useBonus),
                     )
                 : null,
             child: Container(
@@ -200,9 +201,9 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
               const SizedBox(height: 14),
               option(
                 icon: Icons.credit_card,
-                title: 'Онлайн-платёж',
+                title: onlineTest ? 'Онлайн-платёж — тест BCC' : 'Онлайн-платёж',
                 subtitle: onlineAvailable
-                    ? 'Оплата картой внутри приложения'
+                    ? onlineTest ? 'Только тестовые карты. Покупка не будет оплачена настоящими деньгами; бонусы не используются.' : 'Оплата картой внутри приложения'
                     : 'Временно недоступно: банк не настроен на сервере',
                 enabled: onlineAvailable,
                 method: DomlyPaymentMethod.online,

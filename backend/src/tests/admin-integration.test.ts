@@ -12,6 +12,7 @@ import {errorHandler} from '../common/api';
 import {signAccessToken,signRefreshToken,verifyAccessToken} from '../common/auth';
 import {NotificationService,SchedulingService,hashToken} from '../modules/domainServices';
 import {verifyCleaner} from '../modules/cleanerVerification';
+import {PaymentGatewayService} from '../modules/integrations';
 
 test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async t=>{
   const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
@@ -21,7 +22,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
   let failPush=false;
   const notifications=new NotificationService(db,{send:async()=>{if(failPush)throw Error('Provider offline');return {sent:0};}} as any);
   const app=express();
-  app.use(express.json(),buildV1Router({db,notifications,payments:{refundOrderPayments:async()=>[]},scheduling:new SchedulingService(db),addressSearch:{externalSuggestions:async()=>[]},storage:{uploadBuffer:async(key:string)=>env.minioPublicUrl.replace(/\/$/,'')+'/'+key,client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
+  app.use(express.json(),buildV1Router({db,notifications,paymentGateway:new PaymentGatewayService(),payments:{refundOrderPayments:async()=>[]},scheduling:new SchedulingService(db),addressSearch:{externalSuggestions:async()=>[]},storage:{uploadBuffer:async(key:string)=>env.minioPublicUrl.replace(/\/$/,'')+'/'+key,client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
   const server=app.listen(0,'127.0.0.1');
   await new Promise<void>(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
@@ -94,6 +95,46 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM customer_packages WHERE id=$1',[purchaseId]);
         await db.query('DELETE FROM catalog_addons WHERE id=$1',[addonId]);
         await db.query('DELETE FROM catalog_packages WHERE id=$1',[packageId]);
+      }
+    });
+    await t.test('BCC sandbox form and callbacks verify bank result without fulfilling real orders',async()=>{
+      const paymentId=randomUUID(),orderId=randomUUID();
+      const previous={bccMode:env.bccMode,bccNotifyUrl:env.bccNotifyUrl,publicApiUrl:env.publicApiUrl,bccNotifyUser:env.bccNotifyUser,bccNotifyPassword:env.bccNotifyPassword};
+      const originalFetch=global.fetch;
+      Object.assign(env,{bccMode:'test',bccNotifyUrl:'https://domly.kz:443/api/v1/payments/bcc/webhook',publicApiUrl:'https://domly.kz',bccNotifyUser:'',bccNotifyPassword:''});
+      await db.query("INSERT INTO service_orders(id,customer_id,status,payable_amount) VALUES($1,$2,'pending_payment',350)",[orderId,customer]);
+      await db.query("INSERT INTO payments(id,customer_id,order_id,provider,status,amount) VALUES($1,$2,$3,'bcc','pending',350)",[paymentId,customer,orderId]);
+      try {
+        const methods=await request('/payments/methods');assert.equal(methods.json.data.online,true);assert.equal(methods.json.data.onlineTest,true);
+        const session=await request('/payments/'+paymentId+'/bcc-session','POST',{},true);
+        assert.equal(session.status,200);
+        assert.match(session.json.data.paymentHtml,/test3ds.bcc.kz:5445/);
+        assert.equal(session.json.data.testMode,true);
+        const reference=session.json.data.providerPayload.ORDER;
+        const repeated=await request('/payments/'+paymentId+'/bcc-session','POST',{},true);
+        assert.equal(repeated.json.data.providerPayload.ORDER,reference);
+        let bankResponse:any={ORDER:reference,TERMINAL:'88888881',AMOUNT:'350.00',CURRENCY:'398',ACTION:'0',RC:'00'};
+        global.fetch=(async(input:any,init:any)=>String(input).startsWith('https://test3ds.bcc.kz:5445/')
+          ? new Response(JSON.stringify(bankResponse),{status:200,headers:{'Content-Type':'application/json'}}) : originalFetch(input,init)) as typeof fetch;
+        const callback=await originalFetch(base+'/payments/bcc/webhook',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({ORDER:reference,ACTION:'0',RC:'00'})});
+        assert.equal(callback.status,200);
+        assert.equal((await callback.json()).data.bankStatus,'paid');
+        const saved=(await db.query('SELECT * FROM payments WHERE id=$1',[paymentId])).rows[0];
+        assert.equal(saved.status,'pending');assert.equal(saved.payload.bccBankStatus,'paid');
+        assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[orderId])).rows[0].status,'pending_payment');
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM order_offers WHERE order_id=$1',[orderId])).rows[0].n),0);
+        bankResponse={...bankResponse,AMOUNT:'999.00'};
+        assert.equal((await request('/payments/bcc/webhook','POST',{ORDER:reference,ACTION:'0',RC:'00'})).status,502);
+        bankResponse={ACTION:'0',RC:'00'};
+        assert.equal((await request('/payments/bcc/webhook','POST',{ORDER:reference,ACTION:'0',RC:'00'})).status,502);
+        bankResponse={ORDER:reference,TERMINAL:'88888881',ACTION:'2',RC:'05'};
+        assert.equal((await request('/payments/bcc/webhook','POST',{ORDER:reference,ACTION:'0',RC:'00'})).status,200);
+        assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[paymentId])).rows[0].status,'rejected');
+      } finally {
+        global.fetch=originalFetch;Object.assign(env,previous);
+        await db.query('DELETE FROM payment_events WHERE payment_id=$1',[paymentId]);
+        await db.query('DELETE FROM payments WHERE id=$1',[paymentId]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[orderId]);
       }
     });
     await t.test('unbooked package purchase appears in customer orders while awaiting payment and after approval', async () => {

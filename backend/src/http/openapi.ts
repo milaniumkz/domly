@@ -31,6 +31,10 @@ export const openApiSpec = {
     },
   },
   paths: {
+    '/payments/bcc/return': {
+      get: {summary:'Возврат с платёжной страницы BCC; статус проверяется у банка',responses:{'303':{description:'Возврат в историю платежей'}}},
+      post: {summary:'Возврат BCC через форму',responses:{'303':{description:'Возврат в историю платежей'}}},
+    },
     '/orders/{id}/addons': {post:{...secured('Обновить дополнительные услуги заказа'),responses:okError()}},
     '/admin/referrals': {get:{...secured('Реферальная статистика'),responses:okError()}},
     '/packages/my/{id}/freeze': {post: {...secured('Заморозить собственный пакет'),responses: okError()}},

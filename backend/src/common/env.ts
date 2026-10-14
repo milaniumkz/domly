@@ -68,6 +68,11 @@ export const env = {
   bccPublicKey: process.env.BCC_PUBLIC_KEY ?? '',
   bccNotifyUrl: process.env.BCC_NOTIFY_URL ?? '',
   bccReturnUrl: process.env.BCC_RETURN_URL ?? '',
+  bccMode: process.env.BCC_MODE ?? 'disabled',
+  bccGatewayUrl: process.env.BCC_GATEWAY_URL ?? '',
+  bccMerchantName: process.env.BCC_MERCHANT_NAME ?? 'DOMLY',
+  bccNotifyUser: process.env.BCC_NOTIFY_USER ?? '',
+  bccNotifyPassword: process.env.BCC_NOTIFY_PASSWORD ?? '',
   minioEndpoint: process.env.MINIO_ENDPOINT ?? 'localhost',
   minioPort: numberEnv('MINIO_PORT', 9000),
   minioUseSsl: boolEnv('MINIO_USE_SSL'),
@@ -166,9 +171,9 @@ export function validateEnvConfig(config: EnvConfig = env): { ok: boolean; issue
   const missingWapi = missingFields(config, ['wapiToken', 'wapiProfileId']);
   const missingFcm = missingFields(config, ['fcmProjectId', 'fcmClientEmail', 'fcmPrivateKey']);
   const kaspiFields: Array<keyof EnvConfig> = ['kaspiMerchantId', 'kaspiApiKey', 'kaspiBaseUrl'];
-  const bccFields: Array<keyof EnvConfig> = ['bccMerchantId', 'bccTerminalId', 'bccPrivateKey', 'bccPublicKey', 'bccNotifyUrl', 'bccReturnUrl'];
+  const bccFields: Array<keyof EnvConfig> = ['bccMerchantId', 'bccTerminalId', 'bccPrivateKey', 'bccNotifyUrl', 'bccReturnUrl'];
   const missingKaspi = missingFields(config, kaspiFields);
-  const missingBcc = missingFields(config, bccFields);
+  const missingBcc = config.bccMode === 'test' ? [] : missingFields(config, bccFields);
   const kaspiConfigured = hasAnyField(config, kaspiFields);
   const bccConfigured = hasAnyField(config, bccFields);
   const missingYandex = missingFields(config, ['yandexGeocoderApiKey', 'yandexGeosuggestApiKey']);
@@ -200,6 +205,8 @@ export function validateEnvConfig(config: EnvConfig = env): { ok: boolean; issue
     if (config.bccReturnUrl && !isValidHttpUrl(config.bccReturnUrl)) issues.push('BCC_RETURN_URL must be a valid http(s) URL');
     if (strict && config.bccReturnUrl && !isHttpsPublicUrl(config.bccReturnUrl)) issues.push('BCC_RETURN_URL must be a public HTTPS URL in production');
   }
+  if (!['disabled','test','live'].includes(config.bccMode)) issues.push('BCC_MODE must be disabled, test or live');
+  if (config.bccMode === 'live' && (config.bccTerminalId === '88888881' || config.bccTerminalId === '88888888')) issues.push('BCC live mode cannot use a test terminal');
 
   if (requirePayments && missingKaspi.length && missingBcc.length) {
     issues.push(`At least one payment provider must be fully configured: Kaspi (${missingKaspi.join(', ')}) or BCC (${missingBcc.join(', ')})`);

@@ -40,7 +40,7 @@ class _OnlinePaymentViewState extends State<OnlinePaymentView> {
       return;
     }
     final form = html.FormElement()
-      ..method = 'POST'
+      ..method = RegExp(r'<form[^>]*method="get"', caseSensitive: false).hasMatch(widget.html) ? 'GET' : 'POST'
       ..action = action
       ..target = '_self'
       ..style.display = 'none';

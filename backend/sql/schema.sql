@@ -685,6 +685,8 @@ CREATE TABLE IF NOT EXISTS customer_packages (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE SEQUENCE IF NOT EXISTS bcc_order_reference_seq START WITH 1000000;
+
 CREATE TABLE IF NOT EXISTS service_orders (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   numeric_id BIGSERIAL UNIQUE,

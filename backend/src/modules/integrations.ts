@@ -5,6 +5,7 @@ import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from '../common/env';
 import { ApiError } from '../common/api';
+import { bccConfig, bccReady, bccSign, bccTimestamp, bccNonce, bccPaymentHtml } from './bcc';
 
 export class WapiOtpService {
   async sendOtp(phone: string, code: string): Promise<void> {
@@ -75,11 +76,6 @@ export class StorageService {
 }
 
 export class PaymentGatewayService {
-  private signPayload(payload: Record<string, unknown>) {
-    const signBase = Object.values(payload).join(';');
-    return env.bccPrivateKey ? crypto.createHash('sha256').update(`${signBase};${env.bccPrivateKey}`).digest('hex') : '';
-  }
-
   async createKaspiInvoice(input: {
     paymentId: string;
     amount: number;
@@ -112,24 +108,46 @@ export class PaymentGatewayService {
     clientIp?: string;
     language?: string;
     mInfo?: string;
+    customerPhone?: string;
+    externalOrderId?: string;
   }) {
-    const orderId = input.paymentId.replace(/-/g, '').slice(0, 18).padStart(6, '0');
+    if (!bccReady()) throw new ApiError(503,'bcc_not_configured','Онлайн-оплата BCC не настроена.');
+    if (!Number.isFinite(input.amount) || input.amount<=0) throw new ApiError(400,'invalid_amount','Укажите сумму платежа.');
+    const config = bccConfig();
+    const orderId = input.externalOrderId ?? this.bccOrderId(input.paymentId);
+    const returnUrl = new URL(config.returnUrl);
+    returnUrl.searchParams.set('paymentId',input.paymentId);
+    const phone = String(input.customerPhone ?? '').replace(/\D/g,'');
+    const mInfo: Record<string,unknown> = {browserScreenHeight:'1920',browserScreenWidth:'1080',billAddrLine1:config.test?'Kazakhstan':toLatin(input.mInfo ?? 'Kazakhstan').slice(0,50)};
+    if (!config.test && phone.length>=10) mInfo.mobilePhone={cc:'7',subscriber:phone.slice(-10)};
     const payload = {
       TRTYPE: '1',
-      AMOUNT: input.amount,
-      CURRENCY: 'KZT',
+      AMOUNT: input.amount.toFixed(2),
+      CURRENCY: '398',
       ORDER: orderId,
       DESC: input.description,
-      M_INFO: toLatin(input.mInfo ?? 'DOMLY service payment').slice(0, 255),
-      MERCH_RN_ID: env.bccMerchantId,
-      TERMINAL: env.bccTerminalId,
+      M_INFO: Buffer.from(JSON.stringify(mInfo),'utf8').toString('base64'),
+      MERCH_RN_ID: '1'+bccNonce().slice(0,15),
+      MERCHANT: config.merchantId,
+      MERCH_NAME: config.merchantName,
+      TERMINAL: config.terminalId,
+      TIMESTAMP: bccTimestamp(),
+      NONCE: bccNonce(),
+      MERCH_GMT: '0',
       CLIENT_IP: input.clientIp ?? '127.0.0.1',
       LANG: input.language ?? 'ru',
-      NOTIFY_URL: env.bccNotifyUrl,
-      RETURN_URL: env.bccReturnUrl,
+      NOTIFY_URL: config.notifyUrl,
+      BACKREF: returnUrl.toString(),
+      MK_TOKEN: 'MERCH',
     };
-    const pSign = this.signPayload(payload);
-    return { providerPayload: { ...payload, P_SIGN: pSign }, providerResponse: null, paymentUrl: null, externalOrderId: orderId };
+    const providerPayload = {...payload,P_SIGN:bccSign(payload,config.macKey)};
+    return { providerPayload, providerResponse:null,paymentUrl:null,externalOrderId:orderId,
+      paymentHtml:bccPaymentHtml(config.gatewayUrl,providerPayload,config.test?'get':'post'),actionUrl:config.gatewayUrl,
+      orderId:input.paymentId,testMode:config.test,bccTestMode:config.test,bccSessionCreatedAt:new Date().toISOString() };
+  }
+
+  private bccOrderId(paymentId: string): string {
+    return BigInt('0x'+crypto.createHash('sha256').update(paymentId).digest('hex').slice(0,24)).toString().slice(-18).padStart(7,'0');
   }
 
   async createBccRefund(input: {
@@ -137,41 +155,52 @@ export class PaymentGatewayService {
     amount: number;
     referenceId?: string | null;
     language?: string;
+    externalOrderId?: string;
+    originalAmount?: number;
+    intRef?: string;
+    merchRnId?: string;
   }) {
-    const orderId = input.paymentId.replace(/-/g, '').slice(0, 18).padStart(6, '0');
+    const config = bccConfig();
+    const orderId = input.externalOrderId ?? this.bccOrderId(input.paymentId);
     const payload = {
       TRTYPE: '14',
-      AMOUNT: input.amount,
-      CURRENCY: 'KZT',
+      AMOUNT: input.amount.toFixed(2),
+      ORG_AMOUNT: Number(input.originalAmount ?? input.amount).toFixed(2),
+      CURRENCY: '398',
       ORDER: orderId,
-      MERCH_RN_ID: env.bccMerchantId,
-      TERMINAL: env.bccTerminalId,
+      MERCH_RN_ID: input.merchRnId ?? '',
+      TERMINAL: config.terminalId,
       LANG: input.language ?? 'ru',
       RRN: input.referenceId ?? '',
+      INT_REF: input.intRef ?? '',
+      TIMESTAMP: bccTimestamp(), NONCE:bccNonce(),MERCH_GMT:'0',NOTIFY_URL:config.notifyUrl,
     };
-    return { providerPayload: { ...payload, P_SIGN: this.signPayload(payload) }, providerResponse: null, paymentUrl: null, externalOrderId: orderId };
+    return { providerPayload: { ...payload, P_SIGN: bccSign(payload,config.macKey) }, providerResponse: null, paymentUrl: null, externalOrderId: orderId };
   }
 
   async createBccStatusCheck(input: {
     paymentId: string;
     originalTrType?: string;
     language?: string;
+    externalOrderId?: string;
   }) {
-    const orderId = input.paymentId.replace(/-/g, '').slice(0, 18).padStart(6, '0');
+    const config = bccConfig();
+    const orderId = input.externalOrderId ?? this.bccOrderId(input.paymentId);
     const payload = {
       TRTYPE: '90',
       ORDER: orderId,
-      TERMINAL: env.bccTerminalId,
+      TERMINAL: config.terminalId,
       TRAN_TRTYPE: input.originalTrType ?? '1',
       LANG: input.language ?? 'ru',
+      TIMESTAMP:bccTimestamp(),NONCE:bccNonce(),MERCH_GMT:'0',
     };
-    return { providerPayload: { ...payload, P_SIGN: this.signPayload(payload) }, providerResponse: null, paymentUrl: null, externalOrderId: orderId };
+    return { providerPayload: { ...payload, P_SIGN: bccSign(payload,config.macKey) }, providerResponse: null, paymentUrl: null, externalOrderId: orderId };
   }
 
   async createBccConnectionCheck(input: { language?: string }) {
     const payload = {
       TRTYPE: '800',
-      TERMINAL: env.bccTerminalId,
+      TERMINAL: bccConfig().terminalId,
       LANG: input.language ?? 'ru',
     };
     return { providerPayload: payload, providerResponse: null, paymentUrl: null };
