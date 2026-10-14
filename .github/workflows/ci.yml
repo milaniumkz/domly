@@ -75,12 +75,12 @@ jobs:
       run: |
         python3 - <<'PYCODE'
         from pathlib import Path
-        expected={'backend-core.test.ts','cleaner-status.test.ts','scheduler.test.ts','admin-integration.test.ts','catalog-migration.test.ts','mobile-integration.test.ts'}
+        expected={'backend-core.test.ts','bcc.test.ts','cleaner-status.test.ts','scheduler.test.ts','admin-integration.test.ts','catalog-migration.test.ts','mobile-integration.test.ts'}
         assert {p.name for p in Path('src/tests').glob('*.test.ts')} == expected, 'Classify any new backend test in the unit or DB gate before CI can pass'
         PYCODE
     - run: npm run build
     - name: Pure unit tests, no DB test skipped to claim success
-      run: node --test dist/tests/backend-core.test.js dist/tests/cleaner-status.test.js
+      run: node --test dist/tests/backend-core.test.js dist/tests/bcc.test.js dist/tests/cleaner-status.test.js
         dist/tests/scheduler.test.js
     - uses: actions/upload-artifact@v4
       with:
