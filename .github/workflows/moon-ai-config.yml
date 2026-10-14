@@ -64,3 +64,6 @@ jobs:
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/inspect_moon_ai.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/inspect_moon_ai.cjs"
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
             "set -e; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T api node < '$DEPLOY_PATH/shared/inspect_moon_ai.cjs'; rm -f '$DEPLOY_PATH/shared/inspect_moon_ai.cjs'"
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/inspect_payment_config.py "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/inspect_payment_config.py"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+            "python3 '$DEPLOY_PATH/shared/inspect_payment_config.py' '$DEPLOY_PATH'; rm -f '$DEPLOY_PATH/shared/inspect_payment_config.py'"
