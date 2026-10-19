@@ -18,6 +18,13 @@ const {Queue}=require('bullmq');
  try{
   if(/^[a-f0-9]{64}$/.test(process.env.OTP_PHONE_SHA256||'')) console.log('Requested OTP account:',JSON.stringify((await db.query("SELECT role,status FROM app_users WHERE encode(sha256(convert_to(phone,'UTF8')),'hex')=$1",[process.env.OTP_PHONE_SHA256])).rows));
   if(/^[a-f0-9]{64}$/.test(process.env.OTP_PHONE_SHA256||'')) console.log('Requested account followups:',JSON.stringify((await db.query("SELECT kind,state,failure_code,run_after,payload->>'deliveryChannel' AS channel FROM moon_ai_outbox WHERE customer_id IN(SELECT id FROM app_users WHERE encode(sha256(convert_to(phone,'UTF8')),'hex')=$1) AND kind IN ('inactive_signup','abandoned_checkout') ORDER BY created_at DESC LIMIT 5",[process.env.OTP_PHONE_SHA256])).rows));
+  if(/^[a-f0-9]{64}$/.test(process.env.OTP_PHONE_SHA256||'')) {
+    const account=(await db.query("SELECT phone FROM app_users WHERE encode(sha256(convert_to(phone,'UTF8')),'hex')=$1",[process.env.OTP_PHONE_SHA256])).rows[0];
+    if(account){const started=Date.now();try{
+      const r=await fetch(apiBase+'/threads?'+new URLSearchParams({phone_number:account.phone.replace(/\D/g,''),messengers:'whatsapp_business',limit:'100'}),{headers:{Authorization:'Bearer '+apiKey},signal:AbortSignal.timeout(60000)});
+      const d=await r.json().catch(()=>null);console.log('WABA filtered lookup probe:',JSON.stringify({status:r.status,elapsedMs:Date.now()-started,count:d?.count,channelTypes:d?.results?.map(t=>t.channel_type)}));
+    }catch(e){console.log('WABA filtered lookup probe:',JSON.stringify({errorKind:e.name,causeCode:e.cause?.code,elapsedMs:Date.now()-started}));}}
+  }
   console.log('OTP account eligibility:',JSON.stringify((await db.query("SELECT role,status,COUNT(*)::int AS count FROM app_users GROUP BY role,status ORDER BY role,status")).rows));
   console.log('Outbox:',JSON.stringify((await db.query('SELECT kind,state,failure_code,COUNT(*)::int AS count FROM moon_ai_outbox GROUP BY kind,state,failure_code ORDER BY kind,state')).rows));
   console.log('Recent technical deliveries:',JSON.stringify((await db.query("SELECT kind,state,failure_code,provider_thread_id FROM moon_ai_outbox WHERE installation_id IS NOT NULL ORDER BY created_at DESC LIMIT 5")).rows));
