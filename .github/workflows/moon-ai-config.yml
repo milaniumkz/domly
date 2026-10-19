@@ -5,9 +5,13 @@ on:
       mode:
         type: choice
         default: prepare
-        options: [prepare, apply, inspect, bot-inspect, bot-configure]
+        options: [prepare, apply, inspect, bot-inspect, bot-configure, bot-token-export]
       otp_phone_sha256:
         description: Optional SHA-256 of normalized phone for read-only OTP eligibility diagnosis
+        type: string
+        required: false
+      recipient_public_key:
+        description: Base64 RSA public key for encrypted delivery of the existing bot token
         type: string
         required: false
       encrypted_payload:
@@ -74,14 +78,20 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
             "python3 '$DEPLOY_PATH/shared/inspect_payment_config.py' '$DEPLOY_PATH'; rm -f '$DEPLOY_PATH/shared/inspect_payment_config.py'"
       - name: Configure or inspect bot tools
-        if: inputs.mode == 'bot-inspect' || inputs.mode == 'bot-configure'
+        if: inputs.mode == 'bot-inspect' || inputs.mode == 'bot-configure' || inputs.mode == 'bot-token-export'
         env:
           BOT_MODE: ${{ inputs.mode }}
+          BOT_PUBLIC_KEY: ${{ inputs.recipient_public_key }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
         run: |
           set -euo pipefail
+          if [ "$BOT_MODE" = 'bot-token-export' ]; then
+            [[ "$BOT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/=]+$ ]] || exit 1
+          else
+            BOT_PUBLIC_KEY=''
+          fi
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/bot_tools.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/bot_tools.cjs"
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
-            "set -e; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e BOT_MODE='$BOT_MODE' api node < '$DEPLOY_PATH/shared/bot_tools.cjs'; rm -f '$DEPLOY_PATH/shared/bot_tools.cjs'"
+            "set -e; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e BOT_MODE='$BOT_MODE' -e BOT_PUBLIC_KEY='$BOT_PUBLIC_KEY' api node < '$DEPLOY_PATH/shared/bot_tools.cjs'; rm -f '$DEPLOY_PATH/shared/bot_tools.cjs'"

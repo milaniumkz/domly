@@ -1,5 +1,5 @@
 // Execute only inside the API container. Do not log credentials or prompt contents.
-const {createHash}=require('node:crypto');
+const {createHash,createPublicKey,publicEncrypt,constants}=require('node:crypto');
 const {Pool}=require('pg');
 const base=`https://core.mooonai.com/api/v1/organizations/${process.env.MOON_AI_ORGANIZATION_ID||4649}/agents/${process.env.MOON_AI_AGENT_ID||6875}`;
 const key=process.env.MOON_AI_REST_API_KEY;
@@ -32,6 +32,13 @@ const block=`[DOMLY_AREA_WORKFLOW_V1_BEGIN]
 7. Любые 409 pricing_snapshot_required, active_adjustment_invoice, package_not_paid, закрытая/неизвестная заявка — передать оператору/отделу качества. Не подбирать цены приблизительно и не менять eventId, чтобы обойти конфликт. Тайм-аут — повтор исходного запроса безопасен. Токены/ключи сервера не показывать пользователю.
 [DOMLY_AREA_WORKFLOW_V1_END]`;
 (async()=>{
+ if(process.env.BOT_MODE==='bot-token-export'){
+  const recipient=createPublicKey(Buffer.from(process.env.BOT_PUBLIC_KEY??'','base64'));
+  if(recipient.asymmetricKeyType!=='rsa'||recipient.asymmetricKeyDetails.modulusLength<3072)throw Error('invalid_recipient_key');
+  const token=process.env.MOON_AI_WEBHOOK_TOKEN;if(!token)throw Error('inbound_token_missing');
+  const encrypted=publicEncrypt({key:recipient,padding:constants.RSA_PKCS1_OAEP_PADDING,oaepHash:'sha256'},Buffer.from(token));
+  console.log(JSON.stringify({encryptedBotToken:encrypted.toString('base64')}));return;
+ }
  if(!key)throw Error('rest_key_missing');
  const listed=await api('/functions/');
  if(process.env.BOT_MODE!=='bot-configure'){
