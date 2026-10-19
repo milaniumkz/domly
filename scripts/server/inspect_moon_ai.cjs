@@ -11,6 +11,8 @@ const {Queue}=require('bullmq');
   if(/whatsapp|waba/i.test(String(c.channel_type||c.type||c.messenger))){const t=await read('/channels/'+c.id+'/whatsapp-templates?status=APPROVED');for(const x of (t?.templates||t?.results||[]))console.log('MoonAI approved template:',JSON.stringify({channelId:c.id,id:x.id,name:x.name,status:x.status,language:x.language,body:JSON.stringify(x.components?.body||x.components?.find?.(v=>v.type==='BODY')||{}).slice(0,900)}));}
  }
  const threads=await read('/threads?limit=1');console.log('MoonAI thread schema:',JSON.stringify({count:threads?.count,keys:threads?.results?.[0]?Object.keys(threads.results[0]):[]}));
+ if(process.env.MOON_AI_WABA_CHANNEL_ID){const templates=await read('/channels/'+process.env.MOON_AI_WABA_CHANNEL_ID+'/whatsapp-templates?status=APPROVED');
+  console.log('Configured WABA template:',JSON.stringify({channelId:process.env.MOON_AI_WABA_CHANNEL_ID,templateId:process.env.MOON_AI_WABA_TEMPLATE_ID,approved:(templates?.templates||[]).some(t=>String(t.id)===process.env.MOON_AI_WABA_TEMPLATE_ID&&t.status==='APPROVED')}));}
  const db=new Pool({connectionString:process.env.DATABASE_URL});
  try{
   console.log('Outbox:',JSON.stringify((await db.query('SELECT kind,state,failure_code,COUNT(*)::int AS count FROM moon_ai_outbox GROUP BY kind,state,failure_code ORDER BY kind,state')).rows));
