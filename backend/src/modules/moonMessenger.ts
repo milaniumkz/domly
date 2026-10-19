@@ -22,7 +22,8 @@ export async function sendMessengerFollowup(input:{id:string;kind:string;text:st
   async function request(path:string,method='GET',body?:unknown) {
     let response:Response;
     try {response=await send(base+path,{method,headers:{Authorization:`Bearer ${env.moonAiRestApiKey}`,'Content-Type':'application/json'},
-      ...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(15000)});}
+      ...(body===undefined?{}:{body:JSON.stringify(body)}),// Filtered thread lookups can take ~28 seconds even with no results.
+      signal:AbortSignal.timeout(45000)});}
     catch(error){if(method==='GET')throw new MoonMessengerError('whatsapp_lookup_unavailable',true);throw error;}
     const value:any=await response.json().catch(()=>null);
     if(!response.ok)throw new MoonMessengerError(`whatsapp_http_${response.status}`,method==='GET');
