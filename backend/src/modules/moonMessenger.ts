@@ -40,7 +40,9 @@ export async function sendMessengerFollowup(input:{id:string;kind:string;text:st
   const thread=threads[0];
   if(thread && thread.status!=='active')throw new MoonMessengerError('whatsapp_conversation_paused');
   const reference=`domly:${input.kind}:${input.id}`;
-  const intro=input.kind==='inactive_signup'
+  const intro=input.kind==='area_verification'
+    ? 'Перед уборкой нужно подтвердить площадь квартиры. Пришлите в этот WhatsApp-чат чёткий технический план с адресом и общей площадью квартиры. Либо откройте Domly → Профиль → Подтвердить площадь и загрузите техплан: https://domly.kz/customer/#/client/area-confirmation . Если не хотите отправлять документ, напишите — согласуем дату и время проверки отделом качества до уборки.'
+    : input.kind==='inactive_signup'
     ? 'Вы зарегистрировались в Domly. Подскажем, как выбрать и оформить уборку.'
     : 'Вы начали оформление уборки в Domly, но оплата пока не завершена. Можем помочь с оформлением или оплатой.';
   if(thread && Date.parse(thread.free_form_window_expires_at ?? '')>Date.now()+30000) {

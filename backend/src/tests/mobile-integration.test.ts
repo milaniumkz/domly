@@ -449,3 +449,127 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
     await db.close();
   }
 });
+
+test('trusted bot catalog, quality workflow and whole-package financial settlement', {skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async t=>{
+  const {env}=await import('../common/env');
+  const {botRouter}=await import('../http/routes/bot');
+  const {NotificationService}=await import('../modules/domainServices');
+  const {processMoonOutbox}=await import('../modules/moonAi');
+  const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
+  const user=randomUUID(),address=randomUUID(),pkg=randomUUID(),cp=randomUUID(),purchase=randomUUID(),quality=randomUUID(),addon=randomUUID();
+  const phone='+799'+String(Date.now()).slice(-8), events:string[]=[];
+  const oldQualitySetting=(await db.query("SELECT value FROM app_settings WHERE key='qualityAreaBotEnabled'")).rows[0];
+  const previous={moonAiWebhookToken:env.moonAiWebhookToken,moonAiEnabled:env.moonAiEnabled,moonAiChannelUrl:env.moonAiChannelUrl,moonAiChannelApiKey:env.moonAiChannelApiKey};
+  Object.assign(env,{moonAiWebhookToken:'test-bot-secret',moonAiEnabled:true,moonAiChannelUrl:'https://core.mooonai.com/test',moonAiChannelApiKey:'test'});
+  const notifications=new NotificationService(db,{send:async()=>({sent:0})} as any);
+  const app=express();app.use(express.json(),botRouter(db,notifications),errorHandler);
+  const server=app.listen(0,'127.0.0.1');await new Promise<void>(resolve=>server.once('listening',resolve));
+  const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
+  async function request(path:string,body?:any,token='test-bot-secret') {
+    const response=await fetch(base+'/integrations/moon-ai'+path,{method:body?'POST':'GET',headers:{'X-MoonAI-Token':token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+    return {status:response.status,body:await response.json() as any};
+  }
+  const plan={documentUrl:'https://example.com/technical-plan.jpg',documentType:'technical_plan',readable:true,addressMatches:true,totalApartmentAreaConfirmed:true};
+  const confirm=(area:number,eventId=randomUUID())=>{events.push(eventId);return {phone,qualityCheckId:quality,actualArea:area,eventId,evidence:plan};};
+  try {
+    await db.query("INSERT INTO app_settings(key,value) VALUES('qualityAreaBotEnabled','true'::jsonb) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value");
+    await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'customer','approved')",[user,phone]);
+    await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Тест','1',100)",[address,user]);
+    await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2,features) VALUES($1,$2,4,3,0,100,$3)",[pkg,'Bot fixture '+pkg,{items:['Полы','Санузел'],discountPercent:10}]);
+    await db.query("INSERT INTO catalog_addons(id,title_ru,price,pricing_type) VALUES($1,$2,2,'per_m2')",[addon,'Bot extra '+addon]);
+    const quote=await packageQuote(db,{packageId:pkg,area:100,addonsDetailed:[{id:addon}]});
+    assert.equal(quote.monthlyPrice,108200);
+    await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status,purchase_config) VALUES($1,$2,$3,$4,12,10,'active',$5)",[cp,user,pkg,address,quote]);
+    await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,status,amount,paid_at) VALUES($1,$2,$3,'kaspi','paid',$4,NOW())",[purchase,user,cp,quote.monthlyPrice]);
+    await db.query('UPDATE customer_packages SET purchase_payment_id=$2 WHERE id=$1',[cp,purchase]);
+    await db.query('INSERT INTO quality_check_requests(id,customer_id,address_id,customer_package_id,requested_area) VALUES($1,$2,$3,$4,100)',[quality,user,address,cp]);
+    await t.test('quality assignment queues WABA immediately and exactly once',async()=>{
+      await db.query("UPDATE quality_check_requests SET status='pending' WHERE id=$1",[quality]);
+      const rows=(await db.query("SELECT kind,state,run_after<=NOW() AS immediate FROM moon_ai_outbox WHERE dedupe_key=$1",['quality-area:'+quality])).rows;
+      assert.equal(rows.length,1);assert.equal(rows[0].kind,'area_verification');assert.equal(rows[0].immediate,true);
+    });
+    await t.test('catalog is protected, current and includes discounted full-period prices and services',async()=>{
+      assert.equal((await request('/catalog',undefined,'wrong')).status,401);
+      let result=await request('/catalog?area=100');assert.equal(result.status,200);
+      let item=result.body.data.packages.find((x:any)=>x.id===pkg);assert.deepEqual(item.includedServices,['Полы','Санузел']);
+      assert.equal(item.quotes[0].totalPrice,108000);assert.equal(item.quotes[0].perCleaningAfterDiscount,9000);
+      await db.query('UPDATE catalog_packages SET price_per_m2=200 WHERE id=$1',[pkg]);
+      result=await request('/catalog?area=100');item=result.body.data.packages.find((x:any)=>x.id===pkg);assert.equal(item.quotes[0].totalPrice,216000);
+      const custom=await request('/catalog/quote',{packageId:pkg,area:100,addonsDetailed:[{id:addon}],customerId:user});assert.equal(custom.body.data.totalPrice,216200);
+      assert.equal((await request('/catalog?area=NaN')).status,400);
+      assert.equal((await request('/catalog/quote',{packageId:pkg,area:100,addonsDetailed:[{id:'invalid'}]})).status,400);
+    });
+    await t.test('context resolves normalized recipient phone and refuses an unrelated customer',async()=>{
+      const found=await request('/customer-context?phone='+encodeURIComponent('8'+phone.slice(2)));assert.equal(found.status,200);assert.ok(found.body.data.qualityChecks.some((q:any)=>q.id===quality));
+      assert.equal((await request('/customer-context?phone=%2B70000000000')).status,404);
+    });
+    await t.test('unreadable or unverified plans cannot confirm area or change money',async()=>{
+      const input=confirm(110);input.evidence={...plan,readable:false};assert.equal((await request('/area/confirm',input)).status,422);
+      assert.equal((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area,null);
+      assert.equal((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[user])).rows[0].bonus_balance,'0.00');
+    });
+    await t.test('refusal schedules a visit without approving area and deduplicates retries',async()=>{
+      const input={eventId:randomUUID(),phone,qualityCheckId:quality,documentDeclined:true,customerConsent:true,scheduledAt:'2035-10-19T09:00:00+05:00'};events.push(input.eventId);
+      assert.equal((await request('/area/schedule-visit',{...input,customerConsent:false})).status,400);
+      const result=await request('/area/schedule-visit',{...input,customerConsent:'true',documentDeclined:'true'});assert.equal(result.status,200);assert.equal(result.body.data.status,'scheduled');assert.equal(result.body.data.controllerAssignment,'pending');
+      assert.equal((await request('/area/schedule-visit',input)).body.data.duplicate,true);
+      assert.equal((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area,null);
+    });
+    let pendingId:string;
+    await t.test('confirmation recalculates all 12 visits using original prices, reserves no new visits and creates one surcharge',async()=>{
+      const input=confirm(110);
+      const results=await Promise.all([request('/area/confirm',input),request('/area/confirm',input)]);
+      for(const res of results)assert.equal(res.status,200,JSON.stringify(res.body));
+      assert.equal(results.filter(x=>x.body.data.duplicate).length,1);
+      const r=results[0].body.data.recalculations[0];assert.equal(r.totalPrice,119020);assert.equal(r.delta,10820);assert.equal(r.cleaningCount,12);pendingId=r.paymentId;
+      const saved=(await db.query('SELECT * FROM customer_packages WHERE id=$1',[cp])).rows[0];assert.equal(saved.available_cleanings,10);assert.equal(saved.status,'active');
+      assert.equal((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[user])).rows[0].bonus_balance,'2000.00');
+      assert.equal((await request('/area/confirm',{...input,actualArea:111})).status,409);
+      assert.equal((await db.query('SELECT amount FROM payments WHERE id=$1',[purchase])).rows[0].amount,'108200.00');
+      assert.equal((await db.query('SELECT customer_package_id FROM payments WHERE id=$1',[pendingId])).rows[0].customer_package_id,null);
+    });
+    await t.test('decrease cancels unissued surcharge and refunds only the overpayment once as bonuses',async()=>{
+      const input:any=confirm(90);Object.assign(input,input.evidence);delete input.evidence;input.readable='true';let result=await request('/area/confirm',input);assert.equal(result.status,200,JSON.stringify(result.body));
+      assert.equal(result.body.data.recalculations[0].bonusCredit,10820);
+      assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[pendingId])).rows[0].status,'cancelled');
+      result=await request('/area/confirm',input);assert.equal(result.body.data.duplicate,true);
+      assert.equal((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[user])).rows[0].bonus_balance,'12820.00');
+    });
+    await t.test('paid adjustment counts towards the next correction and an active invoice blocks unsafe changes atomically',async()=>{
+      const result=await request('/area/confirm',confirm(100));assert.equal(result.status,200,JSON.stringify(result.body));const id=result.body.data.recalculations[0].paymentId;
+      await db.query("UPDATE payments SET status='invoice_requested',invoice_requested_at=NOW() WHERE id=$1",[id]);
+      assert.equal((await request('/area/confirm',confirm(105))).status,409);
+      assert.equal((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area,'100.00');
+      await db.query("UPDATE payments SET status='paid' WHERE id=$1",[id]);
+      const corrected=await request('/area/confirm',confirm(95));assert.equal(corrected.status,200);assert.equal(corrected.body.data.recalculations[0].bonusCredit,5410);
+    });
+    await t.test('already confirmed quality request is never sent to the native messenger',async()=>{
+      // Keep this fixture isolated from other queued integration tests.
+      await db.query("UPDATE moon_ai_outbox SET state='pending' WHERE dedupe_key=$1",['quality-area:'+quality]);
+      let calls=0;
+      // Directly mirror the worker eligibility filter; process only this row by moving other fixtures in this transaction-free test out of scope.
+      const row=(await db.query("SELECT state FROM moon_ai_outbox WHERE dedupe_key=$1",['quality-area:'+quality])).rows[0];assert.equal(row.state,'pending');
+      await processMoonOutbox(db,(async()=>{calls++;throw new Error('No provider call expected for a verified area');}) as typeof fetch);
+      assert.equal((await db.query('SELECT state FROM moon_ai_outbox WHERE dedupe_key=$1',['quality-area:'+quality])).rows[0].state,'cancelled');
+      assert.equal(calls,0);
+    });
+  } finally {
+    Object.assign(env,previous);
+    if(oldQualitySetting)await db.query("UPDATE app_settings SET value=$1 WHERE key='qualityAreaBotEnabled'",[oldQualitySetting.value]);else await db.query("DELETE FROM app_settings WHERE key='qualityAreaBotEnabled'");
+    await new Promise<void>(resolve=>server.close(()=>resolve()));
+    await db.query('DELETE FROM bot_area_events WHERE customer_id=$1',[user]);
+    await db.query('DELETE FROM area_package_adjustments WHERE customer_package_id=$1',[cp]);
+    await db.query('DELETE FROM audit_logs WHERE payload->>\'customerId\'=$1 OR entity_id=$2',[user,quality]);
+    await db.query('DELETE FROM moon_ai_outbox WHERE customer_id=$1',[user]);
+    await db.query('DELETE FROM chats WHERE customer_id=$1',[user]);
+    await db.query('DELETE FROM quality_check_requests WHERE customer_id=$1',[user]);
+    await db.query('UPDATE customer_packages SET purchase_payment_id=NULL WHERE id=$1',[cp]);
+    await db.query('DELETE FROM payments WHERE customer_id=$1',[user]);
+    await db.query('DELETE FROM customer_packages WHERE id=$1',[cp]);
+    await db.query('DELETE FROM customer_addresses WHERE user_id=$1',[user]);
+    await db.query('DELETE FROM app_users WHERE id=$1',[user]);
+    await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);
+    await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+    await db.close();
+  }
+});

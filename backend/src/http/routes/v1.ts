@@ -8,6 +8,7 @@ import { verifyCleaner } from '../../modules/cleanerVerification';
 import { qualifyReferral, referralDiscount } from '../../modules/referrals';
 import { packageQuote } from '../../modules/packageQuote';
 import { mobileRouter } from './mobile';
+import {botRouter} from './bot';
 import { Router, urlencoded } from 'express';
 import fs from 'fs/promises';
 import multer from 'multer';
@@ -41,6 +42,7 @@ export function buildV1Router(deps: {
   router.use('/payments/bcc', urlencoded({extended:false,limit:'32kb'}));
   router.use(mediaLinksMiddleware(deps.db));
   router.use(mobileRouter(deps.db));
+  router.use(botRouter(deps.db,deps.notifications));
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
   const initConfiguredPayment = async (gateway: PaymentGatewayService, result: {payment: unknown; payableAmount: number}, req: any, description: string) => {
     const payment=result.payment as any;

@@ -199,7 +199,10 @@ void maintenanceQueue.add('expire-order-offers', {}, {
 });
 
 workers.push(new Worker('moon-ai', async()=>{await processMoonOutbox(db);},{connection}));
-void moonQueue.add('moon-ai-outbox', {}, {jobId:'moon-ai-outbox',repeat:{every:10000},removeOnComplete:true});
+void (async()=>{
+  for(const job of await moonQueue.getRepeatableJobs())if(job.name==='moon-ai-outbox'&&Number(job.every)!==2000)await moonQueue.removeRepeatableByKey(job.key);
+  await moonQueue.add('moon-ai-outbox', {}, {jobId:'moon-ai-outbox',repeat:{every:2000},removeOnComplete:true});
+})();
 
 void maintenanceQueue.add('cleanup-expired-auth', {}, {
   jobId: 'cleanup-expired-auth',

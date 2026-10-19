@@ -1303,3 +1303,49 @@ FROM ranked r WHERE q.id=r.id AND r.position>1;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_quality_active_customer_address
  ON quality_check_requests(customer_id, (COALESCE(address_id::text, '')))
  WHERE status IN ('pending','scheduled');
+
+-- Trusted messenger tools: immutable request audit and independently settled adjustments.
+CREATE TABLE IF NOT EXISTS bot_area_events (
+ event_id TEXT PRIMARY KEY,
+ customer_id UUID NOT NULL REFERENCES app_users(id),
+ request_hash TEXT NOT NULL,
+ result JSONB NOT NULL,
+ evidence JSONB NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS area_package_adjustments (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+ customer_package_id UUID NOT NULL REFERENCES customer_packages(id),
+ event_id TEXT NOT NULL,
+ payment_id UUID REFERENCES payments(id),
+ bonus_credit NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK(bonus_credit>=0),
+ old_total NUMERIC(12,2) NOT NULL,
+ new_total NUMERIC(12,2) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ UNIQUE(customer_package_id,event_id)
+);
+ALTER TABLE moon_ai_outbox DROP CONSTRAINT IF EXISTS moon_ai_outbox_kind_check;
+ALTER TABLE moon_ai_outbox ADD CONSTRAINT moon_ai_outbox_kind_check
+ CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification'));
+
+-- Persist immediately in the same transaction as the quality-team assignment.
+-- No customer files, phone numbers, or documents are copied into chat messages.
+CREATE OR REPLACE FUNCTION enqueue_quality_whatsapp() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE assistant_chat UUID;
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM app_settings WHERE key='qualityAreaBotEnabled' AND value='true'::jsonb) THEN RETURN NEW; END IF;
+ IF NEW.status<>'pending' OR NEW.address_id IS NULL OR NEW.document_file_id IS NOT NULL THEN RETURN NEW; END IF;
+ IF NOT EXISTS(SELECT 1 FROM customer_addresses WHERE id=NEW.address_id AND user_id=NEW.customer_id AND verified_area IS NULL) THEN RETURN NEW; END IF;
+ IF NOT EXISTS(SELECT 1 FROM app_users WHERE id=NEW.customer_id AND role='customer' AND status<>'blocked' AND deleted_at IS NULL AND phone ~ '^\+7[0-9]{10}$') THEN RETURN NEW; END IF;
+ INSERT INTO chats(type,customer_id) VALUES('assistant',NEW.customer_id)
+ ON CONFLICT(customer_id) WHERE type='assistant' DO UPDATE SET customer_id=EXCLUDED.customer_id RETURNING id INTO assistant_chat;
+ INSERT INTO chat_participants(chat_id,user_id) VALUES(assistant_chat,NEW.customer_id) ON CONFLICT DO NOTHING;
+ INSERT INTO moon_ai_outbox(customer_id,chat_id,kind,dedupe_key,payload)
+ VALUES(NEW.customer_id,assistant_chat,'area_verification','quality-area:'||NEW.id::text,
+   jsonb_build_object('qualityCheckId',NEW.id,'text','Требуется подтвердить площадь до уборки. Запросить техплан либо согласовать визит отдела качества.'))
+ ON CONFLICT(dedupe_key) DO NOTHING;
+ RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS quality_check_whatsapp ON quality_check_requests;
+CREATE TRIGGER quality_check_whatsapp AFTER INSERT OR UPDATE OF status ON quality_check_requests
+ FOR EACH ROW EXECUTE FUNCTION enqueue_quality_whatsapp();

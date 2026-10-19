@@ -36,14 +36,14 @@ export async function packageQuote(db: Queryable, input: Record<string, any>) {
     if (!addon) throw new ApiError(400, 'invalid_addons', 'Дополнительная услуга недоступна.');
     const unit = Number(addon.price) * (['per_m2','per_sqm'].includes(addon.pricing_type) ? area : 1);
     const total = Math.round(unit * quantity * (addon.pricing_type === 'per_visit' ? cleaningCount : 1));
-    addons.push({id, durationMinutes: Number(addon.duration_minutes ?? 0) * quantity, pricingType: addon.pricing_type, title: addon.title_ru, quantity, price: unit, total, separate: addon.paid_separately});
+    addons.push({id, durationMinutes: Number(addon.duration_minutes ?? 0) * quantity, pricingType: addon.pricing_type, title: addon.title_ru, quantity, unitPrice: Number(addon.price), price: unit, total, separate: addon.paid_separately});
   }
   const addonTotal = addons.reduce((sum, item) => sum + item.total, 0);
   const discountRate = Math.max(0, Math.min(100, Number(pkg.features?.discountPercent ?? 0))) / 100;
   const discountAmount = Math.round(base * discountRate);
   const referralPercent = input.customerId ? await referralDiscount(db, input.customerId) : 0;
   const referralAmount = Math.round((base + addonTotal - discountAmount) * referralPercent / 100);
-  return {referralDiscountPercent: referralPercent, referralDiscountAmount: referralAmount, packageId: pkg.id, perCleaningPrice: Math.round(base / cleaningCount), cleaningCount,
+  return {area, pricingSnapshot:{basePrice:Number(pkg.base_price),pricePerM2:rate,cleaningCount,discountRate,referralDiscountPercent:referralPercent,addons},referralDiscountPercent: referralPercent, referralDiscountAmount: referralAmount, packageId: pkg.id, perCleaningPrice: Math.round(base / cleaningCount), cleaningCount,
     cleaningsPerMonth: visits, billingPeriodMonths: Number(pkg.months), subtotal: base + addonTotal, monthlyPrice: base + addonTotal - discountAmount - referralAmount,
     discountRate, discountAmount, addonTotalPrice: addonTotal, addonsBillableTotal: addonTotal,
     addonsSeparatePaymentTotal: 0, separatePaymentAddons: [], addons};

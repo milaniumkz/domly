@@ -68,13 +68,22 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch) 
     const row=await db.transaction(async tx=>{
       const row=(await tx.query(`SELECT o.* FROM moon_ai_outbox o WHERE o.state='pending' AND o.run_after<=NOW()
         AND NOT EXISTS(SELECT 1 FROM moon_ai_outbox running WHERE running.chat_id=o.chat_id AND running.state='processing')
-        ORDER BY o.created_at FOR UPDATE SKIP LOCKED LIMIT 1`)).rows[0];
+        ORDER BY CASE WHEN o.kind='invoice' THEN 0 WHEN o.kind='area_verification' THEN 1 ELSE 2 END,o.created_at FOR UPDATE SKIP LOCKED LIMIT 1`)).rows[0];
       if(!row)return null;
       await tx.query('SELECT id FROM chats WHERE id=$1 FOR UPDATE',[row.chat_id]);
       if((await tx.query("SELECT 1 FROM moon_ai_outbox WHERE chat_id=$1 AND state='processing' LIMIT 1",[row.chat_id])).rows.length) return {busy:true};
       if(row.kind==='inactive_install') {
         await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='no_whatsapp_phone',finished_at=NOW() WHERE id=$1",[row.id]);
         return {cancelled:true};
+      }
+      if(row.kind==='area_verification') {
+        const eligible=(await tx.query(`SELECT 1 FROM quality_check_requests q JOIN customer_addresses a ON a.id=q.address_id
+          JOIN app_users u ON u.id=q.customer_id
+          WHERE q.id=$1 AND q.customer_id=$2 AND q.status='pending' AND q.document_file_id IS NULL
+            AND a.verified_area IS NULL AND u.role='customer' AND u.status<>'blocked' AND u.deleted_at IS NULL
+            AND NOT EXISTS(SELECT 1 FROM service_orders o WHERE o.customer_id=q.customer_id AND o.address_id=q.address_id
+              AND (o.id=q.order_id OR o.customer_package_id=q.customer_package_id) AND o.status IN ('in_progress','completed'))`,[row.payload.qualityCheckId,row.customer_id])).rows.length;
+        if(!eligible){await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='area_check_no_longer_required',finished_at=NOW() WHERE id=$1",[row.id]);return {cancelled:true};}
       }
       if(row.kind==='inactive_signup') {
         if((await tx.query('SELECT 1 FROM payments WHERE customer_id=$1 LIMIT 1',[row.customer_id])).rows.length ||
