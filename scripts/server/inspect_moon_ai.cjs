@@ -16,6 +16,7 @@ const {Queue}=require('bullmq');
   console.log('Configured WABA template:',JSON.stringify({channelId:process.env.MOON_AI_WABA_CHANNEL_ID,templateId:process.env.MOON_AI_WABA_TEMPLATE_ID,approved:(templates?.templates||[]).some(t=>String(t.id)===process.env.MOON_AI_WABA_TEMPLATE_ID&&t.status==='APPROVED')}));}
  const db=new Pool({connectionString:process.env.DATABASE_URL});
  try{
+  if(/^[a-f0-9]{64}$/.test(process.env.OTP_PHONE_SHA256||'')) console.log('Requested OTP account:',JSON.stringify((await db.query("SELECT role,status FROM app_users WHERE encode(sha256(convert_to(phone,'UTF8')),'hex')=$1",[process.env.OTP_PHONE_SHA256])).rows));
   console.log('OTP account eligibility:',JSON.stringify((await db.query("SELECT role,status,COUNT(*)::int AS count FROM app_users GROUP BY role,status ORDER BY role,status")).rows));
   console.log('Outbox:',JSON.stringify((await db.query('SELECT kind,state,failure_code,COUNT(*)::int AS count FROM moon_ai_outbox GROUP BY kind,state,failure_code ORDER BY kind,state')).rows));
   console.log('Recent technical deliveries:',JSON.stringify((await db.query("SELECT kind,state,failure_code,provider_thread_id FROM moon_ai_outbox WHERE installation_id IS NOT NULL ORDER BY created_at DESC LIMIT 5")).rows));
