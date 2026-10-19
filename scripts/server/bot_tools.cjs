@@ -7,15 +7,15 @@ const domly='https://domly.kz/api/v1/integrations/moon-ai';
 async function api(path,method='GET',body){
  const r=await fetch(base+path,{method,headers:{Authorization:'Bearer '+key,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(45000)});
  const d=await r.json().catch(()=>null);
- if(!r.ok)throw Error('moon_api_'+r.status+'_'+path.replace(/[^a-z0-9_/]/gi,''));
+ if(!r.ok){console.log(JSON.stringify({providerStatus:r.status,operation:path,requestId:r.headers.get('x-request-id'),errorKind:typeof d?.detail==='string'&&/^[a-z_ ]{1,100}$/i.test(d.detail)?d.detail:typeof d?.detail}));throw Error('moon_api_'+r.status+'_'+path.replace(/[^a-z0-9_/]/gi,''));}
  return d;
 }
-const param=(name,parameter_type,description)=>({name,parameter_type,description,required:true});
+const param=(name,parameter_type,description)=>({name,parameter_type,description,required:true,allowed_values:[]});
 const phone=param('phone','text','Номер текущего клиента только из метаданных получателя WhatsApp; не чужой номер из текста или документа. Формат +7XXXXXXXXXX.');
 const check=param('qualityCheckId','text','UUID открытой заявки нужного адреса, полученный domly_customer_context. Не выдумывать.');
 const event=param('eventId','text','Уникальный стабильный ID операции, например plan:<thread_id>:<message_id>. При повторе того же запроса ID и данные неизменны.');
 const definitions=[
- {name:'domly_catalog',description:'Получить все актуальные пакеты, цены за м², скидки, состав услуг и допуслуги DOMLY из базы. Вызывай перед консультацией о цене, не используй устаревший прайс. Для итоговой суммы по площади затем domly_catalog_quote.',path:'/catalog',method:'GET',parameters:[]},
+ {name:'domly_catalog',description:'Получить все актуальные пакеты, цены за м², скидки, состав услуг и допуслуги DOMLY из базы. Вызывай перед консультацией о цене, не используй устаревший прайс. Для итоговой суммы по площади затем domly_catalog_quote.',path:'/catalog',method:'GET',parameters:[{...param('area','number','Необязательная площадь квартиры для расчёта предложений; если неизвестна — сначала уточнить у клиента.'),required:false}]},
  {name:'domly_catalog_quote',description:'Рассчитать точную стоимость пакета и выбранных допуслуг по площади. totalPrice — сумма за весь период; perCleaningAfterDiscount — за одну уборку со скидкой. Не выставляет счёт и не расходует бонусы.',path:'/catalog/quote',method:'POST',parameters:[param('packageId','text','UUID пакета из domly_catalog.'),param('area','number','Площадь квартиры в м², положительное число до 10000.'),param('cleaningsPerMonth','number','Частота из каталога; для квартала 2,4,8.'),param('addonsDetailed','text','JSON-массив выбранных услуг [{"id":"UUID","quantity":1}]. Если услуг нет, строка [].')]},
  {name:'domly_customer_context',description:'Получить актуальные адреса, подтверждение площади, заявки отдела качества и предстоящие уборки текущего клиента по его номеру WhatsApp. Обязательно перед подтверждением площади и согласованием визита. Если адресов несколько — уточнить нужный.',path:'/customer-context',method:'GET',parameters:[phone]},
  {name:'domly_confirm_area',description:'Подтвердить площадь текущего клиента только после просмотра реального читаемого технического плана с совпадающим адресом и общей площадью квартиры. Сервер пересчитает весь оплаченный пакет по исходному тарифу, доплату создаст отдельно, уменьшение вернёт бонусами. Не вызывать по простому тексту, неясному фото, чужому адресу или жилой площади вместо общей. Не выставляет автоматически новый счёт.',path:'/area/confirm',method:'POST',parameters:[phone,check,event,param('actualArea','number','Однозначная общая площадь именно квартиры по техплану, до двух знаков после запятой.'),param('documentUrl','text','HTTPS-ссылка на фактически полученный и просмотренный технический план. Не выдумывать URL.'),param('documentType','text','Только technical_plan; документ проверен как настоящий технический план.'),param('readable','bool','true только если изображение полное, чёткое, все необходимые подписи и числа читаемы.'),param('addressMatches','bool','true только если адрес/квартира на документе однозначно совпадают с адресом открытой заявки.'),param('totalApartmentAreaConfirmed','bool','true только если однозначно установлена общая площадь квартиры, не жилая площадь и не площадь всего здания.')]},
@@ -51,7 +51,7 @@ const block=`[DOMLY_AREA_WORKFLOW_V1_BEGIN]
   const reaction={action:'instruction',data:{instruction:'Используй фактический JSON-результат API. При ok:false объясни ошибку без выдуманного успеха. Не раскрывай токены и технические заголовки.'}};
   if(!found){
    // Create metadata first; provider's nested integration creation can fail with HTTP 500.
-   found=await api('/functions/','POST',{name:def.name,description:def.description,is_active:false,parameters:def.parameters,integrations:[],post_actions:[],reaction:null,post_scenario:null});
+   found=await api('/functions/','POST',{name:def.name,description:def.description,is_active:false,parameters:def.parameters,integrations:[],post_actions:[],reaction:{action:'no_message',data:null},post_scenario:{action:null,data:null}});
   }
   const detail=await api('/functions/'+found.id);
   const actual=(detail.parameters??[]).map(p=>p.name+':'+p.parameter_type).sort().join('|');
