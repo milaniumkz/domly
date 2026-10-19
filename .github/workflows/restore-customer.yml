@@ -1,0 +1,42 @@
+name: Restore customer account
+on:
+  workflow_dispatch:
+    inputs:
+      phone_sha256:
+        description: SHA-256 of normalized phone of the blocked cleaner explicitly requested as customer
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  restore:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Restore the requested account without deleting history
+        env:
+          PHONE_SHA256: ${{ inputs.phone_sha256 }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          [[ "$PHONE_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/restore_customer.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/restore_customer.cjs"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+            "set -e; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e PHONE_SHA256='$PHONE_SHA256' api node < '$DEPLOY_PATH/shared/restore_customer.cjs'; rm -f '$DEPLOY_PATH/shared/restore_customer.cjs'"
