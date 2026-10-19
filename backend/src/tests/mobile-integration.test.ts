@@ -137,9 +137,12 @@ test('temporary delivery fallback completes backend login and the code is single
 test('Moon AI invoices, signed events, guest isolation and thirty-minute campaigns', {skip: !process.env.DOMLY_INTEGRATION_DATABASE_URL}, async t => {
   const {env}=await import('../common/env');
   const {ensureAssistantChat,queueMoonInvoice,scheduleCheckoutFollowup,scheduleSignupFollowup,processMoonOutbox,
-    acceptMoonChatEvent,acceptMoonPaymentStatus,matchMoonPaymentStatus,ensureGuestSession,guestSession,bindGuestSession}=await import('../modules/moonAi');
-  const previous={moonAiEnabled:env.moonAiEnabled,moonAiChannelUrl:env.moonAiChannelUrl,moonAiChannelApiKey:env.moonAiChannelApiKey,moonAiWebhookToken:env.moonAiWebhookToken,moonAiSource:env.moonAiSource};
-  Object.assign(env,{moonAiEnabled:true,moonAiChannelUrl:'https://core.mooonai.com/api/v1/channels/api/messages',moonAiChannelApiKey:'fixture-channel-key',moonAiWebhookToken:'fixture-hook-key',moonAiSource:'domly'});
+    acceptMoonChatEvent,acceptMoonPaymentStatus,matchMoonPaymentStatus,ensureGuestSession,guestSession,bindGuestSession,queueAssistantMessage}=await import('../modules/moonAi');
+  const {sendMessengerFollowup}=await import('../modules/moonMessenger');
+  const previous={moonAiEnabled:env.moonAiEnabled,moonAiChannelUrl:env.moonAiChannelUrl,moonAiChannelApiKey:env.moonAiChannelApiKey,moonAiWebhookToken:env.moonAiWebhookToken,moonAiSource:env.moonAiSource,
+    moonAiRestApiKey:env.moonAiRestApiKey,moonAiOrganizationId:env.moonAiOrganizationId,moonAiAgentId:env.moonAiAgentId,moonAiWabaChannelId:env.moonAiWabaChannelId,moonAiWabaTemplateId:env.moonAiWabaTemplateId};
+  Object.assign(env,{moonAiEnabled:true,moonAiChannelUrl:'https://core.mooonai.com/api/v1/channels/api/messages',moonAiChannelApiKey:'fixture-channel-key',moonAiWebhookToken:'fixture-hook-key',moonAiSource:'domly',
+    moonAiRestApiKey:'fixture-rest-key',moonAiOrganizationId:'4649',moonAiAgentId:'6875',moonAiWabaChannelId:'7787',moonAiWabaTemplateId:'215'});
   const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
   const user=randomUUID(),stranger=randomUUID(),idle=randomUUID(),paymentId=randomUUID();
   const keys=['a'.repeat(64),'b'.repeat(64)];
@@ -152,7 +155,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
   }) as typeof fetch;
   let chatId='';
   try {
-    for(const id of [user,stranger,idle])await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'customer','approved')",[id,'moon-fixture-'+id]);
+    for(const id of [user,stranger,idle])await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'customer','approved')",[id,'+7'+id.replace(/\D/g,'').padEnd(10,'0').slice(0,10)]);
     await t.test('one private assistant chat survives concurrent creation',async()=>{
       const chats=await Promise.all(Array.from({length:5},()=>ensureAssistantChat(db,user)));
       chatId=chats[0].id;assert.equal(new Set(chats.map(c=>c.id)).size,1);
@@ -252,32 +255,77 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
     await t.test('assistant replies are stored once and notified only to the owner',async()=>{
       const events=new Map<string,any>();
       const notifications={create:async(input:any)=>{events.set(input.dedupeKey,input);}};
-      const event={event_id:randomUUID(),event_type:'agent_message',source:'domly',external_thread_id:chatId,thread_id:`api:domly:${chatId}`,message:{data:{text:'Здравствуйте!'}}};
+      const event={event_id:randomUUID(),event_type:'agent_message',source:'domly',external_thread_id:`assistant:${chatId}`,thread_id:`api:domly:assistant:${chatId}`,message:{data:{text:'Здравствуйте!'}}};
+      assert.equal((await acceptMoonChatEvent(db,notifications,event)).ignored,true);
+      await queueAssistantMessage(db,chatId,user,randomUUID(),'Помоги выбрать уборку');
+      await processMoonOutbox(db,send);
+      assert.equal(sent.at(-1).thread_id,`assistant:${chatId}`);
       assert.equal((await acceptMoonChatEvent(db,notifications,event)).duplicate,false);
       assert.equal((await acceptMoonChatEvent(db,notifications,event)).duplicate,true);
       assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM chat_messages WHERE chat_id=$1',[chatId])).rows[0].n,1);
       assert.equal(events.size,1);assert.equal([...events.values()][0].userId,user);assert.equal([...events.values()][0].targetType,'assistant_chat');
       await assert.rejects(acceptMoonChatEvent(db,notifications,{...event,source:'foreign'}));
       const ignored=await acceptMoonChatEvent(db,notifications,{...event,event_type:'user_message'});assert.equal(ignored.ignored,true);
+      assert.equal((await acceptMoonChatEvent(db,notifications,{...event,event_id:randomUUID()})).ignored,true);
+      assert.equal((await acceptMoonChatEvent(db,notifications,{...event,event_id:randomUUID(),external_thread_id:chatId,thread_id:`api:domly:${chatId}`})).ignored,true);
+      assert.equal(events.size,1);
     });
-    await t.test('new registered customer gets a single thirty-minute welcome',async()=>{
+    await t.test('new registered customer gets a single thirty-minute WhatsApp welcome, never an app message',async()=>{
       await scheduleSignupFollowup(db,idle);await scheduleSignupFollowup(db,idle);
       const rows=(await db.query("SELECT *,EXTRACT(EPOCH FROM run_after-created_at)::int AS delay FROM moon_ai_outbox WHERE customer_id=$1 AND kind='inactive_signup'",[idle])).rows;
       assert.equal(rows.length,1);assert.equal(rows[0].delay,1800);
       await db.query("UPDATE moon_ai_outbox SET run_after=NOW()-INTERVAL '1 second' WHERE id=$1",[rows[0].id]);
-      await processMoonOutbox(db,send);assert.equal(sent.length,2);
-      await processMoonOutbox(db,send);assert.equal(sent.length,2);
+      const nativeCalls:any[]=[];
+      const nativeSend=(async(url:any,init:any)=>{
+        assert.equal(init.headers.Authorization,'Bearer fixture-rest-key');
+        const path=new URL(url).pathname;nativeCalls.push({path,body:init.body?JSON.parse(init.body):null});
+        const result=path.endsWith('/threads')?{results:[]}:path.endsWith('/whatsapp-templates')?{templates:[{id:215,status:'APPROVED'}]}:
+          {thread_id:'native-waba-thread',delivery_status:'enqueued'};
+        return new Response(JSON.stringify(result),{status:200});
+      }) as typeof fetch;
+      await processMoonOutbox(db,nativeSend);
+      assert.equal(nativeCalls.length,4);
+      assert.match(nativeCalls.at(-2).path,/channels\/7787\/whatsapp-chat\/initiate$/);
+      assert.equal(nativeCalls.at(-2).body.template_id,215);
+      assert.equal(nativeCalls.at(-2).body.phone,(await db.query('SELECT phone FROM app_users WHERE id=$1',[idle])).rows[0].phone);
+      assert.equal(nativeCalls.at(-1).body.status,'active');
+      await processMoonOutbox(db,nativeSend);assert.equal(nativeCalls.length,4);
+      assert.equal((await db.query("SELECT provider_thread_id FROM moon_ai_outbox WHERE id=$1",[rows[0].id])).rows[0].provider_thread_id,'native-waba-thread');
+      assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM chat_messages m JOIN chats c ON c.id=m.chat_id WHERE c.customer_id=$1",[idle])).rows[0].n),0);
+    });
+    await t.test('existing WhatsApp and WABA conversations use native messages or approved templates',async()=>{
+      for(const channel of ['whatsapp','whatsapp_business']) {
+        for(const activeWindow of [true,false]) {
+          const calls:any[]=[];
+          const transport=(async(url:any,init:any)=>{
+            const path=new URL(url).pathname;calls.push({path,body:init.body?JSON.parse(init.body):null});
+            const result=path.endsWith('/threads')?{results:[{id:'native-thread',channel_type:channel,status:'active',metadata:{phone_number:'77000000000'},free_form_window_expires_at:activeWindow?new Date(Date.now()+3600000).toISOString():null}]}:
+              path.endsWith('/whatsapp-templates')?{templates:[{id:215,status:'APPROVED'}]}:path.endsWith('/messages')?{id:41}:{thread_id:'native-thread'};
+            return new Response(JSON.stringify(result),{status:200});
+          }) as typeof fetch;
+          await sendMessengerFollowup({id:randomUUID(),kind:'abandoned_checkout',text:'Помоги клиенту завершить оформление, без нового счёта.',phone:'+77000000000'},transport);
+          const last=calls.at(-2);
+          if(channel==='whatsapp'||activeWindow){assert.match(last.path,/\/messages$/);assert.equal(last.body.from_type,'manager');assert.equal(last.body.data.text.includes('Служебное событие'),false);}
+          else {assert.match(last.path,/\/whatsapp-template$/);assert.equal(last.body.template_id,215);}
+          assert.equal(calls.some(call=>call.path.includes('/channels/api/')),false);
+          assert.match(calls.at(-1).path,/\/status$/);assert.equal(calls.at(-1).body.status,'active');
+        }
+      }
+      let pausedCalls=0;
+      const paused=(async()=>{pausedCalls++;return new Response(JSON.stringify({results:[{id:'paused-native',channel_type:'whatsapp',status:'paused',metadata:{phone_number:'77000000000'}}]}),{status:200});}) as typeof fetch;
+      await assert.rejects(sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Помоги.',phone:'+77000000000'},paused),/WhatsApp/);
+      assert.equal(pausedCalls,1,'A manager pause must not be bypassed by starting another conversation');
     });
     await t.test('first-open guest sessions are private, idempotent and expire on account binding',async()=>{
       const a=await ensureGuestSession(db,keys[0]),again=await ensureGuestSession(db,keys[0]),b=await ensureGuestSession(db,keys[1]);
       assert.equal(a.chatId,again.chatId);assert.notEqual(a.chatId,b.chatId);
       const guest=await guestSession(db,keys[0]);assert.equal(guest.chat_id,a.chatId);
       const reminders=(await db.query("SELECT EXTRACT(EPOCH FROM run_after-created_at)::int AS delay FROM moon_ai_outbox WHERE installation_id=$1 AND kind='inactive_install'",[guest.id])).rows;
-      assert.equal(reminders.length,1);assert.ok(reminders[0].delay>=1799 && reminders[0].delay<=1800);
+      assert.equal(reminders.length,0);
       await assert.rejects(guestSession(db,'c'.repeat(64)));
       await bindGuestSession(db,keys[0],user);
       await assert.rejects(guestSession(db,keys[0]));
-      assert.equal((await db.query("SELECT state FROM moon_ai_outbox WHERE installation_id=$1",[guest.id])).rows[0].state,'cancelled');
+      assert.equal((await db.query("SELECT 1 FROM moon_ai_outbox WHERE installation_id=$1 AND state='pending'",[guest.id])).rows.length,0);
       await assert.rejects(bindGuestSession(db,keys[0],stranger));
     });
     await t.test('unknown network delivery is never retried into duplicate invoices',async()=>{

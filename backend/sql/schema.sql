@@ -1208,6 +1208,9 @@ CREATE TABLE IF NOT EXISTS moon_ai_outbox (
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_moon_ai_pending ON moon_ai_outbox(run_after) WHERE state='pending';
+-- Guests have no WhatsApp phone; they can still ask the in-app assistant first.
+UPDATE moon_ai_outbox SET state='cancelled',failure_code='no_whatsapp_phone',finished_at=NOW()
+WHERE kind='inactive_install' AND state='pending';
 
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS approval_source TEXT;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES app_users(id);

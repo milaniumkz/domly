@@ -5,6 +5,7 @@ import { FcmService } from './integrations';
 import type { Queryable } from '../domain/repositories/UnitOfWork';
 import { Database } from '../infrastructure/db/Database';
 import type { NotificationService } from './domainServices';
+import {MoonMessengerError,sendMessengerFollowup} from './moonMessenger';
 
 export function moonAiReady(): boolean {
   return env.moonAiEnabled && Boolean(env.moonAiChannelUrl && env.moonAiChannelApiKey && env.moonAiWebhookToken);
@@ -71,6 +72,10 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch) 
       if(!row)return null;
       await tx.query('SELECT id FROM chats WHERE id=$1 FOR UPDATE',[row.chat_id]);
       if((await tx.query("SELECT 1 FROM moon_ai_outbox WHERE chat_id=$1 AND state='processing' LIMIT 1",[row.chat_id])).rows.length) return {busy:true};
+      if(row.kind==='inactive_install') {
+        await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='no_whatsapp_phone',finished_at=NOW() WHERE id=$1",[row.id]);
+        return {cancelled:true};
+      }
       if(row.kind==='inactive_signup') {
         if((await tx.query('SELECT 1 FROM payments WHERE customer_id=$1 LIMIT 1',[row.customer_id])).rows.length ||
           (await tx.query("SELECT 1 FROM moon_ai_outbox WHERE customer_id=$1 AND kind='message' LIMIT 1",[row.customer_id])).rows.length) {
@@ -95,7 +100,15 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch) 
     });
     if(!row)break;if(row.cancelled || row.busy)continue;
     try {
-      const externalThread=row.kind==='invoice'?row.id:row.chat_id;
+      if(!['invoice','message'].includes(row.kind)) {
+        const customer=(await db.query('SELECT phone,settings FROM app_users WHERE id=$1',[row.customer_id])).rows[0];
+        if(customer?.settings?.whatsappOptOut===true)throw new MoonMessengerError('whatsapp_opted_out');
+        const delivery=await sendMessengerFollowup({id:row.id,kind:row.kind,text:row.payload.text,phone:customer?.phone ?? ''},send);
+        await db.query(`UPDATE moon_ai_outbox SET state='sent',provider_thread_id=$2,finished_at=NOW(),failure_code=NULL,
+          payload=payload || $3::jsonb WHERE id=$1`,[row.id,delivery.threadId,{deliveryChannel:delivery.channel,messengerDelivery:delivery}]);
+        sent++;continue;
+      }
+      const externalThread=row.kind==='invoice'?row.id:`assistant:${row.chat_id}`;
       const source=row.kind==='invoice'?`${env.moonAiSource}_invoice`:env.moonAiSource;
       const body:any={thread_id:externalThread,source,from_type:row.kind==='message'?'user':'manager',message_type:'text',data:{text:row.payload.text}};
       // API-channel manager messages are delivered to the conversation. Agent
@@ -108,15 +121,25 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch) 
         await db.query("UPDATE moon_ai_outbox SET state=$2,failure_code=$3,finished_at=NOW() WHERE id=$1",[row.id,response.status>=500?'uncertain':'failed',`http_${response.status}`]);continue;
       }
       await db.query("UPDATE moon_ai_outbox SET state='sent',provider_thread_id=$2,finished_at=NOW() WHERE id=$1",[row.id,result.thread_id ?? null]);sent++;
-    }catch(_) {await db.query("UPDATE moon_ai_outbox SET state='uncertain',failure_code='delivery_unknown',finished_at=NOW() WHERE id=$1",[row.id]);}
+    }catch(error) {
+      if(error instanceof MoonMessengerError) {
+        await db.query(`UPDATE moon_ai_outbox SET state=$2,failure_code=$3,finished_at=CASE WHEN $2='pending' THEN NULL ELSE NOW() END,
+          run_after=CASE WHEN $2='pending' THEN NOW()+INTERVAL '5 minutes' ELSE run_after END WHERE id=$1`,
+          [row.id,error.retryable?'pending':error.failureCode.includes('paused')||error.failureCode.includes('opted_out')||error.failureCode.includes('phone_unavailable')?'cancelled':'failed',error.failureCode]);
+      } else await db.query("UPDATE moon_ai_outbox SET state='uncertain',failure_code='delivery_unknown',finished_at=NOW() WHERE id=$1",[row.id]);
+    }
   }
   return {sent};
 }
 export async function acceptMoonChatEvent(db: Database, notifications: Pick<NotificationService,'create'>, event: any) {
-  const id=String(event.event_id ?? ''),chatId=String(event.external_thread_id ?? '');
+  const id=String(event.event_id ?? ''),externalThread=String(event.external_thread_id ?? '');
   if(event.source===`${env.moonAiSource}_invoice`) return {accepted:true,ignored:true};
+  if(event.source!==env.moonAiSource)throw new ApiError(400,'invalid_source','Неверный источник диалога.');
+  // Old proactive API threads and native messenger conversations never enter the app.
+  if(!externalThread.startsWith('assistant:'))return {accepted:true,ignored:true};
+  const chatId=externalThread.slice('assistant:'.length);
   if(!id || !/^[0-9a-f-]{36}$/i.test(chatId)) throw new ApiError(400,'invalid_event','Нужны event_id и external_thread_id.');
-  if(event.source!==env.moonAiSource || (event.thread_id && event.thread_id!==`api:${env.moonAiSource}:${chatId}`)) throw new ApiError(400,'invalid_source','Неверный источник диалога.');
+  if(event.thread_id && event.thread_id!==`api:${env.moonAiSource}:${externalThread}`) throw new ApiError(400,'invalid_source','Неверный источник диалога.');
   const chat=(await db.query("SELECT * FROM chats WHERE id=$1 AND type IN ('assistant','assistant_guest')",[chatId])).rows[0];
   if(!chat) throw new ApiError(404,'chat_not_found','Диалог не найден.');
   if(!['agent_message','manager_message'].includes(event.event_type)) return {accepted:true,ignored:true};
@@ -128,8 +151,23 @@ export async function acceptMoonChatEvent(db: Database, notifications: Pick<Noti
   const content=[text,...files.map((f:any)=>`${f.filename}: ${f.url}`)].filter(Boolean).join('\n');
   if(!content) return {accepted:true,ignored:true};
   if(content.length>20000) throw new ApiError(400,'message_too_long','Сообщение слишком длинное.');
-  const message=(await db.query(`INSERT INTO chat_messages(chat_id,sender_id,sender_kind,message_ru,external_event_id)
-    VALUES($1,NULL,'assistant',$2,$3) ON CONFLICT(external_event_id) WHERE external_event_id IS NOT NULL DO NOTHING RETURNING id`,[chatId,content,id])).rows[0];
+  const accepted=await db.transaction(async tx=>{
+    await tx.query('SELECT id FROM chats WHERE id=$1 FOR UPDATE',[chatId]);
+    const existing=(await tx.query('SELECT id FROM chat_messages WHERE chat_id=$1 AND external_event_id=$2',[chatId,id])).rows[0];
+    if(existing)return {message:existing,duplicate:true};
+    const request=(await tx.query(`SELECT id,created_at FROM moon_ai_outbox WHERE chat_id=$1 AND kind='message'
+      AND state IN ('processing','sent') AND started_at>NOW()-INTERVAL '10 minutes'
+      AND COALESCE(payload->>'assistantReplied','false')<>'true' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,[chatId])).rows[0];
+    if(!request)return null;
+    const message=(await tx.query(`INSERT INTO chat_messages(chat_id,sender_id,sender_kind,message_ru,external_event_id)
+      VALUES($1,NULL,'assistant',$2,$3) ON CONFLICT(external_event_id) WHERE external_event_id IS NOT NULL DO NOTHING RETURNING id`,[chatId,content,id])).rows[0];
+    await tx.query(`UPDATE moon_ai_outbox SET payload=payload || '{"assistantReplied":true}'::jsonb
+      WHERE chat_id=$1 AND kind='message' AND state IN ('processing','sent')
+      AND created_at<=(SELECT created_at FROM moon_ai_outbox WHERE id=$2)`,[chatId,request.id]);
+    return {message,duplicate:!message};
+  });
+  if(!accepted)return {accepted:true,ignored:true};
+  const {message}=accepted;
   // Notification has an independent dedupe key, so retries repair a push failure.
   if(chat.customer_id) {
     await notifications.create({userId:chat.customer_id,titleRu:'Помощник Domly',bodyRu:text.slice(0,160)||'Вам прислали файл.',targetType:'assistant_chat',targetId:chatId,dedupeKey:`moon-chat:${id}`});
@@ -137,7 +175,7 @@ export async function acceptMoonChatEvent(db: Database, notifications: Pick<Noti
     const tokens=(await db.query('SELECT token FROM assistant_installation_tokens WHERE installation_id=$1',[chat.installation_id])).rows.map((t:any)=>t.token);
     await new FcmService().send(tokens,'Помощник Domly',text.slice(0,160)||'Новое сообщение',{targetType:'assistant_guest',targetId:chatId});
   }
-  return {accepted:true,duplicate:!message};
+  return {accepted:true,duplicate:accepted.duplicate};
 }
 
 type MoonPaymentStatusInput = {
@@ -242,9 +280,6 @@ export async function ensureGuestSession(db: Database, key: string) {
     const chat=(await tx.query(`INSERT INTO chats(type,installation_id) VALUES('assistant_guest',$1)
       ON CONFLICT(installation_id) WHERE type='assistant_guest' DO UPDATE SET installation_id=EXCLUDED.installation_id RETURNING id`,[guest.id])).rows[0];
     await tx.query('UPDATE assistant_installations SET chat_id=$2 WHERE id=$1',[guest.id,chat.id]);
-    await tx.query(`INSERT INTO moon_ai_outbox(installation_id,chat_id,kind,dedupe_key,payload,run_after)
-      VALUES($1,$2,'inactive_install',$3,$4,$5::timestamptz+INTERVAL '30 minutes') ON CONFLICT(dedupe_key) DO NOTHING`,
-      [guest.id,chat.id,`install:${guest.id}`,{text:'Служебное событие DOMLY: приложение было впервые открыто 30 минут назад, пользователь ещё не зарегистрировался и не начал общение. Поздоровайся и предложи помочь разобраться в сервисе. Не утверждай, что знаешь имя или телефон гостя. Не выставляй счёт.'},guest.first_opened_at]);
     return {chatId:chat.id};
   });
 }
