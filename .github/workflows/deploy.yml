@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      reuse_web_from_run:
+        description: Optional successful deployment run; allowed only when frontend source is unchanged
+        type: string
+        required: false
       mode:
         description: Deployment or read-only server inspection
         default: deploy
@@ -13,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: production-deploy
@@ -64,6 +69,8 @@ jobs:
   test:
     if: inputs.mode != 'inspect' && inputs.mode != 'import-catalog'
     uses: ./.github/workflows/ci.yml
+    with:
+      backend_only: ${{ inputs.reuse_web_from_run != '' }}
 
   deploy:
     needs: test
@@ -73,8 +80,36 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+      - name: Verify reused web build comes from unchanged frontend source
+        if: inputs.reuse_web_from_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEB_RUN_ID: ${{ inputs.reuse_web_from_run }}
+        run: |
+          set -euo pipefail
+          [[ "$WEB_RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$WEB_RUN_ID" > /tmp/web-source-run.json
+          WEB_SOURCE_SHA=$(python3 - <<'PYCODE'
+          import json
+          run = json.load(open('/tmp/web-source-run.json'))
+          assert run['conclusion'] == 'success' and run['status'] == 'completed'
+          assert run['head_branch'] == 'main' and run['path'] == '.github/workflows/deploy.yml'
+          print(run['head_sha'])
+          PYCODE
+          )
+          [[ "$WEB_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --depth=1 origin "$WEB_SOURCE_SHA"
+          git diff --name-only "$WEB_SOURCE_SHA" HEAD > /tmp/web-source-changes.txt
+          while IFS= read -r changed; do
+            case "$changed" in
+              backend/*|docs/*|.github/*|scripts/server/*) ;;
+              *) echo "Frontend build cannot be reused after changing $changed" >&2; exit 1 ;;
+            esac
+          done < /tmp/web-source-changes.txt
       - uses: actions/download-artifact@v4
         with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.reuse_web_from_run || github.run_id }}
           name: domly-web
           path: frontend/releases/current
       - name: Prepare SSH
@@ -91,13 +126,32 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
             "mkdir -p '$DEPLOY_PATH/releases/${GITHUB_SHA}'"
+      - name: Verify reused files preserve rollback copies and exclude secrets
+        if: inputs.reuse_web_from_run != ''
+        run: |
+          set -euo pipefail
+          fixture=$(mktemp -d)
+          trap 'rm -rf "$fixture"' EXIT
+          mkdir "$fixture/source" "$fixture/previous" "$fixture/next"
+          printf retained > "$fixture/source/same"
+          cp -p "$fixture/source/same" "$fixture/previous/same"
+          printf fixture > "$fixture/source/.env"
+          rsync -a --exclude=.env --copy-dest="$fixture/previous" "$fixture/source/" "$fixture/next/"
+          test ! -e "$fixture/next/.env"
+          test "$(stat -c %i "$fixture/previous/same")" != "$(stat -c %i "$fixture/next/same")"
+          printf updated > "$fixture/next/same"
+          test "$(cat "$fixture/previous/same")" = retained
       - name: Upload release
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
         run: |
-          rsync -az --delete \
+          copy_options=()
+          if ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "test -d '$DEPLOY_PATH/current'"; then
+            copy_options+=(--copy-dest="$DEPLOY_PATH/current")
+          fi
+          rsync -az --delete "${copy_options[@]}" \
             --exclude '.git' \
             --exclude '.env' \
             --exclude 'backend/.env' \

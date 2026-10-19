@@ -89,6 +89,7 @@ jobs:
         if-no-files-found: error
         retention-days: 1
   flutter:
+    if: ${{ !inputs.backend_only }}
     runs-on: ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && fromJSON('["milanium-mac-arm64",
       "repo-domly"]') || fromJSON('["ubuntu-latest"]') }}
     timeout-minutes: 45
@@ -128,7 +129,11 @@ jobs:
         path: web-release/
         retention-days: 7
 'on':
-  workflow_call: 
+  workflow_call:
+    inputs:
+      backend_only:
+        type: boolean
+        default: false
   pull_request: 
   push:
     branches:

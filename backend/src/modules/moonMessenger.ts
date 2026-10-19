@@ -21,8 +21,9 @@ export async function sendMessengerFollowup(input:{id:string;kind:string;text:st
   const base=`https://core.mooonai.com/api/v1/organizations/${env.moonAiOrganizationId}/agents/${env.moonAiAgentId}`;
   async function request(path:string,method='GET',body?:unknown) {
     let response:Response;
-    try {response=await send(base+path,{method,headers:{Authorization:`Bearer ${env.moonAiRestApiKey}`,'Content-Type':'application/json'},
-      ...(body===undefined?{}:{body:JSON.stringify(body)}),// Filtered thread lookups can take ~28 seconds even with no results.
+    try {response=await send(base+path,{method,headers:{Authorization:`Bearer ${env.moonAiRestApiKey}`,...(body===undefined?{}:{'Content-Type':'application/json'})},
+      ...(body===undefined?{}:{body:JSON.stringify(body)}),
+      // Background messenger calls have a separate deadline from login codes.
       signal:AbortSignal.timeout(45000)});}
     catch(error){if(method==='GET')throw new MoonMessengerError('whatsapp_lookup_unavailable',true);throw error;}
     const value:any=await response.json().catch(()=>null);
@@ -30,7 +31,7 @@ export async function sendMessengerFollowup(input:{id:string;kind:string;text:st
     if(value===null)throw new MoonMessengerError('whatsapp_response_unknown',method==='GET');
     return value;
   }
-  const found=await request('/threads?'+new URLSearchParams({phone_number:phone,limit:'100'}));
+  const found=await request('/threads?'+new URLSearchParams({phone_number:phone,messengers:'whatsapp_business',limit:'100'}));
   if(!Array.isArray(found?.results))throw new MoonMessengerError('whatsapp_lookup_invalid',true);
   const threads=found.results.filter((thread:any)=>thread.channel_type==='whatsapp_business'
     && messengerPhone(thread.metadata?.phone_number)===phone);

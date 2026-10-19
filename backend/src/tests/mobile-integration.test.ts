@@ -278,7 +278,9 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
       const nativeCalls:any[]=[];
       const nativeSend=(async(url:any,init:any)=>{
         assert.equal(init.headers.Authorization,'Bearer fixture-rest-key');
-        const path=new URL(url).pathname;nativeCalls.push({path,body:init.body?JSON.parse(init.body):null});
+        const parsedUrl=new URL(url);const path=parsedUrl.pathname;
+        if(path.endsWith('/threads')){assert.equal(parsedUrl.searchParams.get('messengers'),'whatsapp_business');assert.equal(init.headers['Content-Type'],undefined);}
+        nativeCalls.push({path,body:init.body?JSON.parse(init.body):null});
         const result=path.endsWith('/threads')?{results:[]}:path.endsWith('/whatsapp-templates')?{templates:[{id:215,status:'APPROVED'}]}:
           {thread_id:'native-waba-thread',delivery_status:'enqueued'};
         return new Response(JSON.stringify(result),{status:200});
