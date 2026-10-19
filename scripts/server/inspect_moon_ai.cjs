@@ -2,6 +2,7 @@
 const {Pool}=require('pg');
 const {Queue}=require('bullmq');
 (async()=>{
+ console.log('OTP configuration:',JSON.stringify({showCode:process.env.OTP_SHOW_CODE==='true'||process.env.OTP_SHOW_CODE==='1',legacyWindowActive:Date.parse(process.env.OTP_FAILURE_FALLBACK_UNTIL||'')>Date.now(),deliveryConfigured:!!process.env.WAPI_TOKEN&&!!process.env.WAPI_PROFILE_ID}));
  console.log('MoonAI configuration:',JSON.stringify({enabled:process.env.MOON_AI_ENABLED==='true',channelUrlConfigured:!!process.env.MOON_AI_CHANNEL_URL,channelKeyConfigured:!!process.env.MOON_AI_CHANNEL_API_KEY,webhookConfigured:!!process.env.MOON_AI_WEBHOOK_TOKEN}));
  const apiBase=`https://core.mooonai.com/api/v1/organizations/${process.env.MOON_AI_ORGANIZATION_ID||4649}/agents/${process.env.MOON_AI_AGENT_ID||6875}`;
  const apiKey=process.env.MOON_AI_REST_API_KEY||process.env.MOON_AI_CHANNEL_API_KEY;
@@ -15,6 +16,7 @@ const {Queue}=require('bullmq');
   console.log('Configured WABA template:',JSON.stringify({channelId:process.env.MOON_AI_WABA_CHANNEL_ID,templateId:process.env.MOON_AI_WABA_TEMPLATE_ID,approved:(templates?.templates||[]).some(t=>String(t.id)===process.env.MOON_AI_WABA_TEMPLATE_ID&&t.status==='APPROVED')}));}
  const db=new Pool({connectionString:process.env.DATABASE_URL});
  try{
+  console.log('OTP account eligibility:',JSON.stringify((await db.query("SELECT role,status,COUNT(*)::int AS count FROM app_users GROUP BY role,status ORDER BY role,status")).rows));
   console.log('Outbox:',JSON.stringify((await db.query('SELECT kind,state,failure_code,COUNT(*)::int AS count FROM moon_ai_outbox GROUP BY kind,state,failure_code ORDER BY kind,state')).rows));
   console.log('Recent technical deliveries:',JSON.stringify((await db.query("SELECT kind,state,failure_code,provider_thread_id FROM moon_ai_outbox WHERE installation_id IS NOT NULL ORDER BY created_at DESC LIMIT 5")).rows));
  }finally{await db.end();}
