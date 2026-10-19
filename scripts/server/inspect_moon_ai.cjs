@@ -2,7 +2,7 @@
 const {Pool}=require('pg');
 const {Queue}=require('bullmq');
 (async()=>{
- console.log('OTP configuration:',JSON.stringify({showCode:process.env.OTP_SHOW_CODE==='true'||process.env.OTP_SHOW_CODE==='1',legacyWindowActive:Date.parse(process.env.OTP_FAILURE_FALLBACK_UNTIL||'')>Date.now(),deliveryConfigured:!!process.env.WAPI_TOKEN&&!!process.env.WAPI_PROFILE_ID}));
+ console.log('OTP configuration:',JSON.stringify({showCode:process.env.OTP_SHOW_CODE==='true'||process.env.OTP_SHOW_CODE==='1',legacyWindowActive:Date.parse(process.env.OTP_FAILURE_FALLBACK_UNTIL||'')>Date.now(),provider:process.env.OTP_PROVIDER||'wapi',deliveryConfigured:process.env.OTP_PROVIDER==='greenapi'?!!process.env.GREEN_API_INSTANCE_ID&&!!process.env.GREEN_API_TOKEN:!!process.env.WAPI_TOKEN&&!!process.env.WAPI_PROFILE_ID}));
  console.log('MoonAI configuration:',JSON.stringify({enabled:process.env.MOON_AI_ENABLED==='true',channelUrlConfigured:!!process.env.MOON_AI_CHANNEL_URL,channelKeyConfigured:!!process.env.MOON_AI_CHANNEL_API_KEY,webhookConfigured:!!process.env.MOON_AI_WEBHOOK_TOKEN}));
  const apiBase=`https://core.mooonai.com/api/v1/organizations/${process.env.MOON_AI_ORGANIZATION_ID||4649}/agents/${process.env.MOON_AI_AGENT_ID||6875}`;
  const apiKey=process.env.MOON_AI_REST_API_KEY||process.env.MOON_AI_CHANNEL_API_KEY;

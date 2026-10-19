@@ -19,3 +19,7 @@
 Ошибка подготовки внешнего сообщения не переключает доставку обратно в приложение. Безопасные ошибки чтения повторяются с задержкой; неопределённая отправка не повторяется автоматически во избежание дублей. Технические результаты доступны в `moon_ai_outbox` (`state`, `failure_code`, `provider_thread_id`, `payload.messengerDelivery`), без публикации текста и телефона в логах.
 
 Документация: приложенный владельцем MoonAI API.pdf, методы 1.2/1.3 и 2.1/2.3/2.4; [API-канал](https://docs.mooonai.com/channels/api_channel/) и [WhatsApp Business](https://docs.mooonai.com/channels/whatsapp_business/). Метод 4.1 `/triggers` 19.10.2026 возвращает ошибку сериализации ObjectId (422) после создания объекта; поэтому он не используется. Созданные технические напоминания удалены из отдельного тестового чата. Метод 2.1 проверен там же: HTTP 200, без сообщений реальным клиентам.
+
+## Authentication codes
+
+`OTP_PROVIDER=greenapi` sends only fixed six-digit login-code messages through Green API. Configure `GREEN_API_INSTANCE_ID` and `GREEN_API_TOKEN` securely on the server. Bot followups select only `whatsapp_business` (WABA) threads; grey `whatsapp` threads are ignored. Green API credentials are never used by the bot or invoice integration. An `idMessage` receipt confirms API acceptance, not delivery to the recipient. Existing on-screen OTP display remains enabled until explicitly disabled.

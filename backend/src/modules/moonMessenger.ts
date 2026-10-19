@@ -31,7 +31,7 @@ export async function sendMessengerFollowup(input:{id:string;kind:string;text:st
   }
   const found=await request('/threads?'+new URLSearchParams({phone_number:phone,limit:'100'}));
   if(!Array.isArray(found?.results))throw new MoonMessengerError('whatsapp_lookup_invalid',true);
-  const threads=found.results.filter((thread:any)=>['whatsapp','whatsapp_business'].includes(thread.channel_type)
+  const threads=found.results.filter((thread:any)=>thread.channel_type==='whatsapp_business'
     && messengerPhone(thread.metadata?.phone_number)===phone);
   threads.sort((a:any,b:any)=>Date.parse(b.last_message?.at ?? b.modified ?? b.created ?? 0)-Date.parse(a.last_message?.at ?? a.modified ?? a.created ?? 0));
   // Respect a manager's pause, including a customer's request not to be contacted.
@@ -41,7 +41,7 @@ export async function sendMessengerFollowup(input:{id:string;kind:string;text:st
   const intro=input.kind==='inactive_signup'
     ? 'Вы зарегистрировались в Domly. Подскажем, как выбрать и оформить уборку.'
     : 'Вы начали оформление уборки в Domly, но оплата пока не завершена. Можем помочь с оформлением или оплатой.';
-  if(thread && (thread.channel_type==='whatsapp' || Date.parse(thread.free_form_window_expires_at ?? '')>Date.now()+30000)) {
+  if(thread && Date.parse(thread.free_form_window_expires_at ?? '')>Date.now()+30000) {
     const result=await request(`/threads/${encodeURIComponent(thread.id)}/messages`,'POST',{
       data:{text:`Здравствуйте! ${intro} Напишите нам, если нужна помощь.`},message_type:'text',from_type:'manager',
     });

@@ -326,6 +326,26 @@ test('WapiOtpService returns friendly integration error on provider failure', as
   }
 });
 
+test('Green API sends only a fixed OTP message and requires a message receipt',async()=>{
+  const original={provider:env.otpProvider,instance:env.greenApiInstanceId,token:env.greenApiToken,fetch:globalThis.fetch};
+  try {
+    env.otpProvider='greenapi';env.greenApiInstanceId='770012345678';env.greenApiToken='fixture-secret';
+    const calls:any[]=[];
+    globalThis.fetch=(async(url:any,init:any)=>{calls.push({url,body:JSON.parse(init.body)});return {ok:true,json:async()=>({idMessage:'receipt'})};}) as any;
+    await new WapiOtpService().sendOtp('+77052597368','123456');
+    assert.equal(calls[0].url,'https://7700.api.greenapi.com/waInstance770012345678/sendMessage/fixture-secret');
+    assert.deepEqual(calls[0].body,{chatId:'77052597368@c.us',message:'DOMLY код подтверждения: 123456'});
+    for(const code of ['hello','12345','1234567'])await assert.rejects(()=>new WapiOtpService().sendOtp('+77052597368',code),(e:any)=>e.code==='invalid_otp_payload');
+    assert.equal(calls.length,1);
+    for(const mock of [async()=>({ok:false}),async()=>({ok:true,json:async()=>({})}),async()=>({ok:true,json:async()=>({idMessage:''})}),async()=>{throw Error('secret URL must not escape');}]) {
+      globalThis.fetch=mock as any;
+      await assert.rejects(()=>new WapiOtpService().sendOtp('+77052597368','123456'),(e:any)=>e.code==='integration_error'&&!e.message.includes('secret'));
+    }
+    env.greenApiToken='';
+    await assert.rejects(()=>new WapiOtpService().sendOtp('+77052597368','123456'),(e:any)=>e.code==='integration_error');
+  }finally{env.otpProvider=original.provider;env.greenApiInstanceId=original.instance;env.greenApiToken=original.token;globalThis.fetch=original.fetch;}
+});
+
 test('auth middleware accepts query access token when enabled for SSE', async () => {
   const token = signAccessToken({ id: 'user-1', role: 'customer', phone: '+77052597368' });
   const req = Object.assign(new EventEmitter(), {

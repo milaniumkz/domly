@@ -3,14 +3,25 @@ import crypto from 'crypto';
 import { Client as MinioClient } from 'minio';
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
-import { env } from '../common/env';
+import { env, otpDeliveryReady } from '../common/env';
 import { ApiError } from '../common/api';
 import { bccConfig, bccReady, bccSign, bccTimestamp, bccNonce, bccPaymentHtml } from './bcc';
 
 export class WapiOtpService {
   async sendOtp(phone: string, code: string): Promise<void> {
-    if (!env.wapiToken || !env.wapiProfileId) throw new ApiError(503, 'integration_error', 'Сервис отправки кодов не настроен.');
+    if (!/^\+?7\d{10}$/.test(phone) || !/^\d{6}$/.test(code)) throw new ApiError(400,'invalid_otp_payload','Укажите корректный номер и шестизначный код.');
+    if (!otpDeliveryReady()) throw new ApiError(503, 'integration_error', 'Сервис отправки кодов не настроен.');
     try {
+      if (env.otpProvider==='greenapi') {
+        const response=await fetch(`https://7700.api.greenapi.com/waInstance${env.greenApiInstanceId}/sendMessage/${env.greenApiToken}`,{
+          method:'POST',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({chatId:phone.replace(/^\+/,'')+'@c.us',message:`DOMLY код подтверждения: ${code}`}),
+        });
+        if(!response.ok)throw new Error('delivery_failed');
+        const result=await response.json() as {idMessage?:unknown};
+        if(typeof result.idMessage!=='string'||!result.idMessage.trim())throw new Error('delivery_failed');
+        return;
+      }
       const response = await fetch(`${env.wapiBaseUrl}/sync/message/send?profile_id=${env.wapiProfileId}`, {
         method: 'POST',
         signal: AbortSignal.timeout(10000),

@@ -11,7 +11,7 @@ import { PostgresCustomPackageRepository } from '../custom-package/repositories/
 import { CustomPackageService } from '../custom-package/services/CustomPackageService';
 import { PricingEngine } from '../custom-package/services/PricingEngine';
 import { errorHandler, ok } from '../common/api';
-import { env, validateEnvForRuntime } from '../common/env';
+import { env, otpDeliveryReady, validateEnvForRuntime } from '../common/env';
 import { buildRealtimeRouter, closeRealtimeBus, configureRealtimeBus } from '../realtime/sse';
 import { AuthService, BonusService, NotificationService, PaymentService, PricingService, SchedulingService } from '../modules/domainServices';
 import { AddressSearchService, buildQueues, FcmService, PaymentGatewayService, StorageService, WapiOtpService } from '../modules/integrations';
@@ -67,7 +67,7 @@ app.get('/ready', async (_req, res) => {
     database: await db.query('SELECT 1').then(() => ({ ok: true })).catch(() => ({ ok: false })),
     redis: await readinessRedis.ping().then(() => ({ ok: true })).catch(() => ({ ok: false })),
     minio: await storage.client.bucketExists(env.minioBucket).then((exists) => ({ ok: exists, bucket: env.minioBucket, bucketExists: exists })).catch(() => ({ ok: false, bucket: env.minioBucket, bucketExists: false })),
-    wapi: { ok: Boolean(env.wapiToken && env.wapiProfileId), configured: Boolean(env.wapiToken && env.wapiProfileId) },
+    wapi: { ok: otpDeliveryReady(), configured: otpDeliveryReady() },
     fcm: { ok: Boolean(env.fcmProjectId && env.fcmClientEmail && env.fcmPrivateKey), configured: Boolean(env.fcmProjectId && env.fcmClientEmail && env.fcmPrivateKey) },
   };
   const ready = checks.database.ok && checks.redis.ok && checks.minio.ok;

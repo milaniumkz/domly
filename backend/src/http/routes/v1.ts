@@ -14,7 +14,7 @@ import multer from 'multer';
 import path from 'path';
 import { ok, asyncHandler, ApiError } from '../../common/api';
 import { auth, signAccessToken, signRefreshToken, verifyRefreshToken } from '../../common/auth';
-import { env, validateEnvConfig } from '../../common/env';
+import { otpDeliveryReady, env, validateEnvConfig } from '../../common/env';
 import { pageParams, first } from '../../common/sql';
 import { Database } from '../../infrastructure/db/Database';
 import { AuthService, BonusService, hashToken, normalizePhone, NotificationService, PaymentService, PricingService, SchedulingService } from '../../modules/domainServices';
@@ -3156,16 +3156,14 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/admin/integrations/wapi/test-otp', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
-    if (!env.wapiToken || !env.wapiProfileId) throw new ApiError(400, 'integration_not_configured', 'WAPI не настроен.');
+    if (!otpDeliveryReady()) throw new ApiError(400, 'integration_not_configured', 'Сервис кодов не настроен.');
     const phone = normalizePhone(String(req.body.phone ?? ''));
     const code = String(req.body.code ?? Math.floor(100000 + Math.random() * 900000));
-    if (!/^\d{4,8}$/.test(code)) throw new ApiError(400, 'invalid_code', 'Код должен содержать от 4 до 8 цифр.');
+    if (!/^\d{6}$/.test(code)) throw new ApiError(400, 'invalid_code', 'Код должен содержать 6 цифр.');
     await deps.wapi.sendOtp(phone, code);
-    await recordAudit('integration.wapi_test_otp', 'integration', env.wapiProfileId || null, {
-      phone,
-      profileId: maskValue(env.wapiProfileId),
-    }, req.user?.id);
-    ok(res, { sent: true, phone, profileId: maskValue(env.wapiProfileId) });
+    const profileId=env.otpProvider==='greenapi'?env.greenApiInstanceId:env.wapiProfileId;
+    await recordAudit('integration.otp_test', 'integration', null, {phone,provider:env.otpProvider}, req.user?.id);
+    ok(res, { sent: true, phone, provider:env.otpProvider, profileId: maskValue(profileId) });
   }));
 
   router.post('/notifications/:id/read', auth(), asyncHandler(async (req, res) => {
@@ -3715,8 +3713,9 @@ export function buildV1Router(deps: {
         bucketAvailable: minioBucketAvailable,
       },
       wapi: {
-        configured: Boolean(env.wapiToken && env.wapiProfileId),
-        profileId: env.wapiProfileId ? maskValue(env.wapiProfileId) : null,
+        provider: env.otpProvider,
+        configured: otpDeliveryReady(),
+        profileId: maskValue(env.otpProvider==='greenapi'?env.greenApiInstanceId:env.wapiProfileId),
       },
       fcm: {
         configured: Boolean(env.fcmProjectId && env.fcmClientEmail && env.fcmPrivateKey),

@@ -48,6 +48,9 @@ export const env = {
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET ?? 'dev_refresh_secret_change_me',
   jwtAccessTtlSeconds: numberEnv('JWT_ACCESS_TTL_SECONDS', 900),
   jwtRefreshTtlSeconds: numberEnv('JWT_REFRESH_TTL_SECONDS', 2592000),
+  otpProvider: process.env.OTP_PROVIDER ?? 'wapi',
+  greenApiInstanceId: process.env.GREEN_API_INSTANCE_ID ?? '',
+  greenApiToken: process.env.GREEN_API_TOKEN ?? '',
   wapiToken: process.env.WAPI_TOKEN ?? '',
   wapiProfileId: process.env.WAPI_PROFILE_ID ?? '',
   otpShowCode: boolEnv('OTP_SHOW_CODE'),
@@ -173,7 +176,8 @@ export function validateEnvConfig(config: EnvConfig = env): { ok: boolean; issue
     if (!isHttpsPublicUrl(config.publicApiUrl)) issues.push('PUBLIC_API_URL must be a public HTTPS URL in production');
   }
 
-  const missingWapi = missingFields(config, ['wapiToken', 'wapiProfileId']);
+  if (!['wapi','greenapi'].includes(config.otpProvider)) issues.push('OTP_PROVIDER must be wapi or greenapi');
+  const missingWapi = missingFields(config, config.otpProvider==='greenapi' ? ['greenApiInstanceId','greenApiToken'] : ['wapiToken', 'wapiProfileId']);
   const missingFcm = missingFields(config, ['fcmProjectId', 'fcmClientEmail', 'fcmPrivateKey']);
   const kaspiFields: Array<keyof EnvConfig> = ['kaspiMerchantId', 'kaspiApiKey', 'kaspiBaseUrl'];
   const bccFields: Array<keyof EnvConfig> = ['bccMerchantId', 'bccTerminalId', 'bccPrivateKey', 'bccNotifyUrl', 'bccReturnUrl'];
@@ -233,4 +237,8 @@ export function validateEnvForRuntime(): void {
     for (const warning of report.warnings) console.warn(`[env] ${warning}`);
   }
   if (!report.ok) throw new EnvValidationError(report.issues);
+}
+
+export function otpDeliveryReady(config: EnvConfig = env): boolean {
+  return config.otpProvider==='greenapi' ? /^\d+$/.test(config.greenApiInstanceId) && Boolean(config.greenApiToken) : Boolean(config.wapiToken && config.wapiProfileId);
 }

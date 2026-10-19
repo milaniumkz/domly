@@ -293,26 +293,27 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
       assert.equal((await db.query("SELECT provider_thread_id FROM moon_ai_outbox WHERE id=$1",[rows[0].id])).rows[0].provider_thread_id,'native-waba-thread');
       assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM chat_messages m JOIN chats c ON c.id=m.chat_id WHERE c.customer_id=$1",[idle])).rows[0].n),0);
     });
-    await t.test('existing WhatsApp and WABA conversations use native messages or approved templates',async()=>{
+    await t.test('bot conversations use only WABA and ignore grey WhatsApp threads',async()=>{
       for(const channel of ['whatsapp','whatsapp_business']) {
         for(const activeWindow of [true,false]) {
           const calls:any[]=[];
           const transport=(async(url:any,init:any)=>{
             const path=new URL(url).pathname;calls.push({path,body:init.body?JSON.parse(init.body):null});
             const result=path.endsWith('/threads')?{results:[{id:'native-thread',channel_type:channel,status:'active',metadata:{phone_number:'77000000000'},free_form_window_expires_at:activeWindow?new Date(Date.now()+3600000).toISOString():null}]}:
-              path.endsWith('/whatsapp-templates')?{templates:[{id:215,status:'APPROVED'}]}:path.endsWith('/messages')?{id:41}:{thread_id:'native-thread'};
+              path.endsWith('/whatsapp-templates')?{templates:[{id:215,status:'APPROVED'}]}:path.endsWith('/messages')?{id:41}:{thread_id:'native-thread',delivery_status:'enqueued'};
             return new Response(JSON.stringify(result),{status:200});
           }) as typeof fetch;
           await sendMessengerFollowup({id:randomUUID(),kind:'abandoned_checkout',text:'Помоги клиенту завершить оформление, без нового счёта.',phone:'+77000000000'},transport);
           const last=calls.at(-2);
-          if(channel==='whatsapp'||activeWindow){assert.match(last.path,/\/messages$/);assert.equal(last.body.from_type,'manager');assert.equal(last.body.data.text.includes('Служебное событие'),false);}
+          if(channel==='whatsapp'){assert.match(last.path,/\/channels\/7787\/whatsapp-chat\/initiate$/);}
+          else if(activeWindow){assert.match(last.path,/\/messages$/);assert.equal(last.body.from_type,'manager');assert.equal(last.body.data.text.includes('Служебное событие'),false);}
           else {assert.match(last.path,/\/whatsapp-template$/);assert.equal(last.body.template_id,215);}
           assert.equal(calls.some(call=>call.path.includes('/channels/api/')),false);
           assert.match(calls.at(-1).path,/\/status$/);assert.equal(calls.at(-1).body.status,'active');
         }
       }
       let pausedCalls=0;
-      const paused=(async()=>{pausedCalls++;return new Response(JSON.stringify({results:[{id:'paused-native',channel_type:'whatsapp',status:'paused',metadata:{phone_number:'77000000000'}}]}),{status:200});}) as typeof fetch;
+      const paused=(async()=>{pausedCalls++;return new Response(JSON.stringify({results:[{id:'paused-native',channel_type:'whatsapp_business',status:'paused',metadata:{phone_number:'77000000000'}}]}),{status:200});}) as typeof fetch;
       await assert.rejects(sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Помоги.',phone:'+77000000000'},paused),/WhatsApp/);
       assert.equal(pausedCalls,1,'A manager pause must not be bypassed by starting another conversation');
     });
