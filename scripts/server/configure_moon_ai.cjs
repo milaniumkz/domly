@@ -8,11 +8,12 @@ try {
   decipher.setAuthTag(Buffer.from(packet.tag,'base64'));
   const config=JSON.parse(Buffer.concat([decipher.update(Buffer.from(packet.data,'base64')),decipher.final()]).toString());
   const allowed=new Set(['MOON_AI_ENABLED','MOON_AI_CHANNEL_URL','MOON_AI_CHANNEL_API_KEY','MOON_AI_WEBHOOK_TOKEN','MOON_AI_SOURCE',
-    'OTP_PROVIDER','GREEN_API_INSTANCE_ID','GREEN_API_TOKEN',
+    'OTP_PROVIDER','GREEN_API_INSTANCE_ID','GREEN_API_TOKEN','OTP_SHOW_CODE','OTP_FAILURE_FALLBACK',
     'MOON_AI_REST_API_KEY','MOON_AI_ORGANIZATION_ID','MOON_AI_AGENT_ID','MOON_AI_WABA_CHANNEL_ID','MOON_AI_WABA_TEMPLATE_ID']);
   for(const [name,value]of Object.entries(config)) {
     if(!allowed.has(name)||typeof value!=='string'||/[\r\n\0\"\'\s\$#]/.test(value))throw new Error('invalid config');
   }
+  for(const name of ['OTP_SHOW_CODE','OTP_FAILURE_FALLBACK']) if(config[name]!==undefined&&!['true','false'].includes(config[name]))throw new Error('invalid OTP fallback flag');
   if(config.OTP_PROVIDER!==undefined && !['wapi','greenapi'].includes(config.OTP_PROVIDER))throw new Error('invalid OTP provider');
   if(config.GREEN_API_INSTANCE_ID!==undefined && !/^\d+$/.test(config.GREEN_API_INSTANCE_ID))throw new Error('invalid instance identifier');
   if(config.MOON_AI_ENABLED!==undefined && !['true','false'].includes(config.MOON_AI_ENABLED))throw new Error('invalid enabled value');

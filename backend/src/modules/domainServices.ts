@@ -33,7 +33,7 @@ export class AuthService {
     );
     const until = Date.parse(env.otpFailureFallbackUntil);
     const fallbackActive = Number.isFinite(until) && until > Date.now();
-    const mayShowCode = (env.otpShowCode || fallbackActive)
+    const mayShowCode = (env.otpShowCode || env.otpFailureFallback || fallbackActive)
       && (!user || ['customer','cleaner'].includes(user.role));
     try {
       await this.wapi.sendOtp(normalized, code);

@@ -47,6 +47,12 @@ if value not in ('true', 'false'):
     raise SystemExit('OTP_SHOW_CODE must be true or false')
 p = pathlib.Path(os.environ['RELEASE_ENV'])
 lines = [line for line in p.read_text().splitlines() if not line.startswith(('OTP_SHOW_CODE=', 'OTP_FAILURE_FALLBACK_UNTIL='))]
+fallback = os.environ.get('OTP_FAILURE_FALLBACK', '')
+if fallback:
+    if fallback not in ('true', 'false'):
+        raise SystemExit('OTP_FAILURE_FALLBACK must be true or false')
+    lines = [line for line in lines if not line.startswith('OTP_FAILURE_FALLBACK=')]
+    lines.append('OTP_FAILURE_FALLBACK=' + fallback)
 p.write_text('\n'.join(lines) + '\nOTP_SHOW_CODE=' + value + '\n')
 p.chmod(0o600)
 PYCODE

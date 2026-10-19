@@ -54,6 +54,7 @@ export const env = {
   wapiToken: process.env.WAPI_TOKEN ?? '',
   wapiProfileId: process.env.WAPI_PROFILE_ID ?? '',
   otpShowCode: boolEnv('OTP_SHOW_CODE'),
+  otpFailureFallback: boolEnv('OTP_FAILURE_FALLBACK'),
   otpFailureFallbackUntil: process.env.OTP_FAILURE_FALLBACK_UNTIL ?? '',
   wapiBaseUrl: process.env.WAPI_BASE_URL ?? 'https://wappi.pro/api',
   publicApiUrl: process.env.PUBLIC_API_URL ?? 'http://localhost:8080',

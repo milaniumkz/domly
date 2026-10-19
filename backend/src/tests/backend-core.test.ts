@@ -845,6 +845,20 @@ test('explicit OTP display has no deadline and shows the real code on success or
   } finally {env.otpShowCode=originalFlag;env.otpFailureFallbackUntil=originalUntil;}
 });
 
+test('failure-only OTP fallback has no deadline and hides codes after provider acceptance',async()=>{
+  const saved={show:env.otpShowCode,failure:env.otpFailureFallback,until:env.otpFailureFallbackUntil};
+  let storedHash='';
+  const db={query:async(sql:string,args:any[])=>{if(sql.includes('INSERT INTO auth_otp_codes'))storedHash=args[1];return {rows:[]};}} as any;
+  try {
+    env.otpShowCode=false;env.otpFailureFallback=true;env.otpFailureFallbackUntil='';
+    const accepted=await new AuthService(db,{sendOtp:async()=>{}} as any).requestOtp('+77052597368');
+    assert.equal(accepted.codeSent,true);assert.equal(accepted.fallbackCode,undefined);
+    const failed=await new AuthService(db,{sendOtp:async()=>{throw Error('timeout');}} as any).requestOtp('+77052597368');
+    assert.equal(failed.codeSent,false);assert.equal(failed.deliveryFailed,true);assert.match(failed.fallbackCode!,/^\d{6}$/);
+    assert.equal(await (await import('bcryptjs')).compare(failed.fallbackCode!,storedHash),true);
+  }finally{env.otpShowCode=saved.show;env.otpFailureFallback=saved.failure;env.otpFailureFallbackUntil=saved.until;}
+});
+
 test('blocked and rejected accounts report their status before OTP delivery or verification', async () => {
   for (const status of ['blocked','rejected']) {
     let mutations=0,deliveries=0;
