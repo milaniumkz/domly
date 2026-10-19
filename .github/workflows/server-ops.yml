@@ -44,3 +44,8 @@ jobs:
           fi
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
             "APP_DIR='$DEPLOY_PATH' bash '$DEPLOY_PATH/scripts/server/ops.sh' '$ACTION'"
+
+          if [ "$ACTION" = "status" ]; then
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "df -h '$DEPLOY_PATH'; ps -C rsync -o comm,etime,pcpu,pmem || true"
+          fi
