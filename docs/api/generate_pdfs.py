@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from xml.sax.saxutils import escape
 from reportlab.pdfgen import canvas
@@ -18,8 +19,10 @@ styles={
 def footer(c,d):
  c.setStrokeColor(colors.HexColor('#d8e7df'));c.line(42,36,553,36)
  c.setFont('DejaVu',8);c.setFillColor(colors.HexColor('#60746b'))
- c.drawString(42,23,'DOMLY • API для интеграции бота • v1.0');c.drawRightString(553,23,str(d.page))
-for src,dst in [('bot-catalog.md','domly-bot-catalog.pdf'),('bot-area-verification.md','domly-bot-area-verification.pdf')]:
+ c.drawString(42,23,footer_label);c.drawRightString(553,23,str(d.page))
+for src,dst in [('bot-catalog.md','domly-bot-catalog.pdf'),('bot-area-verification.md','domly-bot-area-verification.pdf'),('customer-mobile-guide.md','domly-customer-mobile-guide.pdf')]:
+ if len(sys.argv)>1 and src not in sys.argv[1:]:continue
+ footer_label='DOMLY • Мобильное приложение заказчика • v1.0' if src=='customer-mobile-guide.md' else 'DOMLY • API для интеграции бота • v1.0'
  story=[]
  for line in (ROOT/'docs/api'/src).read_text().splitlines():
   if not line.strip():continue
@@ -29,3 +32,5 @@ for src,dst in [('bot-catalog.md','domly-bot-catalog.pdf'),('bot-area-verificati
  target=ROOT/'backend/docs'/dst
  SimpleDocTemplate(str(target),pagesize=(595,842),leftMargin=42,rightMargin=42,topMargin=42,bottomMargin=49,title='DOMLY — '+src,author='DOMLY').build(story,onFirstPage=footer,onLaterPages=footer)
  print(target.name,target.stat().st_size)
+ if src=='customer-mobile-guide.md':
+  (ROOT/'backend/docs/domly-customer-mobile-guide.md').write_bytes((ROOT/'docs/api'/src).read_bytes())

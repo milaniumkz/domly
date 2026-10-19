@@ -10,10 +10,10 @@ import {packageQuote} from '../../modules/packageQuote';
 export function botRouter(db:Database,notifications:NotificationService) {
   const router=Router();
   router.get('/integrations/moon-ai/docs/:file',asyncHandler(async(req,res)=>{
-    const files:Record<string,string>={'catalog.pdf':'domly-bot-catalog.pdf','area-verification.pdf':'domly-bot-area-verification.pdf'};
+    const files:Record<string,string>={'catalog.pdf':'domly-bot-catalog.pdf','area-verification.pdf':'domly-bot-area-verification.pdf','customer-mobile-guide.pdf':'domly-customer-mobile-guide.pdf','customer-mobile-guide.md':'domly-customer-mobile-guide.md'};
     const filename=files[String(req.params.file)];
     if(typeof filename!=='string')throw new ApiError(404,'not_found','Документ не найден.');
-    res.type('application/pdf').attachment(filename).sendFile(path.resolve(__dirname,'../../../docs',filename));
+    res.type(filename.endsWith('.md')?'text/markdown':'application/pdf').attachment(filename).sendFile(path.resolve(__dirname,'../../../docs',filename));
   }));
   const protectedRoute=(handler:any)=>asyncHandler(async(req,res)=>{
     verifyMoonToken(req.headers);
