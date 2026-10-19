@@ -49,17 +49,19 @@ const block=`[DOMLY_AREA_WORKFLOW_V1_BEGIN]
   const mapping=Object.fromEntries(def.parameters.map(p=>[p.name,{value:null,value_from:p.name}]));
   const data={url:domly+def.path,method:def.method,headers,...(def.method==='GET'?{query_params:mapping}:{json_params:mapping})};
   const reaction={action:'instruction',data:{instruction:'Используй фактический JSON-результат API. При ok:false объясни ошибку без выдуманного успеха. Не раскрывай токены и технические заголовки.'}};
-  if(!found){found=await api('/functions/','POST',{name:def.name,description:def.description,is_active:false,parameters:def.parameters,integrations:[{integration_type:'api',data}],reaction});}
-  else {
-   const detail=await api('/functions/'+found.id);
-   const actual=(detail.parameters??[]).map(p=>p.name+':'+p.parameter_type).sort().join('|');
-   const expected=def.parameters.map(p=>p.name+':'+p.parameter_type).sort().join('|');
-   if(actual!==expected)throw Error('owned_function_parameters_differ_'+def.name);
-   const integrations=await api('/functions/'+found.id+'/integrations/');
-   const own=(integrations.integrations??[]).filter(i=>i.integration_type==='api');
-   if(own.length!==1||own[0].data?.url!==data.url)throw Error('owned_function_integration_differs_'+def.name);
-   await api('/functions/'+found.id+'/integrations/'+own[0].id,'PUT',{integration_type:'api',data});
+  if(!found){
+   // Create metadata first; provider's nested integration creation can fail with HTTP 500.
+   found=await api('/functions/','POST',{name:def.name,description:def.description,is_active:false,parameters:def.parameters,integrations:[],post_actions:[],reaction:null,post_scenario:null});
   }
+  const detail=await api('/functions/'+found.id);
+  const actual=(detail.parameters??[]).map(p=>p.name+':'+p.parameter_type).sort().join('|');
+  const expected=def.parameters.map(p=>p.name+':'+p.parameter_type).sort().join('|');
+  if(actual!==expected)throw Error('owned_function_parameters_differ_'+def.name);
+  const integrations=await api('/functions/'+found.id+'/integrations/');
+  const own=(integrations.integrations??[]).filter(i=>i.integration_type==='api');
+  if(own.length>1||(own.length===1&&own[0].data?.url!==data.url))throw Error('owned_function_integration_differs_'+def.name);
+  if(own.length)await api('/functions/'+found.id+'/integrations/'+own[0].id,'PUT',{integration_type:'api',data});
+  else await api('/functions/'+found.id+'/integrations/','POST',{integration_type:'api',data});
   await api('/functions/'+found.id,'PATCH',{name:def.name,description:def.description,is_active:true,reaction});
   const verified=await api('/functions/'+found.id+'/integrations/');
   const integration=(verified.integrations??[]).find(i=>i.integration_type==='api'&&i.data?.url===data.url);
