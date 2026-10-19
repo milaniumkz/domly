@@ -762,7 +762,7 @@ test('OTP delivery fallback reveals a verifiable code only during the configured
       await assert.rejects(()=>service.requestOtp('+77052597368'),failure);
     }
     user={role:'customer',status:'blocked'};
-    await assert.rejects(()=>service.requestOtp('+77052597368'),failure);
+    await assert.rejects(()=>service.requestOtp('+77052597368'),(e:any)=>e.code==='account_blocked');
     for (const role of ['customer','cleaner']) {
       user={role,status:'new'};
       assert.match((await service.requestOtp('+77052597368')).fallbackCode!,/^\d{6}$/);
@@ -813,7 +813,7 @@ test('explicit OTP display has no deadline and shows the real code on success or
         assert.equal(await (await import('bcryptjs')).compare(result.fallbackCode!,storedHash),true);
       }
     }
-    for(const account of [{role:'admin',status:'approved'},{role:'superadmin',status:'approved'},{role:'customer',status:'blocked'},{role:'cleaner',status:'rejected'}]) {
+    for(const account of [{role:'admin',status:'approved'},{role:'superadmin',status:'approved'}]) {
       user=account;
       const sent=await new AuthService(db,{sendOtp:async()=>{}} as any).requestOtp('+77052597368');
       assert.equal(sent.fallbackCode,undefined);
@@ -823,6 +823,25 @@ test('explicit OTP display has no deadline and shows the real code on success or
     assert.equal((await new AuthService(db,{sendOtp:async()=>{}} as any).requestOtp('+77052597368')).fallbackCode,undefined);
     await assert.rejects(()=>new AuthService(db,{sendOtp:async()=>{throw failure;}} as any).requestOtp('+77052597368'),failure);
   } finally {env.otpShowCode=originalFlag;env.otpFailureFallbackUntil=originalUntil;}
+});
+
+test('blocked and rejected accounts report their status before OTP delivery or verification', async () => {
+  for (const status of ['blocked','rejected']) {
+    let mutations=0,deliveries=0;
+    const codeHash=await (await import('bcryptjs')).hash('123456',8);
+    const db={query:async(sql:string)=>{
+      if (/INSERT|UPDATE/.test(sql)) mutations++;
+      if(sql.includes('FROM app_users')) return {rows:[{id:'account',role:'cleaner',status}]};
+      if(sql.includes('FROM auth_otp_codes')) return {rows:[{id:'otp',code_hash:codeHash}]};
+      throw new Error('Unexpected query');
+    }} as any;
+    const service=new AuthService(db,{sendOtp:async()=>{deliveries++;}} as any);
+    const matches=(error:any)=>error.status===403 && error.code===`account_${status}`;
+    await assert.rejects(()=>service.requestOtp('+77052597368'),matches);
+    await assert.rejects(()=>service.verifyOtp('+77052597368','123456','cleaner'),matches);
+    assert.equal(mutations,0);
+    assert.equal(deliveries,0);
+  }
 });
 
 test('signed media URLs preserve storage references, expire and reject tampering',()=>{

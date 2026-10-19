@@ -102,17 +102,19 @@ export function buildV1Router(deps: {
     const guest=await guestSession(deps.db,String(req.headers['x-assistant-session'] ?? ''));
     const token=String(req.body.token ?? '');
     if(token.length<20 || token.length>4096)throw new ApiError(400,'invalid_token','Некорректный токен уведомлений.');
-    await deps.db.transaction(async tx => {
+    const saved = await deps.db.transaction(async tx => {
       await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`push:${token}`]);
       const active = (await tx.query('SELECT customer_id FROM assistant_installations WHERE id=$1 FOR UPDATE', [guest.id])).rows[0];
       if (!active || active.customer_id) throw new ApiError(401,'invalid_session','Войдите в приложение.');
       if ((await tx.query('SELECT 1 FROM device_tokens WHERE token=$1 AND enabled=TRUE', [token])).rows.length) {
-        throw new ApiError(409,'token_in_use','Уведомления этого устройства уже подключены к аккаунту.');
+        // A browser can retain the account token after logout. Do not transfer it to a guest.
+        return false;
       }
       await tx.query(`INSERT INTO assistant_installation_tokens(installation_id,token) VALUES($1,$2)
         ON CONFLICT(token) DO UPDATE SET installation_id=EXCLUDED.installation_id`,[guest.id,token]);
+      return true;
     });
-    ok(res,{saved:true});
+    ok(res,{saved});
   }));
   router.post('/assistant/guest/bind',auth(['customer']),asyncHandler(async(req,res)=>{
     if(!moonAiReady())throw new ApiError(503,'integration_not_configured','Помощник пока не подключён.');

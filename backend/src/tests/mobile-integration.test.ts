@@ -413,7 +413,10 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         const ownedToken='moon-registered-token-fixture',guestToken='moon-guest-token-fixture';
         await db.query("INSERT INTO device_tokens(user_id,platform,token) VALUES($1,'web',$2)",[user,ownedToken]);
         const guestHeaders={'X-Assistant-Session':keys[1],'Content-Type':'application/json'};
-        const protectedPush=await fetch(base+'/assistant/guest/device-token',{method:'POST',headers:guestHeaders,body:JSON.stringify({token:ownedToken})});assert.equal(protectedPush.status,409);
+        const protectedPush=await fetch(base+'/assistant/guest/device-token',{method:'POST',headers:guestHeaders,body:JSON.stringify({token:ownedToken})});assert.equal(protectedPush.status,200);
+        assert.equal((await protectedPush.json() as any).data.saved,false);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM assistant_installation_tokens WHERE token=$1',[ownedToken])).rows[0].n,0);
+        assert.equal((await db.query('SELECT user_id FROM device_tokens WHERE token=$1',[ownedToken])).rows[0].user_id,user);
         assert.equal((await db.query('SELECT enabled FROM device_tokens WHERE token=$1',[ownedToken])).rows[0].enabled,true);
         const guestPush=await fetch(base+'/assistant/guest/device-token',{method:'POST',headers:guestHeaders,body:JSON.stringify({token:guestToken})});assert.equal(guestPush.status,200);
         const ownerPush=await fetch(base+'/me/device-tokens',{method:'POST',headers:{Authorization:'Bearer '+other,'Content-Type':'application/json'},body:JSON.stringify({platform:'web',token:guestToken})});assert.equal(ownerPush.status,201);

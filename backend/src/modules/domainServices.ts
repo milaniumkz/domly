@@ -11,11 +11,20 @@ import { env } from '../common/env';
 import { WapiOtpService, FcmService } from './integrations';
 import { publishToUser } from '../realtime/sse';
 
+function assertOtpAccountActive(user: {status?: string} | undefined) {
+  if (user?.status === 'blocked') throw new ApiError(403, 'account_blocked', 'Аккаунт заблокирован. Обратитесь в поддержку.');
+  if (user?.status === 'rejected') throw new ApiError(403, 'account_rejected', 'Заявка аккаунта отклонена. Обратитесь в поддержку.');
+}
+
 export class AuthService {
   constructor(private readonly db: Database, private readonly wapi: WapiOtpService) {}
 
   async requestOtp(phone: string) {
     const normalized = normalizePhone(phone);
+    const user = first<{role: string; status: string}>((await this.db.query(
+      'SELECT role,status FROM app_users WHERE phone=$1', [normalized],
+    )).rows);
+    assertOtpAccountActive(user);
     const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = await bcrypt.hash(code, 8);
     await this.db.query(
@@ -24,14 +33,8 @@ export class AuthService {
     );
     const until = Date.parse(env.otpFailureFallbackUntil);
     const fallbackActive = Number.isFinite(until) && until > Date.now();
-    let mayShowCode = false;
-    if (env.otpShowCode || fallbackActive) {
-      const user = first<{role: string; status: string}>((await this.db.query(
-        'SELECT role,status FROM app_users WHERE phone=$1', [normalized],
-      )).rows);
-      mayShowCode = !user || (['customer','cleaner'].includes(user.role)
-        && !['blocked','rejected'].includes(user.status));
-    }
+    const mayShowCode = (env.otpShowCode || fallbackActive)
+      && (!user || ['customer','cleaner'].includes(user.role));
     try {
       await this.wapi.sendOtp(normalized, code);
     } catch (error) {
@@ -54,11 +57,12 @@ export class AuthService {
     if (!otp || !(await bcrypt.compare(code, otp.code_hash))) {
       throw new ApiError(400, 'invalid_otp', 'Неверный или истекший код.');
     }
-    await this.db.query(`UPDATE auth_otp_codes SET consumed_at=NOW() WHERE id=$1`, [otp.id]);
-    const existingUser = first<{ id: string }>((await this.db.query(
-      `SELECT id FROM app_users WHERE phone=$1`,
+    const existingUser = first<{ id: string; status: string }>((await this.db.query(
+      `SELECT id,status FROM app_users WHERE phone=$1`,
       [normalized],
     )).rows);
+    assertOtpAccountActive(existingUser);
+    await this.db.query(`UPDATE auth_otp_codes SET consumed_at=NOW() WHERE id=$1`, [otp.id]);
     const user = first<AuthUser>((await this.db.query(
       `INSERT INTO app_users (phone, role, is_phone_verified)
        VALUES ($1, $2, TRUE)
