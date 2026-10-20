@@ -25,7 +25,7 @@ export function sanitize(v:any,pii=true,depth=0):any {
  if(v instanceof Date)return Number.isFinite(v.getTime())?v.toISOString():null;
  if(typeof v==='string')return safeText(v,1500);if(typeof v!=='object')return v;
  if(Array.isArray(v))return v.slice(0,100).map(x=>sanitize(x,pii,depth+1));
- return Object.fromEntries(Object.entries(v).slice(0,80).map(([k,x])=>[k,secrets.test(k)&&typeof x!=='boolean'?'[секрет скрыт]':!pii&&privateFields.test(k)?'[персональные данные скрыты]':sanitize(x,pii,depth+1)]));
+ return Object.fromEntries(Object.entries(v).slice(0,80).map(([k,x])=>[k,secrets.test(k)&&typeof x!=='boolean'?'[секрет скрыт]':!pii&&privateFields.test(k)?'[персональные данные скрыты]':/^(size_bytes|occurrences|seq|rows|duration_ms|http_status)$/.test(k)&&typeof x==='string'&&/^\d+$/.test(x)?x:sanitize(x,pii,depth+1)]));
 }
 export function can(op:Operator,permission:string){return op.owner||op.permissions.includes(permission);}
 export function need(op:Operator,permission:string){if(!can(op,permission))throw new ApiError(403,'tech_forbidden','Нет отдельного технического разрешения: '+permission);}

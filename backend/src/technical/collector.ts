@@ -16,7 +16,9 @@ function entity(path:string){
 }
 export function collectRequests(db:Database){return async(req:Request,res:Response,next:NextFunction)=>{
  if(!req.path.startsWith('/api/v1')||req.path.startsWith('/api/v1/realtime')||req.path.includes('/files/media')||req.path.includes('/integrations/moon-ai/docs'))return next();
- const requestId=uuid.test(String(req.headers['x-request-id']))?String(req.headers['x-request-id']):randomUUID();req.techRequestId=requestId;res.setHeader('X-Request-ID',requestId);
+ const clientRequestId=uuid.test(String(req.headers['x-request-id']))?String(req.headers['x-request-id']):null;
+ const clientCorrelation=clientRequestId?{clientRequestId,clientRequestIdSource:'Сообщено клиентом; не является серверным идентификатором запроса.'}:{};
+ const requestId=randomUUID();req.techRequestId=requestId;res.setHeader('X-Request-ID',requestId);
  const started=Date.now(),target=entity(req.path),eventId=randomUUID();req.techEventId=eventId;
  let identity:any=null;try{const raw=String(req.headers.authorization??'');if(raw.startsWith('Bearer ')){const jwt=verifyAccessToken(raw.slice(7));identity=(await db.query('SELECT id,full_name,role FROM app_users WHERE id=$1',[jwt.id])).rows[0];if(identity)identity.sessionId=jwt.sessionId;}}catch{}
  let identityEvidence=identity?'Подписанный токен доступа; разрешение операции проверяется отдельно.':'Исполнитель не установлен.';
@@ -40,7 +42,7 @@ export function collectRequests(db:Database){return async(req:Request,res:Respon
  };
  if(table&&target.id&&identity&&['POST','PATCH','DELETE'].includes(req.method))try{const state=await readState(target.id,identity);before=state?.values??null;subjectUserId=state?.subject??null;}catch{collectorFailure();}
  try{await db.query(`INSERT INTO tech_events(id,request_id,user_id,user_name,user_role,client_session_id,operation_id,action,entity_type,entity_id,platform,app_version,device,ip,fields,before_values)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,[eventId,requestId,identity?.id??null,identity?.full_name??null,identity?.role??null,clientSession,op,safeText(req.method+' '+req.path.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi,':id'),240),target.type,target.id,header('x-domly-platform'),header('x-domly-version'),header('user-agent',160),req.ip??req.socket.remoteAddress??null,{...bodyFields(req.body),identityEvidence},null]);health.lastSuccessAt=new Date().toISOString();}catch{collectorFailure();}
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,[eventId,requestId,identity?.id??null,identity?.full_name??null,identity?.role??null,clientSession,op,safeText(req.method+' '+req.path.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi,':id'),240),target.type,target.id,header('x-domly-platform'),header('x-domly-version'),header('user-agent',160),req.ip??req.socket.remoteAddress??null,{...bodyFields(req.body),identityEvidence,...clientCorrelation},null]);health.lastSuccessAt=new Date().toISOString();}catch{collectorFailure();}
  let responseError:any=null,resultId:any=null,responseUser:any=null;
  const json=res.json.bind(res);res.json=((value:any)=>{
   if(value?.ok===false)responseError={code:safeText(value.code,100),message:safeText(value.message)};
@@ -65,7 +67,7 @@ export function collectRequests(db:Database){return async(req:Request,res:Respon
    const row=(await db.query(`UPDATE tech_events SET result=$2,finished_at=NOW(),duration_ms=$3,http_status=$4,error_code=$5,user_message=$6,failure_reason=$7,
     before_values=$15,user_name=COALESCE(user_name,$14),fields=$13,auth_session_id=$12,user_id=COALESCE($8,user_id),user_role=COALESCE($9,user_role),entity_id=COALESCE(entity_id,$10),after_values=$11 WHERE id=$1 RETURNING *`,
     [eventId,result,Math.min(2147483647,Date.now()-started),interrupted?null:res.statusCode,responseError?.code??req.technicalError?.code??null,responseError?.message??null,
-    interrupted?'Соединение закрыто до ответа. Дальнейшее состояние операции необходимо проверить.':req.technicalError?req.technicalError.kind+' ('+req.technicalError.code+')':responseError?.code??null,user?.id??null,user?.role??null,entityId,after,user?.sessionId??null,{...bodyFields(req.body),identityEvidence,...(subjectUserId?{subjectUserId}:{})},user?.full_name??null,before])).rows[0];
+    interrupted?'Соединение закрыто до ответа. Дальнейшее состояние операции необходимо проверить.':req.technicalError?req.technicalError.kind+' ('+req.technicalError.code+')':responseError?.code??null,user?.id??null,user?.role??null,entityId,after,user?.sessionId??null,{...bodyFields(req.body),identityEvidence,...clientCorrelation,...(subjectUserId?{subjectUserId}:{})},user?.full_name??null,before])).rows[0];
    if(!row)return;
    await db.query('UPDATE tech_events SET signature=$2 WHERE id=$1',[eventId,eventSignature(row)]);
    if(result==='failure'&&res.statusCode>=500)await problem(db,{fingerprint:row.action+':'+row.error_code+':'+row.failure_reason,code:row.error_code??'server_error',title:'Ошибка серверной операции: '+row.action,severity:'critical',eventId,
