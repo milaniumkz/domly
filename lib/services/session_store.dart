@@ -9,6 +9,10 @@ class SessionStore {
   final SessionSurface? _surface;
   static SessionSurface activeSurface = SessionSurface.customer;
   static final invalidation = ValueNotifier<int>(0);
+  static int _telemetryEpoch = 0;
+  static int _sessionMutations = 0;
+  static int get telemetryEpoch => _telemetryEpoch;
+  static bool get sessionMutationInProgress => _sessionMutations > 0;
   SessionSurface get surface => _surface ?? activeSurface;
   String storageKey(String key) => '${key}_${surface.name}';
   static String appKey(String key) => '${key}_${activeSurface.name}';
@@ -82,39 +86,53 @@ class SessionStore {
       (await backendSession())?.refreshToken;
 
   Future<void> saveBackendSession(BackendSession session) async {
-    if (!acceptsRole(session.role))
-      throw StateError('Account belongs to a different application');
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(storageKey('domly_legacy_session_checked'), true);
-    await prefs.setBool(storageKey(_authKey), true);
-    await prefs.setString(storageKey(_accessTokenKey), session.accessToken);
-    await prefs.setString(storageKey(_refreshTokenKey), session.refreshToken);
-    await prefs.setString(storageKey(_userIdKey), session.userId);
-    await prefs.setString(storageKey(_userRoleKey), session.role);
-    if (session.phone?.isNotEmpty == true) {
-      await prefs.setString(storageKey(_userPhoneKey), session.phone!);
-    } else {
-      await prefs.remove(storageKey(_userPhoneKey));
+    _telemetryEpoch++;
+    _sessionMutations++;
+    try {
+      if (!acceptsRole(session.role))
+        throw StateError('Account belongs to a different application');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(storageKey('domly_legacy_session_checked'), true);
+      await prefs.setBool(storageKey(_authKey), true);
+      await prefs.setString(storageKey(_accessTokenKey), session.accessToken);
+      await prefs.setString(storageKey(_refreshTokenKey), session.refreshToken);
+      await prefs.setString(storageKey(_userIdKey), session.userId);
+      await prefs.setString(storageKey(_userRoleKey), session.role);
+      if (session.phone?.isNotEmpty == true) {
+        await prefs.setString(storageKey(_userPhoneKey), session.phone!);
+      } else {
+        await prefs.remove(storageKey(_userPhoneKey));
+      }
+    } finally {
+      _sessionMutations--;
+      _telemetryEpoch++;
     }
   }
 
   Future<void> clearBackendSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(storageKey('domly_legacy_session_checked'), true);
-    for (final key in [
-      _authKey,
-      _accessTokenKey,
-      _refreshTokenKey,
-      _userIdKey,
-      _userRoleKey,
-      _userPhoneKey,
-      'domly_authenticated_session',
-      'domly_authenticated_session_uid',
-      'domly_authenticated_session_secret'
-    ]) {
-      await prefs.remove(storageKey(key));
+    _telemetryEpoch++;
+    _sessionMutations++;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(storageKey('domly_legacy_session_checked'), true);
+      for (final key in [
+        _authKey,
+        _accessTokenKey,
+        _refreshTokenKey,
+        _userIdKey,
+        _userRoleKey,
+        _userPhoneKey,
+        'domly_authenticated_session',
+        'domly_authenticated_session_uid',
+        'domly_authenticated_session_secret'
+      ]) {
+        await prefs.remove(storageKey(key));
+      }
+      if (surface == activeSurface) invalidation.value++;
+    } finally {
+      _sessionMutations--;
+      _telemetryEpoch++;
     }
-    if (surface == activeSurface) invalidation.value++;
   }
 }
 

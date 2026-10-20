@@ -14,6 +14,7 @@ export function telemetryRouter(db:Database){
   if(recent>=120)throw new ApiError(429,'telemetry_limited','Превышен лимит событий устройства.');
   const account=(await db.query('SELECT full_name FROM app_users WHERE id=$1',[req.user!.id])).rows[0];
   for(const event of events){
+   if(event.actorId&&event.actorId!==req.user!.id)continue;
    if(!['screen.open','ui.action.started','ui.action.completed','ui.action.failed','client.error','location.report'].includes(event.action))continue;
    const validId=(v:any)=>typeof v==='string'&&/^[a-zA-Z0-9_-]{8,80}$/.test(v)?v:null;
    let gps=null;
