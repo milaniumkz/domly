@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}"
@@ -47,6 +48,15 @@ run_backup() {
     mv "${BACKUP_DIR}/minio/domly_minio_${stamp}.tar.gz.tmp" "${BACKUP_DIR}/minio/domly_minio_${stamp}.tar.gz"
   fi
 
+  local private_bucket="${TECH_PRIVATE_BUCKET:-domly-technical-private}"
+  if [ "${MINIO_BACKUP_ENABLED}" = "true" ] && mc stat "domly-minio/${private_bucket}" >/dev/null 2>&1; then
+    mkdir -p "${BACKUP_DIR}/technical/latest"
+    mc mirror --overwrite --remove "domly-minio/${private_bucket}" "${BACKUP_DIR}/technical/latest" >/dev/null
+    tar -C "${BACKUP_DIR}/technical/latest" -czf "${BACKUP_DIR}/technical/technical_${stamp}.tar.gz.tmp" .
+    mv "${BACKUP_DIR}/technical/technical_${stamp}.tar.gz.tmp" "${BACKUP_DIR}/technical/technical_${stamp}.tar.gz"
+    sha256sum "${BACKUP_DIR}/technical/technical_${stamp}.tar.gz" > "${BACKUP_DIR}/technical/technical_${stamp}.sha256"
+    find "${BACKUP_DIR}/technical" -type f -name 'technical_*' -mtime +"${BACKUP_KEEP_DAYS}" -delete
+  fi
   local minio_file="" minio_sha="" minio_size=0
   if [ -f "${BACKUP_DIR}/minio/domly_minio_${stamp}.tar.gz" ]; then
     minio_file="${BACKUP_DIR}/minio/domly_minio_${stamp}.tar.gz"

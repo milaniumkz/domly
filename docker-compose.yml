@@ -2,6 +2,10 @@ services:
   api:
     build:
       context: ./backend
+      args:
+        DOMLY_RELEASE_SHA: ${DOMLY_RELEASE_SHA:-unknown}
+    volumes:
+      - ${TECH_STATUS_DIR:-./backend/technical-status}:/run/domly-status:ro
     env_file:
       - ./backend/.env
     depends_on:
@@ -24,6 +28,10 @@ services:
   worker:
     build:
       context: ./backend
+      args:
+        DOMLY_RELEASE_SHA: ${DOMLY_RELEASE_SHA:-unknown}
+    volumes:
+      - ${TECH_STATUS_DIR:-./backend/technical-status}:/run/domly-status:ro
     command: ["node", "dist/jobs/workers.js"]
     env_file:
       - ./backend/.env
@@ -99,7 +107,7 @@ services:
       BACKUP_INTERVAL_SECONDS: 86400
       BACKUP_KEEP_DAYS: 14
     volumes:
-      - ./backend/backups:/backups
+      - ${DOMLY_BACKUP_DIR:-./backend/backups}:/backups
     depends_on:
       postgres:
         condition: service_healthy

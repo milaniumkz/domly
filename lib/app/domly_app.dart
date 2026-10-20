@@ -1,3 +1,5 @@
+import '../ui/required_password_change.dart';
+import '../services/client_telemetry.dart';
 import '../services/realtime_updates.dart';
 import '../services/ui_preferences.dart';
 import '../screens/common/assistant_guest_screen.dart';
@@ -680,7 +682,8 @@ class _DomlyAppState extends State<DomlyApp> {
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context).copyWith(
                     disableAnimations: !UiPreferences.instance.animations),
-                child: child ?? const SizedBox.shrink(),
+                child: RequiredPasswordChange(
+                    child: child ?? const SizedBox.shrink()),
               ),
               navigatorKey: _navigatorKey,
               scaffoldMessengerKey: _messengerKey,
@@ -2092,6 +2095,7 @@ class _DomlyRouteObserver extends NavigatorObserver {
 
   void _setCurrent(Route<dynamic>? route) {
     currentRouteName = route?.settings.name;
+    ClientTelemetry.opened(currentRouteName);
     onRouteChanged?.call(currentRouteName);
   }
 

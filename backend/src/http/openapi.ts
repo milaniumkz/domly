@@ -104,6 +104,7 @@ export const openApiSpec = {
         responses: okError(),
       },
     },
+    '/auth/password/change': { post: { summary: 'Смена временного пароля с отзывом всех сеансов', security: [{bearerAuth:[]}], requestBody: {required:true,content:{'application/json':{schema:{type:'object',required:['currentPassword','newPassword'],properties:{currentPassword:{type:'string',writeOnly:true},newPassword:{type:'string',minLength:12,maxLength:128,writeOnly:true}}}}}}, responses:{200:{description:'Пароль изменён; требуется повторный вход'},403:{description:'Текущий пароль не подтверждён'}} } },
     '/auth/refresh': {
       post: {
         summary: 'Обновить access/refresh токены',

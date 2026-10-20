@@ -1,3 +1,4 @@
+import '../services/client_telemetry.dart';
 import '../services/ui_preferences.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -922,8 +923,13 @@ class _DomlyPrimaryButtonState extends State<DomlyPrimaryButton> {
       _isPressed = false;
     });
 
+    ClientTelemetry.begin(widget.label);
     try {
       await Future.sync(onPressed);
+      ClientTelemetry.emit('ui.action.completed', label: widget.label);
+    } catch (_) {
+      ClientTelemetry.emit('ui.action.failed', label: widget.label);
+      rethrow;
     } finally {
       if (mounted) {
         setState(() {
@@ -1072,8 +1078,13 @@ class _DomlySecondaryButtonState extends State<DomlySecondaryButton> {
       _isPressed = false;
     });
 
+    ClientTelemetry.begin(widget.label);
     try {
       await Future.sync(onPressed);
+      ClientTelemetry.emit('ui.action.completed', label: widget.label);
+    } catch (_) {
+      ClientTelemetry.emit('ui.action.failed', label: widget.label);
+      rethrow;
     } finally {
       if (mounted) {
         setState(() {

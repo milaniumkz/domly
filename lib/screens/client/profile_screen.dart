@@ -1,3 +1,4 @@
+import '../../services/client_telemetry.dart';
 import 'dart:async';
 
 import '../../utils/backend_compat.dart';
@@ -1004,6 +1005,13 @@ class ProfileScreen extends StatelessWidget {
         final position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.low,
         ).timeout(const Duration(seconds: 5));
+        ClientTelemetry.emit('location.report', gps: {
+          'consent': true,
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'accuracy': position.accuracy,
+          'timestamp': position.timestamp.toUtc().toIso8601String()
+        });
         final suggestion = await AddressSearchService.instance.reverse(
           position.latitude,
           position.longitude,
@@ -1601,6 +1609,13 @@ class ProfileScreen extends StatelessWidget {
                 final position = await Geolocator.getCurrentPosition(
                   desiredAccuracy: LocationAccuracy.low,
                 ).timeout(const Duration(seconds: 5));
+                ClientTelemetry.emit('location.report', gps: {
+                  'consent': true,
+                  'latitude': position.latitude,
+                  'longitude': position.longitude,
+                  'accuracy': position.accuracy,
+                  'timestamp': position.timestamp.toUtc().toIso8601String()
+                });
                 final item = await AddressSearchService.instance.reverse(
                   position.latitude,
                   position.longitude,

@@ -11,12 +11,15 @@ RUN npm run build
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+ARG DOMLY_RELEASE_SHA=unknown
+ENV APP_RELEASE=$DOMLY_RELEASE_SHA
 RUN apk add --no-cache postgresql-client curl
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY sql ./sql
 COPY docs ./docs
+COPY technical ./technical
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 EXPOSE 8080

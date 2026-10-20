@@ -1,3 +1,4 @@
+import 'client_telemetry.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -24,6 +25,8 @@ class BackendApiException implements Exception {
 }
 
 class BackendApiService {
+  static final ValueNotifier<bool> passwordChangeRequired =
+      ValueNotifier<bool>(false);
   final ValueNotifier<int> dataRevision = ValueNotifier<int>(0);
   BackendApiService._()
       : _client = http.Client(),
@@ -131,6 +134,7 @@ class BackendApiService {
       final token = await _accessToken();
       final request = http.MultipartRequest('POST', _uri(path));
       request.headers['Accept'] = 'application/json';
+      request.headers.addAll(ClientTelemetry.headers);
       if (token != null && token.isNotEmpty) {
         request.headers['Authorization'] = 'Bearer $token';
       }
@@ -222,6 +226,7 @@ class BackendApiService {
     String? token,
   }) {
     final headers = <String, String>{
+      ...ClientTelemetry.headers,
       'Accept': 'application/json',
       'Content-Type': 'application/json',
       if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
@@ -255,6 +260,8 @@ class BackendApiService {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final map = decoded is Map ? decoded : const <String, dynamic>{};
+      if (map['code'] == 'password_change_required')
+        passwordChangeRequired.value = true;
       throw BackendApiException(
         code: (map['code'] ?? 'http_${response.statusCode}').toString(),
         message: _messageFrom(map, fallback: 'Сервис временно недоступен.'),
@@ -274,7 +281,13 @@ class BackendApiService {
     }
 
     if (decoded is Map && decoded.containsKey('data')) {
-      return decoded['data'];
+      final data = decoded['data'];
+      if (data is Map &&
+          (data['password_change_required'] == true ||
+              (data['user'] is Map &&
+                  data['user']['passwordChangeRequired'] == true)))
+        passwordChangeRequired.value = true;
+      return data;
     }
     return decoded ?? <String, dynamic>{};
   }

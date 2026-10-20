@@ -67,15 +67,16 @@ export class AuthService {
       `INSERT INTO app_users (phone, role, is_phone_verified)
        VALUES ($1, $2, TRUE)
        ON CONFLICT (phone) DO UPDATE SET is_phone_verified=TRUE, last_login_at=NOW()
-       RETURNING id, role, phone`,
+       RETURNING id, role, phone, auth_version AS "authVersion", password_change_required AS "passwordChangeRequired"`,
       [normalized, role],
     )).rows);
     if (!user) throw new ApiError(500, 'auth_failed', 'Не удалось войти. Попробуйте позже.');
+    user.sessionId=crypto.randomUUID();
     const refreshToken = signRefreshToken(user);
     await this.db.query(
-      `INSERT INTO refresh_sessions (user_id, token_hash, expires_at)
-       VALUES ($1,$2,NOW() + ($3 || ' seconds')::interval)`,
-      [user.id, hashToken(refreshToken), env.jwtRefreshTtlSeconds],
+      `INSERT INTO refresh_sessions (user_id, token_hash, expires_at,id)
+       VALUES ($1,$2,NOW() + ($3 || ' seconds')::interval,$4)`,
+      [user.id, hashToken(refreshToken), env.jwtRefreshTtlSeconds,user.sessionId],
     );
     if(!existingUser && user.role==='customer') await scheduleSignupFollowup(this.db,user.id);
     return { user, accessToken: signAccessToken(user), refreshToken, isNew: !existingUser };
@@ -84,7 +85,7 @@ export class AuthService {
   async loginWithPassword(phone: string, password: string) {
     const normalized = normalizePhone(phone);
     const user = first<AuthUser & { password_hash: string | null; status: string }>((await this.db.query(
-      `SELECT id, role, phone, password_hash, status
+      `SELECT id, role, phone, password_hash, status, auth_version AS "authVersion", password_change_required AS "passwordChangeRequired"
        FROM app_users
        WHERE phone=$1 AND role IN ('admin','superadmin','cleaner')`,
       [normalized],
@@ -93,12 +94,12 @@ export class AuthService {
       throw new ApiError(401, 'invalid_credentials', 'Неверный телефон или пароль.');
     }
     if (user.status === 'blocked') throw new ApiError(403, 'blocked', 'Аккаунт заблокирован.');
-    const authUser: AuthUser = { id: user.id, role: user.role, phone: user.phone };
+    const authUser: AuthUser = { sessionId:crypto.randomUUID(), id: user.id, role: user.role, phone: user.phone, authVersion:user.authVersion, passwordChangeRequired:user.passwordChangeRequired };
     const refreshToken = signRefreshToken(authUser);
     await this.db.query(
-      `INSERT INTO refresh_sessions (user_id, token_hash, expires_at)
-       VALUES ($1,$2,NOW() + ($3 || ' seconds')::interval)`,
-      [user.id, hashToken(refreshToken), env.jwtRefreshTtlSeconds],
+      `INSERT INTO refresh_sessions (user_id, token_hash, expires_at,id)
+       VALUES ($1,$2,NOW() + ($3 || ' seconds')::interval,$4)`,
+      [user.id, hashToken(refreshToken), env.jwtRefreshTtlSeconds,authUser.sessionId],
     );
     return { user: authUser, accessToken: signAccessToken(authUser), refreshToken };
   }

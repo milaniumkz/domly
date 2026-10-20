@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import {env} from '../common/env';
 import {httpsMediaUrl} from '../modules/mediaLinks';
 import {Readable} from 'node:stream';
@@ -338,7 +339,8 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});
       try {
         await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status) VALUES($1,$2,$3,'in_progress')",[order,customer,cleaner]);
-        const form=new FormData();form.append('folder','photo_reports');form.append('file',new Blob(['test image'],{type:'image/jpeg'}),'report.jpg');
+        const validPhoto=await sharp({create:{width:640,height:480,channels:3,background:'#238a65'}}).jpeg().toBuffer();
+        const form=new FormData();form.append('folder','photo_reports');form.append('file',new Blob([new Uint8Array(validPhoto)],{type:'image/jpeg'}),'report.jpg');
         const upload=await fetch(base+'/files',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});
         assert.equal(upload.status,201);uploaded=(await upload.json() as any).data;
         const url=new URL(uploaded.public_url);

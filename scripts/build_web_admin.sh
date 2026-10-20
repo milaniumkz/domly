@@ -14,6 +14,7 @@ cd "$PROJECT_DIR"
 
 "$FLUTTER_BIN" build web --release --base-href /admin/ \
   --target "lib/main_admin_web.dart" \
+  --dart-define="DOMLY_APP_VERSION=$(git rev-parse --short=12 HEAD)" \
   --no-wasm-dry-run \
   -o "$REL_TMP_OUT_DIR" \
   --dart-define=FIREBASE_API_KEY_WEB=AIzaSyATusQAZ4b14N8aUUPREx7AUU5X0dmbLw4 \

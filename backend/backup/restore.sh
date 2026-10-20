@@ -70,4 +70,15 @@ if [ "${MINIO_RESTORE_ENABLED}" = "true" ]; then
   mc mirror --overwrite "${tmp_dir}" "domly-minio/${MINIO_BUCKET}" >/dev/null
 fi
 
+if [ "${TECHNICAL_RESTORE_ENABLED:-false}" = "true" ]; then
+  require_env TECHNICAL_BACKUP
+  require_env TECHNICAL_BACKUP_SHA256
+  verify_sha_if_present "$TECHNICAL_BACKUP" "$TECHNICAL_BACKUP_SHA256"
+  technical_tmp="$(mktemp -d)"
+  tar -C "$technical_tmp" -xzf "$TECHNICAL_BACKUP"
+  mc mb --ignore-existing "domly-minio/${TECH_PRIVATE_BUCKET:-domly-technical-private}" >/dev/null
+  mc mirror --overwrite "$technical_tmp" "domly-minio/${TECH_PRIVATE_BUCKET:-domly-technical-private}" >/dev/null
+  rm -rf "$technical_tmp"
+fi
+
 echo "Restore finished."

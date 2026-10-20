@@ -1,3 +1,7 @@
+import {telemetryRouter} from '../technical/telemetry';
+import {technicalRouter} from '../technical/router';
+import {collectRequests,technicalErrorInfo} from '../technical/collector';
+import {configureAuthDatabase} from '../common/auth';
 import { appLinksRouter } from './appLinks';
 import cors from 'cors';
 import express from 'express';
@@ -31,6 +35,7 @@ import { buildV1Router } from './routes/v1';
 validateEnvForRuntime();
 
 const db = new Database(env.databaseUrl);
+configureAuthDatabase(db);
 const logger = new ConsoleLogger();
 
 const cleanerRepository = new PostgresCleanerRepository(db);
@@ -45,7 +50,9 @@ const customPackageService = new CustomPackageService(customPackageRepository, n
 
 const app = express();
 app.disable('x-powered-by');
+app.set('trust proxy',['loopback','linklocal','uniquelocal']);
 app.use(cors());
+app.use(collectRequests(db));
 app.use(express.json({ limit: '10mb' }));
 app.use(appLinksRouter());
 
@@ -76,6 +83,8 @@ app.get('/ready', async (_req, res) => {
 
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
 
+app.use('/api/tech', technicalRouter(db,storage,readinessRedis));
+app.use('/api/v1', telemetryRouter(db));
 app.use('/api/v1', buildV1Router({
   db,
   authService: new AuthService(db, wapi),
@@ -99,6 +108,7 @@ app.use('/api/v1/legacy', buildRouter(
   new CustomPackageController(customPackageService),
 ));
 
+app.use(technicalErrorInfo);
 app.use(errorHandler);
 
 const server = app.listen(env.port, () => {

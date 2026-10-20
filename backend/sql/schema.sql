@@ -1349,3 +1349,125 @@ END $$;
 DROP TRIGGER IF EXISTS quality_check_whatsapp ON quality_check_requests;
 CREATE TRIGGER quality_check_whatsapp AFTER INSERT OR UPDATE OF status ON quality_check_requests
  FOR EACH ROW EXECUTE FUNCTION enqueue_quality_whatsapp();
+
+-- Separate technical control plane. It never trusts application administrator JWTs.
+CREATE TABLE IF NOT EXISTS tech_accounts (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), login TEXT NOT NULL UNIQUE,
+ password_hash TEXT NOT NULL, display_name TEXT NOT NULL, owner BOOLEAN NOT NULL DEFAULT FALSE,
+ permissions TEXT[] NOT NULL DEFAULT '{}', user_scope UUID[], disabled BOOLEAN NOT NULL DEFAULT FALSE,
+ must_change_password BOOLEAN NOT NULL DEFAULT TRUE, muted_until TIMESTAMPTZ,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS tech_sessions (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), account_id UUID NOT NULL REFERENCES tech_accounts(id),
+ token_hash TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ expires_at TIMESTAMPTZ NOT NULL, revoked_at TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS tech_login_attempts (
+ id BIGSERIAL PRIMARY KEY, identity_hash TEXT NOT NULL, ip_hash TEXT NOT NULL, success BOOLEAN NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS tech_login_identity ON tech_login_attempts(identity_hash,created_at DESC);
+CREATE INDEX IF NOT EXISTS tech_login_ip ON tech_login_attempts(ip_hash,created_at DESC);
+CREATE TABLE IF NOT EXISTS tech_rules (
+ id INTEGER PRIMARY KEY DEFAULT 1 CHECK(id=1), version INTEGER NOT NULL DEFAULT 1,
+ config JSONB NOT NULL DEFAULT '{"eventsDays":30,"quarantineDays":14,"auditDays":365,"failedLoginThreshold":8,"deniedThreshold":10,"massOperationThreshold":80,"uploadThreshold":30,"blankDocumentStdDev":1,"blurReject":0.4,"blurReview":12}',
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO tech_rules(id) VALUES(1) ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS tech_problems (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), fingerprint TEXT NOT NULL UNIQUE,
+ kind TEXT NOT NULL DEFAULT 'error', severity TEXT NOT NULL CHECK(severity IN ('info','warning','critical')),
+ title TEXT NOT NULL, error_code TEXT, recommendation TEXT NOT NULL,
+ first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(), last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(), occurrences BIGINT NOT NULL DEFAULT 0,
+ status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','investigating','confirmed','dismissed','fixed')),
+ assigned_to UUID REFERENCES tech_accounts(id), confirmed_cause TEXT, hypothesis TEXT,
+ fixed_version TEXT, verification_note TEXT, verified_at TIMESTAMPTZ, last_alert_at TIMESTAMPTZ,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS tech_events (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), request_id UUID NOT NULL,
+ user_id UUID, user_name TEXT, user_role TEXT, auth_session_id UUID, client_session_id TEXT, operation_id TEXT,
+ source TEXT NOT NULL DEFAULT 'server', action TEXT NOT NULL, entity_type TEXT, entity_id TEXT,
+ result TEXT NOT NULL DEFAULT 'started' CHECK(result IN ('started','success','failure','interrupted','reported')),
+ started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), finished_at TIMESTAMPTZ, duration_ms INTEGER,
+ http_status INTEGER, error_code TEXT, user_message TEXT, failure_reason TEXT,
+ platform TEXT, app_version TEXT, device TEXT, ip TEXT, gps JSONB,
+ fields JSONB NOT NULL DEFAULT '{}'::jsonb, before_values JSONB, after_values JSONB,
+ problem_id UUID REFERENCES tech_problems(id), signature TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS tech_events_time ON tech_events(started_at DESC,id DESC);
+CREATE INDEX IF NOT EXISTS tech_events_user_time ON tech_events(user_id,started_at,id);
+CREATE INDEX IF NOT EXISTS tech_events_session ON tech_events(client_session_id,started_at);
+CREATE INDEX IF NOT EXISTS tech_events_operation ON tech_events(operation_id,started_at);
+CREATE INDEX IF NOT EXISTS tech_events_request ON tech_events(request_id);
+CREATE INDEX IF NOT EXISTS tech_events_entity ON tech_events(entity_type,entity_id,started_at);
+CREATE INDEX IF NOT EXISTS tech_events_problem ON tech_events(problem_id,started_at DESC);
+CREATE INDEX IF NOT EXISTS tech_events_started ON tech_events(started_at) WHERE result='started';
+CREATE TABLE IF NOT EXISTS tech_problem_comments (
+ id BIGSERIAL PRIMARY KEY, problem_id UUID NOT NULL REFERENCES tech_problems(id), account_id UUID NOT NULL REFERENCES tech_accounts(id),
+ text TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS tech_files (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), file_id UUID REFERENCES files(id) ON DELETE SET NULL,
+ event_id UUID REFERENCES tech_events(id) ON DELETE SET NULL, owner_id UUID, entity_type TEXT, entity_id TEXT,
+ bucket TEXT NOT NULL, object_key TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes BIGINT, sha256 TEXT,
+ filename TEXT, document_type TEXT NOT NULL DEFAULT 'media',
+ decision TEXT NOT NULL CHECK(decision IN ('accepted','manual_review','rejected','unavailable')),
+ reason TEXT NOT NULL, analysis JSONB NOT NULL DEFAULT '{}'::jsonb, algorithm_version TEXT NOT NULL,
+ rules_version INTEGER NOT NULL, quarantined BOOLEAN NOT NULL DEFAULT FALSE, original_available BOOLEAN NOT NULL DEFAULT TRUE,
+ review_status TEXT NOT NULL DEFAULT 'pending', reviewed_by UUID REFERENCES tech_accounts(id), review_note TEXT,
+ expires_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(file_id)
+);
+CREATE INDEX IF NOT EXISTS tech_files_owner ON tech_files(owner_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS tech_files_event ON tech_files(event_id);
+CREATE INDEX IF NOT EXISTS tech_files_expiry ON tech_files(expires_at) WHERE quarantined=TRUE;
+CREATE TABLE IF NOT EXISTS tech_audit (
+ seq BIGSERIAL PRIMARY KEY, id UUID NOT NULL DEFAULT uuid_generate_v4(),
+ account_id UUID, session_id UUID, action TEXT NOT NULL, target_type TEXT, target_id TEXT,
+ result TEXT NOT NULL, payload JSONB NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+ previous_hash TEXT NOT NULL, entry_hash TEXT NOT NULL
+);
+CREATE OR REPLACE FUNCTION protect_tech_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF current_setting('domly.tech_archive',TRUE) IS DISTINCT FROM 'on' THEN RAISE EXCEPTION 'technical audit is append-only'; END IF;
+ RETURN OLD;
+END $$;
+DROP TRIGGER IF EXISTS immutable_tech_audit ON tech_audit;
+CREATE TRIGGER immutable_tech_audit BEFORE UPDATE OR DELETE ON tech_audit FOR EACH ROW EXECUTE FUNCTION protect_tech_audit();
+CREATE TABLE IF NOT EXISTS tech_audit_archives (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), first_seq BIGINT NOT NULL,last_seq BIGINT NOT NULL,
+ previous_hash TEXT NOT NULL,last_hash TEXT NOT NULL,sha256 TEXT NOT NULL,object_key TEXT NOT NULL,rows INTEGER NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS tech_notifications (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), account_id UUID NOT NULL REFERENCES tech_accounts(id),
+ problem_id UUID REFERENCES tech_problems(id), event_id UUID REFERENCES tech_events(id) ON DELETE SET NULL,
+ importance TEXT NOT NULL, title TEXT NOT NULL, dedupe_key TEXT NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), acknowledged_at TIMESTAMPTZ, acknowledged_by UUID REFERENCES tech_accounts(id),
+ UNIQUE(account_id,dedupe_key)
+);
+CREATE INDEX IF NOT EXISTS tech_notification_account ON tech_notifications(account_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS tech_push_subscriptions (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), account_id UUID NOT NULL REFERENCES tech_accounts(id),
+ endpoint_hash TEXT NOT NULL UNIQUE, subscription JSONB NOT NULL, disabled BOOLEAN NOT NULL DEFAULT FALSE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS tech_push_deliveries (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), notification_id UUID NOT NULL REFERENCES tech_notifications(id) ON DELETE CASCADE,
+ subscription_id UUID NOT NULL REFERENCES tech_push_subscriptions(id) ON DELETE CASCADE,
+ status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, next_attempt TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ failure_code TEXT, sent_at TIMESTAMPTZ, UNIQUE(notification_id,subscription_id)
+);
+CREATE TABLE IF NOT EXISTS tech_heartbeats (
+ service TEXT PRIMARY KEY, observed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), state JSONB NOT NULL
+);
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS password_change_required BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE files ADD COLUMN IF NOT EXISTS technical_sha256 TEXT;
+ALTER TABLE files ADD COLUMN IF NOT EXISTS technical_quality JSONB;
+
+CREATE INDEX IF NOT EXISTS tech_problems_status ON tech_problems(status,last_seen DESC);
+CREATE INDEX IF NOT EXISTS tech_events_source_actor ON tech_events(source,user_id,started_at DESC);
+CREATE INDEX IF NOT EXISTS tech_push_pending ON tech_push_deliveries(status,next_attempt);
+CREATE INDEX IF NOT EXISTS tech_audit_at ON tech_audit(at,seq);

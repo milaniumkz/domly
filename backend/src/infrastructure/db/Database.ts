@@ -5,7 +5,7 @@ export class Database implements UnitOfWork<Queryable> {
   private readonly pool: Pool;
 
   constructor(connectionString: string) {
-    this.pool = new Pool({ connectionString });
+    this.pool = new Pool({ connectionString, connectionTimeoutMillis: 5000, statement_timeout: 30000, query_timeout: 35000 });
   }
 
   async query<T = any>(text: string, values: unknown[] = []): Promise<{ rows: T[]; rowCount?: number | null }> {

@@ -1,3 +1,4 @@
+import '../services/client_telemetry.dart';
 import '../services/assistant_guest_service.dart';
 import 'dart:async';
 
@@ -26,6 +27,7 @@ Future<void> bootstrap(AppConfig config) async {
       : config.flavor == AppFlavor.pro
           ? SessionSurface.pro
           : SessionSurface.customer;
+  ClientTelemetry.installErrorHandlers();
   runApp(_BootstrapHost(config: config));
 }
 
@@ -189,7 +191,9 @@ void _attachNotificationBootstrap(AppConfig config) {
         AuthService.temporarySessionUid ?? AuthService.restoredSessionUid;
     if (userId == null) {
       if (config.flavor == AppFlavor.customer && !config.adminSurface) {
-        try { await AssistantGuestService.instance.initialize(); } catch (_) {}
+        try {
+          await AssistantGuestService.instance.initialize();
+        } catch (_) {}
       }
       return;
     }

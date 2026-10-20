@@ -1,3 +1,6 @@
+import {Database} from '../infrastructure/db/Database';
+let authDatabase:Database|null=null;
+export function configureAuthDatabase(db:Database|null){authDatabase=db;}
 import { randomUUID } from 'node:crypto';
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
@@ -8,6 +11,9 @@ export type AuthUser = {
   id: string;
   role: 'customer' | 'cleaner' | 'admin' | 'superadmin';
   phone: string;
+  sessionId?: string;
+  authVersion?: number;
+  passwordChangeRequired?: boolean;
 };
 
 declare global {
@@ -19,11 +25,11 @@ declare global {
 }
 
 export function signAccessToken(user: AuthUser): string {
-  return jwt.sign({ id: user.id, role: user.role, phone: user.phone }, env.jwtAccessSecret, { expiresIn: env.jwtAccessTtlSeconds });
+  return jwt.sign({ id: user.id, role: user.role, phone: user.phone, ...(user.sessionId?{sessionId:user.sessionId}:{}), ...(user.authVersion!==undefined?{authVersion:user.authVersion}:{}), ...(user.passwordChangeRequired?{passwordChangeRequired:true}:{}) }, env.jwtAccessSecret, { expiresIn: env.jwtAccessTtlSeconds });
 }
 
 export function signRefreshToken(user: AuthUser): string {
-  return jwt.sign({ id: user.id, role: user.role, phone: user.phone }, env.jwtRefreshSecret, {
+  return jwt.sign({ id: user.id, role: user.role, phone: user.phone, ...(user.sessionId?{sessionId:user.sessionId}:{}), ...(user.authVersion!==undefined?{authVersion:user.authVersion}:{}), ...(user.passwordChangeRequired?{passwordChangeRequired:true}:{}) }, env.jwtRefreshSecret, {
     expiresIn: env.jwtRefreshTtlSeconds,
     jwtid: randomUUID(),
   });
@@ -36,7 +42,7 @@ export function verifyRefreshToken(token: string): AuthUser {
         || !['customer', 'cleaner', 'admin', 'superadmin'].includes(decoded.role)) {
       throw new Error('Invalid refresh identity');
     }
-    return { id: decoded.id, role: decoded.role, phone: decoded.phone };
+    return { id: decoded.id, role: decoded.role, phone: decoded.phone, ...(decoded.sessionId?{sessionId:decoded.sessionId}:{}), ...(decoded.authVersion!==undefined?{authVersion:decoded.authVersion}:{}), ...(decoded.passwordChangeRequired?{passwordChangeRequired:true}:{}) };
   } catch (_) {
     throw new ApiError(401, 'unauthorized', 'Сессия истекла. Войдите заново.');
   }
@@ -47,7 +53,7 @@ export function verifyAccessToken(token: string): AuthUser {
 }
 
 export function auth(requiredRoles: AuthUser['role'][] = [], options: { allowQueryToken?: boolean } = {}) {
-  return (req: Request, _res: Response, next: NextFunction) => {
+  return async (req: Request, _res: Response, next: NextFunction) => {
     const raw = req.header('authorization') ?? '';
     const queryToken = options.allowQueryToken
       ? String(req.query.access_token ?? req.query.accessToken ?? '')
@@ -56,13 +62,19 @@ export function auth(requiredRoles: AuthUser['role'][] = [], options: { allowQue
     if (!token) return next(new ApiError(401, 'unauthorized', 'Войдите в аккаунт заново.'));
     try {
       const user = verifyAccessToken(token);
+      if(authDatabase){
+       const account=(await authDatabase.query('SELECT role,status,deleted_at,auth_version,password_change_required FROM app_users WHERE id=$1',[user.id])).rows[0];
+       if(!account||account.deleted_at||account.status==='blocked'||account.role!==user.role||Number(account.auth_version)!==Number(user.authVersion??0))return next(new ApiError(401,'unauthorized','Сессия завершена. Войдите заново.'));
+       if(account.password_change_required&&!['/auth/password/change','/auth/logout','/me'].includes(req.path))return next(new ApiError(403,'password_change_required','Сначала смените временный пароль.'));
+      }
       if (requiredRoles.length > 0 && !requiredRoles.includes(user.role)) {
         return next(new ApiError(403, 'forbidden', 'Недостаточно прав для этого действия.'));
       }
       req.user = user;
       return next();
-    } catch {
-      return next(new ApiError(401, 'unauthorized', 'Сессия истекла. Войдите заново.'));
+    } catch (error:any) {
+      if(['JsonWebTokenError','TokenExpiredError','NotBeforeError'].includes(error?.name))return next(new ApiError(401, 'unauthorized', 'Сессия истекла. Войдите заново.'));
+      return next(new ApiError(503,'authentication_unavailable','Проверка сессии временно недоступна. Повторите позже.'));
     }
   };
 }

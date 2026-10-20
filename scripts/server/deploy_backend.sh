@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 APP_DIR="${APP_DIR:-/opt/domly-backend}"
 RELEASES_DIR="$APP_DIR/releases"
@@ -9,11 +10,18 @@ SHARED_DIR="$APP_DIR/shared"
 SHARED_ENV="$SHARED_DIR/backend.env"
 COMMIT_SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
 RELEASE_DIR="$RELEASES_DIR/$COMMIT_SHA"
+export DOMLY_RELEASE_SHA="$COMMIT_SHA"
+export TECH_STATUS_DIR="$SHARED_DIR/technical-status"
+export DOMLY_BACKUP_DIR="$BACKUP_DIR/scheduled"
+mkdir -p "$TECH_STATUS_DIR" "$DOMLY_BACKUP_DIR"
+chmod 755 "$TECH_STATUS_DIR"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/health}"
 READY_URL="${READY_URL:-http://127.0.0.1:8080/ready}"
 COMPOSE_PROJECT="${COMPOSE_PROJECT:-domly-backend}"
 
 mkdir -p "$RELEASES_DIR" "$BACKUP_DIR" "$SHARED_DIR"
+deploy_result='failed'
+trap 'if [ "$deploy_result" != success ]; then printf "{\"release\":\"%s\",\"result\":\"failed\",\"checkedAt\":\"%s\"}\n" "$COMMIT_SHA" "$(date -u +%FT%TZ)" > "$SHARED_DIR/deployment-status.json"; fi' EXIT
 
 if [ -f "$SHARED_ENV" ]; then
   mkdir -p "$RELEASE_DIR/backend"
@@ -74,6 +82,8 @@ PYCODE
   cp "$RELEASE_DIR/backend/.env" "$SHARED_ENV"
 fi
 
+printf 'DOMLY_RELEASE_SHA=%s\nTECH_STATUS_DIR=%s\nDOMLY_BACKUP_DIR=%s\n' "$COMMIT_SHA" "$TECH_STATUS_DIR" "$DOMLY_BACKUP_DIR" > "$RELEASE_DIR/.env"
+chmod 600 "$RELEASE_DIR/.env"
 ln -sfn "$RELEASE_DIR" "$CURRENT_DIR"
 echo "$COMMIT_SHA" > "$APP_DIR/REVISION"
 
@@ -99,6 +109,9 @@ SQL
       docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --project-directory "$CURRENT_DIR" up -d nginx
     fi
     docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --project-directory "$CURRENT_DIR" exec -T api node -e "console.log('OTP code display:', process.env.OTP_SHOW_CODE === 'true' ? 'enabled until explicitly disabled' : 'disabled')"
+    printf '{"release":"%s","result":"success","checkedAt":"%s"}\n' "$COMMIT_SHA" "$(date -u +%FT%TZ)" > "$SHARED_DIR/deployment-status.json"
+    python3 "$CURRENT_DIR/scripts/server/technical_status.py" "$APP_DIR" || true
+    deploy_result=success
     echo "Deploy OK: $COMMIT_SHA"
     exit 0
   fi

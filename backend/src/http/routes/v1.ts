@@ -1,3 +1,4 @@
+import {inspectUpload,registerUploadedFile} from '../../technical/files';
 import {ensureGuestSession, guestSession, bindGuestSession, matchMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
 import {validatePromotionBody} from '../../modules/promotionValidation';
 import {saveOrderReview} from '../../modules/orderReviews';
@@ -39,6 +40,10 @@ export function buildV1Router(deps: {
   wapi: WapiOtpService;
 }) {
   const router = Router();
+  const technicalUpload=asyncHandler(async(req,res,next)=>{
+    await inspectUpload(deps.db,deps.storage,req);
+    next();
+  });
   router.use('/payments/bcc', urlencoded({extended:false,limit:'32kb'}));
   router.use(mediaLinksMiddleware(deps.db));
   router.use(mobileRouter(deps.db));
@@ -390,10 +395,27 @@ export function buildV1Router(deps: {
     ok(res, await deps.authService.loginWithPassword(String(req.body.phone ?? ''), String(req.body.password ?? '')));
   }));
 
+  router.post('/auth/password/change',auth(),asyncHandler(async(req,res)=>{
+    const next=String(req.body.newPassword??''),current=String(req.body.currentPassword??'');
+    if(next.length<12||next.length>128)throw new ApiError(400,'weak_password','Пароль должен содержать 12–128 символов.');
+    const bcrypt=(await import('bcryptjs')).default;
+    const row=(await deps.db.query('SELECT password_hash FROM app_users WHERE id=$1',[req.user!.id])).rows[0];
+    if(!row?.password_hash||!await bcrypt.compare(current,row.password_hash))throw new ApiError(403,'reauth_failed','Текущий пароль не подтверждён.');
+    if(await bcrypt.compare(next,row.password_hash))throw new ApiError(400,'password_reused','Выберите другой пароль.');
+    await deps.db.transaction(async tx=>{
+      await tx.query('UPDATE app_users SET password_hash=$2,password_change_required=FALSE,auth_version=auth_version+1 WHERE id=$1',[req.user!.id,await bcrypt.hash(next,12)]);
+      await tx.query('UPDATE refresh_sessions SET revoked_at=NOW() WHERE user_id=$1',[req.user!.id]);
+    });ok(res,{changed:true,loginRequired:true});
+  }));
+
   router.post('/auth/refresh', asyncHandler(async (req, res) => {
     const refreshToken = String(req.body.refreshToken ?? '');
     if (!refreshToken) throw new ApiError(401, 'unauthorized', 'Войдите в аккаунт заново.');
     const user = verifyRefreshToken(refreshToken);
+    const account=(await deps.db.query('SELECT role,status,deleted_at,auth_version,password_change_required FROM app_users WHERE id=$1',[user.id])).rows[0];
+    if(!account||account.deleted_at||account.status==='blocked'||account.role!==user.role||Number(account.auth_version)!==Number(user.authVersion??0))throw new ApiError(401,'unauthorized','Сессия завершена.');
+    user.authVersion=account.auth_version;user.passwordChangeRequired=account.password_change_required;
+    user.sessionId=crypto.randomUUID();
     const nextRefreshToken = signRefreshToken(user);
     const accessToken = signAccessToken(user);
     await deps.db.transaction(async (tx) => {
@@ -406,9 +428,9 @@ export function buildV1Router(deps: {
       if (!session) throw new ApiError(401, 'unauthorized', 'Сессия истекла. Войдите заново.');
       await tx.query(`UPDATE refresh_sessions SET revoked_at=NOW() WHERE id=$1`, [(session as any).id]);
       await tx.query(
-        `INSERT INTO refresh_sessions (user_id, token_hash, expires_at)
-         VALUES ($1,$2,NOW() + ($3 || ' seconds')::interval)`,
-        [user.id, hashToken(nextRefreshToken), env.jwtRefreshTtlSeconds],
+        `INSERT INTO refresh_sessions (user_id, token_hash, expires_at,id)
+         VALUES ($1,$2,NOW() + ($3 || ' seconds')::interval,$4)`,
+        [user.id, hashToken(nextRefreshToken), env.jwtRefreshTtlSeconds,user.sessionId],
       );
     });
     ok(res, { accessToken, refreshToken: nextRefreshToken, user });
@@ -494,7 +516,7 @@ export function buildV1Router(deps: {
     ok(res, { disabled: Boolean(row) });
   }));
 
-  router.post('/files', auth(), upload.single('file'), asyncHandler(async (req, res) => {
+  router.post('/files', auth(), upload.single('file'), technicalUpload, asyncHandler(async (req, res) => {
     if (!req.file) throw new ApiError(400, 'file_required', 'Выберите файл для загрузки.');
     const ext = extensionFromMime(req.file.mimetype);
     const rawFolder = String(req.body.folder ?? 'uploads');
@@ -510,6 +532,7 @@ export function buildV1Router(deps: {
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [req.user!.id, env.minioBucket, objectKey, req.file.mimetype, req.file.size, publicUrl],
     )).rows);
+    await registerUploadedFile(deps.db,req,row);
     ok(res, row, 201);
   }));
 
@@ -876,7 +899,7 @@ export function buildV1Router(deps: {
     ok(res, profile);
   }));
 
-  router.post('/cleaner/documents', auth(['cleaner']), upload.single('file'), asyncHandler(async (req, res) => {
+  router.post('/cleaner/documents', auth(['cleaner']), upload.single('file'), technicalUpload, asyncHandler(async (req, res) => {
     if (!req.file) throw new ApiError(400, 'file_required', 'Загрузите документ.');
     const ext = extensionFromMime(req.file.mimetype);
     const objectKey = `${req.user!.id}/documents/${randomUUID()}${ext}`;
@@ -886,6 +909,7 @@ export function buildV1Router(deps: {
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [req.user!.id, 'domly', objectKey, req.file.mimetype, req.file.size, publicUrl],
     )).rows);
+    await registerUploadedFile(deps.db,req,file);
     const document = first((await deps.db.query(
       `INSERT INTO cleaner_documents (cleaner_id, type, file_id, status) VALUES ($1,$2,$3,'pending') RETURNING *`,
       [req.user!.id, req.body.type ?? 'document', (file as any).id],
@@ -2907,7 +2931,7 @@ export function buildV1Router(deps: {
     ok(res, { report, items, orderAddons });
   }));
 
-  router.post('/quality-checks', auth(['customer']), upload.single('document'), asyncHandler(async (req, res) => {
+  router.post('/quality-checks', auth(['customer']), upload.single('document'), technicalUpload, asyncHandler(async (req, res) => {
     const area = Number(req.body.area);
     if (!Number.isFinite(area) || area <= 0 || !req.file) throw new ApiError(400, 'invalid_request', 'Укажите площадь и загрузите документ.');
     const result = await deps.db.transaction(async tx => {
@@ -2939,6 +2963,7 @@ export function buildV1Router(deps: {
           VALUES ($1,$2,$3,'pending',$4) RETURNING *`,[req.user!.id,req.body.addressId ?? null,area,file.id])).rows);
       return {row,file,notify:true};
     });
+    if(result.file)await registerUploadedFile(deps.db,req,result.file);
     if (result.notify) await deps.notifications.createAdminEvent({
       event: 'quality_check',
       titleRu: 'Проверка площади',
@@ -3304,7 +3329,7 @@ export function buildV1Router(deps: {
     ok(res, row, 201);
   }));
 
-  router.post('/chats/:id/messages', auth(), upload.single('file'), asyncHandler(async (req, res) => {
+  router.post('/chats/:id/messages', auth(), upload.single('file'), technicalUpload, asyncHandler(async (req, res) => {
     const admin = ['admin', 'superadmin'].includes(req.user!.role);
     if (!admin) {
       const participant = first((await deps.db.query(
@@ -3328,6 +3353,7 @@ export function buildV1Router(deps: {
         [req.user!.id, env.minioBucket, objectKey, req.file.mimetype, req.file.size, publicUrl],
       )).rows);
       fileId = file?.id ?? null;
+      if(fileId)await registerUploadedFile(deps.db,req,(await deps.db.query('SELECT * FROM files WHERE id=$1',[fileId])).rows[0]);
     }
     if (fileId) {
       const file = first((await deps.db.query(

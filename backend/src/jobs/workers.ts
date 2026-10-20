@@ -1,3 +1,6 @@
+import {technicalTick} from '../technical/runtime';
+import {StorageService} from '../modules/integrations';
+import {observeWorker} from '../technical/jobs';
 import {processMoonOutbox} from '../modules/moonAi';
 import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
@@ -210,7 +213,12 @@ void maintenanceQueue.add('cleanup-expired-auth', {}, {
   removeOnComplete: true,
 });
 
+const technicalStorage=new StorageService();
+const technicalTimer=setInterval(()=>void technicalTick(db,technicalStorage,{maintenance:maintenanceQueue,moon:moonQueue}),10000);
+void technicalTick(db,technicalStorage,{maintenance:maintenanceQueue,moon:moonQueue});
+for(const worker of workers)observeWorker(db,worker);
 async function shutdown(signal: string) {
+  clearInterval(technicalTimer);
   await Promise.all(workers.map((worker) => worker.close().catch(() => undefined)));
   await Promise.all([
     maintenanceQueue.close().catch(() => undefined),

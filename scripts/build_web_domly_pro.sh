@@ -14,6 +14,7 @@ cd "$PROJECT_DIR"
 
 "$FLUTTER_BIN" build web --release --base-href /pro/ \
   --target "lib/main_pro.dart" \
+  --dart-define="DOMLY_APP_VERSION=$(git rev-parse --short=12 HEAD)" \
   --no-web-resources-cdn \
   --pwa-strategy=none \
   --no-wasm-dry-run \
