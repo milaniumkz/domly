@@ -1,3 +1,4 @@
+import {revokeRealtimeSessions} from '../../realtime/sse';
 import {inspectUpload,registerUploadedFile} from '../../technical/files';
 import {ensureGuestSession, guestSession, bindGuestSession, matchMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
 import {validatePromotionBody} from '../../modules/promotionValidation';
@@ -405,7 +406,7 @@ export function buildV1Router(deps: {
     await deps.db.transaction(async tx=>{
       await tx.query('UPDATE app_users SET password_hash=$2,password_change_required=FALSE,auth_version=auth_version+1 WHERE id=$1',[req.user!.id,await bcrypt.hash(next,12)]);
       await tx.query('UPDATE refresh_sessions SET revoked_at=NOW() WHERE user_id=$1',[req.user!.id]);
-    });ok(res,{changed:true,loginRequired:true});
+    });revokeRealtimeSessions(req.user!.id);ok(res,{changed:true,loginRequired:true});
   }));
 
   router.post('/auth/refresh', asyncHandler(async (req, res) => {

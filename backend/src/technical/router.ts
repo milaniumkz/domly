@@ -1,3 +1,4 @@
+import {revokeRealtimeSessions} from '../realtime/sse';
 import {eventSignature} from './collector';
 import {Router,Request,Response,NextFunction} from 'express';
 import path from 'node:path';
@@ -184,7 +185,7 @@ export function technicalRouter(db:Database,storage:StorageService,redis?:{ping:
    await tx.query('UPDATE refresh_sessions SET revoked_at=NOW() WHERE user_id=$1 AND revoked_at IS NULL',[userId]);
    await tx.query('UPDATE device_tokens SET enabled=FALSE WHERE user_id=$1',[userId]);
    await appendAudit(tx,{accountId:op.id,sessionId:op.session_id,action:'support.'+action,targetType:'user',targetId:userId,payload:{reason:r,before:user,after:{status:action==='block'?'blocked':action==='unblock'?(user.role==='cleaner'?'pending':'approved'):user.status},sessionsRevoked:true}});
-  });ok(res,{done:true,...(temporary?{temporaryPassword:temporary,mustChangePassword:true}:{}),note:'Существующий пароль не раскрывается. Временный показывается только в этом ответе.'});
+  });revokeRealtimeSessions(userId);ok(res,{done:true,...(temporary?{temporaryPassword:temporary,mustChangePassword:true}:{}),note:'Существующий пароль не раскрывается. Временный показывается только в этом ответе.'});
  }));
  router.get('/api/files',required('files.preview'),asyncHandler(async(req,res)=>{
   const op=opFor(res),p=paging(req),values:any[]=[];let where='TRUE';

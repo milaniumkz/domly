@@ -3,7 +3,7 @@ import IORedis from 'ioredis';
 import { auth } from '../common/auth';
 
 const realtimeChannel = 'domly:realtime';
-const clients = new Set<{ userId: string; write: (payload: string) => void }>();
+const clients = new Set<{ userId: string; write: (payload: string) => void; close: () => void }>();
 let publisher: IORedis | null = null;
 let subscriber: IORedis | null = null;
 
@@ -18,6 +18,7 @@ export function buildRealtimeRouter(): Router {
     });
     const client = {
       userId: req.user!.id,
+      close: () => res.end(),
       write: (payload: string) => res.write(`event: message\ndata: ${payload}\n\n`),
     };
     clients.add(client);
@@ -36,8 +37,18 @@ export function buildRealtimeRouter(): Router {
 export function emitToUser(userId: string, event: unknown): void {
   const payload = JSON.stringify(event);
   for (const client of clients) {
-    if (client.userId === userId) client.write(payload);
+    if (client.userId === userId) {
+      client.write(payload);
+      if ((event as {type?:string} | null)?.type === 'auth.revoked') { clients.delete(client); client.close(); }
+    }
   }
+}
+
+export function revokeRealtimeSessions(userId: string): void {
+  const event = {type: 'auth.revoked'};
+  emitToUser(userId, event);
+  // Do not hold a support operation open during a Redis outage.
+  if (publisher) void publishToUser(userId, event).catch(() => undefined);
 }
 
 export function configureRealtimeBus(redisUrl: string): void {
