@@ -6,7 +6,7 @@
 
 Production развёртывается только проверенным commit из main через штатный GitHub Actions Deploy. Скрипт **до переключения** сохраняет PostgreSQL и backend.env в защищённом каталоге `backups/<timestamp>-<sha>/`. Конфигурация Compose (версия, пути мониторинга и плановых копий) сохраняется в серверном `.env`, чтобы последующие служебные workflow не теряли mounts.
 
-Первую инициализацию запускает workflow **Initialize technical panel**. На рабочей машине получателя:
+Первую инициализацию запускает workflow **Initialize technical panel** с mode=initialize. Для повторной read-only проверки используйте mode=inspect: он не пересоздаёт учётные записи, не меняет ключи и не перезапускает сервисы. На рабочей машине получателя:
 
 ```sh
 umask 077

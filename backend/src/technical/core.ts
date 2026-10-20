@@ -13,7 +13,7 @@ export const canonical=(v:any):string=>JSON.stringify(v,(_k,x)=>x&&typeof x==='o
 export function seal(value:any){if(!secretKey())return null;return createHmac('sha256',secretKey()).update(canonical(value)).digest('hex');}
 export function equal(a:string,b:string){const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);}
 const secrets=/password|passwd|парол|token|secret|cookie|authorization|credential|signature|private.?key|api.?key|otp|cvv|cvc|(^|_)pin($|_)/i;
-const privateFields=/phone|телефон|email|name|address|street|house|apartment|user_name|label|^text$|comment|hypothesis|confirmed_cause|device|ip$|gps|location|latitude|longitude|position/i;
+const privateFields=/phone|телефон|email|name|address|street|house|apartment|user_name|user_agent|entrance|floor|intercom|access_comment|label|^text$|comment|hypothesis|confirmed_cause|device|ip$|gps|location|latitude|longitude|position/i;
 export function safeText(v:unknown,max=500):string {
  return String(v??'').replace(/Bearer\s+\S+/gi,'Bearer [скрыто]').replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,'[токен скрыт]')
  .replace(/((?:password|passwd|пароль|token|secret|api[_-]?key|authorization|cookie)\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/gi,'$1[скрыто]')
@@ -56,6 +56,9 @@ export async function verifyAudit(db:Queryable,limit=1000){
  return {valid:secretKey()?failures===0:null,failures,checked:rows.length,firstSeq:rows[0]?.seq??null,lastSeq:rows.at(-1)?.seq??null,head:rows.at(-1)?.entry_hash??null,scope:'Последние '+limit+' записей; архивы и внешний контрольный хеш показываются отдельно.'};
 }
 export async function readRules(db:Queryable){const row=(await db.query('SELECT * FROM tech_rules WHERE id=1')).rows[0];return {...row,config:{geoDistanceKm:100,...row.config}};}
+export const technicalSubjectSql=(a='e')=>`COALESCE(${a}.fields->>'subjectUserId',${a}.before_values->>'customer_id',${a}.after_values->>'customer_id',${a}.before_values->>'user_id',${a}.after_values->>'user_id',CASE WHEN ${a}.entity_type='users' AND (${a}.before_values IS NOT NULL OR ${a}.after_values IS NOT NULL) THEN ${a}.entity_id END)`;
+export const technicalSubjectGuard=(parameter:string,a='e')=>`(${technicalSubjectSql(a)} IS NULL OR (${technicalSubjectSql(a)})::uuid=ANY(${parameter}::uuid[]))`;
+export const technicalEventSubject=(r:any)=>r.fields?.subjectUserId??r.before_values?.customer_id??r.after_values?.customer_id??r.before_values?.user_id??r.after_values?.user_id??(r.entity_type==='users'&&(r.before_values||r.after_values)?r.entity_id:null);
 export async function problem(db:Database,input:{kind?:string;severity?:string;fingerprint:string;title:string;code:string;recommendation:string;eventId?:string}){
  const row=(await db.query(`INSERT INTO tech_problems(fingerprint,kind,severity,title,error_code,recommendation,occurrences)
  VALUES($1,$2,$3,$4,$5,$6,1) ON CONFLICT(fingerprint) DO UPDATE SET last_seen=NOW(),occurrences=tech_problems.occurrences+1,
@@ -65,7 +68,7 @@ export async function problem(db:Database,input:{kind?:string;severity?:string;f
  const alert=(await db.query(`UPDATE tech_problems SET last_alert_at=NOW() WHERE id=$1 AND
  (last_alert_at IS NULL OR last_alert_at<NOW()-INTERVAL '1 hour') RETURNING id`,[row.id])).rows[0];
  if(alert){const bucket=Math.floor(Date.now()/3600000);await db.query(`INSERT INTO tech_notifications(account_id,problem_id,event_id,importance,title,dedupe_key)
- SELECT id,$1,$2,$3,$4,$5 FROM tech_accounts WHERE disabled=FALSE AND (owner=TRUE OR 'events.read'=ANY(permissions)) AND (user_scope IS NULL OR EXISTS(SELECT 1 FROM tech_events WHERE id=$2 AND user_id=ANY(tech_accounts.user_scope)))
+ SELECT id,$1,$2,$3,$4,$5 FROM tech_accounts WHERE disabled=FALSE AND (owner=TRUE OR 'events.read'=ANY(permissions)) AND (user_scope IS NULL OR EXISTS(SELECT 1 FROM tech_events e WHERE e.id=$2 AND e.user_id=ANY(tech_accounts.user_scope) AND ${technicalSubjectGuard('tech_accounts.user_scope')}))
  ON CONFLICT(account_id,dedupe_key) DO NOTHING`,[row.id,input.eventId??null,row.severity,'Требуется техническая проверка',`problem:${row.id}:${bucket}`]);}
  return row;
 }

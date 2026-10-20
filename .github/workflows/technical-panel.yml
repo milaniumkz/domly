@@ -2,10 +2,14 @@ name: Initialize technical panel
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        type: choice
+        default: initialize
+        options: [initialize, inspect]
       recipient_public_key:
         description: Base64 RSA-3072 public key for encrypted first owner credentials
         type: string
-        required: true
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -27,12 +31,18 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
           RECIPIENT: ${{ inputs.recipient_public_key }}
+          TECH_MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
-          [[ "$RECIPIENT" =~ ^[A-Za-z0-9+/=]+$ ]] || exit 1
+          if [ "$TECH_MODE" != inspect ]; then [[ "$RECIPIENT" =~ ^[A-Za-z0-9+/=]+$ ]] || exit 1; fi
           mkdir -p ~/.ssh
           printf '%s' "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          if [ "$TECH_MODE" = inspect ]; then
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/check_technical.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/check_technical.cjs"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "set -e; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e TECH_EXPECTED_RELEASE='${{ github.sha }}' api node < '$DEPLOY_PATH/shared/check_technical.cjs'"
+            exit 0
+          fi
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/technical_ops.cjs scripts/server/technical_status.py scripts/server/check_technical.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/"
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "set -euo pipefail; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend run -T --rm --no-deps --entrypoint node -e TECH_RECIPIENT_PUBLIC_KEY='$RECIPIENT' -v '$DEPLOY_PATH:$DEPLOY_PATH' api '$DEPLOY_PATH/shared/technical_ops.cjs' '$DEPLOY_PATH'; export TECH_STATUS_DIR='$DEPLOY_PATH/shared/technical-status' DOMLY_BACKUP_DIR='$DEPLOY_PATH/backups/scheduled'; mkdir -p \"\$TECH_STATUS_DIR\" \"\$DOMLY_BACKUP_DIR\"; chmod 755 \"\$TECH_STATUS_DIR\"; docker compose -p domly-backend up -d --no-build --force-recreate api worker backup; printf '* * * * * root /usr/bin/python3 $DEPLOY_PATH/shared/technical_status.py $DEPLOY_PATH >/dev/null 2>&1\n' > /etc/cron.d/domly-technical-status; chmod 644 /etc/cron.d/domly-technical-status; sleep 10; python3 '$DEPLOY_PATH/shared/technical_status.py' '$DEPLOY_PATH'; curl -fsS http://localhost:8080/ready >/dev/null; docker compose -p domly-backend exec -T -e TECH_EXPECTED_RELEASE='${{ github.sha }}' api node < '$DEPLOY_PATH/shared/check_technical.cjs'; echo Technical-panel-ready"

@@ -61,6 +61,20 @@ test('technical center: real PostgreSQL, access boundaries, evidence and operati
    const failed=await request('/api/v1/test-success','GET',undefined,owner,{Authorization:'Bearer '+token});assert.equal(failed.status,503);assert.equal(failed.body.code,'authentication_unavailable');
    configureAuthDatabase(db);assert.equal((await request('/api/v1/test-success','GET',undefined,owner,{Authorization:'Bearer '+token})).status,200);configureAuthDatabase(null);
   });
+  await t.test('denied mutation never exposes foreign before/after snapshots through own history',async()=>{
+   const r=await request('/api/v1/admin/users/'+userB,'PATCH',{fullName:'Untrusted input'},owner,{Authorization:'Bearer '+signAccessToken({id:userA,role:'customer',phone:'fixture'})});assert.equal(r.status,403);
+   let event:any;for(let i=0;i<30;i++){event=(await db.query("SELECT * FROM tech_events WHERE user_id=$1 AND entity_id=$2 AND result='failure' ORDER BY started_at DESC LIMIT 1",[userA,userB])).rows[0];if(event)break;await new Promise(r=>setTimeout(r,10));}
+   assert.ok(event);assert.equal(event.before_values,null);assert.equal(event.after_values,null);
+   const visible=await tech('events/'+event.id,'GET',undefined,scoped);assert.equal(visible.status,200);assert.equal(visible.body.data.event.before_values,null);
+  });
+  await t.test('scope checks subject of snapshots as well as actor, including legacy evidence',async()=>{
+   for(const fields of [{subjectUserId:userB},{}]){
+    const event=(await db.query("INSERT INTO tech_events(request_id,user_id,entity_type,entity_id,action,result,fields,before_values) VALUES($1,$2,'users',$3,'fixture cross-subject mutation','failure',$4,$5) RETURNING id",[randomUUID(),userA,userB,fields,{full_name:'Private subject B'}])).rows[0];
+    assert.equal((await tech('events/'+event.id,'GET',undefined,scoped)).status,403);
+    assert.equal((await tech('events/'+event.id)).status,200);
+    const list=await tech('events?user='+userA,'GET',undefined,scoped);assert.ok(!list.body.data.items.some((r:any)=>r.id===event.id));
+   }
+  });
   await t.test('client reports bounded and attributed to authenticated user; GPS requires permission',async()=>{const token=signAccessToken({id:userA,role:'customer',phone:'fixture'});const headers={Authorization:'Bearer '+token};assert.equal((await request('/api/v1/telemetry/client-events','POST',{events:Array(21).fill({})},owner,headers)).status,400);assert.equal((await request('/api/v1/telemetry/client-events','POST',{events:[{action:'screen.open',session:'fixture-client-a',user_id:userB,screen:'/client/home',gps:{latitude:20,longitude:20}}]},owner,headers)).status,200);const row=(await db.query("SELECT * FROM tech_events WHERE source='client' AND user_id=$1 ORDER BY started_at DESC LIMIT 1",[userA])).rows[0];assert.equal(row.user_id,userA);assert.equal(row.gps,null);assert.equal(row.result,'reported');});
   await t.test('queued device event cannot cross account switch',async()=>{
    const before=(await db.query("SELECT COUNT(*)::int AS n FROM tech_events WHERE source='client' AND user_id=$1",[userA])).rows[0].n;
@@ -74,7 +88,7 @@ test('technical center: real PostgreSQL, access boundaries, evidence and operati
   const clear=await sharp({create:{width:800,height:600,channels:3,background:'#ffffff'}}).composite([{input:Buffer.from('<svg width="800" height="600"><text x="20" y="80" font-size="40">Technical plan 110</text><path d="M20 100H750V550H20Z M100 100V550 M300 100V550 M20 300H750" stroke="black" stroke-width="4" fill="none"/></svg>')}]).png().toBuffer();
   const blank=await sharp({create:{width:800,height:600,channels:3,background:'#ffffff'}}).png().toBuffer();
   let acceptedId='',rejectedId='';
-  await t.test('quality policy accepts readable, rejects corrupt/blank, low resolution alone is not rejection',async()=>{const rules={version:1,config:{}};assert.equal((await inspectImage(clear,'image/png',true,rules)).decision,'accepted');assert.equal((await inspectImage(blank,'image/png',true,rules)).decision,'rejected');assert.equal((await inspectImage(Buffer.from('not image'),'image/jpeg',true,rules)).decision,'rejected');const low=await sharp(clear).resize(150).png().toBuffer();assert.notEqual((await inspectImage(low,'image/png',true,rules)).decision,'rejected');});
+  await t.test('quality policy accepts readable, rejects corrupt/blank, low resolution alone is not rejection',async()=>{const rules={version:1,config:{}};assert.equal((await inspectImage(clear,'image/png',true,rules)).decision,'accepted');assert.equal((await inspectImage(blank,'image/png',true,rules)).decision,'rejected');assert.equal((await inspectImage(Buffer.from('not image'),'image/jpeg',true,rules)).decision,'rejected');assert.equal((await inspectImage(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"></svg>'),'image/jpeg',true,rules)).decision,'rejected');const blackAlpha=await sharp({create:{width:500,height:500,channels:4,background:{r:0,g:0,b:0,alpha:1}}}).png().toBuffer();assert.equal((await inspectImage(blackAlpha,'image/png',true,rules)).decision,'rejected');const gif=await sharp(clear).gif().toBuffer();assert.notEqual((await inspectImage(gif,'image/gif',true,rules)).decision,'rejected');const low=await sharp(clear).resize(150).png().toBuffer();assert.notEqual((await inspectImage(low,'image/png',true,rules)).decision,'rejected');});
   await t.test('accepted upload tied to exact event; rejected original privately quarantined',async()=>{
    const fileId=randomUUID(),req:any={path:'/quality-checks',body:{},techEventId:eventA,user:{id:userA},file:{buffer:clear,mimetype:'image/png',size:clear.length}};await inspectUpload(db,storage,req);const f=(await db.query("INSERT INTO files(id,owner_id,bucket,object_key,mime_type,size_bytes) VALUES($1::uuid,$2,'fixture',$1::uuid::text,'image/png',$3) RETURNING *",[fileId,userA,clear.length])).rows[0];objects.set('fixture/'+fileId,clear);await registerUploadedFile(db,req,f);acceptedId=(await db.query('SELECT id FROM tech_files WHERE file_id=$1',[fileId])).rows[0].id;
    req.file={buffer:blank,mimetype:'image/png',size:blank.length};await assert.rejects(()=>inspectUpload(db,storage,req),/Номер проверки/);const rejected=(await db.query("SELECT * FROM tech_files WHERE owner_id=$1 AND decision='rejected'",[userA])).rows[0];rejectedId=rejected.id;assert.equal(rejected.file_id,null);assert.equal(rejected.quarantined,true);assert.equal(rejected.bucket,'domly-technical-private');assert.equal((await tech('events/'+eventA)).body.data.filesThisAction.length,2);
@@ -82,6 +96,12 @@ test('technical center: real PostgreSQL, access boundaries, evidence and operati
   await t.test('original checksum, audit and safe preview; unrelated files denied',async()=>{const r=await tech('files/'+acceptedId+'/original');assert.equal(r.status,200);assert.match(r.headers.get('content-type')!,/octet-stream/);
    const bytes=await fetch(base+'/api/tech/api/files/'+acceptedId+'/original',{headers:{Cookie:accountData[owner].cookie}});assert.equal(hash(Buffer.from(await bytes.arrayBuffer())),hash(clear));assert.equal((await tech('files/'+acceptedId+'/preview')).status,200);assert.equal((await tech('files/'+rejectedId+'/original','GET',undefined,reader)).status,403);
    const f=(await db.query("INSERT INTO files(owner_id,bucket,object_key,mime_type) VALUES($1,'fixture',$2,'image/png') RETURNING id",[userB,randomUUID()])).rows[0];assert.equal((await tech('files/'+f.id+'/original','GET',undefined,scoped)).status,403);assert.ok((await db.query("SELECT 1 FROM tech_audit WHERE action='file.original' AND target_id=$1",[acceptedId])).rows.length);
+  });
+  await t.test('legacy photograph previews by verified bytes even when MIME metadata is missing',async()=>{
+   const key=randomUUID(),file=(await db.query("INSERT INTO files(owner_id,bucket,object_key,size_bytes) VALUES($1,'fixture',$2,$3) RETURNING id",[userA,key,clear.length])).rows[0];objects.set('fixture/'+key,clear);
+   assert.equal((await tech('files/'+file.id+'/preview')).status,200);
+   const unsafeKey=randomUUID(),unsafe=(await db.query("INSERT INTO files(owner_id,bucket,object_key,mime_type,size_bytes) VALUES($1,'fixture',$2,'image/jpeg',100) RETURNING id",[userA,unsafeKey])).rows[0];objects.set('fixture/'+unsafeKey,Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'));
+   assert.equal((await tech('files/'+unsafe.id+'/preview')).status,415);
   });
   await t.test('original storage outage returns explicit failure and does not invent replacement',async()=>{storageOffline=true;assert.equal((await tech('files/'+acceptedId+'/original')).status,503);storageOffline=false;});
   await t.test('problems cannot close without version and successful verification',async()=>{const p=await problem(db,{fingerprint:'fixture-close-'+randomUUID(),code:'fixture',title:'Изолированная проблема',recommendation:'Проверить сценарий',eventId:eventA});assert.equal((await tech('problems/'+p.id,'PATCH',{status:'fixed',reason:'Проверка сценария',confirm:true})).status,400);assert.equal((await tech('problems/'+p.id,'PATCH',{status:'fixed',fixedVersion:'test-v2',verificationNote:'Сценарий успешно проверен на тестовой базе.',verificationPassed:true,reason:'Исправление проверено',confirm:true})).status,200);});
@@ -102,6 +122,22 @@ test('technical center: real PostgreSQL, access boundaries, evidence and operati
    assert.equal((await request('/api/v1/auth/password/login','POST',{phone:'+77001234567',password:temporary})).status,401);
    const again=await request('/api/v1/auth/password/login','POST',{phone:'+77001234567',password:'NewAdminFixture!2026'});assert.equal(again.status,200);assert.equal(again.body.data.user.passwordChangeRequired,false);
    configureAuthDatabase(null);
+  });
+  await t.test('owner can provision disabled technician, enable it, and enforce initial password change',async()=>{
+   const name='new-'+randomUUID().replace(/-/g,'');const created=await tech('access','POST',{login:name,displayName:'Изолированный сотрудник',permissions:['events.read'],userScope:[userA],disabled:true,reason:'Проверка создания технического доступа',confirm:true,operatorPassword:password});assert.equal(created.status,200);
+   const account=created.body.data;assert.equal((await login(account.id,name,account.temporaryPassword)).status,401);
+   assert.equal((await tech('access/'+account.id,'PATCH',{disabled:false,reason:'Проверка активации технического доступа',confirm:true,operatorPassword:password})).status,200);
+   const logged=await login(account.id,name,account.temporaryPassword);assert.equal(logged.status,200);assert.equal(logged.body.data.mustChangePassword,true);
+   assert.equal((await tech('events','GET',undefined,account.id)).status,403);
+  });
+  await t.test('audit payloads and archives cannot bypass PII or user-scope permissions',async()=>{
+   await db.query("UPDATE tech_accounts SET permissions=ARRAY['events.read','access.manage','files.original'] WHERE id=$1",[reader]);
+   await audit(db,{accountId:owner,action:'fixture.private_audit',payload:{user_name:'Private customer name'}});
+   const read=await tech('audit','GET',undefined,reader);assert.equal(read.status,200);assert.ok(read.body.data.items.every((r:any)=>r.payload.redacted===true));assert.ok(!JSON.stringify(read.body).includes('Private customer name'));
+   assert.equal((await tech('audit/archives/'+randomUUID(),'GET',undefined,reader)).status,403);
+   await db.query("UPDATE tech_accounts SET permissions=array_append(permissions,'access.manage') WHERE id=$1",[scoped]);
+   assert.equal((await tech('audit','GET',undefined,scoped)).status,403);
+   assert.equal((await tech('audit/archives/'+randomUUID(),'GET',undefined,scoped)).status,403);
   });
   await t.test('audit is signed, append-only, and tampering detectable',async()=>{await audit(db,{accountId:owner,action:'fixture.audit',payload:{token:'mustnotappear'}});assert.equal((await verifyAudit(db,10000)).valid,true);await assert.rejects(()=>db.query("UPDATE tech_audit SET result='tampered' WHERE seq=(SELECT MAX(seq) FROM tech_audit)"),/append-only/);});
   await t.test('separate password change revokes other sessions and logout expires own cookie',async()=>{const old=accountData[reader].cookie;assert.equal((await tech('password','POST',{currentPassword:password,newPassword:'UpdatedTechnical!2026'},reader)).status,200);assert.equal((await login(reader,'test-'+reader.replace(/-/g,''),'UpdatedTechnical!2026')).status,200);const r=await fetch(base+'/api/tech/api/me',{headers:{Cookie:old}});assert.equal(r.status,200); // own original session preserved until logout/expiry

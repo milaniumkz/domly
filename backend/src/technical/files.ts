@@ -9,9 +9,17 @@ import {readRules,problem,collectorFailure,sanitize} from './core';
 
 export const privateBucket=()=>process.env.TECH_PRIVATE_BUCKET??'domly-technical-private';
 export async function ensurePrivateBucket(storage:StorageService){const name=privateBucket();if(!await storage.client.bucketExists(name))await storage.client.makeBucket(name).catch(async(error)=>{if(!await storage.client.bucketExists(name))throw error;});await storage.client.setBucketPolicy(name,'');}
+export function rasterFormat(bytes:Buffer):string|null{
+ if(bytes.length>=3&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff)return 'jpeg';
+ if(bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))return 'png';
+ if(bytes.subarray(0,4).toString()==='RIFF'&&bytes.subarray(8,12).toString()==='WEBP')return 'webp';
+ if(/^GIF8[79]a$/.test(bytes.subarray(0,6).toString()))return 'gif';
+ if(bytes.subarray(4,8).toString()==='ftyp'&&['heic','heix','hevc','hevx','mif1','msf1','avif','avis'].includes(bytes.subarray(8,12).toString()))return 'heif';
+ return null;
+}
 export async function inspectImage(buffer:Buffer,mime:string,document:boolean,rules:any){
  const config=rules.config??{},version=rules.version??1;
- const base:any={algorithmVersion:'raster-quality-v1',rulesVersion:version,decision:'accepted',reason:'Формат проверен; автоматическая оценка не подтверждает подлинность содержания.',screenRecapture:{assessed:false,statement:'Нет достоверного заключения о пересъёмке экрана.'}};
+ const base:any={algorithmVersion:'raster-quality-v2',rulesVersion:version,decision:'accepted',reason:'Формат проверен; автоматическая оценка не подтверждает подлинность содержания.',screenRecapture:{assessed:false,statement:'Нет достоверного заключения о пересъёмке экрана.'}};
  if(buffer.length>50*1024*1024)return {...base,decision:'rejected',reason:'Размер файла превышает 50 МБ.'};
  const head=buffer.subarray(0,32);
  if(mime==='application/pdf'){
@@ -19,18 +27,20 @@ export async function inspectImage(buffer:Buffer,mime:string,document:boolean,ru
   if(/\/(JavaScript|JS|Launch|EmbeddedFile)\b/.test(buffer.toString('latin1')))return {...base,decision:'rejected',reason:'PDF содержит активные действия или вложенный исполняемый контент.'};
   return {...base,decision:'manual_review',reason:'PDF принят для ручной проверки читаемости и содержания. Антивирусная экспертиза не выполнялась.'};
  }
- if(!/^image\/(jpeg|png|webp|heic|heif)$/.test(mime))return {...base,decision:'rejected',reason:'Недопустимый формат: разрешены JPEG, PNG, WebP, HEIC/HEIF и PDF.'};
+ if(!/^image\/(jpeg|png|webp|gif|heic|heif)$/.test(mime))return {...base,decision:'rejected',reason:'Недопустимый формат: разрешены JPEG, PNG, WebP, GIF, HEIC/HEIF и PDF.'};
+ if(!rasterFormat(buffer))return {...base,decision:'rejected',reason:'Содержимое не соответствует разрешённому растровому изображению. SVG, HTML и исполняемые форматы не принимаются под видом фотографии.'};
  try{
   const meta=await sharp(buffer,{limitInputPixels:40000000}).metadata();
-  const {data,info}=await sharp(buffer,{limitInputPixels:40000000}).rotate().resize({width:512,height:512,fit:'inside',withoutEnlargement:true}).greyscale().raw().toBuffer({resolveWithObject:true});
+  const {data,info}=await sharp(buffer,{limitInputPixels:40000000}).rotate().resize({width:512,height:512,fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'}).greyscale().raw().toBuffer({resolveWithObject:true});
   let sum=0,sq=0,lap=0,lapSq=0,count=0,periodic=0;
   for(let i=0;i<data.length;i++){sum+=data[i];sq+=data[i]*data[i];}
   const stdDev=Math.sqrt(Math.max(0,sq/data.length-(sum/data.length)**2));
   for(let y=1;y<info.height-1;y++)for(let x=1;x<info.width-1;x++){const i=y*info.width+x;const v=4*data[i]-data[i-1]-data[i+1]-data[i-info.width]-data[i+info.width];lap+=v;lapSq+=v*v;count++;if(Math.abs(v)>100)periodic++;}
   const variance=count?Math.max(0,lapSq/count-(lap/count)**2):0;
-  Object.assign(base,{width:meta.width,height:meta.height,format:meta.format,stdDev:Math.round(stdDev*100)/100,laplacianVariance:Math.round(variance*100)/100,
+  Object.assign(base,{width:meta.width,height:meta.height,format:meta.format,frames:meta.pages??1,stdDev:Math.round(stdDev*100)/100,laplacianVariance:Math.round(variance*100)/100,
    lowResolution:Math.min(meta.width??0,meta.height??0)<300,
    screenRecapture:{assessed:true,heuristicScore:count?Math.round(periodic/count*1000)/1000:0,statement:'Плотность резких границ — слабая эвристика; не доказательство пересъёмки и не основание для обвинения.'}});
+  if(Number(meta.pages??1)>1)return {...base,decision:'manual_review',reason:'Анимированное изображение: принята ручная проверка всех кадров; превью показывает первый кадр.'};
   if(document&&(stdDev<Number(config.blankDocumentStdDev??1)||(variance<Number(config.blurReject??0.4)&&stdDev<5)))return {...base,decision:'rejected',reason:'На документе практически нет различимых деталей: однородное либо явно нечитаемое изображение. Нужен чёткий снимок.'};
   if(variance<Number(config.blurReview??12)||base.lowResolution)return {...base,decision:'manual_review',reason:base.lowResolution?'Небольшое разрешение: файл принят, читаемость проверит сотрудник. Само разрешение не является отказом.':'Возможна размытость: файл принят с отметкой для ручной проверки.'};
   return base;

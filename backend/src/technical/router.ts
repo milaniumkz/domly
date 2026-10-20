@@ -8,9 +8,9 @@ import {Database} from '../infrastructure/db/Database';
 import {StorageService} from '../modules/integrations';
 import {ApiError,asyncHandler,ok} from '../common/api';
 import {env} from '../common/env';
-import {Operator,permissions,need,can,scope,id,reason,audit,appendAudit,hash,randomToken,equal,sanitize,safeText,secretKey,readRules,verifyAudit,collectorFailure} from './core';
+import {Operator,permissions,need,can,scope,id,reason,audit,appendAudit,hash,randomToken,equal,sanitize,safeText,secretKey,readRules,verifyAudit,collectorFailure,technicalSubjectGuard,technicalEventSubject} from './core';
 import {runtimeStatus,validPush,cleanupTechnical} from './runtime';
-import {privateBucket} from './files';
+import {privateBucket,rasterFormat} from './files';
 
 export function technicalRouter(db:Database,storage:StorageService,redis?:{ping:()=>Promise<string>}){
  const router=Router(),assets=path.resolve(__dirname,'../../technical');
@@ -81,13 +81,16 @@ export function technicalRouter(db:Database,storage:StorageService,redis?:{ping:
   });ok(res,{changed:true});
  }));
  const reauth=async(req:Request,op:Operator)=>{const row=(await db.query('SELECT password_hash FROM tech_accounts WHERE id=$1',[op.id])).rows[0];if(!await bcrypt.compare(String(req.body.operatorPassword??''),row.password_hash))throw new ApiError(403,'reauth_failed','Повторно подтвердите свой технический пароль.');};
+ const globalScope=(op:Operator)=>{if(op.user_scope!==null)throw new ApiError(403,'tech_scope_denied','Для общего аудита и обслуживания всей системы требуется полная область доступа.');};
  const required=(permission:string)=>asyncHandler(async(_req,res,next)=>{need(opFor(res),permission);next();});
  router.get('/api/overview',required('events.read'),asyncHandler(async(_req,res)=>{ok(res,await runtimeStatus(db,storage,redis));}));
  function paging(req:Request){const limit=Math.max(1,Math.min(100,Number(req.query.limit)||40)),page=Math.max(1,Math.min(10000,Number(req.query.page)||1));return {limit,page,offset:(page-1)*limit};}
+ const subjectGuard=technicalSubjectGuard,eventSubject=technicalEventSubject;
+ function eventScope(op:Operator,row:any){scope(op,row.user_id);if(eventSubject(row))scope(op,eventSubject(row));}
  function eventFilters(req:Request,op:Operator){
   const clauses:string[]=['TRUE'],values:any[]=[];
   const add=(sql:string,value:any)=>{values.push(value);clauses.push(sql.replace('?',String(values.length)));};
-  if(op.user_scope)add('e.user_id=ANY($?::uuid[])',op.user_scope);
+  if(op.user_scope){add('e.user_id=ANY($?::uuid[])',op.user_scope);clauses.push(subjectGuard('$'+values.length));}
   if(req.query.user)add('e.user_id=$?::uuid',id(req.query.user));
   if(req.query.problem)add('e.problem_id=$?::uuid',id(req.query.problem));
   if(req.query.request)add('e.request_id=$?::uuid',id(req.query.request));
@@ -105,26 +108,27 @@ export function technicalRouter(db:Database,storage:StorageService,redis?:{ping:
   return {where:clauses.join(' AND '),values};
  }
  const present=(row:any,op:Operator)=>sanitize(row,can(op,'pii.read'));
+ const presentEvent=(row:any,op:Operator)=>{if(op.user_scope&&!eventSubject(row)&&(row.before_values||row.after_values))return present({...row,before_values:null,after_values:null,snapshotScopeNote:'Принадлежность старого снимка разрешённому пользователю не доказана; значения скрыты.'},op);return present(row,op);};
  router.get('/api/events',required('events.read'),asyncHandler(async(req,res)=>{
   const op=opFor(res),p=paging(req),f=eventFilters(req,op),asc=req.query.order==='asc';
   const rows=(await db.query(`SELECT e.* FROM tech_events e WHERE ${f.where} ORDER BY e.started_at ${asc?'ASC':'DESC'},e.id ${asc?'ASC':'DESC'} LIMIT $${f.values.length+1} OFFSET $${f.values.length+2}`,[...f.values,p.limit+1,p.offset])).rows;
-  ok(res,{items:rows.slice(0,p.limit).map(r=>present(r,op)),hasMore:rows.length>p.limit,page:p.page,scope:{user:req.query.user??null,session:req.query.session??null,operation:req.query.operation??null,request:req.query.request??null,object:req.query.object??null,organization:'Не применимо к Domly'},coverage:'Серверные события и сообщённые устройством действия после внедрения. Порядок — по времени регистрации сервером; время устройства сообщается отдельно и может отличаться. Пробелы не восстановлены; отсутствие продолжения не доказывает прекращение работы.'});
+  ok(res,{items:rows.slice(0,p.limit).map(r=>presentEvent(r,op)),hasMore:rows.length>p.limit,page:p.page,scope:{user:req.query.user??null,session:req.query.session??null,operation:req.query.operation??null,request:req.query.request??null,object:req.query.object??null,organization:'Не применимо к Domly'},coverage:'Серверные события и сообщённые устройством действия после внедрения. Порядок — по времени регистрации сервером; время устройства сообщается отдельно и может отличаться. Пробелы не восстановлены; отсутствие продолжения не доказывает прекращение работы.'});
  }));
  router.get('/api/events/:id',required('events.read'),asyncHandler(async(req,res)=>{
-  const op=opFor(res),row=(await db.query('SELECT * FROM tech_events WHERE id=$1',[id(req.params.id)])).rows[0];if(!row)throw new ApiError(404,'not_found','Событие не найдено.');scope(op,row.user_id);
+  const op=opFor(res),row=(await db.query('SELECT * FROM tech_events WHERE id=$1',[id(req.params.id)])).rows[0];if(!row)throw new ApiError(404,'not_found','Событие не найдено.');eventScope(op,row);
   const files=can(op,'files.preview')?(await db.query('SELECT id,file_id,owner_id,created_at,decision,reason,original_available FROM tech_files WHERE event_id=$1',[row.id])).rows:[];
   const referencedFiles=can(op,'files.preview')&&row.result==='success'&&/^[0-9a-f-]{36}$/i.test(row.fields?.fileId??'')?(await db.query('SELECT id,owner_id,mime_type,size_bytes,created_at FROM files WHERE id=$1 AND owner_id=$2',[row.fields.fileId,row.user_id])).rows:[];
-  const {signature,...raw}=row;ok(res,{event:present(row,op),signatureVerified:signature?eventSignature(raw)===signature:null,filesThisAction:files,referencedFilesThisAction:referencedFiles,otherMaterialsNote:'Связанные ниже текущие материалы объекта не являются файлами именно этого действия.'});
+  const {signature,...raw}=row;ok(res,{event:presentEvent(row,op),signatureVerified:signature?eventSignature(raw)===signature:null,filesThisAction:files,referencedFilesThisAction:referencedFiles,otherMaterialsNote:'Связанные ниже текущие материалы объекта не являются файлами именно этого действия.'});
  }));
  router.get('/api/problems',required('events.read'),asyncHandler(async(req,res)=>{
   const op=opFor(res),p=paging(req),values:any[]=[];let where='TRUE';
-  if(op.user_scope){values.push(op.user_scope);where+=' AND EXISTS(SELECT 1 FROM tech_events e WHERE e.problem_id=p.id AND e.user_id=ANY($1::uuid[]))';}
+  if(op.user_scope){values.push(op.user_scope);where+=' AND EXISTS(SELECT 1 FROM tech_events e WHERE e.problem_id=p.id AND e.user_id=ANY($1::uuid[]) AND '+subjectGuard('$1')+')';}
   for(const key of ['status','kind','severity'])if(req.query[key]){values.push(String(req.query[key]).slice(0,30));where+=` AND p.${key}=$${values.length}`;}
   if(req.query.q){values.push('%'+String(req.query.q).slice(0,100)+'%');where+=` AND p.title ILIKE $${values.length}`;}
   const rows=(await db.query(`SELECT p.*,(SELECT COUNT(DISTINCT user_id)::int FROM tech_events e WHERE e.problem_id=p.id) AS affected_users FROM tech_problems p WHERE ${where} ORDER BY p.last_seen DESC LIMIT $${values.length+1} OFFSET $${values.length+2}`,[...values,p.limit+1,p.offset])).rows;
   ok(res,{items:rows.slice(0,p.limit).map(r=>present(r,op)),hasMore:rows.length>p.limit,page:p.page});
  }));
- async function problemAccess(op:Operator,problemId:string){if(op.user_scope&&!(await db.query('SELECT 1 FROM tech_events WHERE problem_id=$1 AND user_id=ANY($2::uuid[]) LIMIT 1',[problemId,op.user_scope])).rows.length)throw new ApiError(403,'tech_scope_denied','Проблема вне области доступа.');}
+ async function problemAccess(op:Operator,problemId:string){if(op.user_scope&&!(await db.query('SELECT 1 FROM tech_events e WHERE problem_id=$1 AND user_id=ANY($2::uuid[]) AND '+subjectGuard('$2')+' LIMIT 1',[problemId,op.user_scope])).rows.length)throw new ApiError(403,'tech_scope_denied','Проблема вне области доступа.');}
  router.get('/api/problems/:id',required('events.read'),asyncHandler(async(req,res)=>{
   const op=opFor(res),problemId=id(req.params.id);await problemAccess(op,problemId);
   const row=(await db.query('SELECT * FROM tech_problems WHERE id=$1',[problemId])).rows[0];if(!row)throw new ApiError(404,'not_found','Проблема не найдена.');
@@ -204,9 +208,9 @@ export function technicalRouter(db:Database,storage:StorageService,redis?:{ping:
  }
  router.get('/api/files/:id/preview',required('files.preview'),asyncHandler(async(req,res)=>{
   const op=opFor(res);need(op,'pii.read');const row=await fileFor(op,id(req.params.id));
-  if(!String(row.mime_type).startsWith('image/'))throw new ApiError(415,'preview_unavailable','Встроенный просмотр доступен изображениям; документ скачивается отдельно по разрешению оригиналов.');
+
   await audit(db,{accountId:op.id,sessionId:op.session_id,action:'file.preview',targetType:'file',targetId:row.id,payload:{ownerId:row.owner_id}});
-  const bytes=await fileBytes(row);const image=await sharp(bytes,{limitInputPixels:40000000}).rotate().resize({width:1800,height:1800,fit:'inside',withoutEnlargement:true}).jpeg({quality:90}).toBuffer().catch(()=>{throw new ApiError(415,'preview_unavailable','Формат не поддерживает безопасное создание превью; запросите оригинал при наличии разрешения.');});res.type('image/jpeg').send(image);
+  const bytes=await fileBytes(row);if(!rasterFormat(bytes))throw new ApiError(415,'preview_unavailable','Содержимое не является поддерживаемым растровым изображением. Исходный файл доступен отдельно при наличии разрешения оригиналов.');const image=await sharp(bytes,{limitInputPixels:40000000}).rotate().resize({width:1800,height:1800,fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'}).jpeg({quality:90}).toBuffer().catch(()=>{throw new ApiError(415,'preview_unavailable','Формат не поддерживает безопасное создание превью; запросите оригинал при наличии разрешения.');});res.type('image/jpeg').send(image);
  }));
  router.get('/api/files/:id/original',required('files.original'),asyncHandler(async(req,res)=>{
   const op=opFor(res);need(op,'pii.read');const row=await fileFor(op,id(req.params.id));
@@ -242,15 +246,15 @@ export function technicalRouter(db:Database,storage:StorageService,redis?:{ping:
   await db.query(`INSERT INTO tech_push_subscriptions(account_id,endpoint_hash,subscription) VALUES($1,$2,$3) ON CONFLICT(endpoint_hash) DO UPDATE SET subscription=EXCLUDED.subscription,disabled=FALSE`,[op.id,endpointHash,{endpoint:s.endpoint,keys:{auth:s.keys.auth,p256dh:s.keys.p256dh}}]);ok(res,{saved:true});
  }));
  router.delete('/api/push',asyncHandler(async(_req,res)=>{await db.query('UPDATE tech_push_subscriptions SET disabled=TRUE WHERE account_id=$1',[opFor(res).id]);ok(res,{disabled:true});}));
- router.get('/api/operators',required('events.read'),asyncHandler(async(_req,res)=>{ok(res,(await db.query('SELECT id,login,display_name,owner,disabled FROM tech_accounts ORDER BY display_name')).rows);}));
- router.get('/api/access',required('access.manage'),asyncHandler(async(_req,res)=>{ok(res,{permissions,accounts:(await db.query('SELECT id,login,display_name,owner,permissions,user_scope,disabled,must_change_password FROM tech_accounts ORDER BY created_at')).rows});}));
+ router.get('/api/operators',required('events.read'),asyncHandler(async(_req,res)=>{ok(res,(await db.query('SELECT id,login,display_name,owner,disabled FROM tech_accounts ORDER BY display_name')).rows.map(row=>present(row,opFor(res))));}));
+ router.get('/api/access',required('access.manage'),asyncHandler(async(_req,res)=>{ok(res,{permissions,accounts:(await db.query('SELECT id,login,display_name,owner,permissions,user_scope,disabled,must_change_password FROM tech_accounts ORDER BY created_at')).rows.map(row=>present(row,opFor(res)))});}));
  router.post('/api/access',required('access.manage'),asyncHandler(async(req,res)=>{
   const op=opFor(res);if(!op.owner)throw new ApiError(403,'owner_required','Создавать технический доступ может владелец.');const r=reason(req.body);await reauth(req,op);
   const login=String(req.body.login??'').trim().toLowerCase();if(!/^[a-z0-9_.-]{3,40}$/.test(login))throw new ApiError(400,'invalid_login','Логин: 3–40 латинских букв, цифр, точек, дефисов.');
   const perms=Array.isArray(req.body.permissions)?req.body.permissions.filter((p:any)=>permissions.includes(p)):[];
-  const userScope=Array.isArray(req.body.userScope)?req.body.userScope.map(id):null;
+  const userScope=Array.isArray(req.body.userScope)?req.body.userScope.map(id):null;if(userScope&&userScope.length>200)throw new ApiError(400,'scope_too_large','Область доступа: максимум 200 пользователей; для общего доступа используйте NULL.');
   const temporary=randomBytes(18).toString('base64url'),passwordHash=await bcrypt.hash(temporary,12);
-  const account=await db.transaction(async tx=>{const row=(await tx.query('INSERT INTO tech_accounts(login,password_hash,display_name,permissions,user_scope) VALUES($1,$2,$3,$4,$5) RETURNING id,login',[login,passwordHash,safeText(req.body.displayName??login,100),perms,userScope])).rows[0];await appendAudit(tx,{accountId:op.id,sessionId:op.session_id,action:'technical.account_created',targetId:row.id,payload:{reason:r,permissions:perms,userScope}});return row;});
+  const account=await db.transaction(async tx=>{const row=(await tx.query('INSERT INTO tech_accounts(login,password_hash,display_name,permissions,user_scope,disabled) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,login',[login,passwordHash,safeText(req.body.displayName??login,100),perms,userScope,req.body.disabled===true])).rows[0];await appendAudit(tx,{accountId:op.id,sessionId:op.session_id,action:'technical.account_created',targetId:row.id,payload:{reason:r,permissions:perms,userScope,disabled:req.body.disabled===true}});return row;});
   ok(res,{...account,temporaryPassword:temporary,mustChangePassword:true});
  }));
  router.patch('/api/access/:id',required('access.manage'),asyncHandler(async(req,res)=>{
@@ -258,22 +262,26 @@ export function technicalRouter(db:Database,storage:StorageService,redis?:{ping:
   const row=(await db.query('SELECT * FROM tech_accounts WHERE id=$1',[accountId])).rows[0];if(!row)throw new ApiError(404,'not_found','Учётная запись не найдена.');if(row.owner)throw new ApiError(409,'owner_protected','Изменение владельца выполняется через защищённую серверную процедуру.');
   const perms=Array.isArray(req.body.permissions)?req.body.permissions.filter((p:any)=>permissions.includes(p)):row.permissions;
   const userScope=req.body.userScope===null?null:Array.isArray(req.body.userScope)?req.body.userScope.map(id):row.user_scope;
+  if(userScope&&userScope.length>200)throw new ApiError(400,'scope_too_large','Область доступа: максимум 200 пользователей.');
   const temporary=req.body.resetPassword===true?randomBytes(18).toString('base64url'):null;const pw=temporary?await bcrypt.hash(temporary,12):null;
   await db.transaction(async tx=>{await tx.query('UPDATE tech_accounts SET permissions=$2,user_scope=$3,disabled=$4,password_hash=COALESCE($5,password_hash),must_change_password=CASE WHEN $5 IS NULL THEN must_change_password ELSE TRUE END,updated_at=NOW() WHERE id=$1',[accountId,perms,userScope,req.body.disabled??row.disabled,pw]);await tx.query('UPDATE tech_sessions SET revoked_at=NOW() WHERE account_id=$1',[accountId]);await appendAudit(tx,{accountId:op.id,sessionId:op.session_id,action:'technical.account_changed',targetId:accountId,payload:{reason:r,permissions:perms,userScope,disabled:req.body.disabled??row.disabled,passwordReset:Boolean(temporary)}});});ok(res,{changed:true,...(temporary?{temporaryPassword:temporary}:{}),sessionsRevoked:true});
  }));
  router.get('/api/rules',required('rules.manage'),asyncHandler(async(_req,res)=>{ok(res,await readRules(db));}));
  router.patch('/api/rules',required('rules.manage'),asyncHandler(async(req,res)=>{
-  const op=opFor(res),r=reason(req.body);await reauth(req,op);const old=await readRules(db),config={...old.config};
+  const op=opFor(res),r=reason(req.body);globalScope(op);await reauth(req,op);const old=await readRules(db),config={...old.config};
   const ranges:Record<string,[number,number]>={geoDistanceKm:[5,20000],eventsDays:[1,365],quarantineDays:[1,90],auditDays:[30,3650],failedLoginThreshold:[3,100],deniedThreshold:[3,1000],massOperationThreshold:[20,10000],uploadThreshold:[3,1000],blankDocumentStdDev:[0,5],blurReject:[0,2],blurReview:[0,100]};
   for(const [key,v]of Object.entries(req.body.config??{})){const range=ranges[key],n=Number(v);if(!range||!Number.isFinite(n)||n<range[0]||n>range[1])throw new ApiError(400,'invalid_rule','Некорректное значение правила '+key);config[key]=n;}
   const row=await db.transaction(async tx=>{const updated=(await tx.query('UPDATE tech_rules SET version=version+1,config=$1,updated_at=NOW() WHERE id=1 RETURNING *',[config])).rows[0];await appendAudit(tx,{accountId:op.id,sessionId:op.session_id,action:'technical.rules_changed',payload:{reason:r,before:old,after:updated}});return updated;});ok(res,row);
  }));
- router.get('/api/audit',required('access.manage'),asyncHandler(async(req,res)=>{const p=paging(req);ok(res,{items:(await db.query('SELECT * FROM tech_audit ORDER BY seq DESC LIMIT $1 OFFSET $2',[p.limit,p.offset])).rows,verification:await verifyAudit(db,2000),archives:(await db.query('SELECT id,first_seq,last_seq,sha256,rows,created_at FROM tech_audit_archives ORDER BY last_seq DESC LIMIT 50')).rows});}));
+ router.get('/api/audit',required('access.manage'),asyncHandler(async(req,res)=>{
+  const op=opFor(res);globalScope(op);const p=paging(req),rows=(await db.query('SELECT * FROM tech_audit ORDER BY seq DESC LIMIT $1 OFFSET $2',[p.limit+1,p.offset])).rows;
+  ok(res,{items:rows.slice(0,p.limit).map(row=>can(op,'pii.read')?row:{...row,payload:{redacted:true,note:'Содержимое аудита требует pii.read; метаданные доступны.'}}),hasMore:rows.length>p.limit,page:p.page,verification:await verifyAudit(db,2000),archives:(await db.query('SELECT id,first_seq,last_seq,sha256,rows,created_at FROM tech_audit_archives ORDER BY last_seq DESC LIMIT 50')).rows});
+ }));
  router.get('/api/audit/archives/:id',required('access.manage'),asyncHandler(async(req,res)=>{
-  const op=opFor(res);need(op,'files.original');const row=(await db.query('SELECT * FROM tech_audit_archives WHERE id=$1',[id(req.params.id)])).rows[0];if(!row)throw new ApiError(404,'not_found','Архив не найден.');
+  const op=opFor(res);need(op,'files.original');need(op,'pii.read');globalScope(op);const row=(await db.query('SELECT * FROM tech_audit_archives WHERE id=$1',[id(req.params.id)])).rows[0];if(!row)throw new ApiError(404,'not_found','Архив не найден.');
   await audit(db,{accountId:op.id,sessionId:op.session_id,action:'audit.archive_downloaded',targetId:row.id});
   const bytes=await fileBytes({bucket:privateBucket(),object_key:row.object_key,original_available:true});if(hash(bytes)!==row.sha256)throw new ApiError(409,'checksum_mismatch','Не совпадает контрольная сумма архива.');res.type('application/gzip').attachment('technical-audit-'+row.first_seq+'-'+row.last_seq+'.ndjson.gz').send(bytes);
  }));
- router.post('/api/maintenance/retention',required('dangerous'),asyncHandler(async(req,res)=>{const op=opFor(res);reason(req.body);await reauth(req,op);await audit(db,{accountId:op.id,sessionId:op.session_id,action:'maintenance.retention_requested',payload:{reason:reason(req.body)}});await cleanupTechnical(db,storage);ok(res,{completed:true,scope:'Ограниченная порция очистки по действующей политике; не произвольная команда или SQL.'});}));
+ router.post('/api/maintenance/retention',required('dangerous'),asyncHandler(async(req,res)=>{const op=opFor(res);globalScope(op);reason(req.body);await reauth(req,op);await audit(db,{accountId:op.id,sessionId:op.session_id,action:'maintenance.retention_requested',payload:{reason:reason(req.body)}});await cleanupTechnical(db,storage);ok(res,{completed:true,scope:'Ограниченная порция очистки по действующей политике; не произвольная команда или SQL.'});}));
  return router;
 }

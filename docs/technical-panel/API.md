@@ -35,7 +35,7 @@
 | GET /rules | rules.manage; текущая версия порогов/хранения |
 | PATCH /rules | rules.manage; новая версия, проверка допустимых диапазонов |
 | GET /audit | access.manage; записи, граница проверки цепочки, архивы |
-| GET /audit/archives/:id | access.manage + files.original; checksum и аудит скачивания |
+| GET /audit/archives/:id | access.manage + files.original + pii.read и полная область; checksum и аудит скачивания |
 | POST /maintenance/retention | dangerous; только ограниченная очистка по политике |
 
 Общие списки: `page` 1–10000, `limit` 1–100. История: `q, user, from, to, request, session, operation, object, result, version, organization, order=asc`. Организации в Domly отсутствуют; несуществующая организация даёт пустой результат. Сеанс без user возвращает только события без установленного пользователя.
