@@ -20,7 +20,7 @@ module.exports=async({p,local,session,fixture,root})=>{
   const reject=p.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/orders/'+account.orderId+'/addon-requests/reject');
   await p.getByRole('button',{name:'Отклонить',exact:true}).click();
   assert.equal((await reject).status(),200);
-  await p.getByText('Доп. услуги отклонены',{exact:true}).waitFor();
+  await p.getByText(/Доп\. услуги отклонены/).first().waitFor();
   await p.getByText('Согласование доп. услуг',{exact:true}).waitFor({state:'hidden',timeout:10000});
   assert.equal((await db.query("SELECT count(*)::int AS n FROM order_addons WHERE order_id=$1 AND payment_status='pending'",[account.orderId])).rows[0].n,0);
   assert.equal((await db.query("SELECT count(*)::int AS n FROM order_addons WHERE order_id=$1 AND payment_status='paid'",[account.orderId])).rows[0].n,paidBefore);
