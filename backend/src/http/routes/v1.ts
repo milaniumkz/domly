@@ -2062,6 +2062,11 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/orders/:id/addon-requests/reject', auth(['customer', 'admin', 'superadmin']), asyncHandler(async (req, res) => {
+    const order = first((await deps.db.query(
+      'SELECT id FROM service_orders WHERE id=$1 AND ($2::boolean OR customer_id=$3)',
+      [req.params.id, ['admin', 'superadmin'].includes(req.user!.role), req.user!.id],
+    )).rows);
+    if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
     await deps.db.query(`DELETE FROM order_addons WHERE order_id=$1 AND payment_status='pending'`, [req.params.id]);
     ok(res, { requestId: req.params.id, rejected: true });
   }));

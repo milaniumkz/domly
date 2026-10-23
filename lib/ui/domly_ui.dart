@@ -123,7 +123,9 @@ void showDomlySnackBar(
       : title;
   final normalizedSubtitle = type == DomlySnackBarType.error
       ? UserErrorMessage.message(
-          '$title ${subtitle ?? ''}',
+          UserErrorMessage.isAuthError('$title ${subtitle ?? ''}')
+              ? '$title ${subtitle ?? ''}'
+              : subtitle,
           fallback: subtitle ?? 'Попробуйте ещё раз.',
         )
       : subtitle;
