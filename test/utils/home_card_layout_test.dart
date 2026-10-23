@@ -25,10 +25,14 @@ void main() {
         )))),
       )));
       await tester.pumpAndSettle();
-      for (final source in ['Выберите дату и время', 'Исполнитель после выбора даты']) {
+      for (final source in ['Выберите дату и время', 'Исполнитель после выбора даты', 'Разовая уборка']) {
         final text = find.text(source.tr());
         expect(text, findsOneWidget);
         expect(tester.renderObject<RenderParagraph>(text).didExceedMaxLines, isFalse);
+      }
+      if (locale == 'kk') {
+        expect(find.text('Қал.: 4'), findsOneWidget);
+        expect(find.text('Пайд.: 0'), findsOneWidget);
       }
       expect(tester.takeException(), isNull);
     });

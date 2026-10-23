@@ -5296,9 +5296,7 @@ class CustomerNextCleaningCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 1),
                           Text(
-                            planName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            planName.tr(),
                             style: TextStyle(
                               color: DomlyPalette.foreground(Color(0xFF658170)),
                               fontSize: 13,
@@ -5616,7 +5614,7 @@ class _FigmaUsagePill extends StatelessWidget {
               SizedBox(width: isCompact ? 4 : 7),
               Flexible(
                 child: Text(
-                  isCompact ? (compactText ?? text) : text,
+                  (isCompact ? (compactText ?? text) : text).tr(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,

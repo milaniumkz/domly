@@ -583,7 +583,7 @@ class _DomlyBottomNavBar extends StatelessWidget {
           child: SizedBox(
             width: double.infinity,
             child: Container(
-              height: 66,
+              height: math.max(66, 20 + MediaQuery.textScalerOf(context).scale(19) + MediaQuery.textScalerOf(context).scale(10) * 2.4),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
               decoration: BoxDecoration(
                 color:
@@ -642,10 +642,11 @@ class _DomlyBottomNavBar extends StatelessWidget {
                                       const SizedBox(height: 4),
                                       Text(
                                         item.label.tr(),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 2,
+                                        textAlign: TextAlign.center,
                                         style: TextStyle(
                                           fontSize: items.length >= 5 ? 9 : 10,
+                                          height: 1.2,
                                           fontWeight: selected
                                               ? FontWeight.w700
                                               : FontWeight.w500,
