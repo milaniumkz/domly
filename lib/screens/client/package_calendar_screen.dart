@@ -619,7 +619,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                               : 'Подтвердить выбранные даты',
                           isLoading: _submitting,
                           onPressed: _submitting ||
-                                  (effectiveRequiredSelections == 0 ||
+                                  effectiveRequiredSelections == 0 ||
                                   _selectedTimes.isEmpty ||
                                   _selectedTimes.length >
                                       effectiveRequiredSelections
