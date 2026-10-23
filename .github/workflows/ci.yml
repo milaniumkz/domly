@@ -40,7 +40,9 @@ jobs:
     - name: Mandatory real PostgreSQL integration tests
       run: |
         test -n "$DOMLY_INTEGRATION_DATABASE_URL"
-        node --test dist/tests/admin-integration.test.js dist/tests/catalog-migration.test.js dist/tests/mobile-integration.test.js dist/tests/technical-integration.test.js dist/tests/customer-progress.test.js dist/tests/slot-counts.test.js dist/tests/bonus-atomicity.test.js
+        # Scheduler tests inspect all approved cleaners; test files share one DB.
+        # Keep files isolated in time; explicit concurrency regressions still run.
+        node --test --test-concurrency=1 dist/tests/admin-integration.test.js dist/tests/catalog-migration.test.js dist/tests/mobile-integration.test.js dist/tests/technical-integration.test.js dist/tests/customer-progress.test.js dist/tests/slot-counts.test.js dist/tests/bonus-atomicity.test.js
   backend-unit:
     runs-on: ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && (github.ref == 'refs/heads/main'
       || github.ref == 'refs/heads/codex/full-ci-pilot') && fromJSON('["milanium-mac-arm64",
