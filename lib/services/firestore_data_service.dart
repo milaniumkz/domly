@@ -2544,15 +2544,19 @@ class FirestoreDataService {
     });
   }
 
-  Stream<int> userUnreadActivityCountStream() {
+  Stream<int> userUnreadNotificationCountStream() {
     final recipientId = _uidOrNull;
-    final notificationsStream = _useDebugFixtures ||
+    return _useDebugFixtures ||
             _isTemporaryCustomerSession || _isTemporaryCleanerSession
         ? userNotificationsStream().map((items) => items.where((item) => item['read'] != true).length)
         : recipientId == null
             ? Stream<int>.value(0)
             : notificationCountStream(BackendApiService.instance,
                 isCurrentUser: () => _uidOrNull == recipientId);
+  }
+
+  Stream<int> userUnreadActivityCountStream() {
+    final notificationsStream = userUnreadNotificationCountStream();
     final chatsStream = userChatSummariesStream();
     return Stream.multi((controller) {
       var unreadNotifications = 0;

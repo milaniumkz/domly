@@ -28,7 +28,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
   late final Stream<List<Map<String, dynamic>>> _scheduleSlotsStream;
   late final Stream<List<Map<String, dynamic>>> _offersStream;
   late final Stream<List<Map<String, dynamic>>> _ordersStream;
-  late final Stream<List<Map<String, dynamic>>> _notificationsStream;
+  late final Stream<int> _notificationsStream;
   late final Stream<List<Map<String, dynamic>>> _chatSummariesStream;
   bool _initialTabApplied = false;
   final Set<String> _acceptingOfferIds = <String>{};
@@ -45,7 +45,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     _scheduleSlotsStream = _data.cleanerScheduleSlotsStream();
     _offersStream = _data.cleanerOrderOffersStream().asBroadcastStream();
     _ordersStream = _data.cleanerOrdersStream();
-    _notificationsStream = _data.userNotificationsStream();
+    _notificationsStream = _data.userUnreadNotificationCountStream();
     _chatSummariesStream = _data.userChatSummariesStream();
   }
 
@@ -583,13 +583,11 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
   }
 
   Widget _notificationsActionButton() {
-    return StreamBuilder<List<Map<String, dynamic>>>(
+    return StreamBuilder<int>(
       stream: _notificationsStream,
-      initialData: const <Map<String, dynamic>>[],
+      initialData: 0,
       builder: (context, notificationsSnap) {
-        final unreadCount = (notificationsSnap.data ?? const [])
-            .where((item) => item['read'] != true)
-            .length;
+        final unreadCount = notificationsSnap.data ?? 0;
         return domlyTopBadgeIconButton(
           icon: Icons.notifications_none,
           badgeCount: unreadCount,
