@@ -13,6 +13,11 @@ export class WapiOtpService {
     if (!otpDeliveryReady()) throw new ApiError(503, 'integration_error', 'Сервис отправки кодов не настроен.');
     try {
       if (env.otpProvider==='greenapi') {
+        // Green API can enqueue messages while WhatsApp is disconnected.
+        const stateResponse=await fetch(`https://7700.api.greenapi.com/waInstance${env.greenApiInstanceId}/getStateInstance/${env.greenApiToken}`,{signal:AbortSignal.timeout(5000)});
+        if(!stateResponse.ok)throw new Error('delivery_unavailable');
+        const state=await stateResponse.json() as {stateInstance?:unknown};
+        if(state.stateInstance!=='authorized')throw new Error('delivery_unavailable');
         const response=await fetch(`https://7700.api.greenapi.com/waInstance${env.greenApiInstanceId}/sendMessage/${env.greenApiToken}`,{
           method:'POST',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json'},
           body:JSON.stringify({chatId:phone.replace(/^\+/,'')+'@c.us',message:`DOMLY код подтверждения: ${code}`}),
