@@ -30,6 +30,41 @@ class AddressSuggestion {
     this.searchText = '',
   });
 
+  factory AddressSuggestion.fromBackend(Map<String, dynamic> row) {
+    double? number(dynamic value) => double.tryParse('$value');
+    final street = (row['street'] ?? '').toString();
+    final house = (row['house'] ?? '').toString();
+    final address = [street, house].where((part) => part.isNotEmpty).join(' ');
+    final complex =
+        (row['residentialComplex'] ?? row['residential_complex_ru'] ?? '')
+            .toString()
+            .trim();
+    return AddressSuggestion(
+        title: complex.isNotEmpty
+            ? complex
+            : address.isEmpty
+                ? (row['label'] ?? '').toString()
+                : address,
+        subtitle: complex.isNotEmpty
+            ? [address, row['city']]
+                .where((v) => v != null && v.toString().isNotEmpty)
+                .join(', ')
+            : (row['city'] ?? '').toString(),
+        addressLine: address,
+        street: street,
+        house: house,
+        placeId: (row['id'] ?? '${row['source']}:${row['lat']},${row['lng']}')
+            .toString(),
+        residentialComplex: complex,
+        isResidentialComplex: complex.isNotEmpty,
+        city: (row['city'] ?? '').toString(),
+        lat: number(row['lat']),
+        lng: number(row['lng']),
+        distanceMeters: number(row['distanceKm']) == null
+            ? null
+            : (number(row['distanceKm'])! * 1000).round());
+  }
+
   final String title;
   final String subtitle;
   final String placeId;
@@ -65,28 +100,6 @@ class AddressSearchService {
     return rows.map((row) => (row['name_ru'] ?? '').toString()).toList();
   }
 
-  AddressSuggestion _map(Map<String, dynamic> row) {
-    double? number(dynamic value) => double.tryParse('$value');
-    final street = (row['street'] ?? '').toString();
-    final house = (row['house'] ?? '').toString();
-    final address = [street, house].where((part) => part.isNotEmpty).join(' ');
-    return AddressSuggestion(
-        title: address.isEmpty ? (row['label'] ?? '').toString() : address,
-        subtitle: (row['city'] ?? '').toString(),
-        addressLine: address,
-        street: street,
-        house: house,
-        placeId: (row['id'] ?? '${row['source']}:${row['lat']},${row['lng']}')
-            .toString(),
-        residentialComplex: (row['residentialComplex'] ?? '').toString(),
-        city: (row['city'] ?? '').toString(),
-        lat: number(row['lat']),
-        lng: number(row['lng']),
-        distanceMeters: number(row['distanceKm']) == null
-            ? null
-            : (number(row['distanceKm'])! * 1000).round());
-  }
-
   Future<List<AddressSuggestion>> search(String query,
       {AddressSearchBias? bias, String city = ''}) async {
     if (query.trim().length < 2) return [];
@@ -101,7 +114,8 @@ class AddressSearchService {
     });
     return (data['suggestions'] as List? ?? [])
         .whereType<Map>()
-        .map((row) => _map(Map<String, dynamic>.from(row)))
+        .map((row) =>
+            AddressSuggestion.fromBackend(Map<String, dynamic>.from(row)))
         .toList();
   }
 
@@ -113,7 +127,9 @@ class AddressSearchService {
       'lang': TranslationController.active?.localeCode ?? 'ru'
     });
     final row = data['suggestion'];
-    return row is Map ? _map(Map<String, dynamic>.from(row)) : null;
+    return row is Map
+        ? AddressSuggestion.fromBackend(Map<String, dynamic>.from(row))
+        : null;
   }
 
   Future<AddressSuggestion> withResolvedCoordinates(

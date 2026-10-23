@@ -459,6 +459,8 @@ class FirestoreDataService {
       'house': item['house'],
       'address': address,
       'addressLine': address,
+      if ((item['residential_complex'] ?? '').toString().trim().isNotEmpty)
+        'residentialComplex': item['residential_complex'],
       'apartment': item['apartment'],
       'entrance': item['entrance'],
       'floor': item['floor'],
@@ -3515,6 +3517,8 @@ class FirestoreDataService {
     final payload = <String, dynamic>{
       'city': address['city'] ?? data['city'] ?? 'Астана',
       'settlement': address['settlement'],
+      'residentialComplex':
+          address['residentialComplex'] ?? data['residentialComplex'],
       'street': parsed['street'],
       'house': parsed['house'],
       'apartment': address['apartment'] ?? data['apartment'],

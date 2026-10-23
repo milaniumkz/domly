@@ -58,15 +58,19 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       assert.equal(current.json.data.darkMode,true);
       assert.equal(current.json.data.animations,false);
       assert.equal(current.json.data.tutorialCompleted_customer,true);
-      const address=await request('/addresses','POST',{city:'Астана',street:'Тәуелсіздік',house:'29/2',area:100},true);
+      const address=await request('/addresses','POST',{city:'Астана',street:'Тәуелсіздік',house:'29/2',area:100,residentialComplex:'ЖК Тестовый'},true);
       assert.equal(address.status,201);
+      assert.equal(address.json.data.residential_complex,'ЖК Тестовый');
+      const edited=await request('/addresses/'+address.json.data.id,'PATCH',{city:'Астана',street:'Тәуелсіздік',house:'29/2',area:110,residentialComplex:'ЖК Новый'},true);
+      assert.equal(edited.status,200);
+      assert.equal(edited.json.data.residential_complex,'ЖК Новый');
       const addresses=await request('/addresses','GET',undefined,true);
-      assert.ok(addresses.json.data.some((item:any)=>item.id===address.json.data.id && item.house==='29/2' && item.service_available===true));
+      assert.ok(addresses.json.data.some((item:any)=>item.id===address.json.data.id && item.house==='29/2' && item.service_available===true && item.residential_complex==='ЖК Новый'));
     });
     await t.test('Russian and Kazakh searches find the same Astana address in the chosen language', async () => {
       const id=randomUUID(), house='29/2-'+id.slice(0,6);
-      await db.query("INSERT INTO connected_houses(id,city,street_ru,street_kk,house,active) VALUES($1,'Астана','Тауелсиздик','Тәуелсіздік',$2,FALSE)",[id,house]);
-      for(const [search,lang,street] of [['тауелсиздык','ru','Тауелсиздик'],['Тәуелсіздік','kk','Тәуелсіздік']]) {
+      await db.query("INSERT INTO connected_houses(id,city,street_ru,street_kk,house,active,residential_complex_ru,residential_complex_kk) VALUES($1,'Астана','Тауелсиздик','Тәуелсіздік',$2,FALSE,'ЖК Проверочный '||$2,'Тексеру '||$2)",[id,house]);
+      for(const [search,lang,street] of [['тауелсиздык','ru','Тауелсиздик'],['Тәуелсіздік','kk','Тәуелсіздік'],['Проверочный','ru','Тауелсиздик'],['Тексеру','kk','Тәуелсіздік']]) {
         const result=await request('/geo/address-suggestions?city='+encodeURIComponent('Астана')+'&search='+encodeURIComponent(search+' '+house)+'&lang='+lang);
         assert.equal(result.status,200);
         assert.equal(result.json.data.suggestions.find((row:any)=>row.id===id)?.street,street);

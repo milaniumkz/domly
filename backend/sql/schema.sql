@@ -354,6 +354,8 @@ CREATE TABLE IF NOT EXISTS customer_addresses (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE customer_addresses ADD COLUMN IF NOT EXISTS residential_complex TEXT;
+
 CREATE TABLE IF NOT EXISTS cleaner_profiles (
   user_id UUID PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
   city TEXT NOT NULL DEFAULT 'Астана',

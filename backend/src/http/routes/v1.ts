@@ -164,6 +164,7 @@ export function buildV1Router(deps: {
     return {
       city,
       settlement: cleanText(body.settlement),
+      residentialComplex: cleanText(body.residentialComplex),
       street,
       house,
       apartment: cleanText(body.apartment),
@@ -679,8 +680,8 @@ export function buildV1Router(deps: {
     const address = addressPayload(req.body ?? {});
     const row = first((await deps.db.query(
       `INSERT INTO customer_addresses
-       (user_id, city, settlement, street, house, apartment, entrance, floor, intercom, access_comment, area, latitude, longitude, is_primary)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,TRUE)
+       (user_id, city, settlement, street, house, apartment, entrance, floor, intercom, access_comment, area, latitude, longitude, residential_complex, is_primary)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,TRUE)
        RETURNING *`,
       [
         req.user!.id,
@@ -696,6 +697,7 @@ export function buildV1Router(deps: {
         address.area,
         address.latitude,
         address.longitude,
+        address.residentialComplex,
       ],
     )).rows);
     ok(res, row, 201);
@@ -715,7 +717,7 @@ export function buildV1Router(deps: {
        city=COALESCE($3,city), settlement=COALESCE($4,settlement), street=COALESCE($5,street), house=COALESCE($6,house),
        apartment=COALESCE($7,apartment), entrance=COALESCE($8,entrance), floor=COALESCE($9,floor),
        intercom=COALESCE($10,intercom), access_comment=COALESCE($11,access_comment),
-       area=COALESCE($12,area), latitude=COALESCE($13,latitude), longitude=COALESCE($14,longitude), updated_at=NOW()
+       area=COALESCE($12,area), latitude=COALESCE($13,latitude), longitude=COALESCE($14,longitude), residential_complex=COALESCE($15,residential_complex), updated_at=NOW()
        WHERE id=$1 AND user_id=$2 RETURNING *`,
       [
         req.params.id,
@@ -732,6 +734,7 @@ export function buildV1Router(deps: {
         address.area,
         address.latitude,
         address.longitude,
+        address.residentialComplex,
       ],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Адрес не найден.');

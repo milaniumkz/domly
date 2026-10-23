@@ -1,7 +1,31 @@
+import 'package:domly/services/address_search_service.dart';
 import 'package:domly/utils/address_payload.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('complex selection saves the building address, not the complex name',
+      () {
+    for (final complex in ['ЖК Тестовый', 'Тексеру тұрғын үй кешені']) {
+      final suggestion = AddressSuggestion.fromBackend({
+        'id': 'building-id',
+        'city': 'Астана',
+        'residentialComplex': complex,
+        'street': 'Тәуелсіздік',
+        'house': '29/2'
+      });
+      expect(suggestion.title, complex);
+      expect(suggestion.fullText, contains('29/2'));
+      expect(suggestion.selectionText, complex);
+      expect(
+          streetAndHouse({
+            'street': suggestion.street,
+            'house': suggestion.house,
+            'address': suggestion.addressText
+          }),
+          {'street': 'Тәуелсіздік', 'house': '29/2'});
+      expect(suggestion.placeId, 'building-id');
+    }
+  });
   test('structured suggestions preserve street and compound house', () {
     expect(
         streetAndHouse({

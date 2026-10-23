@@ -899,6 +899,8 @@ class ProfileScreen extends StatelessWidget {
           placeId: (house['id'] ?? '').toString(),
           residentialComplex: residential,
           addressLine: address,
+          street: (house['street_ru'] ?? house['street'] ?? '').toString(),
+          house: (house['house'] ?? '').toString(),
           isResidentialComplex: residential.isNotEmpty,
           lat: _readDouble(house['lat']),
           lng: _readDouble(house['lng']),
@@ -1137,6 +1139,8 @@ class ProfileScreen extends StatelessWidget {
                                 return;
                               }
                               setModalState(() {
+                                addressOptions = mergeAddressSuggestions(
+                                    remoteItems, addressOptions);
                                 filteredAddressOptions =
                                     mergeAddressSuggestions(
                                   localItems,
@@ -1220,6 +1224,8 @@ class ProfileScreen extends StatelessWidget {
                                         ),
                                   onTap: () {
                                     setModalState(() {
+                                      ++addressLookupRequestId;
+                                      addressLookupLoading = false;
                                       selectedAddress = item;
                                       residentialController.text =
                                           item.fullText;
@@ -1396,8 +1402,14 @@ class ProfileScreen extends StatelessWidget {
                               final addressUnchanged =
                                   residential == initialResidentialText;
                               if (address == null &&
-                                  existingHouseId.isNotEmpty &&
-                                  addressUnchanged) {
+                                  addressUnchanged &&
+                                  (existingHouseId.isNotEmpty ||
+                                      ((profile['street'] ?? '')
+                                              .toString()
+                                              .isNotEmpty &&
+                                          (profile['house'] ?? '')
+                                              .toString()
+                                              .isNotEmpty))) {
                                 address = AddressSuggestion(
                                   title: (profile['residentialComplex'] ??
                                           profile['address'] ??
@@ -1406,6 +1418,8 @@ class ProfileScreen extends StatelessWidget {
                                   subtitle:
                                       (profile['address'] ?? '').toString(),
                                   placeId: existingHouseId,
+                                  street: (profile['street'] ?? '').toString(),
+                                  house: (profile['house'] ?? '').toString(),
                                   residentialComplex:
                                       (profile['residentialComplex'] ??
                                               residential)
