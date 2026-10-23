@@ -259,7 +259,7 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(uploaded ? 'Файл загружен' : 'Файл не загружен'),
+                  Text((uploaded ? 'Файл загружен' : 'Файл не загружен').tr()),
                 ],
               ),
             ),

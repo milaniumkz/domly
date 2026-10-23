@@ -1,8 +1,23 @@
+import 'package:flutter/widgets.dart';
+import 'package:domly/app/route_parameters.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:domly/app/domly_links.dart';
 import 'package:domly/app/app_flavor.dart';
 
 void main() {
+  test('protected detail routes retain IDs when query is removed from the path',
+      () {
+    final target = routeWithQueryArguments(
+        const RouteSettings(name: '/cleaner/checklist?orderId=visit-42'));
+    expect(target.name, '/cleaner/checklist');
+    expect(target.arguments, {'orderId': 'visit-42'});
+    final explicit = routeWithQueryArguments(const RouteSettings(
+        name: '/chat?orderId=old', arguments: {'orderId': 'current'}));
+    expect(explicit.arguments, {'orderId': 'current'});
+    final basic = const RouteSettings(name: '/client/home');
+    expect(routeWithQueryArguments(basic), same(basic));
+  });
+
   test('customer and Pro links open only the matching application', () {
     expect(DomlyLinks.route(Uri.parse(DomlyLinks.customer), AppFlavor.customer),
         '/client/home');

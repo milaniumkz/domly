@@ -389,7 +389,8 @@ class FirestoreDataService {
       stablePollingStream(loader,
           interval: interval, refresh: BackendApiService.instance.dataRevision);
 
-  Stream<Map<String, dynamic>?> customerProfileStream() {
+  Stream<Map<String, dynamic>?> customerProfileStream(
+      {bool waitForSession = false}) {
     if (_isDebugCustomer) {
       return _debugSharedCustomerProfileStream();
     }
@@ -397,7 +398,7 @@ class FirestoreDataService {
       return _debugSnapshotStream(_temporaryCustomerProfile);
     }
     final uid = _uidOrNull;
-    if (uid == null) {
+    if (uid == null && !waitForSession) {
       return Stream.value(null);
     }
     return _backendPollingStream(_loadBackendCustomerProfile);
@@ -563,8 +564,11 @@ class FirestoreDataService {
     return {
       'id': item['id'],
       'orderId': item['id'],
+      'customerPackageId': item['customer_package_id'],
+      'subscriptionId': item['customer_package_id'],
+      'packageId': item['package_id'],
+      'addressId': item['address_id'],
       if (item['view_kind'] == 'package_purchase') ...{
-        'subscriptionId': item['customer_package_id'],
         'type': 'package_purchase',
       },
       'addonsDetailed': item['addons'] ?? const [],
@@ -9357,7 +9361,7 @@ class FirestoreDataService {
       'userId': userId ?? _uidOrNull,
       'actualArea': actualArea,
       'areaVerified': false,
-      'pendingReview': true,
+      'pendingReview': request['document_file_id'] != null,
       'bonusAwarded': false,
       'bonusAmount': 0,
       'reportId': request['id'],

@@ -114,9 +114,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              hasExistingReview
-                                  ? 'Ваш отзыв сохранен и уже учтен в системе.'
-                                  : 'Оцените уборщицу и оставьте отзыв о визите',
+                              (hasExistingReview
+                                      ? 'Ваш отзыв сохранен и уже учтен в системе.'
+                                      : 'Оцените уборщицу и оставьте отзыв о визите')
+                                  .tr(),
                               style: TextStyle(
                                 fontSize: 12,
                                 color:
@@ -200,9 +201,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  _rating < 3
-                                      ? 'Если оценка ниже 3 звезд, отметьте причины.'
-                                      : 'Отметьте сильные стороны уборщицы.',
+                                  (_rating < 3
+                                          ? 'Если оценка ниже 3 звезд, отметьте причины.'
+                                          : 'Отметьте сильные стороны уборщицы.')
+                                      .tr(),
                                   style: TextStyle(
                                     color: DomlyPalette.foreground(
                                         DomlyColors.muted),

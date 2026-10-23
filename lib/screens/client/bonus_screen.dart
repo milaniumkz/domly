@@ -650,7 +650,7 @@ class _InvitedByCard extends StatelessWidget {
           ),
           const SizedBox(height: 11),
           Text(
-            hasCode ? 'Код указан' : 'Код не указан',
+            (hasCode ? 'Код указан' : 'Код не указан').tr(),
             style: TextStyle(
               color: DomlyPalette.foreground(_BonusScreenState._muted),
               fontSize: 12,

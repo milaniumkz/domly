@@ -1,3 +1,4 @@
+import '../../localization/translation_controller.dart';
 import 'package:flutter/material.dart';
 import '../../services/firestore_data_service.dart';
 import '../../services/payment_link_service.dart';
@@ -71,9 +72,10 @@ class _OrderPaymentRetryState extends State<OrderPaymentRetry> {
       return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 12),
-      Text(status == 'pending'
-          ? 'Оплата не завершена. Выберите способ оплаты.'
-          : 'Счёт отменён или произошла ошибка оплаты. Заказ сохранён. Вы можете выбрать другой способ оплаты.'),
+      Text((status == 'pending'
+              ? 'Оплата не завершена. Выберите способ оплаты.'
+              : 'Счёт отменён или произошла ошибка оплаты. Заказ сохранён. Вы можете выбрать другой способ оплаты.')
+          .tr()),
       const SizedBox(height: 8),
       DomlyPrimaryButton(
           label: 'Попробовать снова',

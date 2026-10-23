@@ -984,106 +984,115 @@ class _DomlyPrimaryButtonState extends State<DomlyPrimaryButton> {
 
     final showLoading = widget.isLoading || _isPending;
     final enabled = widget.onPressed != null && !showLoading;
-    return SizedBox(
-      width: double.infinity,
-      child: AnimatedScale(
-        scale: _isPressed && enabled ? 0.985 : 1,
-        duration: UiPreferences.instance.animations
-            ? const Duration(milliseconds: 110)
-            : Duration.zero,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: enabled ? _handlePressed : null,
-          onTapDown: enabled ? (_) => setState(() => _isPressed = true) : null,
-          onTapUp: enabled ? (_) => setState(() => _isPressed = false) : null,
-          onTapCancel:
-              enabled ? () => setState(() => _isPressed = false) : null,
-          child: Material(
-            color: DomlyPalette.surface(Colors.transparent),
-            borderRadius: BorderRadius.circular(16),
-            child: Ink(
-              decoration: BoxDecoration(
-                gradient: enabled
-                    ? LinearGradient(
-                        colors: _isPressed
-                            ? [
-                                DomlyColors.buttonPrimaryDark,
-                                DomlyColors.buttonPrimary,
-                              ]
-                            : [
-                                DomlyColors.buttonPrimary,
-                                DomlyColors.buttonAccent,
-                              ],
-                      )
-                    : null,
-                color:
-                    DomlyPalette.surface(enabled ? null : DomlyColors.border),
-                borderRadius: const BorderRadius.all(Radius.circular(16)),
-                boxShadow: enabled && !_isPressed
-                    ? const [
-                        BoxShadow(
-                          color: Color(0x24A75736),
-                          blurRadius: 12,
-                          offset: Offset(0, 6),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Container(
-                width: double.infinity,
-                constraints: const BoxConstraints(minHeight: 52),
-                padding:
-                    const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
-                child: Center(
-                  child: Wrap(
-                    alignment: WrapAlignment.center,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      if (showLoading)
-                        SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              enabled ? Colors.white : DomlyColors.muted,
+    return Semantics(
+        button: true,
+        enabled: enabled,
+        label: widget.label.tr(),
+        excludeSemantics: true,
+        onTap: enabled ? _handlePressed : null,
+        child: SizedBox(
+          width: double.infinity,
+          child: AnimatedScale(
+            scale: _isPressed && enabled ? 0.985 : 1,
+            duration: UiPreferences.instance.animations
+                ? const Duration(milliseconds: 110)
+                : Duration.zero,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: enabled ? _handlePressed : null,
+              onTapDown:
+                  enabled ? (_) => setState(() => _isPressed = true) : null,
+              onTapUp:
+                  enabled ? (_) => setState(() => _isPressed = false) : null,
+              onTapCancel:
+                  enabled ? () => setState(() => _isPressed = false) : null,
+              child: Material(
+                color: DomlyPalette.surface(Colors.transparent),
+                borderRadius: BorderRadius.circular(16),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    gradient: enabled
+                        ? LinearGradient(
+                            colors: _isPressed
+                                ? [
+                                    DomlyColors.buttonPrimaryDark,
+                                    DomlyColors.buttonPrimary,
+                                  ]
+                                : [
+                                    DomlyColors.buttonPrimary,
+                                    DomlyColors.buttonAccent,
+                                  ],
+                          )
+                        : null,
+                    color: enabled
+                        ? null
+                        : DomlyPalette.surface(DomlyColors.border),
+                    borderRadius: const BorderRadius.all(Radius.circular(16)),
+                    boxShadow: enabled && !_isPressed
+                        ? const [
+                            BoxShadow(
+                              color: Color(0x24A75736),
+                              blurRadius: 12,
+                              offset: Offset(0, 6),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    constraints: const BoxConstraints(minHeight: 52),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 18),
+                    child: Center(
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          if (showLoading)
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  enabled ? Colors.white : DomlyColors.muted,
+                                ),
+                              ),
+                            )
+                          else if (widget.icon != null)
+                            Icon(
+                              widget.icon,
+                              color: DomlyPalette.foreground(
+                                  enabled ? Colors.white : DomlyColors.muted),
+                              size: 18,
+                            ),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 260),
+                            child: Text(
+                              widget.label.tr(),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: DomlyPalette.foreground(
+                                    enabled ? Colors.white : DomlyColors.muted),
+                                height: 1.2,
+                              ),
                             ),
                           ),
-                        )
-                      else if (widget.icon != null)
-                        Icon(
-                          widget.icon,
-                          color: DomlyPalette.foreground(
-                              enabled ? Colors.white : DomlyColors.muted),
-                          size: 18,
-                        ),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 260),
-                        child: Text(
-                          widget.label.tr(),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: DomlyPalette.foreground(
-                                enabled ? Colors.white : DomlyColors.muted),
-                            height: 1.2,
-                          ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 }
 
@@ -1190,7 +1199,7 @@ class _DomlySecondaryButtonState extends State<DomlySecondaryButton> {
                 : Duration.zero,
           ),
           child: _DomlySecondaryButtonContent(
-            label: widget.label,
+            label: widget.label.tr(),
             icon: widget.icon,
             foregroundColor: DomlyPalette.foreground(widget.foregroundColor),
             isLoading: showLoading,

@@ -623,6 +623,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         final quoteTotal = _displayQuoteTotal;
 
         return DomlyShell(
+          showBackButton: false,
           bottomNavigationBar: const DomlyClientBottomNav(currentIndex: 0),
           child: SafeArea(
             bottom: false,
@@ -704,9 +705,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                           ),
                         ),
                         child: Text(
-                          _submittingOrder
-                              ? 'Оформляем...'
-                              : 'Заказать и оплатить',
+                          (_submittingOrder
+                                  ? 'Оформляем...'
+                                  : 'Заказать и оплатить')
+                              .tr(),
                         ),
                       ),
                     ),
@@ -983,7 +985,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
-                  quantity > 0 ? 'Убрать' : 'Добавить',
+                  (quantity > 0 ? 'Убрать' : 'Добавить').tr(),
                   style: TextStyle(
                     color: DomlyPalette.foreground(
                         quantity > 0 ? Colors.white : const Color(0xFF2B4338)),
@@ -1081,11 +1083,12 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                     ],
                   ),
                   Text(
-                    isQuarterly
-                        ? 'Скидка 10% от суммы за 3 месяца'
-                        : isSpecial
-                            ? 'Стоимость рассчитывается после площади'
-                            : 'Стоимость = цена за уборку × количество уборок',
+                    (isQuarterly
+                            ? 'Скидка 10% от суммы за 3 месяца'
+                            : isSpecial
+                                ? 'Стоимость рассчитывается после площади'
+                                : 'Стоимость = цена за уборку × количество уборок')
+                        .tr(),
                     style: TextStyle(
                         fontSize: 11,
                         color: DomlyPalette.foreground(DomlyColors.foreground)),

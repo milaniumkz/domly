@@ -103,9 +103,10 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  hasExistingComplaint
-                                      ? 'Обращение сохранено. Здесь показан его текущий статус.'
-                                      : 'Опишите проблему и приложите до 5 фото одним выбором',
+                                  (hasExistingComplaint
+                                          ? 'Обращение сохранено. Здесь показан его текущий статус.'
+                                          : 'Опишите проблему и приложите до 5 фото одним выбором')
+                                      .tr(),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: DomlyPalette.foreground(
@@ -321,9 +322,10 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
-                                      _photoUrls.isEmpty
-                                          ? 'После выбора фото сразу появятся здесь.'
-                                          : 'Фото прикреплены к жалобе и будут отправлены вместе с текстом.',
+                                      (_photoUrls.isEmpty
+                                              ? 'После выбора фото сразу появятся здесь.'
+                                              : 'Фото прикреплены к жалобе и будут отправлены вместе с текстом.')
+                                          .tr(),
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: DomlyPalette.foreground(

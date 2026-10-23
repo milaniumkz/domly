@@ -530,9 +530,9 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                       ],
                     )
                   : null,
-              color: DomlyPalette.surface(isSelected
+              color: isSelected
                   ? null
-                  : isToday
+                  : DomlyPalette.surface(isToday
                       ? DomlyColors.backgroundSoft
                       : hasOrders
                           ? DomlyColors.accent.withValues(alpha: 0.15)

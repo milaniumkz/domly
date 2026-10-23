@@ -352,9 +352,10 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            locked > 0
-                ? 'Доступно к выводу через 7 дней'
-                : 'Доступно к выводу сейчас',
+            (locked > 0
+                    ? 'Доступно к выводу через 7 дней'
+                    : 'Доступно к выводу сейчас')
+                .tr(),
             style: TextStyle(
               fontSize: 13,
               color: DomlyPalette.foreground(Colors.white70),

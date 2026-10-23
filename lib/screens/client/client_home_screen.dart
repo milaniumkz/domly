@@ -1984,9 +1984,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isCurrentCleaning
-                            ? 'Текущая уборка'
-                            : 'Следующая уборка',
+                        (isCurrentCleaning
+                                ? 'Текущая уборка'
+                                : 'Следующая уборка')
+                            .tr(),
                         style: TextStyle(
                           color: DomlyPalette.foreground(Color(0xFF658170)),
                           fontSize: 14,
@@ -2565,11 +2566,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        status == 'ACTIVE'
-                            ? 'Дом подключен'
-                            : status == 'IN_PROGRESS'
-                                ? 'Дом почти подключен'
-                                : 'Мы скоро стартуем в вашем доме',
+                        (status == 'ACTIVE'
+                                ? 'Дом подключен'
+                                : status == 'IN_PROGRESS'
+                                    ? 'Дом почти подключен'
+                                    : 'Мы скоро стартуем в вашем доме')
+                            .tr(),
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -3301,7 +3303,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 ),
                 ElevatedButton(
                   onPressed: saving ? null : submit,
-                  child: Text(saving ? 'Сохраняем...' : 'Сохранить'),
+                  child: Text((saving ? 'Сохраняем...' : 'Сохранить').tr()),
                 ),
               ],
             );
@@ -5662,7 +5664,7 @@ class _FigmaHomeAction extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label: label,
+      label: label.tr(),
       child: Material(
         color: DomlyPalette.surface(Colors.transparent),
         child: InkWell(
@@ -5737,7 +5739,7 @@ class _FigmaHomeAction extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            caption,
+                            caption.tr(),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

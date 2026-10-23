@@ -2016,9 +2016,10 @@ class _OrdersScreenState extends State<OrdersScreen>
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
-                  hasChecklist
-                      ? 'Уборщица отметила выполненные пункты. Клиенту отправлено уведомление.'
-                      : 'Уборщица еще не отметила чек-лист. Ниже показано, что входит в уборку.',
+                  (hasChecklist
+                          ? 'Уборщица отметила выполненные пункты. Клиенту отправлено уведомление.'
+                          : 'Уборщица еще не отметила чек-лист. Ниже показано, что входит в уборку.')
+                      .tr(),
                   style: TextStyle(
                     color: DomlyPalette.foreground(hasChecklist
                         ? const Color(0xFF2F8F4E)
@@ -2128,7 +2129,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           ),
         ),
         subtitle: Text(
-          checked ? 'Отмечено уборщицей' : 'Не отмечено',
+          (checked ? 'Отмечено уборщицей' : 'Не отмечено').tr(),
           style: TextStyle(
               fontSize: 12, color: DomlyPalette.foreground(DomlyColors.muted)),
         ),
@@ -2421,14 +2422,16 @@ class _OrdersScreenState extends State<OrdersScreen>
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: Text(
-          confirmed
-              ? 'Вы уверены, что уборщица начала уборку?'
-              : 'Вы уверены, что уборщица не начала уборку?',
+          (confirmed
+                  ? 'Вы уверены, что уборщица начала уборку?'
+                  : 'Вы уверены, что уборщица не начала уборку?')
+              .tr(),
         ),
         content: Text(
-          confirmed
-              ? 'После подтверждения уборщица сможет продолжить и завершить заказ.'
-              : 'После ответа “Нет” уборщица не сможет завершить заказ без повторного подтверждения.',
+          (confirmed
+                  ? 'После подтверждения уборщица сможет продолжить и завершить заказ.'
+                  : 'После ответа “Нет” уборщица не сможет завершить заказ без повторного подтверждения.')
+              .tr(),
         ),
         actions: [
           TextButton(
@@ -2829,7 +2832,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            addonsOnly ? 'Добавить допы' : 'Изменить уборку',
+                            (addonsOnly ? 'Добавить допы' : 'Изменить уборку')
+                                .tr(),
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
@@ -2840,9 +2844,10 @@ class _OrdersScreenState extends State<OrdersScreen>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      addonsOnly
-                          ? 'Уборка уже идет. Можно добавить доп. услуги, уборщица увидит обновление в заказе и чек-листе.'
-                          : 'Можно изменить дату, указать любое будущее время и добавить доп. услуги к этой уборке.',
+                      (addonsOnly
+                              ? 'Уборка уже идет. Можно добавить доп. услуги, уборщица увидит обновление в заказе и чек-листе.'
+                              : 'Можно изменить дату, указать любое будущее время и добавить доп. услуги к этой уборке.')
+                          .tr(),
                       style: TextStyle(
                           color: DomlyPalette.foreground(DomlyColors.muted)),
                     ),
@@ -4142,9 +4147,10 @@ class _CleaningStartConfirmationPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            rejected
-                ? 'Вы не подтвердили старт уборки'
-                : 'Уборщица начала уборку?',
+            (rejected
+                    ? 'Вы не подтвердили старт уборки'
+                    : 'Уборщица начала уборку?')
+                .tr(),
             style: TextStyle(
               color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 14,

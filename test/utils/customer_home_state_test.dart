@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:domly/utils/customer_home_state.dart';
 import 'package:domly/screens/client/area_confirmation_screen.dart';
 import 'package:domly/ui/cleaning_schedule_summary.dart';
@@ -35,7 +36,6 @@ void main() {
   for (final width in [320.0, 393.0]) {
     for (final date in ['23 октября 2026', '2026 жылғы 23 қазан']) {
       testWidgets('complete date at width $width: $date', (tester) async {
-
         await tester.pumpWidget(MaterialApp(
             home: Scaffold(
                 body: Center(
@@ -55,6 +55,26 @@ void main() {
       });
     }
   }
+  testWidgets(
+      'late profile data still fills the area field after an empty snapshot',
+      (tester) async {
+    final profile = StreamController<Map<String, dynamic>?>();
+    await tester.pumpWidget(MaterialApp(
+        home: AreaConfirmationScreen(
+            configStream: Stream.value({'uploadEnabled': true}),
+            profileStream: profile.stream)));
+    profile.add(null);
+    await tester.pumpAndSettle();
+    profile.add({'area': 110, 'areaProofSubmitted': false});
+    await tester.pumpAndSettle();
+    final field = tester.widget<TextField>(find.byType(TextField).first);
+    expect(field.controller!.text, '110');
+    expect(find.text('Не подтверждена'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    unawaited(profile.close());
+    await tester.pump();
+  });
   for (final state in [0, 1, 2]) {
     testWidgets('area form opens with true document state $state',
         (tester) async {

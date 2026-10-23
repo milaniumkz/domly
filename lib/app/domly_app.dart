@@ -1,3 +1,4 @@
+import 'route_parameters.dart';
 import '../ui/required_password_change.dart';
 import '../services/client_telemetry.dart';
 import '../services/realtime_updates.dart';
@@ -722,6 +723,7 @@ class _DomlyAppState extends State<DomlyApp> {
   }
 
   Route<dynamic> _onGenerateRoute(RouteSettings settings) {
+    settings = routeWithQueryArguments(settings);
     final page = _buildPage(settings);
     final routeSettings = RouteSettings(
       name: _normalizedRouteName(settings.name),
@@ -740,6 +742,7 @@ class _DomlyAppState extends State<DomlyApp> {
   }
 
   Widget _buildPage(RouteSettings settings) {
+    settings = routeWithQueryArguments(settings);
     final routeName = _normalizedRouteName(settings.name);
     final normalizedSettings = RouteSettings(
       name: routeName,

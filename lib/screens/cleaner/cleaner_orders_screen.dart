@@ -1812,7 +1812,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
 
   String _slotDateText(Map<String, dynamic> slot) {
     final date = _slotDate(slot);
-    return '${date.day}.${date.month}.${date.year} ${(slot['time'] ?? '10:00 - 13:00')}';
+    return '${date.day}.${date.month}.${date.year}';
   }
 
   Widget _actionButton({

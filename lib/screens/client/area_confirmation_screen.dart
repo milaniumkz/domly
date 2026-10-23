@@ -28,7 +28,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
   final _areaController = TextEditingController();
   final _imagePicker = ImagePicker();
   late final _profileStream =
-      widget.profileStream ?? _data.customerProfileStream();
+      widget.profileStream ?? _data.customerProfileStream(waitForSession: true);
   late final _configStream = widget.configStream ?? _config.areaConfigStream();
 
   XFile? _selectedImage;
@@ -275,7 +275,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
     return PopScope(
       canPop: !_isSubmitting,
       child: DomlyShell(
-        showBackButton: _isSubmitting ? false : null,
+        showBackButton: false,
         bottomNavigationBar:
             _isSubmitting ? null : const DomlyClientBottomNav(currentIndex: 2),
         child: SafeArea(
@@ -318,8 +318,8 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                       _areaController.removeListener(_onAreaChanged);
                       _areaController.text = rawArea.toString();
                       _areaController.addListener(_onAreaChanged);
+                      _areaSeeded = true;
                     }
-                    _areaSeeded = true;
                   }
                   final canSubmit = _canSubmit(
                     uploadEnabled: uploadEnabled,
@@ -415,9 +415,10 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                                 ),
                               ),
                               child: Text(
-                                _isSubmitting
-                                    ? 'Отправляем...'
-                                    : 'Подтвердить площадь',
+                                (_isSubmitting
+                                        ? 'Отправляем...'
+                                        : 'Подтвердить площадь')
+                                    .tr(),
                               ),
                             ),
                           ),
