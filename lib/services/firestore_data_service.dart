@@ -1,3 +1,4 @@
+import '../utils/cleaner_checklist_data.dart';
 import '../utils/stable_polling_stream.dart';
 import '../utils/service_coverage.dart';
 import '../utils/address_payload.dart';
@@ -25,6 +26,11 @@ import 'auth_service.dart';
 import 'session_store.dart';
 import 'backend_api_service.dart';
 import '../utils/package_catalog_utils.dart';
+
+String _newIdempotencyKey() {
+  final random = math.Random.secure();
+  return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+}
 
 class FirestoreDataService {
   FirestoreDataService._();
@@ -8267,17 +8273,7 @@ class FirestoreDataService {
       final data = await BackendApiService.instance.getMap(
         '/orders/$orderId/checklist',
       );
-      final report = Map<String, dynamic>.from(
-        (data['report'] as Map?) ?? const <String, dynamic>{},
-      );
-      final items = (data['items'] as List? ?? const [])
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList();
-      if (report.isEmpty && items.isEmpty) {
-        return null;
-      }
-      return {'id': orderId, ...report, 'items': items};
+      return mapCleanerChecklist(orderId, data);
     });
   }
 
@@ -9167,6 +9163,7 @@ class FirestoreDataService {
         final result = await BackendApiService.instance.postMap(
           '/packages/purchase',
           body: {
+            'idempotencyKey': _newIdempotencyKey(),
             'packageId': normalizedPackageId,
             'cleaningsPerMonth': cleaningsPerMonth,
             'addonsDetailed': addonsDetailed,
@@ -11037,6 +11034,7 @@ class FirestoreDataService {
       final created = await BackendApiService.instance.postMap(
         '/orders',
         body: {
+          'idempotencyKey': _newIdempotencyKey(),
           'customerPackageId': subscriptionId,
           'date': dateKey,
           'startTime': startTime,

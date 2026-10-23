@@ -1,3 +1,4 @@
+import {defaultRequiredTasks} from '../modules/checklists';
 import sharp from 'sharp';
 import {env} from '../common/env';
 import {httpsMediaUrl} from '../modules/mediaLinks';
@@ -279,7 +280,30 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal(Number((await db.query('SELECT COUNT(*) AS count FROM notifications WHERE target_id=$1',[order])).rows[0].count),count);
         assert.equal((await request(`/orders/${order}/photo-report`,'GET',undefined,true)).json.data.canSubmit,true);
         assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'completed'})).status,409);
-        assert.equal((await cleanerRequest(`/orders/${order}/photo-report`,{photoUrls:['a','b','c']})).status,201);
+        assert.equal((await cleanerRequest(`/orders/${order}/photo-report`,{photoUrls:['a','b','c']})).status,400);
+        const photoKey='photo_reports/'+cleaner+'/'+randomUUID()+'.jpg';
+        const photoUrl=env.minioPublicUrl.replace(/\/$/,'')+'/'+photoKey;
+        await db.query("INSERT INTO files(owner_id,bucket,object_key,mime_type,public_url) VALUES($1,$2,$3,'image/jpeg',$4)",[cleaner,env.minioBucket,photoKey,photoUrl]);
+        assert.equal((await cleanerRequest(`/orders/${order}/photo-report`,{photoUrls:[photoUrl,photoUrl,photoUrl]})).status,201);
+        assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'completed'})).status,409);
+        assert.equal((await cleanerRequest(`/orders/${order}/checklist`,{completedTasks:defaultRequiredTasks.slice(0,1),note:'Проверка заметки'})).status,200);
+        assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'completed'})).status,409);
+        const draft=await request(`/orders/${order}/checklist`,'GET');
+        assert.equal(draft.json.data.items.filter((i:any)=>i.required&&!i.checked).length,4);
+        assert.equal(draft.json.data.report.note,'Проверка заметки');
+        // A legacy draft retained only checked rows; opening it must restore missing requirements.
+        await db.query('DELETE FROM checklist_report_items WHERE report_id=$1 AND NOT checked',[draft.json.data.report.id]);
+        await db.query('UPDATE checklist_reports SET requirements_initialized=FALSE WHERE id=$1',[draft.json.data.report.id]);
+        const restored=await request(`/orders/${order}/checklist`,'GET');
+        assert.equal(restored.json.data.items.filter((i:any)=>i.required).length,5);
+        assert.equal(restored.json.data.items.filter((i:any)=>i.checked).length,1);
+        assert.equal((await cleanerRequest(`/orders/${order}/checklist`,{completedTasks:defaultRequiredTasks})).status,200);
+        const reportId=draft.json.data.report.id;
+        await db.query("INSERT INTO checklist_report_items(report_id,title_ru,required) VALUES($1,'Доп. услуга: Мытьё окон',TRUE)",[reportId]);
+        assert.equal((await cleanerRequest(`/orders/${order}/status`,{status:'completed'})).status,409);
+        assert.equal((await cleanerRequest(`/orders/${order}/checklist`,{completedTasks:defaultRequiredTasks,addons:['Мытьё окон']})).status,200);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM checklist_report_items WHERE report_id=$1 AND required AND NOT checked',[reportId])).rows[0].n,0);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM checklist_report_items WHERE report_id=$1',[reportId])).rows[0].n,6);
         const complete=await cleanerRequest(`/orders/${order}/status`,{status:'completed'});
         assert.equal(complete.status,200);
         assert.ok(complete.json.data.completed_at);
@@ -632,6 +656,27 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM files WHERE id=$1',[ownFile]);
       }
     });
+    await t.test('concurrent admin assignments cannot double-book a cleaner',async()=>{
+      const ids=[randomUUID(),randomUUID()];
+      try {
+        for(const id of ids)await db.query("INSERT INTO service_orders(id,customer_id,status,scheduled_date,start_time,end_time) VALUES($1,$2,'pending_assignment','2035-01-01','10:00','12:00')",[id,customer]);
+        const results=await Promise.all(ids.map(id=>request('/admin/orders/'+id+'/assign-cleaner','POST',{cleanerId:cleaner})));
+        assert.equal(results.filter(r=>r.status===200).length,1);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM service_orders WHERE id=ANY($1::uuid[]) AND cleaner_id=$2',[ids,cleaner])).rows[0].n,1);
+      } finally {
+        await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[ids]);
+        await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[ids]);
+      }
+    });
+
+    await t.test('checklist template search and date filters remain valid SQL',async()=>{
+      for(const query of ['?search=absent','?dateFrom=2000-01-01&dateTo=2099-01-01','?search=absent&offset=5&limit=5'])assert.equal((await request('/admin/checklistTemplates'+query)).status,200);
+    });
+    await t.test('ordinary users cannot grant themselves a bonus',async()=>{
+      const before=(await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance;
+      assert.equal((await request('/bonus/transactions','POST',{amount:100000},true)).status,403);
+      assert.equal((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance,before);
+    });
     await t.test('complaints are scoped to the customer and available to admin',async()=>{
       await db.query("INSERT INTO complaints(customer_id,title,body) VALUES($1,'Тестовая жалоба','Тест')",[customer]);
       assert.equal((await request('/complaints','GET',undefined,true)).status,200);
@@ -649,7 +694,61 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('DELETE FROM audit_logs WHERE actor_id=$1',[admin]);
     await db.query('DELETE FROM cleaner_documents WHERE cleaner_id=$1',[cleaner]);
     await db.query('DELETE FROM files WHERE id=$1',[file]);
+    await db.query('DELETE FROM files WHERE owner_id=ANY($1::uuid[])',[[admin,cleaner,customer]]);
     await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[admin,cleaner,customer]]);
     await db.close();
   }
+});
+
+test('purchase idempotency and legacy payment callback authentication',{skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async()=>{
+  const {BonusService,PaymentService,PricingService}=await import('../modules/domainServices');
+  const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!),customer=randomUUID(),pkg=randomUUID(),address=randomUUID();
+  const bonuses=new BonusService(db);const notifications=new NotificationService(db,{send:async()=>({sent:0})} as any);
+  const app=express();app.use(express.json(),buildV1Router({db,bonuses,payments:new PaymentService(db,bonuses),pricing:new PricingService(),notifications,paymentGateway:{createKaspiInvoice:async()=>null},scheduling:new SchedulingService(db)} as any),errorHandler);
+  const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
+  const token=signAccessToken({id:customer,role:'customer',phone:'audit-'+customer});const previousToken=env.kaspiWebhookToken,previousMoon=env.moonAiEnabled;env.moonAiEnabled=false;env.kaspiWebhookToken=randomUUID();
+  try{
+    await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'customer','approved')",[customer,'audit-'+customer]);
+    await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,$2,1,1,0,10)",[pkg,'Аудит '+pkg]);
+    await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Аудит','1',100)",[address,customer]);
+    const body={packageId:pkg,addressId:address,provider:'kaspi',idempotencyKey:randomUUID()};
+    const purchase=()=>fetch(base+'/packages/purchase',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const responses=await Promise.all([purchase(),purchase(),purchase()]);assert.ok(responses.every(r=>r.status===200));const rows=await Promise.all(responses.map(r=>r.json() as Promise<any>));assert.equal(new Set(rows.map(r=>r.data.customerPackage.id)).size,1);
+    assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].n,1);
+    const id=rows[0].data.payment.id;
+    const hook=(secret?:string)=>fetch(base+'/payments/kaspi/webhook',{method:'POST',headers:{'Content-Type':'application/json',...(secret?{'X-Kaspi-Token':secret}:{})},body:JSON.stringify({paymentId:id,status:'paid'})});
+    assert.equal((await hook()).status,401);assert.equal((await hook('wrong')).status,401);
+    assert.notEqual((await db.query('SELECT status FROM payments WHERE id=$1',[id])).rows[0].status,'paid');
+    assert.equal((await hook(env.kaspiWebhookToken)).status,200);assert.equal((await hook(env.kaspiWebhookToken)).status,200);
+    const cp=(await db.query('SELECT status,available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0];assert.equal(cp.status,'active');assert.equal(cp.available_cleanings,1);
+    const orderBody={customerPackageId:rows[0].data.customerPackage.id,date:'2035-01-03',startTime:'08:00',idempotencyKey:randomUUID()};
+    const orders=await Promise.all([1,2,3].map(()=>fetch(base+'/orders',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(orderBody)})));
+    assert.ok(orders.every(r=>r.status===201));
+    const booked=await Promise.all(orders.map(r=>r.json() as Promise<any>));assert.equal(new Set(booked.map(r=>r.data.order.id)).size,1);
+    assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].available_cleanings,0);
+  }finally{
+    env.kaspiWebhookToken=previousToken;env.moonAiEnabled=previousMoon;
+    await new Promise<void>(r=>server.close(()=>r()));
+    await db.query('DELETE FROM notifications WHERE user_id=$1 OR target_id IN(SELECT id::text FROM service_orders WHERE customer_id=$1)',[customer]);
+    await db.query('DELETE FROM quality_check_requests WHERE customer_id=$1',[customer]);
+    await db.query('DELETE FROM service_orders WHERE customer_id=$1',[customer]);
+    await db.query('DELETE FROM bonus_transactions WHERE user_id=$1',[customer]);
+    await db.query('DELETE FROM payment_events WHERE payment_id IN(SELECT id FROM payments WHERE customer_id=$1)',[customer]);
+    await db.query('DELETE FROM payments WHERE customer_id=$1',[customer]);
+    await db.query('DELETE FROM quality_check_requests WHERE customer_id=$1',[customer]);
+    await db.query('DELETE FROM notifications WHERE user_id=$1',[customer]);
+    await db.query('DELETE FROM customer_packages WHERE customer_id=$1',[customer]);
+    await db.query('DELETE FROM app_users WHERE id=$1',[customer]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);await db.close();
+  }
+});
+
+
+test('health database timeout returns 503 and the same process recovers',async()=>{
+  const {healthHandler}=await import('../http/health');
+  let fail=true;
+  const app=express();app.get('/health',healthHandler({query:async()=>{if(fail)throw Error('connection timeout');return {rows:[]};}} as any));
+  const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
+  const url='http://127.0.0.1:'+(server.address() as AddressInfo).port+'/health';
+  try{assert.equal((await fetch(url)).status,503);fail=false;assert.equal((await fetch(url)).status,200);}
+  finally{await new Promise<void>(r=>server.close(()=>r()));}
 });

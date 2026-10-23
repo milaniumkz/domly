@@ -948,3 +948,13 @@ test('push messages use each recipient language without mixing device groups',as
  await sendLocalizedPush(db,{send:async(...args:any[])=>calls.push(args)},{userId:'user-kk',titleRu:'Площадь подтверждена',bodyRu:'Подтверждённая площадь квартиры: 110 м².'},{notificationId:'fixture'});
  assert.equal(calls.length,2);assert.deepEqual(calls[0][0],['ru-device']);assert.equal(calls[0][1],'Площадь подтверждена');assert.deepEqual(calls[1][0],['kk-device']);assert.equal(calls[1][1],'Аудан расталды');assert.ok(calls[1][2].includes('110'));assert.ok(!calls[1][2].includes('площадь'));assert.deepEqual(calls[1][3],{notificationId:'fixture'});
 });
+
+test('booking date validation rejects malformed, rolled-over and past local times',async()=>{
+  const {validateBookingStart}=await import('../modules/bookingValidation');
+  const now=Date.parse('2026-10-23T10:00:00Z');
+  for(const [day,time] of [['2026-02-30','12:00'],['2001-01-01','08:00'],['2026-10-23','14:59'],['2026-11-01','24:00'],['2026-11-01','wrong']]) {
+    assert.throws(()=>validateBookingStart(day,time,now));
+  }
+  assert.doesNotThrow(()=>validateBookingStart('2026-10-23','15:01',now));
+  assert.doesNotThrow(()=>validateBookingStart('2026-11-01','08:00:00',now));
+});

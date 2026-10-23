@@ -16,6 +16,7 @@ class AppTheme {
     useMaterial3: true,
     brightness: Brightness.dark,
     fontFamily: 'Inter',
+    fontFamilyFallback: const ['Roboto'],
     colorScheme: ColorScheme.fromSeed(
             seedColor: primaryGreen, brightness: Brightness.dark)
         .copyWith(
@@ -59,6 +60,7 @@ class AppTheme {
     ),
     scaffoldBackgroundColor: backgroundCream,
     fontFamily: 'Inter',
+    fontFamilyFallback: const ['Roboto'],
     textTheme: const TextTheme(
       displayLarge: TextStyle(
         fontSize: 32,

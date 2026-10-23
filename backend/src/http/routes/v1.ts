@@ -1,9 +1,12 @@
+import {idempotent} from '../../common/idempotency';
+import {ensureChecklistReport,saveChecklist} from '../../modules/checklists';
+import {validateBookingStart} from '../../modules/bookingValidation';
 import {revokeRealtimeSessions} from '../../realtime/sse';
 import {inspectUpload,registerUploadedFile} from '../../technical/files';
 import {ensureGuestSession, guestSession, bindGuestSession, matchMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
 import {validatePromotionBody} from '../../modules/promotionValidation';
 import {saveOrderReview} from '../../modules/orderReviews';
-import {canonicalMediaUrl, httpsMediaUrl, mediaLinksMiddleware, verifyMediaLink} from '../../modules/mediaLinks';
+import {canonicalMediaUrl, httpsMediaUrl, mediaLinksMiddleware, verifyMediaLink, storageKey} from '../../modules/mediaLinks';
 import { transitionOrder, releaseCleanerAssignment } from '../../modules/orderLifecycle';
 import {confirmArea} from '../../modules/areaVerification';
 import { verifyCleaner } from '../../modules/cleanerVerification';
@@ -748,7 +751,7 @@ export function buildV1Router(deps: {
     )).rows);
   }));
 
-  router.post('/bonus/transactions', auth(), asyncHandler(async (req, res) => {
+  router.post('/bonus/transactions', auth(['admin','superadmin']), asyncHandler(async (req, res) => {
     const targetUserId = ['admin', 'superadmin'].includes(req.user!.role)
       ? String(req.body.userId ?? req.user!.id)
       : req.user!.id;
@@ -1337,7 +1340,7 @@ export function buildV1Router(deps: {
     ok(res, { kaspi: Boolean(env.moonAiEnabled && env.moonAiChannelUrl && env.moonAiChannelApiKey), online: bccReady(),onlineTest:bccConfig().test });
   }));
 
-  router.post('/packages/purchase', auth(['customer']), asyncHandler(async (req, res) => {
+  router.post('/packages/purchase', auth(['customer']), idempotent(deps.db,'package_purchase'), asyncHandler(async (req, res) => {
     if (req.body.paymentMethod === 'online' && !bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
     const pkg = first<{ id: string; base_price: string; price_per_m2: string; cleaning_count: number; months: number }>((await deps.db.query(
       `SELECT * FROM catalog_packages WHERE id=$1 AND active=TRUE`,
@@ -1384,7 +1387,8 @@ export function buildV1Router(deps: {
     ok(res, { customerPackage, ...payment });
   }));
 
-  router.post('/orders', auth(['customer']), asyncHandler(async (req, res) => {
+  router.post('/orders', auth(['customer']), idempotent(deps.db, 'order_create'), asyncHandler(async (req, res) => {
+    validateBookingStart(req.body.date, req.body.startTime);
     const customerPackage = first<{ id: string; package_id: string; address_id: string; available_cleanings: number; total_cleanings: number; status: string; purchase_config: any; freeze_until?: string }>((await deps.db.query(
       `SELECT * FROM customer_packages WHERE id=$1 AND customer_id=$2`,
       [req.body.customerPackageId, req.user!.id],
@@ -1412,6 +1416,7 @@ export function buildV1Router(deps: {
     const addonAmount = addons.reduce((sum: number, row) => sum + Number(row.price)*row.quantity, 0);
     const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes ?? 0),0);
     const end = addMinutes(String(req.body.startTime), duration);
+    if (end <= String(req.body.startTime).slice(0,5)) throw new ApiError(400,'invalid_order_time','Уборка должна завершиться в выбранный день.');
     const initialStatus = addonAmount > 0 ? 'pending_payment' : 'pending_assignment';
     const row = await deps.db.transaction(async (tx) => {
       const reserved = first((await tx.query(
@@ -1751,25 +1756,11 @@ export function buildV1Router(deps: {
     if (req.user!.role === 'cleaner' && (order as any).cleaner_id !== req.user!.id) {
       throw new ApiError(403, 'forbidden', 'Нет доступа к этому заказу.');
     }
-    const report = await ensureChecklistReport(deps.db, order);
     const titles = [
       ...(Array.isArray(req.body.completedTasks) ? req.body.completedTasks.map(String) : []),
-      ...(Array.isArray(req.body.orderedAddons) ? req.body.orderedAddons.map(String) : []),
       ...(Array.isArray(req.body.addons) ? req.body.addons.map(String) : []),
     ].map((item) => item.trim()).filter(Boolean);
-    await deps.db.query(`DELETE FROM checklist_report_items WHERE report_id=$1`, [(report as any).id]);
-    for (const title of titles) {
-      await deps.db.query(
-        `INSERT INTO checklist_report_items (report_id, title_ru, checked, checked_at)
-         VALUES ($1,$2,TRUE,NOW())`,
-        [(report as any).id, title],
-      );
-    }
-    const updated = first((await deps.db.query(
-      `UPDATE checklist_reports SET status='completed', cleaner_id=COALESCE($2, cleaner_id), updated_at=NOW()
-       WHERE id=$1 RETURNING *`,
-      [(report as any).id, req.user!.id],
-    )).rows);
+    const updated = await saveChecklist(deps.db,order,req.user!.id,titles,String(req.body.note??''));
     await deps.notifications.create({
       userId: (order as any).customer_id,
       titleRu: 'Чек-лист уборки заполнен',
@@ -1832,6 +1823,10 @@ export function buildV1Router(deps: {
     if (photoUrls.length < 3) {
       throw new ApiError(400, 'photos_required', 'Добавьте минимум 3 фото для отчёта.');
     }
+    const keys = photoUrls.map(storageKey);
+    if (keys.some((key: string | null) => !key)) throw new ApiError(400,'invalid_photos','Загрузите фотографии через приложение.');
+    const uploaded = (await deps.db.query(`SELECT object_key FROM files WHERE bucket=$1 AND owner_id=$2 AND mime_type LIKE 'image/%' AND object_key=ANY($3::text[])`, [env.minioBucket,req.user!.id,[...new Set(keys)]])).rows;
+    if (uploaded.length !== new Set(keys).size) throw new ApiError(400,'invalid_photos','Фото не найдены или принадлежат другому пользователю. Загрузите их повторно.');
     const row = first((await deps.db.query(
       `INSERT INTO photo_reports (order_id, cleaner_id, photo_urls)
        VALUES ($1,$2,$3)
@@ -1870,20 +1865,9 @@ export function buildV1Router(deps: {
       const cleanerId = req.body.cleanerId ?? (order as any).cleaner_id;
       if (req.user!.role === 'cleaner' && cleanerId !== req.user!.id) throw new ApiError(403,'forbidden','Нельзя назначить заказ другой уборщице.');
       if (!cleanerId) throw new ApiError(400, 'cleaner_required', 'Выберите уборщицу для назначения заказа.');
-      if (cleanerId !== (order as any).cleaner_id) {
-        const free = await deps.scheduling.cleanerAvailable(cleanerId, (order as any).scheduled_date, (order as any).start_time, (order as any).end_time);
-        if (!free) throw new ApiError(400, 'cleaner_unavailable', 'Уборщица занята на это время. Выберите другую.');
-      }
-      const row = first((await deps.db.query(
-        `UPDATE service_orders SET cleaner_id=$2, status='assigned', updated_at=NOW() WHERE id=$1 AND status IN ('pending_assignment','waiting_cleaner','assigned') RETURNING *`,
-        [req.params.id, cleanerId],
-      )).rows);
-      if (!row) throw new ApiError(409,'invalid_transition','Статус заказа уже изменился. Обновите страницу.');
-      await deps.db.query(
-        `INSERT INTO order_status_history (order_id, old_status, new_status, actor_id, comment)
-         VALUES ($1,$2,'assigned',$3,$4)`,
-        [req.params.id, (order as any).status, req.user!.id, req.body.comment ?? null],
-      );
+      const assignment = await deps.scheduling.assignOrder(String(req.params.id), cleanerId, req.user!.id, req.body.comment);
+      const row = assignment.order;
+      if (!assignment.changed) { ok(res, row); return; }
       await deps.notifications.create({
         userId: cleanerId,
         titleRu: 'Назначен заказ',
@@ -1908,6 +1892,7 @@ export function buildV1Router(deps: {
       await cancelOrder(req, res);
       return;
     }
+    if (nextStatus === 'completed' && req.user!.role === 'cleaner') await ensureChecklistReport(deps.db, order);
     const row = await transitionOrder(deps.db, deps.notifications, String(req.params.id), req.user!, nextStatus);
     ok(res, row);
   };
@@ -1921,9 +1906,9 @@ export function buildV1Router(deps: {
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
     if (!['pending_assignment', 'waiting_cleaner', 'assigned', 'pending_payment'].includes(order.status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ уже нельзя перенести.');
-    const date = req.body.date ?? req.body.scheduledDate ?? order.scheduled_date;
+    const date = req.body.date ?? req.body.scheduledDate ?? (order.scheduled_date instanceof Date?order.scheduled_date.toISOString().slice(0,10):String(order.scheduled_date).slice(0,10));
     const startTime = req.body.time ?? req.body.startTime ?? order.start_time;
-    if (!date || !startTime) throw new ApiError(400, 'invalid_request', 'Выберите дату и время уборки.');
+    validateBookingStart(date,startTime);
     const duration = Number(order.estimated_duration_minutes ?? 0) > 0
       ? Number(order.estimated_duration_minutes)
       : await estimateCleaningDurationMinutes(deps.db, order.address_id, []);
@@ -2437,6 +2422,8 @@ export function buildV1Router(deps: {
 
   router.post('/payments/kaspi/webhook', asyncHandler(async (req, res) => {
     if(env.moonAiEnabled) throw new ApiError(409,'use_signed_callback','Используйте защищённый callback MooonAI для оплаты Kaspi.');
+    const provided=String(req.header('X-Kaspi-Token')??req.header('Authorization')?.replace(/^Bearer /i,'')??'');
+    if(!env.kaspiWebhookToken||!provided||hashToken(provided)!==hashToken(env.kaspiWebhookToken))throw new ApiError(401,'unauthorized','Недействительная подпись платёжного уведомления.');
     const status = normalizeKaspiPaymentStatus(req.body);
     const paymentId = req.body.paymentId ?? req.body.orderId ?? req.body.id;
     const payment = first((await deps.db.query(
@@ -4407,23 +4394,14 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
   if (section === 'checklistTemplates') {
     addCommon('ct', ['ct.title_ru', 'ct.title_kk', 'pkg.name_ru']);
     return done(
-      `SELECT ct.*, pkg.name_ru AS package_name_ru,
-              COALESCE(
-                json_agg(
-                  json_build_object(
-                    'id', cti.id,
-                    'title_ru', cti.title_ru,
-                    'title_kk', cti.title_kk,
-                    'sort_order', cti.sort_order
-                  )
-                  ORDER BY cti.sort_order ASC, cti.id ASC
-                ) FILTER (WHERE cti.id IS NOT NULL),
-                '[]'::json
-              ) AS items
+      `SELECT ct.*, pkg.name_ru AS package_name_ru, COALESCE(items.value,'[]'::json) AS items
        FROM checklist_templates ct
        LEFT JOIN catalog_packages pkg ON pkg.id=ct.package_id
-       LEFT JOIN checklist_template_items cti ON cti.template_id=ct.id
-       GROUP BY ct.id, pkg.name_ru`,
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object('id',cti.id,'title_ru',cti.title_ru,
+           'title_kk',cti.title_kk,'sort_order',cti.sort_order) ORDER BY cti.sort_order,cti.id) AS value
+         FROM checklist_template_items cti WHERE cti.template_id=ct.id
+       ) items ON TRUE`,
       'ct.title_ru ASC',
     );
   }
@@ -5003,49 +4981,6 @@ async function getVisibleOrder(db: Database, orderId: string, user: { id: string
     || anyOrder.cleaner_id === user.id;
   if (!canSee) throw new ApiError(403, 'forbidden', 'Нет доступа к этому заказу.');
   return order;
-}
-
-async function ensureChecklistReport(db: Database, order: unknown) {
-  const anyOrder = order as any;
-  const existing = first((await db.query(`SELECT * FROM checklist_reports WHERE order_id=$1`, [anyOrder.id])).rows);
-  if (existing) return existing;
-
-  const report = first((await db.query(
-    `INSERT INTO checklist_reports (order_id, cleaner_id, status) VALUES ($1,$2,'open') RETURNING *`,
-    [anyOrder.id, anyOrder.cleaner_id ?? null],
-  )).rows);
-  const reportId = (report as any).id;
-
-  const templateItems = (await db.query(
-    `SELECT cti.title_ru, cti.title_kk
-     FROM checklist_templates ct
-     JOIN checklist_template_items cti ON cti.template_id=ct.id
-     WHERE ct.active=TRUE AND (ct.package_id=$1 OR ct.package_id IS NULL)
-     ORDER BY cti.sort_order ASC`,
-    [anyOrder.package_id ?? null],
-  )).rows;
-  for (const item of templateItems) {
-    await db.query(
-      `INSERT INTO checklist_report_items (report_id, title_ru, title_kk) VALUES ($1,$2,$3)`,
-      [reportId, (item as any).title_ru, (item as any).title_kk ?? null],
-    );
-  }
-
-  const addons = (await db.query(
-    `SELECT a.title_ru, a.title_kk
-     FROM order_addons oa
-     JOIN catalog_addons a ON a.id=oa.addon_id
-     WHERE oa.order_id=$1 AND oa.payment_status='paid'`,
-    [anyOrder.id],
-  )).rows;
-  for (const addon of addons) {
-    await db.query(
-      `INSERT INTO checklist_report_items (report_id, title_ru, title_kk) VALUES ($1,$2,$3)`,
-      [reportId, `Доп. услуга: ${(addon as any).title_ru}`, (addon as any).title_kk ? `Қосымша қызмет: ${(addon as any).title_kk}` : null],
-    );
-  }
-
-  return report;
 }
 
 function scoreAddressMatch(query: string, text: string): number {

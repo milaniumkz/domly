@@ -1,3 +1,4 @@
+import {healthHandler} from './health';
 import {telemetryRouter} from '../technical/telemetry';
 import {technicalRouter} from '../technical/router';
 import {collectRequests,technicalErrorInfo} from '../technical/collector';
@@ -64,10 +65,7 @@ const bonuses = new BonusService(db);
 const queues = buildQueues();
 configureRealtimeBus(env.redisUrl);
 
-app.get('/health', async (_req, res) => {
-  await db.query('SELECT 1');
-  ok(res, { status: 'ok', service: 'domly-backend', time: new Date().toISOString() });
-});
+app.get('/health', healthHandler(db));
 
 app.get('/ready', async (_req, res) => {
   const checks = {

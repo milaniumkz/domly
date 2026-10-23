@@ -63,7 +63,11 @@ export class AuthService {
       [normalized],
     )).rows);
     assertOtpAccountActive(existingUser);
-    await this.db.query(`UPDATE auth_otp_codes SET consumed_at=NOW() WHERE id=$1`, [otp.id]);
+    const consumed = await this.db.query(
+      `UPDATE auth_otp_codes SET consumed_at=NOW()
+       WHERE id=$1 AND consumed_at IS NULL AND expires_at>NOW() RETURNING id`, [otp.id],
+    );
+    if (!consumed.rows.length) throw new ApiError(400, 'invalid_otp', 'Неверный или истекший код.');
     const user = first<AuthUser>((await this.db.query(
       `INSERT INTO app_users (phone, role, is_phone_verified)
        VALUES ($1, $2, TRUE)
@@ -432,6 +436,27 @@ export class PaymentService {
 
 export class SchedulingService {
   constructor(private readonly db: Database) {}
+
+  async assignOrder(orderId: string, cleanerId: string, actorId: string, comment?: string) {
+    return this.db.transaction(async tx => {
+      // Match acceptOffer's lock order so assignments and offers share one schedule lock.
+      const cleaner = (await tx.query("SELECT id FROM app_users WHERE id=$1 AND role='cleaner' FOR UPDATE", [cleanerId])).rows[0];
+      if (!cleaner) throw new ApiError(400, 'cleaner_required', 'Выберите уборщицу для назначения заказа.');
+      const order = first<any>((await tx.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE', [orderId])).rows);
+      if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
+      if (Number(order.payable_amount) > 0) throw new ApiError(409, 'payment_required', 'Сначала оплатите допуслуги.');
+      if (!['pending_assignment','waiting_cleaner','assigned'].includes(order.status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ нельзя назначить повторно.');
+      if (order.status === 'assigned' && order.cleaner_id === cleanerId) return {order, changed: false};
+      const overlap = (await tx.query(`SELECT id FROM service_orders WHERE cleaner_id=$1 AND scheduled_date=$2
+        AND status NOT IN ('cancelled','completed') AND start_time<$4::time AND end_time>$3::time AND id<>$5 LIMIT 1`,
+        [cleanerId,order.scheduled_date,order.start_time,order.end_time,orderId])).rows;
+      if (overlap.length) throw new ApiError(400, 'cleaner_unavailable', 'Уборщица занята на это время. Выберите другую.');
+      const updated = first((await tx.query("UPDATE service_orders SET cleaner_id=$2,status='assigned',updated_at=NOW() WHERE id=$1 RETURNING *", [orderId,cleanerId])).rows);
+      await tx.query("UPDATE order_offers SET status='expired' WHERE order_id=$1 AND status='offered'", [orderId]);
+      await tx.query("INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,'assigned',$3,$4)", [orderId,order.status,actorId,comment ?? null]);
+      return {order:updated, changed:true};
+    });
+  }
 
   async cleanerAvailable(cleanerId: string, date: string, startTime: string, endTime: string, excludeOrderId?: string): Promise<boolean> {
     const overlap = first<{ id: string }>((await this.db.query(

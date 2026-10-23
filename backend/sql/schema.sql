@@ -1480,3 +1480,18 @@ CREATE INDEX IF NOT EXISTS tech_problems_status ON tech_problems(status,last_see
 CREATE INDEX IF NOT EXISTS tech_events_source_actor ON tech_events(source,user_id,started_at DESC);
 CREATE INDEX IF NOT EXISTS tech_push_pending ON tech_push_deliveries(status,next_attempt);
 CREATE INDEX IF NOT EXISTS tech_audit_at ON tech_audit(at,seq);
+
+-- Admin date filters also apply to checklist templates.
+ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+ALTER TABLE checklist_report_items ADD COLUMN IF NOT EXISTS required BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE checklist_reports ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS api_idempotency (
+  user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  scope TEXT NOT NULL, key TEXT NOT NULL, fingerprint TEXT NOT NULL,
+  response JSONB, status_code INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), completed_at TIMESTAMPTZ,
+  PRIMARY KEY(user_id,scope,key)
+);
+
+ALTER TABLE checklist_reports ADD COLUMN IF NOT EXISTS requirements_initialized BOOLEAN NOT NULL DEFAULT FALSE;

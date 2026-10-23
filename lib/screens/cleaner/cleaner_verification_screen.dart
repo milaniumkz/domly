@@ -87,6 +87,7 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
         final isRejected = status == 'rejected';
 
         return DomlyShell(
+          showBackButton: false,
           bottomNavigationBar: const DomlyCleanerBottomNav(currentIndex: 4),
           child: SafeArea(
             child: Center(
@@ -239,41 +240,10 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
   }
 
   Widget _stepTile(String title, String key, String type) {
-    final uploaded = (_files[key] ?? '').isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: DomlyCard(
-        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title.tr(),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text((uploaded ? 'Файл загружен' : 'Файл не загружен').tr()),
-                ],
-              ),
-            ),
-            const SizedBox(width: 4),
-            SizedBox(
-              width: 80,
-              child: DomlySecondaryButton(
-                label: uploaded ? 'Заменить' : 'Загрузить',
-                onPressed: () => _pickFile(key, type),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return CleanerVerificationDocumentTile(
+      title: title,
+      uploaded: (_files[key] ?? '').isNotEmpty,
+      onUpload: () => _pickFile(key, type),
     );
   }
 
@@ -351,5 +321,54 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
       default:
         return 'На проверке';
     }
+  }
+}
+
+class CleanerVerificationDocumentTile extends StatelessWidget {
+  const CleanerVerificationDocumentTile(
+      {super.key,
+      required this.title,
+      required this.uploaded,
+      required this.onUpload});
+  final String title;
+  final bool uploaded;
+  final VoidCallback onUpload;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: DomlyCard(
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title.tr(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text((uploaded ? 'Файл загружен' : 'Файл не загружен').tr()),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 128,
+              child: DomlySecondaryButton(
+                label: uploaded ? 'Заменить' : 'Загрузить',
+                onPressed: onUpload,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

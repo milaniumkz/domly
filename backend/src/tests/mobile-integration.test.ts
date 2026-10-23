@@ -125,6 +125,15 @@ test('temporary delivery fallback completes backend login and the code is single
     assert.ok(session.accessToken);
     assert.ok(session.refreshToken);
     await assert.rejects(()=>service.verifyOtp(phone,sent.fallbackCode!),(e:any)=>e.code==='invalid_otp');
+    const concurrentCode=await service.requestOtp(phone);
+    // Hold the account read until all callers have validated the same unused code.
+    let arrived=0; let release!:()=>void;
+    const barrier=new Promise<void>(resolve=>{release=resolve;});
+    const racingDb={query:async(sql:string,args:unknown[])=>{const result=await db.query(sql,args);if(sql.includes('SELECT id,status FROM app_users')){if(++arrived===4)release();await barrier;}return result;}};
+    const racingService=new AuthService(racingDb as any,{} as any);
+    const attempts=await Promise.allSettled(Array.from({length:4},()=>racingService.verifyOtp(phone,concurrentCode.fallbackCode!)));
+    assert.equal(attempts.filter(r=>r.status==='fulfilled').length,1,'A code can create only one session, including concurrent submissions');
+    assert.ok(attempts.filter(r=>r.status==='rejected').every(r=>(r as PromiseRejectedResult).reason.code==='invalid_otp'));
   } finally {
     env.otpFailureFallbackUntil=original;
     await db.query('DELETE FROM refresh_sessions WHERE user_id=$1',[id]);

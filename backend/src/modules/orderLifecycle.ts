@@ -32,6 +32,10 @@ export async function transitionOrder(db: Database, notifications: NotificationS
       if (order.status === status) return {order, deliveries: []};
       if (order.status !== 'in_progress') throw new ApiError(409, 'invalid_transition', 'Сначала подтвердите начало уборки.');
       if (actor.role === 'cleaner') {
+        const checklist = (await tx.query(`SELECT r.id FROM checklist_reports r WHERE r.order_id=$1 AND r.requirements_initialized
+          AND EXISTS(SELECT 1 FROM checklist_report_items i WHERE i.report_id=r.id AND i.required)
+          AND NOT EXISTS(SELECT 1 FROM checklist_report_items i WHERE i.report_id=r.id AND i.required AND NOT i.checked)`,[id])).rows;
+        if(!checklist.length)throw new ApiError(409,'checklist_required','Заполните все обязательные пункты чек-листа перед завершением уборки.');
         const report = first<any>((await tx.query('SELECT photo_urls FROM photo_reports WHERE order_id=$1', [id])).rows);
         if (!Array.isArray(report?.photo_urls) || report.photo_urls.length < 3) throw new ApiError(409, 'photo_report_required', 'Добавьте минимум три фотографии уборки.');
       }
