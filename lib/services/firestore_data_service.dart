@@ -12034,6 +12034,7 @@ class FirestoreDataService {
 
   Future<Map<String, dynamic>> reviewManualPayment({
     required String orderId,
+    required String paymentId,
     required bool approved,
     String? note,
   }) async {
@@ -12174,7 +12175,7 @@ class FirestoreDataService {
       };
     }
     return BackendApiService.instance.postMap(
-      approved ? '/payments/$orderId/confirm' : '/payments/$orderId/reject',
+      approved ? '/payments/$paymentId/confirm' : '/payments/$paymentId/reject',
       body: {if (note != null && note.trim().isNotEmpty) 'note': note.trim()},
     );
   }
