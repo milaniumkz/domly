@@ -1,5 +1,6 @@
 import '../utils/calendar_availability.dart';
 import '../utils/schedule_order.dart';
+import '../utils/stored_package_price.dart';
 import '../utils/cleaner_checklist_data.dart';
 import '../utils/stable_polling_stream.dart';
 import '../utils/service_coverage.dart';
@@ -420,6 +421,8 @@ class FirestoreDataService {
     final fullName = (user['full_name'] ?? user['fullName'] ?? '').toString();
     return {
       'id': user['id'],
+      for (final key in ['tier', 'monthly_spent', 'next_tier_threshold', 'tier_progress', 'tier_discount_percent'])
+        key: user[key],
       'referralCode': user['referralCode'],
       'referredByCode': user['referredByCode'],
       'referralQualifiedCount': user['referralQualifiedCount'],
@@ -539,6 +542,7 @@ class FirestoreDataService {
       'packageName': packageName,
       'name': packageName,
       'status': item['status'],
+      'price': storedPackagePrice(item),
       'paymentStatus':
           item['status'] == 'pending_payment' ? 'pending_invoice' : 'paid',
       'remainingCleanings': available,

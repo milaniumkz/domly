@@ -287,7 +287,7 @@ class ProfileScreen extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: ProfileSummaryCard(
-                                    onTap: () => _showInfo(context, 'Ваш прогресс', 'Прогресс зависит от ваших оплат и активности в сервисе. Здесь отображается текущий уровень, доступная скидка и сумма трат за месяц.'),
+                                    onTap: () => _showInfo(context, 'Ваш прогресс', 'Уровень зависит от суммы оплаченных услуг за текущий месяц. Приглашённые клиенты не влияют на этот прогресс.'),
                                     height: 180,
                                     padding: const EdgeInsets.fromLTRB(
                                       27,
@@ -326,8 +326,8 @@ class ProfileScreen extends StatelessWidget {
                                         const SizedBox(height: 5),
                                         Text(
                                           (tierDiscountPercent > 0
-                                              ? 'Ваша скидка: $tierDiscountPercent%'
-                                              : 'Скидка пока не активирована').tr(),
+                                              ? 'Ваша скидка: {p0}%'.tr(params: {'p0': '$tierDiscountPercent'})
+                                              : 'Скидка пока не активирована'.tr()),
                                           style: TextStyle(
                                             color: DomlyPalette.foreground(
                                                 _orange),
@@ -363,8 +363,8 @@ class ProfileScreen extends StatelessWidget {
                                         const SizedBox(height: 19),
                                         Text(
                                           (nextTierThreshold > 0
-                                              ? 'Потрачено в этом месяце: ${monthlySpent.toInt()} / ${nextTierThreshold.toInt()} ₸'
-                                              : 'Потрачено в этом месяце: ${monthlySpent.toInt()} ₸').tr(),
+                                              ? 'Потрачено в этом месяце: {p0} / {p1} ₸'.tr(params: {'p0': '${monthlySpent.toInt()}', 'p1': '${nextTierThreshold.toInt()}'})
+                                              : 'Потрачено в этом месяце: {p0} ₸'.tr(params: {'p0': '${monthlySpent.toInt()}'})),
                                           style: TextStyle(
                                             color:
                                                 DomlyPalette.foreground(_muted),
@@ -393,7 +393,7 @@ class ProfileScreen extends StatelessWidget {
                                       onTap: () => _showInfo(
                                         context,
                                         'Ваш прогресс',
-                                        'Прогресс зависит от ваших оплат и активности в сервисе. Здесь отображается текущий уровень, доступная скидка и сумма трат за месяц.',
+                                        'Уровень зависит от суммы оплаченных услуг за текущий месяц. Приглашённые клиенты не влияют на этот прогресс.',
                                       ),
                                       child: SizedBox(
                                         width: 23,
@@ -511,7 +511,8 @@ class ProfileScreen extends StatelessWidget {
     Map<String, dynamic>? subscription,
     Map<String, dynamic> profile,
   ) {
-    final amount = (subscription?['price'] ?? profile['planPrice'] ?? 0);
+    final amount = subscription?['price'] ?? profile['planPrice'];
+    if (amount == null) return '—';
     final packageId = (subscription?['packageId'] ?? subscription?['id'] ?? '')
         .toString()
         .trim()
