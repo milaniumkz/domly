@@ -172,10 +172,10 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
       assert.ok(sent[0].data.text.includes('payment_sum=22000'));assert.ok(sent[0].data.text.includes('phone_number=77000000000'));
       await processMoonOutbox(db,send);assert.equal(sent.length,1);
     });
-    await t.test('abandoned checkout runs after thirty minutes and is cancelled on payment',async()=>{
+    await t.test('abandoned checkout runs after five minutes and is cancelled on payment',async()=>{
       await scheduleCheckoutFollowup(db,payment);
       const reminder=(await db.query("SELECT EXTRACT(EPOCH FROM run_after-created_at)::int AS delay FROM moon_ai_outbox WHERE payment_id=$1 AND kind='abandoned_checkout'",[paymentId])).rows[0];
-      assert.equal(reminder.delay,1800);
+      assert.equal(reminder.delay,300);
       await processMoonOutbox(db,send);assert.equal(sent.length,1);
     });
     const paid={key:paymentId,status:'paid',amount:22000,phone:'+77000000000',externalId:'moon-invoice-fixture',eventId:randomUUID(),eventTime:new Date().toISOString(),payload:{test:true}};
@@ -270,10 +270,10 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
       assert.equal((await acceptMoonChatEvent(db,notifications,{...event,event_id:randomUUID(),external_thread_id:chatId,thread_id:`api:domly:${chatId}`})).ignored,true);
       assert.equal(events.size,1);
     });
-    await t.test('new registered customer gets a single thirty-minute WhatsApp welcome, never an app message',async()=>{
+    await t.test('new registered customer gets a single five-minute WhatsApp welcome, never an app message',async()=>{
       await scheduleSignupFollowup(db,idle);await scheduleSignupFollowup(db,idle);
       const rows=(await db.query("SELECT *,EXTRACT(EPOCH FROM run_after-created_at)::int AS delay FROM moon_ai_outbox WHERE customer_id=$1 AND kind='inactive_signup'",[idle])).rows;
-      assert.equal(rows.length,1);assert.equal(rows[0].delay,1800);
+      assert.equal(rows.length,1);assert.equal(rows[0].delay,300);
       await db.query("UPDATE moon_ai_outbox SET run_after=NOW()-INTERVAL '1 second' WHERE id=$1",[rows[0].id]);
       const nativeCalls:any[]=[];
       const nativeSend=(async(url:any,init:any)=>{

@@ -1208,6 +1208,13 @@ CREATE TABLE IF NOT EXISTS moon_ai_outbox (
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_moon_ai_pending ON moon_ai_outbox(run_after) WHERE state='pending';
+-- Shorten only untouched pending followups; preserve delivered rows and retry schedules.
+UPDATE moon_ai_outbox
+SET run_after=created_at+INTERVAL '5 minutes',
+ payload=jsonb_set(payload,'{text}',to_jsonb(replace(COALESCE(payload->>'text',''),'30 минут','5 минут')))
+WHERE kind IN ('inactive_signup','abandoned_checkout') AND state='pending'
+ AND started_at IS NULL AND run_after=created_at+INTERVAL '30 minutes';
+
 -- Guests have no WhatsApp phone; they can still ask the in-app assistant first.
 UPDATE moon_ai_outbox SET state='cancelled',failure_code='no_whatsapp_phone',finished_at=NOW()
 WHERE kind='inactive_install' AND state='pending';

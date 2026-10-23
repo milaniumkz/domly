@@ -48,8 +48,8 @@ export async function scheduleCheckoutFollowup(db: Database, payment: any) {
   if(!env.moonAiEnabled || !payment?.customer_id || Number(payment.amount)<=0 || payment.status==='paid') return;
   const chat=await ensureAssistantChat(db,payment.customer_id);
   await db.query(`INSERT INTO moon_ai_outbox(customer_id,chat_id,payment_id,kind,dedupe_key,payload,run_after)
-    VALUES($1,$2,$3,'abandoned_checkout',$4,$5,NOW()+INTERVAL '30 minutes') ON CONFLICT(dedupe_key) DO NOTHING`,
-    [payment.customer_id,chat.id,payment.id,`followup:${payment.id}`,{text:`Служебное событие DOMLY: клиент начал оформление покупки, но не завершил оплату за 30 минут. Вежливо уточни, нужна ли помощь с оформлением или оплатой. Не создавай новый счёт без запроса клиента и не утверждай, что покупка оплачена.`}]);
+    VALUES($1,$2,$3,'abandoned_checkout',$4,$5,NOW()+INTERVAL '5 minutes') ON CONFLICT(dedupe_key) DO NOTHING`,
+    [payment.customer_id,chat.id,payment.id,`followup:${payment.id}`,{text:`Служебное событие DOMLY: клиент начал оформление покупки, но не завершил оплату за 5 минут. Вежливо уточни, нужна ли помощь с оформлением или оплатой. Не создавай новый счёт без запроса клиента и не утверждай, что покупка оплачена.`}]);
 }
 export async function queueAssistantMessage(db: Queryable, chatId: string, customerId: string, messageId: string, text: string, fileUrl?: string) {
   if(!moonAiReady()) throw new ApiError(503,'integration_not_configured','Помощник временно недоступен.');
@@ -276,8 +276,8 @@ export async function scheduleSignupFollowup(db: Database, customerId: string) {
   if(!env.moonAiEnabled)return;
   const chat=await ensureAssistantChat(db,customerId);
   await db.query(`INSERT INTO moon_ai_outbox(customer_id,chat_id,kind,dedupe_key,payload,run_after)
-    VALUES($1,$2,'inactive_signup',$3,$4,NOW()+INTERVAL '30 minutes') ON CONFLICT(dedupe_key) DO NOTHING`,
-    [customerId,chat.id,`signup:${customerId}`,{text:'Служебное событие DOMLY: пользователь зарегистрировался 30 минут назад, но не начал оформление покупки. Поздоровайся, предложи помочь выбрать уборку. Не выставляй счёт без явного запроса клиента.'}]);
+    VALUES($1,$2,'inactive_signup',$3,$4,NOW()+INTERVAL '5 minutes') ON CONFLICT(dedupe_key) DO NOTHING`,
+    [customerId,chat.id,`signup:${customerId}`,{text:'Служебное событие DOMLY: пользователь зарегистрировался 5 минут назад, но не начал оформление покупки. Поздоровайся, предложи помочь выбрать уборку. Не выставляй счёт без явного запроса клиента.'}]);
 }
 export async function ensureGuestSession(db: Database, key: string) {
   if(!moonAiReady()) throw new ApiError(503,'integration_not_configured','Помощник пока не подключён.');
