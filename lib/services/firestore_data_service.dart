@@ -1,4 +1,5 @@
 import '../utils/calendar_availability.dart';
+import '../utils/schedule_order.dart';
 import '../utils/cleaner_checklist_data.dart';
 import '../utils/stable_polling_stream.dart';
 import '../utils/service_coverage.dart';
@@ -10407,19 +10408,8 @@ class FirestoreDataService {
     return _mapBackendCustomerPackage(item);
   }
 
-  bool _isActiveScheduleSlot(Map<String, dynamic> slot) {
-    final status = (slot['status'] ?? '').toString();
-    final orderStatus = (slot['orderStatus'] ?? '').toString();
-    if (status == 'canceled' ||
-        status == 'cancelled' ||
-        status == 'completed' ||
-        orderStatus == 'canceled' ||
-        orderStatus == 'cancelled' ||
-        orderStatus == 'completed') {
-      return false;
-    }
-    return true;
-  }
+  bool _isActiveScheduleSlot(Map<String, dynamic> slot) =>
+      isActiveScheduleOrder(slot);
 
   DateTime? _asDay(dynamic value) {
     DateTime? parsed;
