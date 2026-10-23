@@ -72,6 +72,23 @@ test('technical center: real PostgreSQL, access boundaries, evidence and operati
     assert.equal((await request('/api/v1/me','GET',undefined,owner,{Authorization:'Bearer invalid'})).status,401);
    }finally{db.query=original;configureAuthDatabase(null);await original("UPDATE app_users SET status='approved',auth_version=0,deleted_at=NULL WHERE id=$1",[userA]);}
   });
+  await t.test('notification history and unread count avoid scanning other recipients while retaining role broadcasts',async()=>{
+   await db.query(`INSERT INTO notifications(role,title_ru,body_ru,target_type) SELECT 'admin','Other','Body','perf_fixture' FROM generate_series(1,12000)`);
+   await db.query(`INSERT INTO notifications(user_id,title_ru,body_ru,target_type) SELECT $1,'Own','Body','perf_fixture' FROM generate_series(1,5)`,[userA]);
+   await db.query(`INSERT INTO notifications(role,title_ru,body_ru,target_type) VALUES('customer','Broadcast','Body','perf_fixture'),('cleaner','Hidden','Body','perf_fixture')`);
+   await db.query('ANALYZE notifications');
+   const predicate="FROM notifications n LEFT JOIN notification_reads nr ON nr.notification_id=n.id AND nr.user_id=$1 WHERE (n.user_id=$1 OR (n.user_id IS NULL AND n.role=$2))";
+   const plan=(await db.query('EXPLAIN (FORMAT JSON) SELECT n.*,COALESCE(n.read_at,nr.read_at) AS read_at '+predicate,[userA,'customer'])).rows[0]['QUERY PLAN'][0].Plan;
+   const scansOtherRecipients=(node:any):boolean=>(node['Node Type']==='Seq Scan'&&node['Relation Name']==='notifications')||(node.Plans??[]).some(scansOtherRecipients);
+   assert.equal(scansOtherRecipients(plan),false,'a recipient lookup must not scan all other users notifications');
+   const result=await request('/api/v1/notifications','GET',undefined,owner,{Authorization:'Bearer '+signAccessToken({id:userA,role:'customer',phone:'fixture'})});
+   assert.equal(result.status,200);assert.equal(result.body.data.filter((n:any)=>n.target_type==='perf_fixture').length,6);
+   assert.ok(result.body.data.every((n:any)=>n.user_id===userA||n.user_id===null&&n.role==='customer'));
+   const unread=await request('/api/v1/notifications/unread-count','GET',undefined,owner,{Authorization:'Bearer '+signAccessToken({id:userA,role:'customer',phone:'fixture'})});
+   assert.equal(unread.status,200);assert.equal(unread.body.data.count,result.body.data.filter((n:any)=>n.read_at===null).length);
+   const countPlan=(await db.query('EXPLAIN (FORMAT JSON) SELECT count(*) '+predicate+' AND COALESCE(n.read_at,nr.read_at) IS NULL',[userA,'customer'])).rows[0]['QUERY PLAN'][0].Plan;
+   assert.equal(scansOtherRecipients(countPlan),false);
+  });
   await t.test('server request identifiers cannot be forged to merge two user histories',async()=>{
    const supplied=randomUUID();const first=await request('/api/v1/test-success','GET',undefined,owner,{Authorization:'Bearer '+signAccessToken({id:userA,role:'customer',phone:'fixture'}),'X-Request-ID':supplied});const second=await request('/api/v1/test-success','GET',undefined,owner,{Authorization:'Bearer '+signAccessToken({id:userB,role:'admin',phone:'fixture'}),'X-Request-ID':supplied});
    const a=first.headers.get('x-request-id'),b=second.headers.get('x-request-id');assert.ok(a&&b);assert.notEqual(a,b);assert.notEqual(a,supplied);assert.notEqual(b,supplied);
