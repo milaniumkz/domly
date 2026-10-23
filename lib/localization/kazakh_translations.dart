@@ -1,5 +1,7 @@
 // Bundled Kazakh UI catalog; source strings and parameter names stay stable.
 const Map<String,String> kKazakhTranslations = {
+  "{p0} на неделе": "{p0} апта ішінде",
+  "{p0} ₸/мес": "{p0} ₸/ай",
   ")} мин": ")} мин",
   ", б:": ", b:",
   ", в:": ", ішінде:",

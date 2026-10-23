@@ -2004,7 +2004,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 19),
-                _FigmaNextCleaningCard(
+                CustomerNextCleaningCard(
                   onTap: () => _runProtectedAction(
                     () => _openFocusedClientOrder(upcomingSlot),
                   ),
@@ -2354,7 +2354,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 19),
-                _FigmaNextCleaningCard(
+                CustomerNextCleaningCard(
                   onTap: canSelectDates
                       ? scheduleAction
                       : () => _runProtectedAction(
@@ -5174,8 +5174,8 @@ class _FigmaEmptyCleanerText extends StatelessWidget {
   }
 }
 
-class _FigmaNextCleaningCard extends StatelessWidget {
-  const _FigmaNextCleaningCard({
+class CustomerNextCleaningCard extends StatelessWidget {
+  const CustomerNextCleaningCard({
     required this.onTap,
     required this.timeText,
     required this.areaText,
@@ -5229,8 +5229,8 @@ class _FigmaNextCleaningCard extends StatelessWidget {
             ),
             child: Column(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                IntrinsicHeight(child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
                       child: _FigmaInfoTile(
@@ -5250,7 +5250,7 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                ),
+                )),
                 const SizedBox(height: 16),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -5286,9 +5286,7 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            cleanerName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                            cleanerName.tr(),
                             style: TextStyle(
                               color: DomlyPalette.foreground(Color(0xFF2B4338)),
                               fontSize: 19,
@@ -5490,8 +5488,8 @@ class _FigmaInfoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     DomlyPalette.watch(context);
 
-    return SizedBox(
-      height: 122,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 122),
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
         decoration: BoxDecoration(
@@ -5508,6 +5506,7 @@ class _FigmaInfoTile extends StatelessWidget {
           ],
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(icon,
@@ -5524,20 +5523,13 @@ class _FigmaInfoTile extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Expanded(
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: Text(
-                  value,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: DomlyPalette.foreground(Color(0xFF2B4338)),
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    height: 21 / 17,
-                  ),
-                ),
+            Text(
+              value.tr(),
+              style: TextStyle(
+                color: DomlyPalette.foreground(Color(0xFF2B4338)),
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                height: 21 / 17,
               ),
             ),
           ],
