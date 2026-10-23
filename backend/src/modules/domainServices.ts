@@ -3,7 +3,7 @@ import {scheduleSignupFollowup, scheduleCheckoutFollowup} from './moonAi';
 import { Queryable } from '../domain/repositories/UnitOfWork';
 import { referralDiscount } from './referrals';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
+import { passwordCrypto as bcrypt } from '../common/passwordCrypto';
 import { Database } from '../infrastructure/db/Database';
 import { ApiError } from '../common/api';
 import { first } from '../common/sql';
