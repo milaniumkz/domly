@@ -1047,7 +1047,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          name,
+                          name.tr(),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(

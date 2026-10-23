@@ -16,6 +16,7 @@ class ClusterMapScreen extends StatelessWidget {
     DomlyPalette.watch(context);
 
     return DomlyShell(
+      showBackButton: false,
       child: SafeArea(
         child: Column(
           children: [
@@ -26,7 +27,11 @@ class ClusterMapScreen extends StatelessWidget {
                 children: [
                   domlyTopIconButton(
                     icon: Icons.arrow_back,
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      final navigator = Navigator.of(context);
+                      if (navigator.canPop()) { navigator.pop(); }
+                      else { navigator.pushReplacementNamed('/client/home'); }
+                    },
                   ),
                   const SizedBox(width: 12),
                   Expanded(

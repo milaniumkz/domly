@@ -95,6 +95,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             }
             final profile = snap.data ?? <String, dynamic>{};
             return DomlyShell(
+              showBackButton: false,
               bottomNavigationBar: const DomlyCleanerBottomNav(currentIndex: 4),
               child: SafeArea(
                 child: Column(
@@ -152,7 +153,10 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
         children: [
           domlyTopIconButton(
             icon: Icons.arrow_back,
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              if (Navigator.canPop(context)) { Navigator.pop(context); }
+              else { Navigator.pushReplacementNamed(context, '/cleaner/profile'); }
+            },
           ),
           const SizedBox(width: 12),
           Expanded(

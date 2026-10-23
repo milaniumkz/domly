@@ -2905,7 +2905,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                               absorbing: loadingSlots,
                               child: Localizations.override(
                                 context: context,
-                                locale: const Locale('ru'),
+                                locale: Localizations.localeOf(context),
                                 child: CalendarDatePicker(
                                   key: ValueKey(
                                     '${visibleMonth.year}-${visibleMonth.month}-${selectedDate?.toIso8601String() ?? ''}',

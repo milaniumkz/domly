@@ -361,9 +361,9 @@ class ProfileScreen extends StatelessWidget {
                                         ),
                                         const SizedBox(height: 19),
                                         Text(
-                                          nextTierThreshold > 0
+                                          (nextTierThreshold > 0
                                               ? 'Потрачено в этом месяце: ${monthlySpent.toInt()} / ${nextTierThreshold.toInt()} ₸'
-                                              : 'Потрачено в этом месяце: ${monthlySpent.toInt()} ₸',
+                                              : 'Потрачено в этом месяце: ${monthlySpent.toInt()} ₸').tr(),
                                           style: TextStyle(
                                             color:
                                                 DomlyPalette.foreground(_muted),
@@ -531,7 +531,7 @@ class ProfileScreen extends StatelessWidget {
         packageName.contains('ген') ||
         packageName.contains('ремонт') ||
         packageName.contains('разов')) {
-      return '$amount ₸ / заказ';
+      return '$amount ₸ / заказ'.tr();
     }
     return '$amount ₸ / месяц';
   }

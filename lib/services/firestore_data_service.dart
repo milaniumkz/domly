@@ -1,3 +1,4 @@
+import '../utils/calendar_availability.dart';
 import '../utils/cleaner_checklist_data.dart';
 import '../utils/stable_polling_stream.dart';
 import '../utils/service_coverage.dart';
@@ -10333,34 +10334,22 @@ class FirestoreDataService {
           (slot) =>
               (slot['customer_package_id'] ?? '').toString() == subscriptionId,
         )
-        .map((slot) => (slot['scheduled_date'] ?? '').toString())
+        .map((slot) => calendarDateKey(slot['scheduled_date']))
         .where((key) => key.isNotEmpty)
         .toSet();
-    final dates = <Map<String, dynamic>>[];
+    final candidates = <String>[];
     while (!cursor.isAfter(monthEnd)) {
       final dateKey = _isoDate(cursor);
       final day = DateTime(cursor.year, cursor.month, cursor.day);
       if (!day.isBefore(validFrom) &&
           !day.isAfter(validUntil) &&
           !bookedDateKeys.contains(dateKey)) {
-        try {
-          final slots = await _loadBackendAvailableSlots(
-            dateKey: dateKey,
-            addressId: (subscription['addressId'] ?? '').toString(),
-          );
-          if (slots.isNotEmpty) {
-            dates.add({
-              'date': dateKey,
-              'availableSlotsCount': slots.length,
-              'backend': true,
-            });
-          }
-        } catch (_) {
-          // If backend cannot calculate this day, keep it unavailable.
-        }
+        candidates.add(dateKey);
       }
       cursor = cursor.add(const Duration(days: 1));
     }
+    final dates = await loadAvailableCalendarDays(candidates, loadSlots: (dateKey) =>
+      _loadBackendAvailableSlots(dateKey: dateKey, addressId: (subscription['addressId'] ?? '').toString()));
     return {'ok': true, 'dates': dates, 'backend': true};
   }
 

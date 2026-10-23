@@ -639,7 +639,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
                       firstDate: DateTime(now.year, now.month, now.day)
                           .add(const Duration(days: 1)),
                       lastDate: now.add(const Duration(days: 45)),
-                      locale: const Locale('ru'),
+                      locale: Localizations.localeOf(context),
                     );
                     if (picked != null) {
                       setDialogState(() => selectedDate = picked);

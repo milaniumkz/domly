@@ -45,6 +45,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         final isLoading = snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData;
         return DomlyShell(
+          showBackButton: false,
           bottomNavigationBar: widget.surface == NotificationSurface.client
               ? const DomlyClientBottomNav(currentIndex: 3)
               : null,
@@ -58,7 +59,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     children: [
                       domlyTopIconButton(
                         icon: Icons.arrow_back,
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () {
+                          if (Navigator.canPop(context)) { Navigator.pop(context); }
+                          else { Navigator.pushReplacementNamed(context, widget.surface == NotificationSurface.client ? '/client/home' : '/cleaner/dashboard'); }
+                        },
                       ),
                       const SizedBox(width: 12),
                       Expanded(

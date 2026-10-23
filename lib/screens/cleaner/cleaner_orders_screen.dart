@@ -267,9 +267,9 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                           unselectedLabelColor:
                                               DomlyPalette.foreground(
                                                   DomlyColors.muted),
-                                          tabs: const [
-                                            Tab(text: 'Активные'),
-                                            Tab(text: 'Завершенные'),
+                                          tabs: [
+                                            Tab(text: 'Активные'.tr()),
+                                            Tab(text: 'Завершенные'.tr()),
                                           ],
                                         ),
                                       ),
