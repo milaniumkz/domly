@@ -1,3 +1,5 @@
+import '../utils/legal_document_sections.dart';
+import '../utils/stable_polling_stream.dart';
 import '../utils/promotion_data.dart';
 import '../utils/banner_data.dart';
 import 'dart:async';
@@ -19,29 +21,10 @@ class AppConfigService {
   dynamic get _db =>
       throw StateError('Firestore отключён: данные идут через backend.');
 
-  Stream<T> _backendPollingStream<T>(Future<T> Function() loader) {
-    return Stream<T>.multi((controller) {
-      Timer? timer;
-      var closed = false;
-      Future<void> emit() async {
-        if (closed) return;
-        try {
-          controller.add(await loader());
-        } catch (_) {
-          if (!closed) {
-            controller.addError('Сервис временно недоступен.');
-          }
-        }
-      }
-
-      emit();
-      timer = Timer.periodic(const Duration(seconds: 30), (_) => emit());
-      controller.onCancel = () {
-        closed = true;
-        timer?.cancel();
-      };
-    });
-  }
+  Stream<T> _backendPollingStream<T>(Future<T> Function() loader) =>
+      stablePollingStream(loader,
+          interval: const Duration(seconds: 30),
+          refresh: BackendApiService.instance.dataRevision);
 
   Future<Map<String, dynamic>> _backendBootstrap() async {
     final data = await BackendApiService.instance.getMap(
@@ -95,10 +78,8 @@ class AppConfigService {
       return const <String, dynamic>{};
     }
     if (kIsWeb && DebugSession.enabled) {
-      final bridgeDoc = await _db
-          .collection('debug_bridge_policies')
-          .doc('main')
-          .get();
+      final bridgeDoc =
+          await _db.collection('debug_bridge_policies').doc('main').get();
       if (bridgeDoc.data() != null) {
         return bridgeDoc.data();
       }
@@ -160,8 +141,8 @@ class AppConfigService {
           return aOrder.compareTo(bOrder);
         }
         return (a['title'] ?? a['id']).toString().compareTo(
-          (b['title'] ?? b['id']).toString(),
-        );
+              (b['title'] ?? b['id']).toString(),
+            );
       });
     return items;
   }
@@ -191,10 +172,8 @@ class AppConfigService {
       return null;
     }
     if (kIsWeb && DebugSession.enabled) {
-      final bridgeDoc = await _db
-          .collection('debug_bridge_info_content')
-          .doc(key)
-          .get();
+      final bridgeDoc =
+          await _db.collection('debug_bridge_info_content').doc(key).get();
       if (bridgeDoc.data() != null) {
         return bridgeDoc.data();
       }
@@ -307,39 +286,37 @@ class AppConfigService {
               .map((group) => Map<String, dynamic>.from(group))
               .toList();
         }
-        final groups =
-            docs
-                .map(
-                  (doc) => {
-                    ...doc,
-                    'key': (doc['key'] ?? doc['id']).toString(),
-                  },
-                )
-                .where((group) => group['isActive'] != false)
-                .toList()
-              ..sort((a, b) {
-                final aOrder = (a['sortOrder'] as num?)?.toInt() ?? 999;
-                final bOrder = (b['sortOrder'] as num?)?.toInt() ?? 999;
-                return aOrder.compareTo(bOrder);
-              });
+        final groups = docs
+            .map(
+              (doc) => {
+                ...doc,
+                'key': (doc['key'] ?? doc['id']).toString(),
+              },
+            )
+            .where((group) => group['isActive'] != false)
+            .toList()
+          ..sort((a, b) {
+            final aOrder = (a['sortOrder'] as num?)?.toInt() ?? 999;
+            final bOrder = (b['sortOrder'] as num?)?.toInt() ?? 999;
+            return aOrder.compareTo(bOrder);
+          });
         for (final group in groups) {
-          final items =
-              ((group['items'] ?? const []) as List)
-                  .whereType<Map>()
-                  .map((item) => Map<String, dynamic>.from(item))
-                  .where((item) => item['isActive'] != false)
-                  .toList()
-                ..sort((a, b) {
-                  final aOrder = (a['sortOrder'] as num?)?.toInt() ?? 999;
-                  final bOrder = (b['sortOrder'] as num?)?.toInt() ?? 999;
-                  return aOrder.compareTo(bOrder);
-                });
+          final items = ((group['items'] ?? const []) as List)
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .where((item) => item['isActive'] != false)
+              .toList()
+            ..sort((a, b) {
+              final aOrder = (a['sortOrder'] as num?)?.toInt() ?? 999;
+              final bOrder = (b['sortOrder'] as num?)?.toInt() ?? 999;
+              return aOrder.compareTo(bOrder);
+            });
           group['items'] = items;
         }
         return groups.isEmpty
             ? defaultAddonGroupConfigs
-                  .map((group) => Map<String, dynamic>.from(group))
-                  .toList()
+                .map((group) => Map<String, dynamic>.from(group))
+                .toList()
             : groups;
       });
     }
@@ -375,25 +352,24 @@ class AppConfigService {
               .map((item) => Map<String, dynamic>.from(item))
               .toList();
         }
-        final items =
-            docs
-                .map(
-                  (doc) => {
-                    ...doc,
-                    'key': (doc['key'] ?? doc['id']).toString(),
-                  },
-                )
-                .where((item) => item['isActive'] != false)
-                .toList()
-              ..sort((a, b) {
-                final aOrder = (a['sortOrder'] as num?)?.toInt() ?? 999;
-                final bOrder = (b['sortOrder'] as num?)?.toInt() ?? 999;
-                return aOrder.compareTo(bOrder);
-              });
+        final items = docs
+            .map(
+              (doc) => {
+                ...doc,
+                'key': (doc['key'] ?? doc['id']).toString(),
+              },
+            )
+            .where((item) => item['isActive'] != false)
+            .toList()
+          ..sort((a, b) {
+            final aOrder = (a['sortOrder'] as num?)?.toInt() ?? 999;
+            final bOrder = (b['sortOrder'] as num?)?.toInt() ?? 999;
+            return aOrder.compareTo(bOrder);
+          });
         return items.isEmpty
             ? defaultCleanerChecklistTemplates
-                  .map((item) => Map<String, dynamic>.from(item))
-                  .toList()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList()
             : items;
       });
     }
@@ -405,35 +381,31 @@ class AppConfigService {
     final catalog = Map<String, dynamic>.from(
       (data['catalog'] as Map?) ?? const <String, dynamic>{},
     );
-    final raw =
-        (catalog['checklistTemplates'] ??
-                catalog['checklists'] ??
-                catalog['checklist_templates'])
-            as List?;
-    final items =
-        (raw ?? const [])
-            .whereType<Map>()
-            .map((doc) => Map<String, dynamic>.from(doc))
-            .map(
-              (doc) => {
-                ...doc,
-                'key': (doc['key'] ?? doc['id']).toString(),
-                'title': doc['title_ru'] ?? doc['title'] ?? '',
-                'titleKk': doc['title_kk'],
-                'description':
-                    doc['description_ru'] ?? doc['description'] ?? '',
-                'descriptionKk': doc['description_kk'],
-                'sortOrder': doc['sort_order'] ?? doc['sortOrder'] ?? 999,
-                'isActive': doc['active'] != false,
-              },
-            )
-            .where((item) => item['isActive'] != false)
-            .toList()
-          ..sort(_bySortOrder);
+    final raw = (catalog['checklistTemplates'] ??
+        catalog['checklists'] ??
+        catalog['checklist_templates']) as List?;
+    final items = (raw ?? const [])
+        .whereType<Map>()
+        .map((doc) => Map<String, dynamic>.from(doc))
+        .map(
+          (doc) => {
+            ...doc,
+            'key': (doc['key'] ?? doc['id']).toString(),
+            'title': doc['title_ru'] ?? doc['title'] ?? '',
+            'titleKk': doc['title_kk'],
+            'description': doc['description_ru'] ?? doc['description'] ?? '',
+            'descriptionKk': doc['description_kk'],
+            'sortOrder': doc['sort_order'] ?? doc['sortOrder'] ?? 999,
+            'isActive': doc['active'] != false,
+          },
+        )
+        .where((item) => item['isActive'] != false)
+        .toList()
+      ..sort(_bySortOrder);
     return items.isEmpty
         ? defaultCleanerChecklistTemplates
-              .map((item) => Map<String, dynamic>.from(item))
-              .toList()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList()
         : items;
   }
 
@@ -452,11 +424,10 @@ class AppConfigService {
         .toList();
     for (final group in groups) {
       final groupId = group['id']?.toString();
-      final items =
-          addons
-              .where((addon) => addon['groupId']?.toString() == groupId)
-              .toList()
-            ..sort(_bySortOrder);
+      final items = addons
+          .where((addon) => addon['groupId']?.toString() == groupId)
+          .toList()
+        ..sort(_bySortOrder);
       group['items'] = items;
     }
     groups.sort(_bySortOrder);
@@ -465,8 +436,8 @@ class AppConfigService {
         .toList();
     return nonEmpty.isEmpty
         ? defaultAddonGroupConfigs
-              .map((group) => Map<String, dynamic>.from(group))
-              .toList()
+            .map((group) => Map<String, dynamic>.from(group))
+            .toList()
         : nonEmpty;
   }
 
@@ -485,14 +456,12 @@ class AppConfigService {
         'key': key,
         'title': item['title_ru'] ?? item['name_ru'] ?? item['title'] ?? '',
         'titleKk': item['title_kk'] ?? item['name_kk'],
-        'description':
-            item['description_ru'] ??
+        'description': item['description_ru'] ??
             item['description'] ??
             item['body_ru'] ??
             '',
         'descriptionKk': item['description_kk'] ?? item['body_kk'],
-        'body':
-            item['body_ru'] ??
+        'body': item['body_ru'] ??
             item['description_ru'] ??
             item['description'] ??
             '',
@@ -515,6 +484,10 @@ class AppConfigService {
       }
     }
 
+    for (final page
+        in (data['contentPages'] as List? ?? const []).whereType<Map>()) {
+      items.add(legalPageToInfoContent(Map<String, dynamic>.from(page)));
+    }
     items.sort(_bySortOrder);
     return items;
   }
@@ -523,44 +496,44 @@ class AppConfigService {
     dynamic raw, {
     String? placement,
   }) {
-    final items =
-        (raw as List? ?? const [])
-            .whereType<Map>()
-            .map((item) => mapBackendBanner(Map<String, dynamic>.from(item)))
-            .where((item) {
-              if (item['active'] == false) return false;
-              if (placement == null) return true;
-              return item['placement']?.toString() == placement;
-            })
-            .map(
-              (item) => {
-                'id': item['id'],
-                'title': item['title_ru'] ?? item['title'] ?? '',
-                'titleKk': item['title_kk'],
-                'subtitle': item['subtitle_ru'] ?? item['subtitle'] ?? '',
-                'subtitleKk': item['subtitle_kk'],
-                'description': item['description_ru'] ?? '',
-                'descriptionKk': item['description_kk'],
-                'imageUrl': item['image_url'] ?? item['imageUrl'] ?? '',
-                'bannerImageUrl': item['image_url'] ?? item['imageUrl'] ?? '',
-                'route': item['route'] ?? '',
-                'externalUrl':
-                    item['external_url'] ?? item['externalUrl'] ?? '',
-                'ctaLabel': item['cta_label_ru'] ?? item['ctaLabel'] ?? '',
-                'ctaLabelKk': item['cta_label_kk'],
-                'sortOrder': item['sort_order'] ?? item['sortOrder'] ?? 999,
-                'isActive': item['active'] != false,
-              },
-            )
-            .toList()
-          ..sort(_bySortOrder);
+    final items = (raw as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => mapBackendBanner(Map<String, dynamic>.from(item)))
+        .where((item) {
+          if (item['active'] == false) return false;
+          if (placement == null) return true;
+          return item['placement']?.toString() == placement;
+        })
+        .map(
+          (item) => {
+            'id': item['id'],
+            'title': item['title_ru'] ?? item['title'] ?? '',
+            'titleKk': item['title_kk'],
+            'subtitle': item['subtitle_ru'] ?? item['subtitle'] ?? '',
+            'subtitleKk': item['subtitle_kk'],
+            'description': item['description_ru'] ?? '',
+            'descriptionKk': item['description_kk'],
+            'imageUrl': item['image_url'] ?? item['imageUrl'] ?? '',
+            'bannerImageUrl': item['image_url'] ?? item['imageUrl'] ?? '',
+            'route': item['route'] ?? '',
+            'externalUrl': item['external_url'] ?? item['externalUrl'] ?? '',
+            'ctaLabel': item['cta_label_ru'] ?? item['ctaLabel'] ?? '',
+            'ctaLabelKk': item['cta_label_kk'],
+            'sortOrder': item['sort_order'] ?? item['sortOrder'] ?? 999,
+            'isActive': item['active'] != false,
+          },
+        )
+        .toList()
+      ..sort(_bySortOrder);
     return items;
   }
 
   List<Map<String, dynamic>> _mapBackendPromotions(dynamic raw) {
-    return (raw as List? ?? const []).whereType<Map>()
-        .map((item) => mapBackendPromotion(Map<String,dynamic>.from(item)))
-        .where((item) => item['isActive'] != false).toList();
+    return (raw as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => mapBackendPromotion(Map<String, dynamic>.from(item)))
+        .where((item) => item['isActive'] != false)
+        .toList();
   }
 
   Map<String, dynamic> _mapBackendAddonGroup(Map<String, dynamic> item) {
@@ -1168,8 +1141,7 @@ class AppConfigService {
     }
     return {
       ...base,
-      'bonusPerReferral':
-          (config['referralBonusAmount'] as num?)?.toInt() ??
+      'bonusPerReferral': (config['referralBonusAmount'] as num?)?.toInt() ??
           base['bonusPerReferral'],
     };
   }
@@ -1219,12 +1191,12 @@ class AppConfigService {
           (config['cleanerWeeklyAreaBonusAmount'] as num?)?.toInt() ?? 5000,
       'weeklyAddonBonusThreshold1':
           (config['cleanerWeeklyAddonBonusThreshold1'] as num?)?.toInt() ??
-          30000,
+              30000,
       'weeklyAddonBonusAmount1':
           (config['cleanerWeeklyAddonBonusAmount1'] as num?)?.toInt() ?? 4000,
       'weeklyAddonBonusThreshold2':
           (config['cleanerWeeklyAddonBonusThreshold2'] as num?)?.toInt() ??
-          50000,
+              50000,
       'weeklyAddonBonusAmount2':
           (config['cleanerWeeklyAddonBonusAmount2'] as num?)?.toInt() ?? 6000,
     };

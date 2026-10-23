@@ -1,3 +1,4 @@
+import '../theme/domly_palette.dart';
 import '../services/client_telemetry.dart';
 import '../services/ui_preferences.dart';
 import 'dart:async';
@@ -38,6 +39,8 @@ class DomlyLanguageSwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final controller = AppScope.of(context).translationController;
     final current = controller.localeCode;
     return Align(
@@ -45,9 +48,9 @@ class DomlyLanguageSwitcher extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: DomlyColors.backgroundSoft,
+          color: DomlyPalette.surface(DomlyColors.backgroundSoft),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: DomlyColors.border),
+          border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -82,8 +85,11 @@ class _DomlyLanguageChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Material(
-      color: selected ? DomlyColors.buttonPrimary : Colors.transparent,
+      color: DomlyPalette.surface(
+          selected ? DomlyColors.buttonPrimary : Colors.transparent),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: selected ? null : onTap,
@@ -91,9 +97,10 @@ class _DomlyLanguageChip extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           child: Text(
-            label,
+            label.tr(),
             style: TextStyle(
-              color: selected ? Colors.white : DomlyColors.foreground,
+              color: DomlyPalette.foreground(
+                  selected ? Colors.white : DomlyColors.foreground),
               fontWeight: FontWeight.w800,
               fontSize: 13,
             ),
@@ -130,7 +137,7 @@ void showDomlySnackBar(
     ..showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
+        backgroundColor: DomlyPalette.surface(Colors.transparent),
         elevation: 0,
         margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         duration: duration,
@@ -173,6 +180,8 @@ class _DomlySnackBarCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final hasSubtitle = subtitle != null && subtitle!.trim().isNotEmpty;
     final backgroundColor = switch (type) {
       DomlySnackBarType.success => const Color(0xFF1F4D33),
@@ -197,9 +206,9 @@ class _DomlySnackBarCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: DomlyPalette.surface(backgroundColor),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: DomlyPalette.border(borderColor)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -210,7 +219,7 @@ class _DomlySnackBarCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: titleColor,
+              color: DomlyPalette.foreground(titleColor),
             ),
           ),
           if (hasSubtitle) ...[
@@ -220,7 +229,7 @@ class _DomlySnackBarCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.35,
-                color: subtitleColor,
+                color: DomlyPalette.foreground(subtitleColor),
               ),
             ),
           ],
@@ -244,6 +253,8 @@ class DomlyShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final shouldShowBackButton =
         showBackButton ?? _shouldShowShellBackButton(context);
     return Scaffold(
@@ -322,19 +333,21 @@ class _DomlyShellBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 10, 0, 0),
         child: Material(
-          color: Colors.white.withValues(alpha: 0.92),
+          color: DomlyPalette.surface(Colors.white.withValues(alpha: 0.92)),
           shape: const CircleBorder(),
           elevation: 8,
           shadowColor: Colors.black26,
           child: IconButton(
             tooltip: 'Назад'.tr(),
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_ios_new_rounded,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
               size: 20,
             ),
             onPressed: () => _goBack(context),
@@ -378,6 +391,8 @@ class DomlyClientBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final targetKeys = DomlyTutorialTargets.navigationKeys(context);
     return StreamBuilder<int>(
       stream: FirestoreDataService.instance.userUnreadActivityCountStream(),
@@ -440,6 +455,8 @@ class DomlyCleanerBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final targetKeys = DomlyTutorialTargets.navigationKeys(context);
     final data = FirestoreDataService.instance;
     return StreamBuilder<List<Map<String, dynamic>>>(
@@ -548,6 +565,8 @@ class _DomlyBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final screenWidth = MediaQuery.sizeOf(context).width;
     final sideInset = screenWidth <= 380 ? 10.0 : 16.0;
     return SafeArea(
@@ -565,9 +584,11 @@ class _DomlyBottomNavBar extends StatelessWidget {
               height: 66,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.97),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.97)),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: DomlyColors.border),
+                border:
+                    Border.all(color: DomlyPalette.border(DomlyColors.border)),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x122D6B4F),
@@ -586,7 +607,7 @@ class _DomlyBottomNavBar extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 1),
                       child: Material(
-                        color: Colors.transparent,
+                        color: DomlyPalette.surface(Colors.transparent),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
                           onTap: () => onSelected(index),
@@ -595,9 +616,9 @@ class _DomlyBottomNavBar extends StatelessWidget {
                                 ? const Duration(milliseconds: 140)
                                 : Duration.zero,
                             decoration: BoxDecoration(
-                              color: selected
+                              color: DomlyPalette.surface(selected
                                   ? DomlyColors.buttonSoft
-                                  : Colors.transparent,
+                                  : Colors.transparent),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Stack(
@@ -612,9 +633,9 @@ class _DomlyBottomNavBar extends StatelessWidget {
                                             ? item.selectedIcon
                                             : item.icon,
                                         size: 19,
-                                        color: selected
+                                        color: DomlyPalette.foreground(selected
                                             ? DomlyColors.buttonPrimary
-                                            : DomlyColors.muted,
+                                            : DomlyColors.muted),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
@@ -626,9 +647,10 @@ class _DomlyBottomNavBar extends StatelessWidget {
                                           fontWeight: selected
                                               ? FontWeight.w700
                                               : FontWeight.w500,
-                                          color: selected
-                                              ? DomlyColors.foreground
-                                              : DomlyColors.muted,
+                                          color: DomlyPalette.foreground(
+                                              selected
+                                                  ? DomlyColors.foreground
+                                                  : DomlyColors.muted),
                                         ),
                                       ),
                                     ],
@@ -661,15 +683,15 @@ Widget _navBadge(int count) {
   return Container(
     constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-    decoration: const BoxDecoration(
-      color: DomlyColors.danger,
+    decoration: BoxDecoration(
+      color: DomlyPalette.surface(DomlyColors.danger),
       shape: BoxShape.circle,
     ),
     child: Text(
       count > 99 ? '99+' : '$count',
       textAlign: TextAlign.center,
-      style: const TextStyle(
-        color: Colors.white,
+      style: TextStyle(
+        color: DomlyPalette.foreground(Colors.white),
         fontSize: 10,
         fontWeight: FontWeight.w700,
       ),
@@ -689,13 +711,18 @@ class DomlyHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [DomlyColors.primary, DomlyColors.accent],
+          colors: [
+            DomlyPalette.surface(DomlyColors.primary),
+            DomlyPalette.surface(DomlyColors.accent)
+          ],
         ),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(34)),
         boxShadow: [
@@ -715,7 +742,8 @@ class DomlyHeader extends StatelessWidget {
               width: 108,
               height: 108,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.10),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.10)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -727,7 +755,8 @@ class DomlyHeader extends StatelessWidget {
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -757,13 +786,16 @@ class DomlyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: color,
+        color: DomlyPalette.surface(color),
         borderRadius: BorderRadius.circular(22),
-        border: border ?? Border.all(color: DomlyColors.border),
+        border: border ??
+            Border.all(color: DomlyPalette.border(DomlyColors.border)),
         boxShadow: const [
           BoxShadow(
             color: Color(0x142D6B4F),
@@ -791,6 +823,8 @@ class DomlyIconBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       width: size,
       height: size,
@@ -805,7 +839,8 @@ class DomlyIconBadge extends StatelessWidget {
           ),
         ],
       ),
-      child: Icon(icon, color: Colors.white, size: size * 0.48),
+      child: Icon(icon,
+          color: DomlyPalette.foreground(Colors.white), size: size * 0.48),
     );
   }
 }
@@ -818,19 +853,21 @@ class DomlyStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final baseColor = color ?? DomlyColors.buttonPrimary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: baseColor.withValues(alpha: 0.12),
+        color: DomlyPalette.surface(baseColor.withValues(alpha: 0.12)),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label.tr(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: DomlyColors.foreground,
+          color: DomlyPalette.foreground(DomlyColors.foreground),
         ),
       ),
     );
@@ -851,21 +888,23 @@ class DomlySectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Row(
       children: [
         Expanded(
           child: Text(
             title.tr(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
         ),
         if (actionLabel != null && onAction != null)
           Material(
-            color: Colors.transparent,
+            color: DomlyPalette.surface(Colors.transparent),
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
               onTap: onAction,
@@ -874,10 +913,10 @@ class DomlySectionTitle extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 child: Text(
                   actionLabel!.tr(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
               ),
@@ -941,6 +980,8 @@ class _DomlyPrimaryButtonState extends State<DomlyPrimaryButton> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final showLoading = widget.isLoading || _isPending;
     final enabled = widget.onPressed != null && !showLoading;
     return SizedBox(
@@ -958,7 +999,7 @@ class _DomlyPrimaryButtonState extends State<DomlyPrimaryButton> {
           onTapCancel:
               enabled ? () => setState(() => _isPressed = false) : null,
           child: Material(
-            color: Colors.transparent,
+            color: DomlyPalette.surface(Colors.transparent),
             borderRadius: BorderRadius.circular(16),
             child: Ink(
               decoration: BoxDecoration(
@@ -975,7 +1016,8 @@ class _DomlyPrimaryButtonState extends State<DomlyPrimaryButton> {
                               ],
                       )
                     : null,
-                color: enabled ? null : DomlyColors.border,
+                color:
+                    DomlyPalette.surface(enabled ? null : DomlyColors.border),
                 borderRadius: const BorderRadius.all(Radius.circular(16)),
                 boxShadow: enabled && !_isPressed
                     ? const [
@@ -1013,7 +1055,8 @@ class _DomlyPrimaryButtonState extends State<DomlyPrimaryButton> {
                       else if (widget.icon != null)
                         Icon(
                           widget.icon,
-                          color: enabled ? Colors.white : DomlyColors.muted,
+                          color: DomlyPalette.foreground(
+                              enabled ? Colors.white : DomlyColors.muted),
                           size: 18,
                         ),
                       ConstrainedBox(
@@ -1026,7 +1069,8 @@ class _DomlyPrimaryButtonState extends State<DomlyPrimaryButton> {
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: enabled ? Colors.white : DomlyColors.muted,
+                            color: DomlyPalette.foreground(
+                                enabled ? Colors.white : DomlyColors.muted),
                             height: 1.2,
                           ),
                         ),
@@ -1096,6 +1140,8 @@ class _DomlySecondaryButtonState extends State<DomlySecondaryButton> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final showLoading = widget.isLoading || _isPending;
     final enabled = widget.onPressed != null && !showLoading;
     return AnimatedScale(
@@ -1116,7 +1162,9 @@ class _DomlySecondaryButtonState extends State<DomlySecondaryButton> {
               const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
             ),
             side: WidgetStateProperty.all(
-              BorderSide(color: widget.foregroundColor.withValues(alpha: 0.20)),
+              BorderSide(
+                  color: DomlyPalette.border(
+                      widget.foregroundColor.withValues(alpha: 0.20))),
             ),
             shape: WidgetStateProperty.all(
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1144,7 +1192,7 @@ class _DomlySecondaryButtonState extends State<DomlySecondaryButton> {
           child: _DomlySecondaryButtonContent(
             label: widget.label,
             icon: widget.icon,
-            foregroundColor: widget.foregroundColor,
+            foregroundColor: DomlyPalette.foreground(widget.foregroundColor),
             isLoading: showLoading,
             enabled: enabled,
           ),
@@ -1171,6 +1219,8 @@ class _DomlySecondaryButtonContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -1192,7 +1242,8 @@ class _DomlySecondaryButtonContent extends StatelessWidget {
           Icon(
             icon,
             size: 18,
-            color: enabled ? foregroundColor : DomlyColors.muted,
+            color: DomlyPalette.foreground(
+                enabled ? foregroundColor : DomlyColors.muted),
           ),
           const SizedBox(width: 8),
         ],
@@ -1221,7 +1272,7 @@ Widget domlyTopIconButton({
         !DomlyShell._shouldShowShellBackButton(context))
       return const SizedBox.shrink();
     return Material(
-      color: background,
+      color: DomlyPalette.surface(background),
       borderRadius: BorderRadius.circular(15),
       child: InkWell(
         borderRadius: BorderRadius.circular(15),
@@ -1229,7 +1280,8 @@ Widget domlyTopIconButton({
         child: SizedBox(
           width: 34,
           height: 34,
-          child: Icon(icon, color: foreground, size: 17),
+          child:
+              Icon(icon, color: DomlyPalette.foreground(foreground), size: 17),
         ),
       ),
     );
@@ -1260,17 +1312,18 @@ Widget domlyTopBadgeIconButton({
             constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
             decoration: BoxDecoration(
-              color: DomlyColors.danger,
+              color: DomlyPalette.surface(DomlyColors.danger),
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: Colors.white, width: 1.5),
+              border: Border.all(
+                  color: DomlyPalette.border(Colors.white), width: 1.5),
             ),
             child: Text(
               badgeCount > 9 ? '9+' : '$badgeCount',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: DomlyPalette.foreground(Colors.white),
               ),
             ),
           ),
@@ -1296,7 +1349,7 @@ const List<String> _domlyMonthNamesGenitive = [
 
 String domlyDateText(DateTime date) {
   final day = date.day.toString();
-  final month = _domlyMonthNamesGenitive[date.month - 1];
+  final month = _domlyMonthNamesGenitive[date.month - 1].tr();
   return '$day $month ${date.year}';
 }
 
@@ -1318,12 +1371,14 @@ class DomlyStickyActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.98),
+        color: DomlyPalette.surface(Colors.white.withValues(alpha: 0.98)),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
         boxShadow: const [
           BoxShadow(
             color: Color(0x140F172A),
@@ -1351,6 +1406,8 @@ class DomlyEmptyStateCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return DomlyCard(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1359,12 +1416,12 @@ class DomlyEmptyStateCard extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: DomlyColors.backgroundSoft,
+              color: DomlyPalette.surface(DomlyColors.backgroundSoft),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Icon(
               icon,
-              color: DomlyColors.buttonPrimary,
+              color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
               size: 24,
             ),
           ),
@@ -1372,10 +1429,10 @@ class DomlyEmptyStateCard extends StatelessWidget {
           Text(
             title.tr(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
               height: 1.25,
             ),
           ),
@@ -1383,9 +1440,9 @@ class DomlyEmptyStateCard extends StatelessWidget {
           Text(
             subtitle.tr(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
               height: 1.45,
             ),
           ),

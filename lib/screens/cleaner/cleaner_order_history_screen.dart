@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 
@@ -22,6 +23,8 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return DomlyShell(
       bottomNavigationBar: const DomlyCleanerBottomNav(currentIndex: 4),
       child: SafeArea(
@@ -57,13 +60,15 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                   ),
                 ),
                 SizedBox(height: 4),
                 Text(
                   'Сводка по выполненным уборкам за период.'.tr(),
-                  style: TextStyle(fontSize: 12, color: Color(0xCCFFFFFF)),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: DomlyPalette.foreground(Color(0xCCFFFFFF))),
                 ),
               ],
             ),
@@ -95,7 +100,8 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
       _OrderPeriod.year: 'Год',
     };
     return Material(
-      color: selected ? DomlyColors.primary : Colors.white,
+      color:
+          DomlyPalette.surface(selected ? DomlyColors.primary : Colors.white),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () => setState(() => _period = period),
@@ -106,7 +112,8 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
           child: Text(
             labels[period]!,
             style: TextStyle(
-              color: selected ? Colors.white : DomlyColors.muted,
+              color: DomlyPalette.foreground(
+                  selected ? Colors.white : DomlyColors.muted),
               fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
@@ -148,8 +155,8 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
         }
         final allOrders = snap.data ?? [];
         final completedOrders = allOrders.where((order) {
-          final status = (order['orderStatus'] ?? order['status'] ?? '')
-              .toString();
+          final status =
+              (order['orderStatus'] ?? order['status'] ?? '').toString();
           return status == 'completed';
         }).toList();
         final filtered = _filterByPeriod(completedOrders);
@@ -218,10 +225,10 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
     int totalAddons = 0;
     for (final o in orders) {
       totalArea += ((o['area'] ?? 0) as num).toInt();
-      totalDurationMinutes +=
-          ((o['totalDurationMinutes'] ?? o['estimatedDurationMinutes'] ?? 0)
-                  as num)
-              .toInt();
+      totalDurationMinutes += ((o['totalDurationMinutes'] ??
+              o['estimatedDurationMinutes'] ??
+              0) as num)
+          .toInt();
       totalAddons += ((o['addonCount'] ?? 0) as num).toInt();
     }
     return {
@@ -257,17 +264,18 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
       children: [
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: DomlyColors.foreground,
+            color: DomlyPalette.foreground(DomlyColors.foreground),
           ),
         ),
         const SizedBox(height: 2),
         Text(
-          label,
+          label.tr(),
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 11, color: DomlyColors.muted),
+          style: TextStyle(
+              fontSize: 11, color: DomlyPalette.foreground(DomlyColors.muted)),
         ),
       ],
     );
@@ -276,23 +284,20 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
   Widget _orderCard(Map<String, dynamic> order) {
     final status = (order['orderStatus'] ?? order['status'] ?? '').toString();
     final date = _orderDate(order);
-    final dateStr =
-        '${date.day.toString().padLeft(2, '0')}.'
+    final dateStr = '${date.day.toString().padLeft(2, '0')}.'
         '${date.month.toString().padLeft(2, '0')}.'
         '${date.year}';
     final addons = _formatAddons(order);
-    final durationMinutes =
-        ((order['totalDurationMinutes'] ??
-                    order['estimatedDurationMinutes'] ??
-                    0)
-                as num)
-            .toInt();
+    final durationMinutes = ((order['totalDurationMinutes'] ??
+            order['estimatedDurationMinutes'] ??
+            0) as num)
+        .toInt();
     final addonCount = ((order['addonCount'] ?? 0) as num).toInt();
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -307,26 +312,29 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
                   children: [
                     Text(
                       _statusLabel(status),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: DomlyColors.foreground,
+                        color: DomlyPalette.foreground(DomlyColors.foreground),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       dateStr,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: DomlyColors.foreground,
+                        color: DomlyPalette.foreground(DomlyColors.foreground),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${(order['area'] ?? 0)} м² · $durationMinutes мин',
-                      style: const TextStyle(
+                      "{p0} м² · {p1} мин".tr(params: {
+                        'p0': ((order['area'] ?? 0)).toString(),
+                        'p1': (durationMinutes).toString()
+                      }),
+                      style: TextStyle(
                         fontSize: 13,
-                        color: DomlyColors.muted,
+                        color: DomlyPalette.foreground(DomlyColors.muted),
                       ),
                     ),
                   ],
@@ -338,14 +346,18 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
             const SizedBox(height: 8),
             Text(
               (order['address'] ?? '—').toString(),
-              style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ],
           if (addons.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
               addons,
-              style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ],
           if (addonCount > 0) ...[
@@ -363,15 +375,15 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: DomlyColors.backgroundSoft,
+        color: DomlyPalette.surface(DomlyColors.backgroundSoft),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        label,
-        style: const TextStyle(
+        label.tr(),
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: DomlyColors.foreground,
+          color: DomlyPalette.foreground(DomlyColors.foreground),
         ),
       ),
     );
@@ -392,8 +404,7 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
   }
 
   DateTime _orderDate(Map<String, dynamic> order) {
-    final value =
-        order['completedAt'] ??
+    final value = order['completedAt'] ??
         order['date'] ??
         order['scheduledFor'] ??
         order['createdAt'];

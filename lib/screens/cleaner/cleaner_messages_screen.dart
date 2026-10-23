@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 
@@ -11,6 +12,8 @@ class CleanerMessagesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final data = FirestoreDataService.instance;
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: data.userChatSummariesStream(),
@@ -73,7 +76,7 @@ class CleanerMessagesScreen extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                                color: DomlyPalette.foreground(Colors.white),
                               ),
                             ),
                             SizedBox(height: 4),
@@ -81,7 +84,8 @@ class CleanerMessagesScreen extends StatelessWidget {
                               'Диалоги с клиентами по заказам.'.tr(),
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Color(0xCCFFFFFF),
+                                color:
+                                    DomlyPalette.foreground(Color(0xCCFFFFFF)),
                               ),
                             ),
                           ],
@@ -130,8 +134,8 @@ class CleanerMessagesScreen extends StatelessWidget {
                                       context,
                                       '/chat',
                                       arguments: {
-                                        'orderId': (item['orderId'] ?? '')
-                                            .toString(),
+                                        'orderId':
+                                            (item['orderId'] ?? '').toString(),
                                       },
                                     );
                                   },
@@ -145,15 +149,17 @@ class CleanerMessagesScreen extends StatelessWidget {
                                           width: 48,
                                           height: 48,
                                           decoration: BoxDecoration(
-                                            color: DomlyColors.backgroundSoft,
+                                            color: DomlyPalette.surface(
+                                                DomlyColors.backgroundSoft),
                                             borderRadius: BorderRadius.circular(
                                               16,
                                             ),
                                           ),
                                           alignment: Alignment.center,
-                                          child: const Icon(
+                                          child: Icon(
                                             Icons.chat_bubble_outline,
-                                            color: DomlyColors.buttonPrimary,
+                                            color: DomlyPalette.foreground(
+                                                DomlyColors.buttonPrimary),
                                           ),
                                         ),
                                         const SizedBox(width: 14),
@@ -164,10 +170,13 @@ class CleanerMessagesScreen extends StatelessWidget {
                                             children: [
                                               Text(
                                                 title,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 15,
                                                   fontWeight: FontWeight.w700,
-                                                  color: DomlyColors.foreground,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors
+                                                              .foreground),
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
@@ -177,9 +186,11 @@ class CleanerMessagesScreen extends StatelessWidget {
                                                     .toString(),
                                                 maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 13,
-                                                  color: DomlyColors.muted,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors.muted),
                                                 ),
                                               ),
                                             ],
@@ -194,9 +205,10 @@ class CleanerMessagesScreen extends StatelessWidget {
                                               updatedAt == null
                                                   ? '—'
                                                   : domlyDateText(updatedAt),
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 12,
-                                                color: DomlyColors.muted,
+                                                color: DomlyPalette.foreground(
+                                                    DomlyColors.muted),
                                               ),
                                             ),
                                             const SizedBox(height: 8),

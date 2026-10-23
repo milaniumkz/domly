@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'customer_rating_dialog.dart';
 import 'package:flutter/material.dart';
 
@@ -56,6 +57,8 @@ class _PhotoReportScreenState extends State<PhotoReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final initialOrderId = widget.orderId.trim();
     if (initialOrderId.isEmpty && _resolvedOrderId == null) {
       return StreamBuilder<List<Map<String, dynamic>>>(
@@ -160,18 +163,18 @@ class _PhotoReportScreenState extends State<PhotoReportScreen> {
                       children: [
                         Text(
                           'Фотоотчет до/после'.tr(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                            color: DomlyPalette.foreground(Colors.white),
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Загрузите 3–5 фото после уборки'.tr(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xCCFFFFFF),
+                            color: DomlyPalette.foreground(Color(0xCCFFFFFF)),
                           ),
                         ),
                       ],
@@ -194,10 +197,10 @@ class _PhotoReportScreenState extends State<PhotoReportScreen> {
                             'Загружено: {count}/5'.tr(
                               params: {'count': _urls.length.toString()},
                             ),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: DomlyColors.muted,
+                              color: DomlyPalette.foreground(DomlyColors.muted),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -247,15 +250,16 @@ class _PhotoReportScreenState extends State<PhotoReportScreen> {
                                         child: Container(
                                           padding: const EdgeInsets.all(4),
                                           decoration: BoxDecoration(
-                                            color: Colors.black.withValues(
-                                              alpha: 0.6,
-                                            ),
+                                            color: DomlyPalette.surface(Colors
+                                                .black
+                                                .withValues(alpha: 0.6)),
                                             shape: BoxShape.circle,
                                           ),
-                                          child: const Icon(
+                                          child: Icon(
                                             Icons.close,
                                             size: 14,
-                                            color: Colors.white,
+                                            color: DomlyPalette.foreground(
+                                                Colors.white),
                                           ),
                                         ),
                                       ),

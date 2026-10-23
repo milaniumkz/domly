@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../common/customer_rating_dialog.dart';
 import 'dart:async';
 
@@ -73,6 +74,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _profileStream,
       initialData: const <String, dynamic>{},
@@ -206,7 +209,9 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                                   style: TextStyle(
                                                     fontSize: 24,
                                                     fontWeight: FontWeight.w700,
-                                                    color: Colors.white,
+                                                    color:
+                                                        DomlyPalette.foreground(
+                                                            Colors.white),
                                                   ),
                                                 ),
                                                 SizedBox(height: 2),
@@ -215,7 +220,9 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                                       .tr(),
                                                   style: TextStyle(
                                                     fontSize: 12,
-                                                    color: Color(0xCCFFFFFF),
+                                                    color:
+                                                        DomlyPalette.foreground(
+                                                            Color(0xCCFFFFFF)),
                                                   ),
                                                 ),
                                               ],
@@ -235,26 +242,31 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                       ),
                                       child: Container(
                                         decoration: BoxDecoration(
-                                          color: Colors.white,
+                                          color: DomlyPalette.surface(
+                                              Colors.white),
                                           borderRadius: BorderRadius.circular(
                                             18,
                                           ),
                                           border: Border.all(
-                                            color: DomlyColors.border,
+                                            color: DomlyPalette.border(
+                                                DomlyColors.border),
                                           ),
                                         ),
                                         child: TabBar(
                                           controller: _tabController,
                                           indicator: BoxDecoration(
-                                            color: DomlyColors.buttonPrimary,
+                                            color: DomlyPalette.surface(
+                                                DomlyColors.buttonPrimary),
                                             borderRadius: BorderRadius.circular(
                                               16,
                                             ),
                                           ),
                                           dividerColor: Colors.transparent,
-                                          labelColor: Colors.white,
+                                          labelColor: DomlyPalette.foreground(
+                                              Colors.white),
                                           unselectedLabelColor:
-                                              DomlyColors.muted,
+                                              DomlyPalette.foreground(
+                                                  DomlyColors.muted),
                                           tabs: const [
                                             Tab(text: 'Активные'),
                                             Tab(text: 'Завершенные'),
@@ -341,7 +353,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           const SizedBox(height: 8),
@@ -357,7 +369,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           const SizedBox(height: 8),
@@ -415,21 +427,23 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
-                  color: _color(status),
+                  color: DomlyPalette.surface(_color(status)),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   _text(status),
-                  style: const TextStyle(color: Colors.white),
+                  style:
+                      TextStyle(color: DomlyPalette.foreground(Colors.white)),
                 ),
               ),
               const Spacer(),
             ],
           ),
           const SizedBox(height: 2),
-          Text('Заказ: $displayId'.tr()),
-          Text('Дата: $dateLabel'.tr()),
-          Text('Время: ${(order['time'] ?? '—')}'),
+          Text("Заказ: {p0}".tr(params: {'p0': (displayId).toString()})),
+          Text("Дата: {p0}".tr(params: {'p0': (dateLabel).toString()})),
+          Text("Время: {p0}"
+              .tr(params: {'p0': ((order['time'] ?? '—')).toString()})),
           if ((order['estimatedDurationMinutes'] ??
                       order['totalDurationMinutes'])
                   .toString()
@@ -437,14 +451,26 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
               '${order['estimatedDurationMinutes'] ?? order['totalDurationMinutes']}' !=
                   'null')
             Text(
-              'Длительность: ${(order['estimatedDurationMinutes'] ?? order['totalDurationMinutes'] ?? '—')} мин',
+              "Длительность: {p0} мин".tr(params: {
+                'p0': ((order['estimatedDurationMinutes'] ??
+                        order['totalDurationMinutes'] ??
+                        '—'))
+                    .toString()
+              }),
             ),
-          Text('Клиент: ${(order['customerName'] ?? order['client'] ?? '—')}'),
+          Text("Клиент: {p0}".tr(params: {
+            'p0': ((order['customerName'] ?? order['client'] ?? '—')).toString()
+          })),
           Text(
-            'Телефон клиента: ${customerPhone.isEmpty ? '.tr()—' : customerPhone}',
+            "Телефон клиента: {p0}".tr(params: {
+              'p0':
+                  (customerPhone.isEmpty ? '.tr()—' : customerPhone).toString()
+            }),
           ),
-          Text('Адрес: ${(order['address'] ?? '—')}'),
-          if (area > 0) Text('Площадь: $area м²'.tr()),
+          Text("Адрес: {p0}"
+              .tr(params: {'p0': ((order['address'] ?? '—')).toString()})),
+          if (area > 0)
+            Text("Площадь: {p0} м²".tr(params: {'p0': (area).toString()})),
           if (_shouldShowResidentialComplex(
             (order['address'] ?? '').toString(),
             (order['residentialComplex'] ?? '').toString(),
@@ -457,11 +483,16 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
           if ((order['entrance'] ?? '').toString().isNotEmpty ||
               (order['apartment'] ?? '').toString().isNotEmpty)
             Text(
-              'Подъезд: ${(order['entrance'] ?? '—')} • Квартира: ${(order['apartment'] ?? '—')}',
+              "Подъезд: {p0} • Квартира: {p1}".tr(params: {
+                'p0': ((order['entrance'] ?? '—')).toString(),
+                'p1': ((order['apartment'] ?? '—')).toString()
+              }),
             ),
           if ((order['accessMethod'] ?? '').toString().isNotEmpty)
-            Text('Доступ: ${(order['accessMethod'] ?? '—')}'),
-          Text('Пакет: ${(order['package'] ?? '—')}'),
+            Text("Доступ: {p0}".tr(
+                params: {'p0': ((order['accessMethod'] ?? '—')).toString()})),
+          Text("Пакет: {p0}"
+              .tr(params: {'p0': ((order['package'] ?? '—')).toString()})),
           if (status == 'completed')
             TextButton(
                 onPressed: () => showCustomerRatingDialog(context,
@@ -669,12 +700,13 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFA500),
+                  color: DomlyPalette.surface(const Color(0xFFFFA500)),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   'Предложение'.tr(),
-                  style: TextStyle(color: Colors.white),
+                  style:
+                      TextStyle(color: DomlyPalette.foreground(Colors.white)),
                 ),
               ),
               const Spacer(),
@@ -684,20 +716,27 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
           const SizedBox(height: 12),
           Text(
             (offer['address'] ?? 'Адрес уточняется').toString(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           const SizedBox(height: 6),
-          Text('Дата уборки: $dateLabel'.tr()),
-          Text('Время начала: ${(offer['time'] ?? '—')}'),
-          if (area > 0) Text('Площадь: $area м²'.tr()),
+          Text("Дата уборки: {p0}".tr(params: {'p0': (dateLabel).toString()})),
+          Text("Время начала: {p0}"
+              .tr(params: {'p0': ((offer['time'] ?? '—')).toString()})),
+          if (area > 0)
+            Text("Площадь: {p0} м²".tr(params: {'p0': (area).toString()})),
           if (estimatedMinutes > 0)
-            Text('Примерная длительность: $estimatedMinutes мин'.tr()),
-          if (travelMinutes > 0) Text('Доезд: $travelMinutes мин'.tr()),
-          if (addonLabels.isNotEmpty) Text('Доп. услуги: $addonLabels'.tr()),
+            Text("Примерная длительность: {p0} мин"
+                .tr(params: {'p0': (estimatedMinutes).toString()})),
+          if (travelMinutes > 0)
+            Text("Доезд: {p0} мин"
+                .tr(params: {'p0': (travelMinutes).toString()})),
+          if (addonLabels.isNotEmpty)
+            Text("Доп. услуги: {p0}"
+                .tr(params: {'p0': (addonLabels).toString()})),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -753,28 +792,42 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
-                  color: _color(status == 'assigned' ? 'confirmed' : status),
+                  color: DomlyPalette.surface(
+                      _color(status == 'assigned' ? 'confirmed' : status)),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   status == 'assigned' ? 'Запланировано' : _text(status),
-                  style: const TextStyle(color: Colors.white),
+                  style:
+                      TextStyle(color: DomlyPalette.foreground(Colors.white)),
                 ),
               ),
               const Spacer(),
             ],
           ),
           const SizedBox(height: 2),
-          Text('Заказ: $displayId'.tr()),
-          Text('Дата: ${_slotDateText(slot)}'.tr()),
-          Text('Время уборки: ${(slot['time'] ?? '—')}'),
+          Text("Заказ: {p0}".tr(params: {'p0': (displayId).toString()})),
+          Text("Дата: {p0}"
+              .tr(params: {'p0': (_slotDateText(slot)).toString()})),
+          Text("Время уборки: {p0}"
+              .tr(params: {'p0': ((slot['time'] ?? '—')).toString()})),
           Text(
-            'Длительность: ${(slot['totalDurationMinutes'] ?? slot['estimatedDurationMinutes'] ?? '—')} мин',
+            "Длительность: {p0} мин".tr(params: {
+              'p0': ((slot['totalDurationMinutes'] ??
+                      slot['estimatedDurationMinutes'] ??
+                      '—'))
+                  .toString()
+            }),
           ),
-          Text('Клиент: ${(slot['customerName'] ?? '—')}'),
-          if (customerPhone.isNotEmpty) Text('Телефон: $customerPhone'.tr()),
-          Text('Адрес: ${(slot['address'] ?? '—')}'),
-          if (area > 0) Text('Площадь: $area м²'.tr()),
+          Text("Клиент: {p0}"
+              .tr(params: {'p0': ((slot['customerName'] ?? '—')).toString()})),
+          if (customerPhone.isNotEmpty)
+            Text(
+                "Телефон: {p0}".tr(params: {'p0': (customerPhone).toString()})),
+          Text("Адрес: {p0}"
+              .tr(params: {'p0': ((slot['address'] ?? '—')).toString()})),
+          if (area > 0)
+            Text("Площадь: {p0} м²".tr(params: {'p0': (area).toString()})),
           if (_shouldShowResidentialComplex(
             (slot['address'] ?? '').toString(),
             (slot['residentialComplex'] ?? '').toString(),
@@ -787,12 +840,19 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
           if ((slot['entrance'] ?? '').toString().isNotEmpty ||
               (slot['apartment'] ?? '').toString().isNotEmpty)
             Text(
-              'Подъезд: ${(slot['entrance'] ?? '—')} • Квартира: ${(slot['apartment'] ?? '—')}',
+              "Подъезд: {p0} • Квартира: {p1}".tr(params: {
+                'p0': ((slot['entrance'] ?? '—')).toString(),
+                'p1': ((slot['apartment'] ?? '—')).toString()
+              }),
             ),
           if ((slot['accessMethod'] ?? '').toString().isNotEmpty)
-            Text('Доступ: ${(slot['accessMethod'] ?? '—')}'),
-          Text('Пакет: ${(slot['package'] ?? '—')}'),
-          if (addonLabels.isNotEmpty) Text('Доп. услуги: $addonLabels'.tr()),
+            Text("Доступ: {p0}".tr(
+                params: {'p0': ((slot['accessMethod'] ?? '—')).toString()})),
+          Text("Пакет: {p0}"
+              .tr(params: {'p0': ((slot['package'] ?? '—')).toString()})),
+          if (addonLabels.isNotEmpty)
+            Text("Доп. услуги: {p0}"
+                .tr(params: {'p0': (addonLabels).toString()})),
           const SizedBox(height: 10),
           Column(
             children: [
@@ -850,7 +910,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                   width: double.infinity,
                   child: DomlySecondaryButton(
                     label: 'Отменить заказ',
-                    foregroundColor: DomlyColors.danger,
+                    foregroundColor:
+                        DomlyPalette.foreground(DomlyColors.danger),
                     onPressed: () => _handleCancelAssignment(slot),
                   ),
                 ),
@@ -905,7 +966,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -927,8 +988,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
               maxChildSize: 0.95,
               builder: (context, scrollController) {
                 return Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
+                  decoration: BoxDecoration(
+                    color: DomlyPalette.surface(Colors.white),
                     borderRadius: BorderRadius.vertical(
                       top: Radius.circular(28),
                     ),
@@ -943,7 +1004,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                             Text(
                               'Предложить доп. услуги'.tr(),
                               style: TextStyle(
-                                color: DomlyColors.foreground,
+                                color: DomlyPalette.foreground(
+                                    DomlyColors.foreground),
                                 fontSize: 22,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -953,7 +1015,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                               'Клиент получит согласование. После оплаты и подтверждения админом допы добавятся в заказ.'
                                   .tr(),
                               style: TextStyle(
-                                color: DomlyColors.muted,
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                                 fontSize: 13,
                                 height: 1.35,
                               ),
@@ -986,8 +1049,9 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                                 group['key'] ??
                                                 'Допы')
                                             .toString(),
-                                        style: const TextStyle(
-                                          color: DomlyColors.foreground,
+                                        style: TextStyle(
+                                          color: DomlyPalette.foreground(
+                                              DomlyColors.foreground),
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
@@ -1014,9 +1078,11 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                                   children: [
                                                     Text(
                                                       labels[key] ?? key,
-                                                      style: const TextStyle(
-                                                        color: DomlyColors
-                                                            .foreground,
+                                                      style: TextStyle(
+                                                        color: DomlyPalette
+                                                            .foreground(
+                                                                DomlyColors
+                                                                    .foreground),
                                                         fontWeight:
                                                             FontWeight.w600,
                                                       ),
@@ -1026,8 +1092,10 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                                       Text(
                                                         'Оплата отдельно'.tr(),
                                                         style: TextStyle(
-                                                          color:
-                                                              DomlyColors.muted,
+                                                          color: DomlyPalette
+                                                              .foreground(
+                                                                  DomlyColors
+                                                                      .muted),
                                                           fontSize: 12,
                                                         ),
                                                       ),
@@ -1078,10 +1146,11 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                             TextField(
                               controller: noteController,
                               maxLines: 3,
-                              decoration: const InputDecoration(
-                                labelText: 'Комментарий клиенту',
+                              decoration: InputDecoration(
+                                labelText: 'Комментарий клиенту'.tr(),
                                 hintText:
-                                    'Например: холодильник сильно загрязнен',
+                                    'Например: холодильник сильно загрязнен'
+                                        .tr(),
                               ),
                             ),
                           ],
@@ -1089,8 +1158,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                       ),
                       Container(
                         padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
+                        decoration: BoxDecoration(
+                          color: DomlyPalette.surface(Colors.white),
                           boxShadow: [
                             BoxShadow(
                               blurRadius: 18,
@@ -1772,9 +1841,9 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: wholeSeconds > 0
+            color: DomlyPalette.foreground(wholeSeconds > 0
                 ? DomlyColors.buttonPrimary
-                : DomlyColors.danger,
+                : DomlyColors.danger),
           ),
         );
       },

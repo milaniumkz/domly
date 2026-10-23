@@ -1,3 +1,5 @@
+import '../utils/stable_polling_stream.dart';
+import '../utils/service_coverage.dart';
 import '../utils/address_payload.dart';
 import 'ui_preferences.dart';
 import '../utils/booking_addon_data.dart';
@@ -383,45 +385,9 @@ class FirestoreDataService {
   }
 
   Stream<T> _backendPollingStream<T>(Future<T> Function() loader,
-      {Duration interval = const Duration(seconds: 20)}) {
-    return Stream<T>.multi((controller) {
-      Timer? timer;
-      var closed = false;
-      var loading = false;
-      var reload = false;
-      Future<void> emit() async {
-        if (closed) return;
-        if (loading) {
-          reload = true;
-          return;
-        }
-        loading = true;
-        try {
-          final value = await loader();
-          if (!closed) controller.add(value);
-        } catch (_) {
-          if (!closed) {
-            controller.addError('Сервис временно недоступен.');
-          }
-        } finally {
-          loading = false;
-          if (reload && !closed) {
-            reload = false;
-            emit();
-          }
-        }
-      }
-
-      emit();
-      timer = Timer.periodic(interval, (_) => emit());
-      BackendApiService.instance.dataRevision.addListener(emit);
-      controller.onCancel = () {
-        closed = true;
-        timer?.cancel();
-        BackendApiService.instance.dataRevision.removeListener(emit);
-      };
-    });
-  }
+          {Duration interval = const Duration(seconds: 20)}) =>
+      stablePollingStream(loader,
+          interval: interval, refresh: BackendApiService.instance.dataRevision);
 
   Stream<Map<String, dynamic>?> customerProfileStream() {
     if (_isDebugCustomer) {
@@ -483,6 +449,11 @@ class FirestoreDataService {
       'id': item['id'],
       'addressId': item['id'],
       'city': item['city'],
+      'serviceAvailable': item['service_available'] == true ||
+          hasCityWideService(item['city']?.toString()),
+      if (item['service_available'] == true ||
+          hasCityWideService(item['city']?.toString()))
+        'houseStatus': 'ACTIVE',
       'settlement': item['settlement'],
       'street': item['street'],
       'house': item['house'],
@@ -644,8 +615,10 @@ class FirestoreDataService {
       ...item,
       'customerId': item['customer_id'],
       'approvalSource': item['approval_source'],
-      'bccTestMode': item['payload'] is Map && item['payload']['bccTestMode'] == true,
-      'bccBankStatus': item['payload'] is Map ? item['payload']['bccBankStatus'] : null,
+      'bccTestMode':
+          item['payload'] is Map && item['payload']['bccTestMode'] == true,
+      'bccBankStatus':
+          item['payload'] is Map ? item['payload']['bccBankStatus'] : null,
       'approvedBy': item['approved_by'],
       'approvedByName': item['approved_by_name'],
       'approvedAt': item['approved_at'],
@@ -1177,6 +1150,7 @@ class FirestoreDataService {
     final items = await BackendApiService.instance.getList(
       '/geo/connected-houses',
       authenticated: false,
+      query: {'limit': '100'},
     );
     items.sort((a, b) {
       final aText =
@@ -1205,6 +1179,15 @@ class FirestoreDataService {
       return null;
     }
 
+    if (!_isDebugCustomer &&
+        !_isTemporaryCustomerSession &&
+        RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(placeId)) {
+      final matched = await BackendApiService.instance.getList(
+          '/geo/connected-houses',
+          authenticated: false,
+          query: {'id': placeId, 'limit': '1'});
+      if (matched.isNotEmpty) return matched.first;
+    }
     final items = await getAvailableHouses();
     Map<String, dynamic>? best;
     var bestScore = 0;
@@ -11021,16 +11004,26 @@ class FirestoreDataService {
       final addonIds = bookingAddonIds(selection);
       final addonDetails = <Map<String, dynamic>>[
         ...(selection['newAddonsDetailed'] as List? ?? const [])
-            .whereType<Map>().map((item) => Map<String, dynamic>.from(item)),
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item)),
       ];
       final bonusToSpend = math.max(
         0,
         (selection['bonusToSpend'] as num?)?.toInt() ?? 0,
       );
       final kaspiPhone = (selection['kaspiPhone'] ?? '').toString().trim();
-      final quotedAddons = addonDetails.fold<int>(0,(total,item)=>total+
-        (_num(item['price'])*(item['quantity'] is num ? (item['quantity'] as num).toInt() : 1)).round());
-      if (addonDetails.isNotEmpty && kaspiPhone.isEmpty && bonusToSpend < quotedAddons) {
+      final quotedAddons = addonDetails.fold<int>(
+          0,
+          (total, item) =>
+              total +
+              (_num(item['price']) *
+                      (item['quantity'] is num
+                          ? (item['quantity'] as num).toInt()
+                          : 1))
+                  .round());
+      if (addonDetails.isNotEmpty &&
+          kaspiPhone.isEmpty &&
+          bonusToSpend < quotedAddons) {
         throw FlutterError('Укажите номер Kaspi для оплаты доп. услуг.');
       }
       final created = await BackendApiService.instance.postMap(

@@ -1,3 +1,4 @@
+import '../localization/translation_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -25,8 +26,8 @@ class ChatInteraction {
         scroll.animateTo(0,
             duration: const Duration(milliseconds: 180), curve: Curves.easeOut);
       if (notify)
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Новое сообщение в чате'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Новое сообщение в чате'.tr()),
             duration: Duration(seconds: 2)));
     });
     WidgetsBinding.instance.ensureVisualUpdate();

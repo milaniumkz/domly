@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../ui/domly_ui.dart';
@@ -29,7 +30,7 @@ Future<bool> showPurchaseTermsDialog(
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
               ),
             ),
             content: SingleChildScrollView(
@@ -49,9 +50,10 @@ Future<bool> showPurchaseTermsDialog(
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: DomlyColors.backgroundSoft,
+                      color: DomlyPalette.surface(DomlyColors.backgroundSoft),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: DomlyColors.border),
+                      border: Border.all(
+                          color: DomlyPalette.border(DomlyColors.border)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,7 +84,8 @@ Future<bool> showPurchaseTermsDialog(
                           '• доп. услуги оплачиваются отдельно, если не включены в пакет;'
                               .tr(),
                         ),
-                        Text('• срок действия пакета — $validityText;'.tr()),
+                        Text("• срок действия пакета — {p0};"
+                            .tr(params: {'p0': (validityText).toString()})),
                         Text(
                           '• бесплатная отмена — за 12 часов до визита;'.tr(),
                         ),
@@ -127,9 +130,10 @@ Future<bool> showPurchaseTermsDialog(
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: DomlyColors.backgroundSoft,
+                      color: DomlyPalette.surface(DomlyColors.backgroundSoft),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: DomlyColors.border),
+                      border: Border.all(
+                          color: DomlyPalette.border(DomlyColors.border)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 import '../../utils/backend_compat.dart';
 
@@ -41,6 +42,8 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final data = FirestoreDataService.instance;
 
     return StreamBuilder<Map<String, dynamic>?>(
@@ -59,9 +62,8 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
             ),
           );
         }
-        final video = snap.hasError
-            ? data.fallbackVideoById(widget.videoId)
-            : snap.data;
+        final video =
+            snap.hasError ? data.fallbackVideoById(widget.videoId) : snap.data;
         if (video == null) {
           return const DomlyShell(
             child: SafeArea(
@@ -116,7 +118,8 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                                   style: TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.white,
+                                    color:
+                                        DomlyPalette.foreground(Colors.white),
                                   ),
                                 ),
                                 SizedBox(height: 4),
@@ -124,7 +127,8 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                                   'Смотрите прямо в приложении'.tr(),
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Color(0xCCFFFFFF),
+                                    color: DomlyPalette.foreground(
+                                        Color(0xCCFFFFFF)),
                                   ),
                                 ),
                               ],
@@ -148,33 +152,37 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                                       borderRadius: BorderRadius.circular(24),
                                     )
                                   : thumbnailUrl.isEmpty
-                                  ? Container(
-                                      color: DomlyColors.backgroundSoft,
-                                      alignment: Alignment.center,
-                                      child: const Icon(
-                                        Icons.play_circle_outline,
-                                        size: 72,
-                                        color: DomlyColors.buttonPrimary,
-                                      ),
-                                    )
-                                  : Image.network(
-                                      thumbnailUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (
+                                      ? Container(
+                                          color: DomlyPalette.surface(
+                                              DomlyColors.backgroundSoft),
+                                          alignment: Alignment.center,
+                                          child: Icon(
+                                            Icons.play_circle_outline,
+                                            size: 72,
+                                            color: DomlyPalette.foreground(
+                                                DomlyColors.buttonPrimary),
+                                          ),
+                                        )
+                                      : Image.network(
+                                          thumbnailUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (
                                             context,
                                             error,
                                             stackTrace,
-                                          ) => Container(
-                                            color: DomlyColors.backgroundSoft,
+                                          ) =>
+                                              Container(
+                                            color: DomlyPalette.surface(
+                                                DomlyColors.backgroundSoft),
                                             alignment: Alignment.center,
-                                            child: const Icon(
+                                            child: Icon(
                                               Icons.play_circle_outline,
                                               size: 72,
-                                              color: DomlyColors.buttonPrimary,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.buttonPrimary),
                                             ),
                                           ),
-                                    ),
+                                        ),
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -184,7 +192,7 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                             children: [
                               DomlyStatusChip(label: category),
                               if (isRequired)
-                                const DomlyStatusChip(
+                                DomlyStatusChip(
                                   label: 'Обязательно',
                                   color: DomlyColors.danger,
                                 ),
@@ -197,19 +205,20 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            title,
-                            style: const TextStyle(
+                            title.tr(),
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              color: DomlyColors.foreground,
+                              color: DomlyPalette.foreground(
+                                  DomlyColors.foreground),
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             description,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
-                              color: DomlyColors.muted,
+                              color: DomlyPalette.foreground(DomlyColors.muted),
                               height: 1.45,
                             ),
                           ),
@@ -224,7 +233,8 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
-                                      color: DomlyColors.foreground,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.foreground),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -232,7 +242,8 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                                     'Ключевые тезисы'.tr(),
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: DomlyColors.muted,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.muted),
                                     ),
                                   ),
                                   const SizedBox(height: 10),
@@ -241,9 +252,10 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                                       padding: const EdgeInsets.only(bottom: 8),
                                       child: Text(
                                         '• $item',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 14,
-                                          color: DomlyColors.foreground,
+                                          color: DomlyPalette.foreground(
+                                              DomlyColors.foreground),
                                           height: 1.4,
                                         ),
                                       ),
@@ -273,8 +285,8 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
     final date = value is DateTime
         ? value
         : value is Timestamp
-        ? value.toDate()
-        : null;
+            ? value.toDate()
+            : null;
     if (date == null) {
       return '';
     }

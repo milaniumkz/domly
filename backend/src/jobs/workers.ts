@@ -1,3 +1,4 @@
+import {translateKazakh,sendLocalizedPush} from '../localization';
 import {technicalTick} from '../technical/runtime';
 import {StorageService} from '../modules/integrations';
 import {observeWorker} from '../technical/jobs';
@@ -31,20 +32,14 @@ async function readSettings() {
 
 async function notifyUser(userId: string, titleRu: string, bodyRu: string, targetType?: string, targetId?: string, dedupeKey?: string) {
   const row = (await db.query<{ id: string }>(
-    `INSERT INTO notifications (user_id, title_ru, body_ru, target_type, target_id, dedupe_key)
-     VALUES ($1,$2,$3,$4,$5,$6)
+    `INSERT INTO notifications (user_id, title_ru, body_ru, target_type, target_id, dedupe_key, title_kk, body_kk)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      ON CONFLICT (user_id, dedupe_key) DO NOTHING
      RETURNING id`,
-    [userId, titleRu, bodyRu, targetType ?? null, targetId ?? null, dedupeKey ?? null],
+    [userId, titleRu, bodyRu, targetType ?? null, targetId ?? null, dedupeKey ?? null,translateKazakh(titleRu),translateKazakh(bodyRu)],
   )).rows[0];
-  const tokens = (await db.query<{ token: string }>(
-    `SELECT token FROM device_tokens WHERE user_id=$1 AND enabled=TRUE`,
-    [userId],
-  )).rows.map((row) => row.token);
-  await fcm.send(tokens, titleRu, bodyRu, {
-    targetType: targetType ?? '',
-    targetId: targetId ?? '',
-    notificationId: row?.id ?? '',
+  await sendLocalizedPush(db,fcm,{userId,titleRu,bodyRu},{
+    targetType: targetType ?? '', targetId: targetId ?? '', notificationId: row?.id ?? '',
   });
   if (row) {
     await publishToUser(userId, {
@@ -68,13 +63,7 @@ async function notifyRole(role: string, titleRu: string, bodyRu: string, targetT
 
 workers.push(new Worker('notifications', async (job) => {
   const { userId, role, titleRu, bodyRu, targetType, targetId } = job.data;
-  const tokens = (await db.query<{ token: string }>(
-    userId
-      ? `SELECT token FROM device_tokens WHERE user_id=$1 AND enabled=TRUE`
-      : `SELECT dt.token FROM device_tokens dt JOIN app_users u ON u.id=dt.user_id WHERE u.role=$1 AND dt.enabled=TRUE`,
-    userId ? [userId] : [role],
-  )).rows.map((row) => row.token);
-  await fcm.send(tokens, titleRu, bodyRu, { targetType: targetType ?? '', targetId: targetId ?? '' });
+  await sendLocalizedPush(db,fcm,{userId,role,titleRu,bodyRu},{targetType:targetType??'',targetId:targetId??''});
   if (userId) {
     await publishToUser(userId, {
       type: 'notification',
@@ -85,15 +74,8 @@ workers.push(new Worker('notifications', async (job) => {
 
 workers.push(new Worker('cleaner-alarms', async (job) => {
   const { cleanerId, orderId, titleRu, bodyRu, notificationId } = job.data;
-  const tokens = (await db.query<{ token: string }>(
-    `SELECT token FROM device_tokens WHERE user_id=$1 AND enabled=TRUE`,
-    [cleanerId],
-  )).rows.map((row) => row.token);
-  await fcm.send(tokens, titleRu ?? 'Новый заказ', bodyRu ?? 'Вам поступил новый заказ. Откройте приложение.', {
-    targetType: 'order_offer',
-    targetId: orderId,
-    notificationId: notificationId ?? '',
-    alarm: 'true',
+  await sendLocalizedPush(db,fcm,{userId:cleanerId,titleRu:titleRu ?? 'Новый заказ',bodyRu:bodyRu ?? 'Вам поступил новый заказ. Откройте приложение.'},{
+    targetType:'order_offer',targetId:orderId,notificationId:notificationId??'',alarm:'true',
   });
   await publishToUser(cleanerId, {
     type: 'cleaner_alarm',

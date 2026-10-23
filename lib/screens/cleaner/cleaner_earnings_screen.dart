@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 
@@ -18,6 +19,8 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final data = FirestoreDataService.instance;
 
     return StreamBuilder<Map<String, dynamic>?>(
@@ -44,38 +47,35 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
         final availableWeeklyCashout = availableWeeklyCashoutRaw > 0
             ? availableWeeklyCashoutRaw
             : (availableFullCashout > 0
-                  ? (availableFullCashout.toDouble() * 0.3).round()
-                  : 0);
+                ? (availableFullCashout.toDouble() * 0.3).round()
+                : 0);
         final lockedBonus = (profile['lockedBonusAmount'] ?? 0) as num;
         final unlockedBonus = (profile['unlockedBonusAmount'] ?? 0) as num;
         final totalBonusAwarded = (profile['totalBonusAwarded'] ?? 0) as num;
         final totalArea = (profile['totalCleanedArea'] ?? 0) as num;
         final jobsCount = (profile['jobsCount'] ?? 0) as num;
-        final level =
-            (profile['cleanerStatusLabel'] ??
-                    (jobsCount >= 20 ? 'Специалист' : 'Новичок'))
-                .toString();
-        final progressText = (profile['cleanerStatusProgressText'] ?? '')
+        final level = (profile['cleanerStatusLabel'] ??
+                (jobsCount >= 20 ? 'Специалист' : 'Новичок'))
             .toString();
+        final progressText =
+            (profile['cleanerStatusProgressText'] ?? '').toString();
         final nextLevel = (profile['nextCleanerStatus'] ?? '').toString();
         final statusProgress =
             ((profile['cleanerStatusProgress'] as num?)?.toDouble() ?? 0).clamp(
-              0.0,
-              1.0,
-            );
+          0.0,
+          1.0,
+        );
 
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: data.cleanerOrdersStream(),
           builder: (context, ordersSnap) {
             final orders = ordersSnap.data ?? const <Map<String, dynamic>>[];
-            final completedOrders =
-                orders
-                    .where(
-                      (order) =>
-                          (order['status'] ?? '').toString() == 'completed',
-                    )
-                    .toList()
-                  ..sort((a, b) => _timestampOf(b).compareTo(_timestampOf(a)));
+            final completedOrders = orders
+                .where(
+                  (order) => (order['status'] ?? '').toString() == 'completed',
+                )
+                .toList()
+              ..sort((a, b) => _timestampOf(b).compareTo(_timestampOf(a)));
 
             return StreamBuilder<List<Map<String, dynamic>>>(
               stream: data.cleanerPayoutsStream(),
@@ -89,9 +89,8 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                     .where((payout) => _matchesPeriod(payout, _period))
                     .toList();
                 final settledPayouts = filteredPayouts.where((payout) {
-                  final status = (payout['status'] ?? '')
-                      .toString()
-                      .toLowerCase();
+                  final status =
+                      (payout['status'] ?? '').toString().toLowerCase();
                   return status == 'completed' ||
                       status == 'paid' ||
                       status == 'approved' ||
@@ -100,9 +99,8 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                       status == 'succeeded';
                 }).toList();
                 final settledAllPayouts = payouts.where((payout) {
-                  final status = (payout['status'] ?? '')
-                      .toString()
-                      .toLowerCase();
+                  final status =
+                      (payout['status'] ?? '').toString().toLowerCase();
                   return status == 'completed' ||
                       status == 'paid' ||
                       status == 'approved' ||
@@ -117,11 +115,11 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                 );
                 final displayWalletBalance =
                     totalWithdrawnLive > 0 || totalWithdrawnProfile > 0
-                    ? (totalEarnedProfile - totalWithdrawnLive).clamp(
-                        0,
-                        1 << 31,
-                      )
-                    : walletBalance;
+                        ? (totalEarnedProfile - totalWithdrawnLive).clamp(
+                            0,
+                            1 << 31,
+                          )
+                        : walletBalance;
 
                 final periodIncome = filteredOrders.fold<num>(
                   0,
@@ -187,7 +185,8 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                             Icons
                                                 .account_balance_wallet_outlined,
                                             size: 40,
-                                            color: Colors.white,
+                                            color: DomlyPalette.foreground(
+                                                Colors.white),
                                           ),
                                           SizedBox(height: 8),
                                           Text(
@@ -195,7 +194,8 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                             style: TextStyle(
                                               fontSize: 24,
                                               fontWeight: FontWeight.w700,
-                                              color: Colors.white,
+                                              color: DomlyPalette.foreground(
+                                                  Colors.white),
                                             ),
                                           ),
                                           SizedBox(height: 6),
@@ -203,7 +203,8 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                             'Баланс, начисления и выводы'.tr(),
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: Color(0xCCFFFFFF),
+                                              color: DomlyPalette.foreground(
+                                                  Color(0xCCFFFFFF)),
                                             ),
                                           ),
                                         ],
@@ -232,16 +233,18 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                             'Текущий баланс'.tr(),
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: Colors.white70,
+                                              color: DomlyPalette.foreground(
+                                                  Colors.white70),
                                             ),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
                                             '${displayWalletBalance.toInt()} ₸',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 20,
                                               fontWeight: FontWeight.w700,
-                                              color: Colors.white,
+                                              color: DomlyPalette.foreground(
+                                                  Colors.white),
                                             ),
                                           ),
                                           const SizedBox(height: 4),
@@ -333,7 +336,9 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                               children: [
                                                 Icon(
                                                   Icons.card_giftcard_outlined,
-                                                  color: Colors.white,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          Colors.white),
                                                 ),
                                                 SizedBox(width: 8),
                                                 Expanded(
@@ -343,7 +348,9 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                                       fontSize: 12,
                                                       fontWeight:
                                                           FontWeight.w700,
-                                                      color: Colors.white,
+                                                      color: DomlyPalette
+                                                          .foreground(
+                                                              Colors.white),
                                                     ),
                                                   ),
                                                 ),
@@ -373,9 +380,9 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                             Container(
                                               padding: const EdgeInsets.all(6),
                                               decoration: BoxDecoration(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.15,
-                                                ),
+                                                color: DomlyPalette.surface(
+                                                    Colors.white.withValues(
+                                                        alpha: 0.15)),
                                                 borderRadius:
                                                     BorderRadius.circular(14),
                                               ),
@@ -387,7 +394,9 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                                           .tr(),
                                                       style: TextStyle(
                                                         fontSize: 12,
-                                                        color: Colors.white,
+                                                        color: DomlyPalette
+                                                            .foreground(
+                                                                Colors.white),
                                                         fontWeight:
                                                             FontWeight.w500,
                                                       ),
@@ -396,11 +405,13 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                                   const SizedBox(width: 10),
                                                   Text(
                                                     '${totalBonusAwarded.toInt()} ₸',
-                                                    style: const TextStyle(
+                                                    style: TextStyle(
                                                       fontSize: 12,
                                                       fontWeight:
                                                           FontWeight.w700,
-                                                      color: Colors.white,
+                                                      color: DomlyPalette
+                                                          .foreground(
+                                                              Colors.white),
                                                     ),
                                                   ),
                                                 ],
@@ -443,14 +454,13 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                                 width: double.infinity,
                                                 child: DomlySecondaryButton(
                                                   label: 'Вывести 30%',
-                                                  onPressed:
-                                                      _cashoutSubmitting ||
+                                                  onPressed: _cashoutSubmitting ||
                                                           availableWeeklyCashout <=
                                                               0
                                                       ? null
                                                       : () => _requestCashout(
-                                                          'partial',
-                                                        ),
+                                                            'partial',
+                                                          ),
                                                 ),
                                               ),
                                               const SizedBox(height: 6),
@@ -458,14 +468,13 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                                 width: double.infinity,
                                                 child: DomlyPrimaryButton(
                                                   label: 'Вывести все',
-                                                  onPressed:
-                                                      _cashoutSubmitting ||
+                                                  onPressed: _cashoutSubmitting ||
                                                           availableFullCashout <=
                                                               0
                                                       ? null
                                                       : () => _requestCashout(
-                                                          'full',
-                                                        ),
+                                                            'full',
+                                                          ),
                                                 ),
                                               ),
                                             ],
@@ -506,9 +515,13 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                                     .withValues(alpha: 0.12),
                                                 labelStyle: TextStyle(
                                                   fontSize: 12,
-                                                  color: selected
-                                                      ? DomlyColors.primary
-                                                      : DomlyColors.foreground,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          selected
+                                                              ? DomlyColors
+                                                                  .primary
+                                                              : DomlyColors
+                                                                  .foreground),
                                                   fontWeight: FontWeight.w600,
                                                 ),
                                               );
@@ -569,19 +582,23 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                           children: [
                                             Row(
                                               children: [
-                                                const Icon(
+                                                Icon(
                                                   Icons.workspace_premium,
-                                                  color: Colors.white,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          Colors.white),
                                                 ),
                                                 const SizedBox(width: 8),
                                                 Expanded(
                                                   child: Text(
                                                     level,
-                                                    style: const TextStyle(
+                                                    style: TextStyle(
                                                       fontSize: 14,
                                                       fontWeight:
                                                           FontWeight.w700,
-                                                      color: Colors.white,
+                                                      color: DomlyPalette
+                                                          .foreground(
+                                                              Colors.white),
                                                     ),
                                                   ),
                                                 ),
@@ -591,9 +608,9 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                             Container(
                                               height: 8,
                                               decoration: BoxDecoration(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.20,
-                                                ),
+                                                color: DomlyPalette.surface(
+                                                    Colors.white.withValues(
+                                                        alpha: 0.20)),
                                                 borderRadius:
                                                     BorderRadius.circular(999),
                                               ),
@@ -602,11 +619,12 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                                 alignment: Alignment.centerLeft,
                                                 child: Container(
                                                   decoration: BoxDecoration(
-                                                    color: Colors.white,
+                                                    color: DomlyPalette.surface(
+                                                        Colors.white),
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                          999,
-                                                        ),
+                                                      999,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -616,8 +634,9 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                               nextLevel.isNotEmpty
                                                   ? progressText
                                                   : 'Максимальный уровень достигнут.',
-                                              style: const TextStyle(
-                                                color: Colors.white,
+                                              style: TextStyle(
+                                                color: DomlyPalette.foreground(
+                                                    Colors.white),
                                               ),
                                             ),
                                           ],
@@ -647,7 +666,9 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                                 'За выбранный период операций нет'
                                                     .tr(),
                                                 style: TextStyle(
-                                                  color: DomlyColors.muted,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors.muted),
                                                 ),
                                               ),
                                             )
@@ -712,25 +733,29 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
       padding: const EdgeInsets.all(8),
       child: Column(
         children: [
-          Icon(icon, color: DomlyColors.buttonPrimary),
+          Icon(icon, color: DomlyPalette.foreground(DomlyColors.buttonPrimary)),
           const SizedBox(height: 8),
           Text(
-            title,
-            style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+            title.tr(),
+            style: TextStyle(
+                fontSize: 12,
+                color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
           const SizedBox(height: 4),
           Text(
             '${amount.toInt()}',
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
-          const Text(
+          Text(
             '₸',
-            style: TextStyle(fontSize: 12, color: DomlyColors.muted),
+            style: TextStyle(
+                fontSize: 12,
+                color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
         ],
       ),
@@ -741,23 +766,24 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
+        color: DomlyPalette.surface(Colors.white.withValues(alpha: 0.12)),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
-            style: const TextStyle(fontSize: 12, color: Colors.white70),
+            title.tr(),
+            style: TextStyle(
+                fontSize: 12, color: DomlyPalette.foreground(Colors.white70)),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: DomlyPalette.foreground(Colors.white),
             ),
           ),
         ],
@@ -769,25 +795,26 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
+        color: DomlyPalette.surface(Colors.white.withValues(alpha: 0.15)),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: Colors.white),
+          Icon(icon, size: 20, color: DomlyPalette.foreground(Colors.white)),
           const SizedBox(height: 8),
           Text(
-            title,
-            style: const TextStyle(fontSize: 11, color: Colors.white70),
+            title.tr(),
+            style: TextStyle(
+                fontSize: 11, color: DomlyPalette.foreground(Colors.white70)),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: DomlyPalette.foreground(Colors.white),
             ),
           ),
         ],
@@ -801,19 +828,21 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: DomlyColors.buttonPrimary),
+          Icon(icon, color: DomlyPalette.foreground(DomlyColors.buttonPrimary)),
           const SizedBox(height: 8),
           Text(
-            title,
-            style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+            title.tr(),
+            style: TextStyle(
+                fontSize: 12,
+                color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
         ],
@@ -828,16 +857,17 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
         children: [
           Expanded(
             child: Text(
-              label,
-              style: const TextStyle(color: DomlyColors.muted),
+              label.tr(),
+              style:
+                  TextStyle(color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ),
           const SizedBox(width: 8),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
         ],
@@ -861,10 +891,10 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
+              color: DomlyPalette.surface(color.withValues(alpha: 0.10)),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(icon, color: color),
+            child: Icon(icon, color: DomlyPalette.foreground(color)),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -873,17 +903,17 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
               children: [
                 Text(
                   item.title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   item.subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DomlyColors.muted,
+                    color: DomlyPalette.foreground(DomlyColors.muted),
                   ),
                 ),
               ],
@@ -892,7 +922,9 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
           const SizedBox(width: 10),
           Text(
             '${isWithdrawal ? '-' : '+'}${item.amount.toInt()} ₸',
-            style: TextStyle(fontWeight: FontWeight.w700, color: color),
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: DomlyPalette.foreground(color)),
           ),
         ],
       ),

@@ -1,3 +1,5 @@
+import '../localization/translation_controller.dart';
+
 class PackageCatalogUtils {
   const PackageCatalogUtils._();
   static const List<int> _allowedMonthlyVisits = [1, 2, 4, 8];
@@ -131,7 +133,12 @@ class PackageCatalogUtils {
     return isQuarterlyPackage(package) ? 0.10 : 0;
   }
 
-  static String frequencyLabel(
+  static String frequencyLabel(Map<String, dynamic>? package,
+          {int quarterlyVisitsPerMonth = 2}) =>
+      _frequencyLabel(package, quarterlyVisitsPerMonth: quarterlyVisitsPerMonth)
+          .tr();
+
+  static String _frequencyLabel(
     Map<String, dynamic>? package, {
     int quarterlyVisitsPerMonth = 2,
   }) {
@@ -151,7 +158,12 @@ class PackageCatalogUtils {
     return '$visits раза в месяц';
   }
 
-  static String displayName(
+  static String displayName(Map<String, dynamic>? package,
+          {int quarterlyVisitsPerMonth = 2}) =>
+      _displayName(package, quarterlyVisitsPerMonth: quarterlyVisitsPerMonth)
+          .tr();
+
+  static String _displayName(
     Map<String, dynamic>? package, {
     int quarterlyVisitsPerMonth = 2,
   }) {

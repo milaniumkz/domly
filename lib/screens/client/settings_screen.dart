@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../services/ui_preferences.dart';
 import 'package:flutter/material.dart';
 
@@ -49,6 +50,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final authController = AppScope.of(context).authController;
     final isAuthenticated = authController.isAuthenticated;
 
@@ -90,7 +93,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return DomlyShell(
           bottomNavigationBar: DomlyClientBottomNav(currentIndex: 4),
           child: ColoredBox(
-            color: _background,
+            color: DomlyPalette.background(_background),
             child: SafeArea(
               bottom: false,
               child: Center(
@@ -268,7 +271,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final translationController = AppScope.of(context).translationController;
     final next = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) {
         return SafeArea(
           child: Container(
@@ -287,7 +290,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text(
                   'Язык приложения'.tr(),
                   style: TextStyle(
-                    color: _foreground,
+                    color: DomlyPalette.foreground(_foreground),
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -402,11 +405,16 @@ class _SettingsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 130,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF439F73), Color(0xFF80D4B0)],
+          colors: [
+            DomlyPalette.surface(Color(0xFF439F73)),
+            DomlyPalette.surface(Color(0xFF80D4B0))
+          ],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -420,7 +428,8 @@ class _SettingsHeader extends StatelessWidget {
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -432,7 +441,8 @@ class _SettingsHeader extends StatelessWidget {
               width: 138,
               height: 138,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -458,7 +468,7 @@ class _SettingsHeader extends StatelessWidget {
                 Text(
                   'Внешний вид, язык и уведомления'.tr(),
                   style: TextStyle(
-                    color: Color(0xFFEDFAF2),
+                    color: DomlyPalette.foreground(Color(0xFFEDFAF2)),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     height: 16 / 12,
@@ -488,6 +498,8 @@ class _SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: height,
       padding: EdgeInsets.fromLTRB(25, 10, 52, 16),
@@ -495,24 +507,25 @@ class _SettingsSection extends StatelessWidget {
         color:
             UiPreferences.instance.darkMode ? Color(0xFF203127) : Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _SettingsScreenState._border),
+        border: Border.all(
+            color: DomlyPalette.border(_SettingsScreenState._border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
+            title.tr(),
             style: TextStyle(
-              color: _SettingsScreenState._foreground,
+              color: DomlyPalette.foreground(_SettingsScreenState._foreground),
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
           ),
           SizedBox(height: 5),
           Text(
-            subtitle,
+            subtitle.tr(),
             style: TextStyle(
-              color: _SettingsScreenState._muted,
+              color: DomlyPalette.foreground(_SettingsScreenState._muted),
               fontSize: 12,
               fontWeight: FontWeight.w400,
             ),
@@ -544,6 +557,8 @@ class _SettingsOptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Material(
       color: UiPreferences.instance.darkMode ? Color(0xFF203127) : Colors.white,
       borderRadius: BorderRadius.circular(20),
@@ -555,7 +570,8 @@ class _SettingsOptionTile extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(18, 5, 12, 5),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _SettingsScreenState._border),
+            border: Border.all(
+                color: DomlyPalette.border(_SettingsScreenState._border)),
           ),
           child: Row(
             children: [
@@ -565,21 +581,23 @@ class _SettingsOptionTile extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      title,
+                      title.tr(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: _SettingsScreenState._foreground,
+                        color: DomlyPalette.foreground(
+                            _SettingsScreenState._foreground),
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
-                      subtitle,
+                      subtitle.tr(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: _SettingsScreenState._muted,
+                        color: DomlyPalette.foreground(
+                            _SettingsScreenState._muted),
                         fontSize: 12,
                         fontWeight: FontWeight.w400,
                       ),
@@ -591,7 +609,7 @@ class _SettingsOptionTile extends StatelessWidget {
                 Text(
                   '›',
                   style: TextStyle(
-                    color: _SettingsScreenState._green,
+                    color: DomlyPalette.foreground(_SettingsScreenState._green),
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
@@ -601,9 +619,9 @@ class _SettingsOptionTile extends StatelessWidget {
                   width: 11,
                   height: 11,
                   decoration: BoxDecoration(
-                    color: active
+                    color: DomlyPalette.surface(active
                         ? _SettingsScreenState._green
-                        : _SettingsScreenState._border,
+                        : _SettingsScreenState._border),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -620,6 +638,8 @@ class _AboutAppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 70,
       padding: EdgeInsets.fromLTRB(33, 8, 24, 8),
@@ -627,7 +647,8 @@ class _AboutAppCard extends StatelessWidget {
         color:
             UiPreferences.instance.darkMode ? Color(0xFF203127) : Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _SettingsScreenState._border),
+        border: Border.all(
+            color: DomlyPalette.border(_SettingsScreenState._border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -635,7 +656,7 @@ class _AboutAppCard extends StatelessWidget {
           Text(
             'О приложении'.tr(),
             style: TextStyle(
-              color: _SettingsScreenState._foreground,
+              color: DomlyPalette.foreground(_SettingsScreenState._foreground),
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -644,7 +665,7 @@ class _AboutAppCard extends StatelessWidget {
           Text(
             'Версия и поддержка'.tr(),
             style: TextStyle(
-              color: _SettingsScreenState._muted,
+              color: DomlyPalette.foreground(_SettingsScreenState._muted),
               fontSize: 12,
             ),
           ),
@@ -652,7 +673,7 @@ class _AboutAppCard extends StatelessWidget {
           Text(
             'Domly 1.0.0',
             style: TextStyle(
-              color: _SettingsScreenState._foreground,
+              color: DomlyPalette.foreground(_SettingsScreenState._foreground),
               fontSize: 14,
             ),
           ),
@@ -677,10 +698,13 @@ class _LogoutButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 8),
       child: Material(
-        color: danger ? Color(0xFFB84545) : _SettingsScreenState._button,
+        color: DomlyPalette.surface(
+            danger ? Color(0xFFB84545) : _SettingsScreenState._button),
         borderRadius: BorderRadius.circular(14),
         elevation: 4,
         shadowColor: Colors.black.withValues(alpha: 0.25),
@@ -707,7 +731,7 @@ class _LogoutButton extends StatelessWidget {
                     SizedBox(width: 8),
                   ],
                   Text(
-                    label,
+                    label.tr(),
                     style: TextStyle(
                       color: UiPreferences.instance.darkMode
                           ? Color(0xFF203127)
@@ -737,6 +761,8 @@ class _LanguageChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return _SettingsOptionTile(
       title: label,
       subtitle: selected ? 'Выбран' : 'Нажмите, чтобы выбрать',

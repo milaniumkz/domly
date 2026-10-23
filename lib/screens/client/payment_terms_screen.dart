@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
@@ -14,8 +15,10 @@ class PaymentTermsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Scaffold(
-      backgroundColor: AppTheme.backgroundCream,
+      backgroundColor: DomlyPalette.background(AppTheme.backgroundCream),
       body: SafeArea(
         child: Stack(
           children: [
@@ -27,7 +30,7 @@ class PaymentTermsScreen extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: DomlyPalette.surface(Colors.white),
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
@@ -81,12 +84,13 @@ class PaymentTermsScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 0, 0),
               child: Material(
-                color: Colors.white.withValues(alpha: 0.92),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.92)),
                 shape: const CircleBorder(),
                 elevation: 8,
                 shadowColor: Colors.black26,
                 child: IconButton(
-                  tooltip: 'Назад',
+                  tooltip: 'Назад'.tr(),
                   icon: const Icon(Icons.arrow_back_ios_new_rounded),
                   onPressed: () {
                     final navigator = Navigator.of(context);
@@ -111,23 +115,25 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'DOMLY',
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            color: AppTheme.primaryGreen,
-            fontWeight: FontWeight.w800,
-          ),
+                color: AppTheme.primaryGreen,
+                fontWeight: FontWeight.w800,
+              ),
         ),
         const SizedBox(height: 8),
         Text(
           'Условия приема и возврата платежей'.tr(),
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: AppTheme.darkText,
-            fontWeight: FontWeight.w700,
-          ),
+                color: AppTheme.darkText,
+                fontWeight: FontWeight.w700,
+              ),
         ),
         const SizedBox(height: 8),
         Text(
@@ -149,17 +155,19 @@ class _TermsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
+            title.tr(),
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: AppTheme.darkText,
-              fontWeight: FontWeight.w800,
-            ),
+                  color: AppTheme.darkText,
+                  fontWeight: FontWeight.w800,
+                ),
           ),
           const SizedBox(height: 10),
           ...items.map(
@@ -168,11 +176,12 @@ class _TermsSection extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 7),
                     child: CircleAvatar(
                       radius: 3,
-                      backgroundColor: AppTheme.primaryTerracotta,
+                      backgroundColor:
+                          DomlyPalette.surface(AppTheme.primaryTerracotta),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -180,9 +189,9 @@ class _TermsSection extends StatelessWidget {
                     child: Text(
                       item,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        height: 1.45,
-                        color: AppTheme.darkText,
-                      ),
+                            height: 1.45,
+                            color: AppTheme.darkText,
+                          ),
                     ),
                   ),
                 ],

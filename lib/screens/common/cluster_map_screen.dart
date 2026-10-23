@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -12,6 +13,8 @@ class ClusterMapScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return DomlyShell(
       child: SafeArea(
         child: Column(
@@ -36,7 +39,7 @@ class ClusterMapScreen extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                            color: DomlyPalette.foreground(Colors.white),
                           ),
                         ),
                         SizedBox(height: 4),
@@ -45,7 +48,7 @@ class ClusterMapScreen extends StatelessWidget {
                               .tr(),
                           style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xCCFFFFFF),
+                            color: DomlyPalette.foreground(Color(0xCCFFFFFF)),
                           ),
                         ),
                       ],
@@ -54,7 +57,7 @@ class ClusterMapScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: 24),
               child: DomlyCard(
                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -240,23 +243,25 @@ class _LegendDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Row(
       children: [
         Container(
           width: 10,
           height: 10,
           decoration: BoxDecoration(
-            color: color,
+            color: DomlyPalette.surface(color),
             shape: BoxShape.circle,
           ),
         ),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
-            label,
-            style: const TextStyle(
+            label.tr(),
+            style: TextStyle(
               fontSize: 12,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
             ),
           ),
         ),

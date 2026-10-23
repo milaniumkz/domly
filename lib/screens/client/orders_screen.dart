@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../common/order_payment_retry.dart';
 import 'dart:async';
 
@@ -440,6 +441,8 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _data.customerScheduleSlotsStream(),
       initialData: const <Map<String, dynamic>>[],
@@ -697,7 +700,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       );
     }
     if (loading) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.only(top: 42),
         child: Center(
           child: SizedBox(
@@ -705,7 +708,7 @@ class _OrdersScreenState extends State<OrdersScreen>
             height: 28,
             child: CircularProgressIndicator(
               strokeWidth: 2.4,
-              color: Color(0xFF439F73),
+              color: DomlyPalette.foreground(Color(0xFF439F73)),
             ),
           ),
         ),
@@ -729,7 +732,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 child: Text(
                   'Последние заказы'.tr(),
                   style: TextStyle(
-                    color: Color(0xFF2B4338),
+                    color: DomlyPalette.foreground(Color(0xFF2B4338)),
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
                     height: 30 / 22,
@@ -745,7 +748,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   'Все'.tr(),
                   textAlign: TextAlign.right,
                   style: TextStyle(
-                    color: Color(0xFF439F73),
+                    color: DomlyPalette.foreground(Color(0xFF439F73)),
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     height: 22 / 16,
@@ -785,16 +788,19 @@ class _OrdersScreenState extends State<OrdersScreen>
           Text(
             'Согласование доп. услуг'.tr(),
             style: TextStyle(
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            '$cleanerName предложила добавить: $labels'.tr(),
-            style: const TextStyle(
-              color: DomlyColors.muted,
+            "{p0} предложила добавить: {p1}".tr(params: {
+              'p0': (cleanerName).toString(),
+              'p1': (labels).toString()
+            }),
+            style: TextStyle(
+              color: DomlyPalette.foreground(DomlyColors.muted),
               fontSize: 13,
               height: 1.35,
             ),
@@ -803,8 +809,8 @@ class _OrdersScreenState extends State<OrdersScreen>
             const SizedBox(height: 6),
             Text(
               note,
-              style: const TextStyle(
-                color: DomlyColors.foreground,
+              style: TextStyle(
+                color: DomlyPalette.foreground(DomlyColors.foreground),
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -813,8 +819,8 @@ class _OrdersScreenState extends State<OrdersScreen>
           const SizedBox(height: 10),
           Text(
             '${amount.toString()} ₸',
-            style: const TextStyle(
-              color: DomlyColors.foreground,
+            style: TextStyle(
+              color: DomlyPalette.foreground(DomlyColors.foreground),
               fontSize: 20,
               fontWeight: FontWeight.w800,
             ),
@@ -986,7 +992,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       );
     }
     if (loading) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.only(top: 42),
         child: Center(
           child: SizedBox(
@@ -994,7 +1000,7 @@ class _OrdersScreenState extends State<OrdersScreen>
             height: 28,
             child: CircularProgressIndicator(
               strokeWidth: 2.4,
-              color: Color(0xFF439F73),
+              color: DomlyPalette.foreground(Color(0xFF439F73)),
             ),
           ),
         ),
@@ -1087,9 +1093,10 @@ class _OrdersScreenState extends State<OrdersScreen>
       child: Container(
         padding: const EdgeInsets.fromLTRB(27, 19, 15, 14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DomlyPalette.surface(Colors.white),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFFDEECE3)),
+          border:
+              Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
         ),
         child: Column(
           children: [
@@ -1099,8 +1106,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                 Expanded(
                   child: Text(
                     domlyDateText(_slotDate(slot)),
-                    style: const TextStyle(
-                      color: Color(0xFF2B4338),
+                    style: TextStyle(
+                      color: DomlyPalette.foreground(Color(0xFF2B4338)),
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
                       height: 30 / 22,
@@ -1121,8 +1128,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                 Expanded(
                   child: Text(
                     (slot['time'] ?? '10:00 - 12:36').toString(),
-                    style: const TextStyle(
-                      color: Color(0xFF658170),
+                    style: TextStyle(
+                      color: DomlyPalette.foreground(Color(0xFF658170)),
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                       height: 20 / 15,
@@ -1132,9 +1139,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                 Padding(
                   padding: const EdgeInsets.only(right: 48),
                   child: Text(
-                    '$area м²'.tr(),
-                    style: const TextStyle(
-                      color: Color(0xFF658170),
+                    "{p0} м²".tr(params: {'p0': (area).toString()}),
+                    style: TextStyle(
+                      color: DomlyPalette.foreground(Color(0xFF658170)),
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
                       height: 22 / 16,
@@ -1157,8 +1164,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                         cleaner,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF2B4338),
+                        style: TextStyle(
+                          color: DomlyPalette.foreground(Color(0xFF2B4338)),
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
                           height: 24 / 18,
@@ -1168,8 +1175,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                         address.isEmpty ? 'Адрес будет уточнен' : address,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF658170),
+                        style: TextStyle(
+                          color: DomlyPalette.foreground(Color(0xFF658170)),
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           height: 18 / 13,
@@ -1181,8 +1188,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                 if (price > 0) ...[
                   Text(
                     '$price ₸',
-                    style: const TextStyle(
-                      color: Color(0xFFCF7548),
+                    style: TextStyle(
+                      color: DomlyPalette.foreground(Color(0xFFCF7548)),
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                       height: 27 / 20,
@@ -1190,9 +1197,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                   ),
                   const SizedBox(width: 8),
                 ],
-                const Icon(
+                Icon(
                   Icons.chevron_right,
-                  color: Color(0xFF658170),
+                  color: DomlyPalette.foreground(Color(0xFF658170)),
                   size: 24,
                 ),
               ],
@@ -1248,7 +1255,7 @@ class _OrdersScreenState extends State<OrdersScreen>
 
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       isScrollControlled: true,
       builder: (context) {
         return SafeArea(
@@ -1260,7 +1267,7 @@ class _OrdersScreenState extends State<OrdersScreen>
               margin: const EdgeInsets.all(12),
               padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DomlyPalette.surface(Colors.white),
                 borderRadius: BorderRadius.circular(24),
               ),
               child: SingleChildScrollView(
@@ -1271,7 +1278,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                     Text(
                       'Действия по уборке'.tr(),
                       style: TextStyle(
-                        color: Color(0xFF2B4338),
+                        color: DomlyPalette.foreground(Color(0xFF2B4338)),
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1279,8 +1286,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                     const SizedBox(height: 8),
                     Text(
                       _cancellationRuleText(slot),
-                      style: const TextStyle(
-                        color: Color(0xFF658170),
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(Color(0xFF658170)),
                         fontSize: 12,
                         height: 1.35,
                       ),
@@ -1371,7 +1378,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                       const SizedBox(height: 10),
                       DomlySecondaryButton(
                         label: 'Отменить уборку',
-                        foregroundColor: DomlyColors.danger,
+                        foregroundColor:
+                            DomlyPalette.foreground(DomlyColors.danger),
                         onPressed: () {
                           Navigator.pop(context);
                           _cancelSlot(slot);
@@ -1457,7 +1465,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         .toString()
         .trim();
     if (packageName.isNotEmpty) {
-      return packageName;
+      return packageName.tr();
     }
     final packageId = (order['packageId'] ?? '').toString().toLowerCase();
     if (packageId == 'addons_only') {
@@ -1526,9 +1534,9 @@ class _OrdersScreenState extends State<OrdersScreen>
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7FBF8),
+        color: DomlyPalette.surface(const Color(0xFFF7FBF8)),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1540,7 +1548,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 child: Text(
                   'Что оплачивается'.tr(),
                   style: TextStyle(
-                    color: Color(0xFF658170),
+                    color: DomlyPalette.foreground(Color(0xFF658170)),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     height: 16 / 12,
@@ -1550,8 +1558,8 @@ class _OrdersScreenState extends State<OrdersScreen>
               if (amount > 0)
                 Text(
                   _moneyText(amount),
-                  style: const TextStyle(
-                    color: Color(0xFF2B4338),
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(Color(0xFF2B4338)),
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
                     height: 22 / 18,
@@ -1562,8 +1570,8 @@ class _OrdersScreenState extends State<OrdersScreen>
           const SizedBox(height: 6),
           Text(
             _pendingOrderTitle(order),
-            style: const TextStyle(
-              color: Color(0xFF2B4338),
+            style: TextStyle(
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 14,
               fontWeight: FontWeight.w700,
               height: 18 / 14,
@@ -1576,8 +1584,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       line,
-                      style: const TextStyle(
-                        color: Color(0xFF658170),
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(Color(0xFF658170)),
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                         height: 16 / 12,
@@ -1592,8 +1600,8 @@ class _OrdersScreenState extends State<OrdersScreen>
             const SizedBox(height: 6),
             Text(
               'Kaspi: $kaspiPhone',
-              style: const TextStyle(
-                color: Color(0xFFCF7548),
+              style: TextStyle(
+                color: DomlyPalette.foreground(Color(0xFFCF7548)),
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 height: 16 / 12,
@@ -1640,17 +1648,17 @@ class _OrdersScreenState extends State<OrdersScreen>
     return Container(
       padding: const EdgeInsets.fromLTRB(26, 18, 18, 18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFF2B4338),
+            title.tr(),
+            style: TextStyle(
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 18,
               fontWeight: FontWeight.w700,
               height: 24 / 18,
@@ -1662,9 +1670,9 @@ class _OrdersScreenState extends State<OrdersScreen>
             children: [
               Expanded(
                 child: Text(
-                  subtitle,
-                  style: const TextStyle(
-                    color: Color(0xFF658170),
+                  subtitle.tr(),
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(Color(0xFF658170)),
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     height: 18 / 13,
@@ -1682,7 +1690,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                     height: 30,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8E7DD),
+                      color: DomlyPalette.surface(const Color(0xFFF8E7DD)),
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
@@ -1692,10 +1700,10 @@ class _OrdersScreenState extends State<OrdersScreen>
                         ),
                       ],
                     ),
-                    child: const Text(
+                    child: Text(
                       'KASPI.KZ',
                       style: TextStyle(
-                        color: Color(0xFFDF0808),
+                        color: DomlyPalette.foreground(Color(0xFFDF0808)),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         height: 16 / 12,
@@ -1732,8 +1740,9 @@ class _OrdersScreenState extends State<OrdersScreen>
               onPressed: () => _cancelPendingOrder(order),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(42),
-                side: const BorderSide(color: Color(0xFFE7B89C)),
-                foregroundColor: const Color(0xFFC8794E),
+                side: BorderSide(color: DomlyPalette.border(Color(0xFFE7B89C))),
+                foregroundColor:
+                    DomlyPalette.foreground(const Color(0xFFC8794E)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
@@ -1762,9 +1771,10 @@ class _OrdersScreenState extends State<OrdersScreen>
         height: 130,
         padding: const EdgeInsets.fromLTRB(28, 25, 49, 26),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DomlyPalette.surface(Colors.white),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFFDEECE3)),
+          border:
+              Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1775,8 +1785,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                 children: [
                   Text(
                     domlyDateText(_orderDate(order)),
-                    style: const TextStyle(
-                      color: Color(0xFF2B4338),
+                    style: TextStyle(
+                      color: DomlyPalette.foreground(Color(0xFF2B4338)),
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                       height: 24 / 18,
@@ -1786,7 +1796,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   Text(
                     'Завершено'.tr(),
                     style: TextStyle(
-                      color: Color(0xFF439F73),
+                      color: DomlyPalette.foreground(Color(0xFF439F73)),
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       height: 18 / 13,
@@ -1794,11 +1804,12 @@ class _OrdersScreenState extends State<OrdersScreen>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Исполнитель: $cleaner'.tr(),
+                    "Исполнитель: {p0}"
+                        .tr(params: {'p0': (cleaner).toString()}),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF658170),
+                    style: TextStyle(
+                      color: DomlyPalette.foreground(Color(0xFF658170)),
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       height: 18 / 13,
@@ -1813,8 +1824,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                 child: Text(
                   '$price ₸',
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    color: Color(0xFF2B4338),
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(Color(0xFF2B4338)),
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     height: 24 / 18,
@@ -1834,14 +1845,14 @@ class _OrdersScreenState extends State<OrdersScreen>
     }
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) {
         return SafeArea(
           child: Container(
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DomlyPalette.surface(Colors.white),
               borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
@@ -1851,7 +1862,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 Text(
                   'Завершенный заказ'.tr(),
                   style: TextStyle(
-                    color: Color(0xFF2B4338),
+                    color: DomlyPalette.foreground(Color(0xFF2B4338)),
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1860,7 +1871,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 Text(
                   'Оставьте отзыв об уборке или сообщите о проблеме.'.tr(),
                   style: TextStyle(
-                    color: DomlyColors.muted,
+                    color: DomlyPalette.foreground(DomlyColors.muted),
                     fontSize: 12,
                     height: 1.35,
                   ),
@@ -1910,7 +1921,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) {
         return SafeArea(
           child: Container(
@@ -1919,7 +1930,7 @@ class _OrdersScreenState extends State<OrdersScreen>
             ),
             margin: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DomlyPalette.surface(Colors.white),
               borderRadius: BorderRadius.circular(24),
             ),
             child: StreamBuilder<List<Map<String, dynamic>>>(
@@ -1978,14 +1989,15 @@ class _OrdersScreenState extends State<OrdersScreen>
                 child: Text(
                   'Чек-лист уборки'.tr(),
                   style: TextStyle(
-                    color: Color(0xFF2B4338),
+                    color: DomlyPalette.foreground(Color(0xFF2B4338)),
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.close, color: DomlyColors.muted),
+                icon: Icon(Icons.close,
+                    color: DomlyPalette.foreground(DomlyColors.muted)),
                 onPressed: () => Navigator.pop(context),
               ),
             ],
@@ -1998,9 +2010,9 @@ class _OrdersScreenState extends State<OrdersScreen>
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: hasChecklist
+                  color: DomlyPalette.surface(hasChecklist
                       ? const Color(0xFFEFF9F2)
-                      : const Color(0xFFFFF7EF),
+                      : const Color(0xFFFFF7EF)),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
@@ -2008,9 +2020,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                       ? 'Уборщица отметила выполненные пункты. Клиенту отправлено уведомление.'
                       : 'Уборщица еще не отметила чек-лист. Ниже показано, что входит в уборку.',
                   style: TextStyle(
-                    color: hasChecklist
+                    color: DomlyPalette.foreground(hasChecklist
                         ? const Color(0xFF2F8F4E)
-                        : DomlyColors.primary,
+                        : DomlyColors.primary),
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     height: 1.35,
@@ -2050,17 +2062,17 @@ class _OrdersScreenState extends State<OrdersScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FBF8),
+        color: DomlyPalette.surface(const Color(0xFFF8FBF8)),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFF2B4338),
+            title.tr(),
+            style: TextStyle(
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 16,
               fontWeight: FontWeight.w800,
             ),
@@ -2069,8 +2081,8 @@ class _OrdersScreenState extends State<OrdersScreen>
             const SizedBox(height: 4),
             Text(
               description,
-              style: const TextStyle(
-                color: DomlyColors.muted,
+              style: TextStyle(
+                color: DomlyPalette.foreground(DomlyColors.muted),
                 fontSize: 12,
                 height: 1.35,
               ),
@@ -2100,15 +2112,16 @@ class _OrdersScreenState extends State<OrdersScreen>
     return AbsorbPointer(
       child: CheckboxListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        tileColor: DomlyColors.backgroundSoft,
+        tileColor: DomlyPalette.surface(DomlyColors.backgroundSoft),
         value: checked,
         onChanged: (_) {},
-        activeColor: const Color(0xFF43A866),
+        activeColor: DomlyPalette.foreground(const Color(0xFF43A866)),
         checkColor: Colors.white,
         title: Text(
-          title,
+          title.tr(),
           style: TextStyle(
-            color: checked ? const Color(0xFF2B4338) : DomlyColors.foreground,
+            color: DomlyPalette.foreground(
+                checked ? const Color(0xFF2B4338) : DomlyColors.foreground),
             fontSize: 14,
             height: 1.3,
             fontWeight: checked ? FontWeight.w700 : FontWeight.w500,
@@ -2116,7 +2129,8 @@ class _OrdersScreenState extends State<OrdersScreen>
         ),
         subtitle: Text(
           checked ? 'Отмечено уборщицей' : 'Не отмечено',
-          style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+          style: TextStyle(
+              fontSize: 12, color: DomlyPalette.foreground(DomlyColors.muted)),
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
@@ -2142,9 +2156,9 @@ class _OrdersScreenState extends State<OrdersScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FBF8),
+        color: DomlyPalette.surface(const Color(0xFFF8FBF8)),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2152,7 +2166,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           Text(
             'Купленные допы'.tr(),
             style: TextStyle(
-              color: Color(0xFF2B4338),
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 16,
               fontWeight: FontWeight.w800,
             ),
@@ -2161,7 +2175,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           Text(
             'Видно, какие доп. услуги уборщица отметила выполненными.'.tr(),
             style: TextStyle(
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
               fontSize: 12,
               height: 1.35,
             ),
@@ -2170,7 +2184,9 @@ class _OrdersScreenState extends State<OrdersScreen>
           if (items.isEmpty)
             Text(
               'Дополнительных услуг нет.'.tr(),
-              style: TextStyle(color: DomlyColors.muted, fontSize: 13),
+              style: TextStyle(
+                  color: DomlyPalette.foreground(DomlyColors.muted),
+                  fontSize: 13),
             )
           else
             ...items.map(
@@ -2186,17 +2202,17 @@ class _OrdersScreenState extends State<OrdersScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFF2B4338),
+            title.tr(),
+            style: TextStyle(
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 15,
               fontWeight: FontWeight.w800,
             ),
@@ -2204,8 +2220,8 @@ class _OrdersScreenState extends State<OrdersScreen>
           const SizedBox(height: 8),
           Text(
             body,
-            style: const TextStyle(
-              color: DomlyColors.foreground,
+            style: TextStyle(
+              color: DomlyPalette.foreground(DomlyColors.foreground),
               fontSize: 13,
               height: 1.35,
             ),
@@ -2454,7 +2470,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -2464,7 +2480,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   style: TextStyle(
                     fontSize: 13,
                     height: 1.45,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -2661,7 +2677,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -2788,8 +2804,8 @@ class _OrdersScreenState extends State<OrdersScreen>
             }
 
             return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
+              decoration: BoxDecoration(
+                color: DomlyPalette.surface(Colors.white),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
               ),
               padding: EdgeInsets.only(
@@ -2827,7 +2843,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                       addonsOnly
                           ? 'Уборка уже идет. Можно добавить доп. услуги, уборщица увидит обновление в заказе и чек-листе.'
                           : 'Можно изменить дату, указать любое будущее время и добавить доп. услуги к этой уборке.',
-                      style: const TextStyle(color: DomlyColors.muted),
+                      style: TextStyle(
+                          color: DomlyPalette.foreground(DomlyColors.muted)),
                     ),
                     if (_addonQuantitiesSummary(
                       addonQuantities,
@@ -2854,10 +2871,11 @@ class _OrdersScreenState extends State<OrdersScreen>
                         selectedDate == null
                             ? 'Выберите новую дату'
                             : 'Дата: ${domlyDateText(selectedDate!)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -2867,12 +2885,15 @@ class _OrdersScreenState extends State<OrdersScreen>
                         else if (availableDates.isEmpty)
                           Text(
                             'Нет дат для выбранного месяца'.tr(),
-                            style: TextStyle(color: DomlyColors.muted),
+                            style: TextStyle(
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted)),
                           )
                         else
                           DecoratedBox(
                             decoration: BoxDecoration(
-                              color: DomlyColors.backgroundSoft,
+                              color: DomlyPalette.surface(
+                                  DomlyColors.backgroundSoft),
                               borderRadius: BorderRadius.circular(18),
                             ),
                             child: AbsorbPointer(
@@ -2923,7 +2944,10 @@ class _OrdersScreenState extends State<OrdersScreen>
                           children: [
                             Expanded(
                               child: Text(
-                                'Время на ${domlyDateText(selectedDate!)}'.tr(),
+                                "Время на {p0}".tr(params: {
+                                  'p0':
+                                      (domlyDateText(selectedDate!)).toString()
+                                }),
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
@@ -2948,7 +2972,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                           Text(
                             'На выбранную дату свободных окон нет. Выберите другую дату.'
                                 .tr(),
-                            style: TextStyle(color: DomlyColors.muted),
+                            style: TextStyle(
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted)),
                           )
                         else
                           ...availableSlots.map((item) {
@@ -2957,9 +2983,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 10),
                               child: Material(
-                                color: isSelected
+                                color: DomlyPalette.surface(isSelected
                                     ? DomlyColors.buttonSoft
-                                    : DomlyColors.backgroundSoft,
+                                    : DomlyColors.backgroundSoft),
                                 borderRadius: BorderRadius.circular(16),
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(16),
@@ -2989,7 +3015,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                                             style: TextStyle(
                                               fontSize: 12,
                                               fontWeight: FontWeight.w600,
-                                              color: DomlyColors.buttonPrimary,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.buttonPrimary),
                                             ),
                                           ),
                                       ],
@@ -3003,19 +3030,22 @@ class _OrdersScreenState extends State<OrdersScreen>
                       if (selectedTime != null) ...[
                         const SizedBox(height: 10),
                         Text(
-                          'Новое время: $selectedTime'.tr(),
-                          style: const TextStyle(
+                          "Новое время: {p0}"
+                              .tr(params: {'p0': (selectedTime).toString()}),
+                          style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                       ] else if (currentTime.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         Text(
-                          'Текущее время: $currentTime'.tr(),
-                          style: const TextStyle(
+                          "Текущее время: {p0}"
+                              .tr(params: {'p0': (currentTime).toString()}),
+                          style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: DomlyColors.muted,
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                           ),
                         ),
                       ],
@@ -3027,7 +3057,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                         fontSize: 20,
                         height: 1.1,
                         fontWeight: FontWeight.w700,
-                        color: DomlyColors.foreground,
+                        color: DomlyPalette.foreground(DomlyColors.foreground),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -3451,19 +3481,19 @@ class _OrdersScreenState extends State<OrdersScreen>
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: DomlyColors.backgroundSoft,
+        color: DomlyPalette.surface(DomlyColors.backgroundSoft),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
-            style: const TextStyle(
+            title.tr(),
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           const SizedBox(height: 6),
@@ -3472,10 +3502,10 @@ class _OrdersScreenState extends State<OrdersScreen>
               padding: const EdgeInsets.only(top: 3),
               child: Text(
                 line,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   height: 1.3,
-                  color: DomlyColors.muted,
+                  color: DomlyPalette.foreground(DomlyColors.muted),
                 ),
               ),
             ),
@@ -3519,7 +3549,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F7F2),
+        color: DomlyPalette.surface(const Color(0xFFF0F7F2)),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
@@ -3538,10 +3568,11 @@ class _OrdersScreenState extends State<OrdersScreen>
                         group.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
                     ),
@@ -3552,17 +3583,17 @@ class _OrdersScreenState extends State<OrdersScreen>
                         constraints: const BoxConstraints(minWidth: 22),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: DomlyColors.buttonPrimary.withValues(
-                            alpha: .12,
-                          ),
+                          color: DomlyPalette.surface(
+                              DomlyColors.buttonPrimary.withValues(alpha: .12)),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           '$selectedCount',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                       ),
@@ -3571,7 +3602,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                     Icon(
                       expanded ? Icons.expand_less : Icons.expand_more,
                       size: 24,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                     ),
                   ],
                 ),
@@ -3609,9 +3640,9 @@ class _OrdersScreenState extends State<OrdersScreen>
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -3619,17 +3650,17 @@ class _OrdersScreenState extends State<OrdersScreen>
           SizedBox(
             width: 28,
             child: Material(
-              color: DomlyColors.backgroundSoft,
+              color: DomlyPalette.surface(DomlyColors.backgroundSoft),
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
                 onTap: () => _showAddonInfo(item, unitPrice: unitPrice),
                 borderRadius: BorderRadius.circular(8),
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.all(6),
                   child: Icon(
                     Icons.info_outline,
                     size: 16,
-                    color: DomlyColors.buttonPrimary,
+                    color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
                   ),
                 ),
               ),
@@ -3642,9 +3673,9 @@ class _OrdersScreenState extends State<OrdersScreen>
               children: [
                 Text(
                   item.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
                 if (item.separatePayment) ...[
@@ -3653,7 +3684,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                     'Оплачивается отдельно при оценке специалиста'.tr(),
                     style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.buttonPrimary,
+                      color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -3661,9 +3692,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                   const SizedBox(height: 4),
                   Text(
                     item.note!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                     ),
                   ),
                 ],
@@ -3674,7 +3705,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           if (item.supportsQuantity)
             Container(
               decoration: BoxDecoration(
-                color: DomlyColors.backgroundSoft,
+                color: DomlyPalette.surface(DomlyColors.backgroundSoft),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Row(
@@ -3691,9 +3722,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                     child: Text(
                       '$quantity',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: DomlyColors.foreground,
+                        color: DomlyPalette.foreground(DomlyColors.foreground),
                       ),
                     ),
                   ),
@@ -3831,11 +3862,16 @@ class _OrdersFigmaHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 130,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF439F73), Color(0xFF80D4B0)],
+        gradient: LinearGradient(
+          colors: [
+            DomlyPalette.surface(Color(0xFF439F73)),
+            DomlyPalette.surface(Color(0xFF80D4B0))
+          ],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -3849,7 +3885,8 @@ class _OrdersFigmaHeader extends StatelessWidget {
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -3861,7 +3898,8 @@ class _OrdersFigmaHeader extends StatelessWidget {
               width: 138,
               height: 138,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -3876,16 +3914,16 @@ class _OrdersFigmaHeader extends StatelessWidget {
                 Text(
                   'Заказы'.tr(),
                   style: TextStyle(
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                     height: 31 / 20,
                   ),
                 ),
                 Text(
-                  subtitle,
-                  style: const TextStyle(
-                    color: Color(0xFFEDFAF2),
+                  subtitle.tr(),
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(Color(0xFFEDFAF2)),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     height: 16 / 12,
@@ -3908,12 +3946,14 @@ class _OrdersSegmentedTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 46,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Stack(
         children: [
@@ -3926,9 +3966,10 @@ class _OrdersSegmentedTabs extends StatelessWidget {
               width: 166,
               height: 46,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DomlyPalette.surface(Colors.white),
                 borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: const Color(0xFFDEECE3)),
+                border: Border.all(
+                    color: DomlyPalette.border(const Color(0xFFDEECE3))),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.18),
@@ -3972,16 +4013,18 @@ class _OrdersTabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Expanded(
       child: InkWell(
         borderRadius: BorderRadius.circular(15),
         onTap: onTap,
         child: Center(
           child: Text(
-            label,
+            label.tr(),
             style: TextStyle(
-              color:
-                  selected ? const Color(0xFF2B4338) : const Color(0xFF658170),
+              color: DomlyPalette.foreground(
+                  selected ? const Color(0xFF2B4338) : const Color(0xFF658170)),
               fontSize: 13,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               height: 18 / 13,
@@ -4001,12 +4044,14 @@ class _OrdersStatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       width: 130,
       height: 30,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F7F2),
+        color: DomlyPalette.surface(const Color(0xFFF0F7F2)),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
@@ -4014,7 +4059,7 @@ class _OrdersStatusPill extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          color: color,
+          color: DomlyPalette.foreground(color),
           fontSize: 12,
           fontWeight: FontWeight.w600,
           height: 16 / 12,
@@ -4037,9 +4082,12 @@ class _SlotActionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final color = danger ? DomlyColors.danger : const Color(0xFFC8794E);
     return Material(
-      color: danger ? const Color(0xFFFFF2F1) : const Color(0xFFF8E7DD),
+      color: DomlyPalette.surface(
+          danger ? const Color(0xFFFFF2F1) : const Color(0xFFF8E7DD)),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -4049,12 +4097,12 @@ class _SlotActionChip extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Text(
-              label,
+              label.tr(),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: color,
+                color: DomlyPalette.foreground(color),
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 height: 1.15,
@@ -4080,13 +4128,15 @@ class _CleaningStartConfirmationPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4FAF6),
+        color: DomlyPalette.surface(const Color(0xFFF4FAF6)),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4095,8 +4145,8 @@ class _CleaningStartConfirmationPanel extends StatelessWidget {
             rejected
                 ? 'Вы не подтвердили старт уборки'
                 : 'Уборщица начала уборку?',
-            style: const TextStyle(
-              color: Color(0xFF2B4338),
+            style: TextStyle(
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 14,
               fontWeight: FontWeight.w800,
             ),
@@ -4106,7 +4156,7 @@ class _CleaningStartConfirmationPanel extends StatelessWidget {
             'Подтвердите, что уборщица уже приступила к работе. Без ответа она не сможет завершить заказ.'
                 .tr(),
             style: TextStyle(
-              color: Color(0xFF658170),
+              color: DomlyPalette.foreground(Color(0xFF658170)),
               fontSize: 12,
               height: 1.35,
               fontWeight: FontWeight.w500,
@@ -4122,7 +4172,7 @@ class _CleaningStartConfirmationPanel extends StatelessWidget {
               Expanded(
                 child: DomlySecondaryButton(
                   label: 'Нет',
-                  foregroundColor: DomlyColors.danger,
+                  foregroundColor: DomlyPalette.foreground(DomlyColors.danger),
                   onPressed: onReject,
                 ),
               ),
@@ -4141,21 +4191,26 @@ class _OrdersAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final initial = name.trim().isEmpty ? 'A' : name.trim().characters.first;
     return Container(
       width: 55,
       height: 55,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFCF7548), Color(0xFFEEB09B)],
+        gradient: LinearGradient(
+          colors: [
+            DomlyPalette.surface(Color(0xFFCF7548)),
+            DomlyPalette.surface(Color(0xFFEEB09B))
+          ],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
       child: Text(
         initial.toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: DomlyPalette.foreground(Colors.white),
           fontSize: 20,
           fontWeight: FontWeight.w700,
           height: 27 / 20,
@@ -4173,31 +4228,33 @@ class _OrdersFigmaMessageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       margin: const EdgeInsets.only(top: 22),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         children: [
           Text(
-            title,
+            title.tr(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFF2B4338),
+            style: TextStyle(
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            subtitle,
+            subtitle.tr(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFF658170),
+            style: TextStyle(
+              color: DomlyPalette.foreground(Color(0xFF658170)),
               fontSize: 13,
               fontWeight: FontWeight.w500,
               height: 18 / 13,

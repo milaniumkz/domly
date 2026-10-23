@@ -912,3 +912,18 @@ test('unpaid extras block cleaner dispatch and acceptance even with stale assign
   await assert.rejects(scheduling.acceptOffer('order', 'cleaner'), (error: any) => error.code === 'order_unavailable');
   assert.equal(reads, 2);
 });
+
+test('Kazakh system translations retain dynamic values and parameter names', async()=>{
+ const {translateKazakh}=await import('../localization');
+ assert.equal(translateKazakh('Разовый пакет'),'Бір реттік пакет');
+ const translated=translateKazakh('Подтверждённая площадь квартиры: 110 м².');
+ assert.ok(translated.includes('110'));assert.ok(!translated.includes('площадь'));
+ assert.equal(translateKazakh('unregistered-external-text'),'unregistered-external-text');
+});
+
+test('push messages use each recipient language without mixing device groups',async()=>{
+ const {sendLocalizedPush}=await import('../localization');const calls:any[]=[];
+ const db={query:async(sql:string,args:any[])=>{assert.ok(sql.includes('u.id=$1'));assert.deepEqual(args,['user-kk']);return {rows:[{token:'kk-device',language:'kk'},{token:'ru-device',language:'ru'}]};}} as any;
+ await sendLocalizedPush(db,{send:async(...args:any[])=>calls.push(args)},{userId:'user-kk',titleRu:'Площадь подтверждена',bodyRu:'Подтверждённая площадь квартиры: 110 м².'},{notificationId:'fixture'});
+ assert.equal(calls.length,2);assert.deepEqual(calls[0][0],['ru-device']);assert.equal(calls[0][1],'Площадь подтверждена');assert.deepEqual(calls[1][0],['kk-device']);assert.equal(calls[1][1],'Аудан расталды');assert.ok(calls[1][2].includes('110'));assert.ok(!calls[1][2].includes('площадь'));assert.deepEqual(calls[1][3],{notificationId:'fixture'});
+});

@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -60,28 +61,27 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         _liveSlots = List<Map<String, dynamic>>.from(slots);
       });
     });
-    _addonPricesSubscription = AppConfigService.instance
-        .addonGroupConfigsStream()
-        .listen((groups) {
-          if (!mounted) {
-            return;
-          }
-          setState(() {
-            _addonUnitPrices.clear();
-            for (final group in groups) {
-              final rawItems = group['items'];
-              final items = rawItems is List ? rawItems : const [];
-              for (final rawItem in items.whereType<Map>()) {
-                final item = Map<String, dynamic>.from(rawItem);
-                final key = (item['key'] ?? item['id'] ?? '').toString();
-                final price = _priceFromAddonConfig(item);
-                if (key.isNotEmpty) {
-                  _addonUnitPrices[key] = price;
-                }
-              }
+    _addonPricesSubscription =
+        AppConfigService.instance.addonGroupConfigsStream().listen((groups) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _addonUnitPrices.clear();
+        for (final group in groups) {
+          final rawItems = group['items'];
+          final items = rawItems is List ? rawItems : const [];
+          for (final rawItem in items.whereType<Map>()) {
+            final item = Map<String, dynamic>.from(rawItem);
+            final key = (item['key'] ?? item['id'] ?? '').toString();
+            final price = _priceFromAddonConfig(item);
+            if (key.isNotEmpty) {
+              _addonUnitPrices[key] = price;
             }
-          });
-        });
+          }
+        }
+      });
+    });
     _loadAvailableDates();
   }
 
@@ -107,8 +107,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
 
   int _monthlyIncludedVisits(Map<String, dynamic> subscription) {
     final catalogVisits = PackageCatalogUtils.cleaningsPerMonth(subscription);
-    final stored =
-        (subscription['includedVisits'] as num?)?.toInt() ??
+    final stored = (subscription['includedVisits'] as num?)?.toInt() ??
         (subscription['cleaningsPerMonth'] as num?)?.toInt() ??
         0;
     final label =
@@ -146,8 +145,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       return 0;
     }
     final scheduledVisits = (subscription['scheduledVisits'] as num?)?.toInt();
-    final selectedVisits = (subscription['selectedVisitsCount'] as num?)
-        ?.toInt();
+    final selectedVisits =
+        (subscription['selectedVisitsCount'] as num?)?.toInt();
     return _maxInt(scheduledVisits ?? 0, selectedVisits ?? 0);
   }
 
@@ -223,14 +222,13 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
   }
 
   bool _isAddonOnlySubscription(Map<String, dynamic> subscription) {
-    final type =
-        (subscription['type'] ??
-                subscription['kind'] ??
-                subscription['pricingMode'] ??
-                '')
-            .toString()
-            .trim()
-            .toLowerCase();
+    final type = (subscription['type'] ??
+            subscription['kind'] ??
+            subscription['pricingMode'] ??
+            '')
+        .toString()
+        .trim()
+        .toLowerCase();
     final title =
         '${subscription['package'] ?? ''} ${subscription['frequencyLabel'] ?? ''}'
             .toLowerCase();
@@ -274,21 +272,19 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
             .trim();
     final live = _liveSlots.where((slot) {
       final slotSubscriptionId = (slot['subscriptionId'] ?? '').toString();
-      final slotOrderId =
-          (slot['sourceOrderId'] ??
-                  slot['customerOrderId'] ??
-                  slot['orderId'] ??
-                  '')
-              .toString();
-      final belongs =
-          (id.isNotEmpty && slotSubscriptionId == id) ||
+      final slotOrderId = (slot['sourceOrderId'] ??
+              slot['customerOrderId'] ??
+              slot['orderId'] ??
+              '')
+          .toString();
+      final belongs = (id.isNotEmpty && slotSubscriptionId == id) ||
           (sourceOrderId.isNotEmpty && slotOrderId == sourceOrderId);
       return belongs &&
           _slotInCurrentPeriod(slot, subscription) &&
           _isActiveScheduledSlot(slot);
     }).length;
-    final storedCurrent = (subscription['currentPeriodScheduledVisits'] as num?)
-        ?.toInt();
+    final storedCurrent =
+        (subscription['currentPeriodScheduledVisits'] as num?)?.toInt();
     return _maxInt(live, storedCurrent ?? _storedScheduledVisits(subscription));
   }
 
@@ -303,26 +299,21 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
             .trim();
     final live = _liveSlots.where((slot) {
       final slotSubscriptionId = (slot['subscriptionId'] ?? '').toString();
-      final slotOrderId =
-          (slot['sourceOrderId'] ??
-                  slot['customerOrderId'] ??
-                  slot['orderId'] ??
-                  '')
-              .toString();
-      final belongs =
-          (id.isNotEmpty && slotSubscriptionId == id) ||
+      final slotOrderId = (slot['sourceOrderId'] ??
+              slot['customerOrderId'] ??
+              slot['orderId'] ??
+              '')
+          .toString();
+      final belongs = (id.isNotEmpty && slotSubscriptionId == id) ||
           (sourceOrderId.isNotEmpty && slotOrderId == sourceOrderId);
       if (!belongs) {
         return false;
       }
       final status = (slot['status'] ?? '').toString().trim().toLowerCase();
-      final orderStatus = (slot['orderStatus'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
+      final orderStatus =
+          (slot['orderStatus'] ?? '').toString().trim().toLowerCase();
       final completed = status == 'completed' || orderStatus == 'completed';
-      final forfeited =
-          (status == 'canceled' ||
+      final forfeited = (status == 'canceled' ||
               status == 'cancelled' ||
               orderStatus == 'canceled' ||
               orderStatus == 'cancelled') &&
@@ -330,8 +321,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       return _slotInCurrentPeriod(slot, subscription) &&
           (completed || forfeited);
     }).length;
-    final stored =
-        (subscription['currentPeriodUsedVisits'] as num?)?.toInt() ??
+    final stored = (subscription['currentPeriodUsedVisits'] as num?)?.toInt() ??
         (_storedCompletedVisits(subscription) +
             ((subscription['forfeitedVisits'] as num?)?.toInt() ?? 0));
     return _maxInt(live, stored);
@@ -416,14 +406,13 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     if (subscription == null) {
       return false;
     }
-    final paymentStatus =
-        (subscription['paymentStatus'] ??
-                subscription['paymentState'] ??
-                subscription['statusPayment'] ??
-                '')
-            .toString()
-            .trim()
-            .toLowerCase();
+    final paymentStatus = (subscription['paymentStatus'] ??
+            subscription['paymentState'] ??
+            subscription['statusPayment'] ??
+            '')
+        .toString()
+        .trim()
+        .toLowerCase();
     if (paymentStatus.isEmpty) {
       return subscription['paid'] == true ||
           subscription['paidAt'] != null ||
@@ -440,10 +429,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
 
   bool _isActiveScheduledSlot(Map<String, dynamic> slot) {
     final status = (slot['status'] ?? '').toString().trim().toLowerCase();
-    final orderStatus = (slot['orderStatus'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
+    final orderStatus =
+        (slot['orderStatus'] ?? '').toString().trim().toLowerCase();
     if (status == 'canceled' ||
         status == 'cancelled' ||
         status == 'completed' ||
@@ -502,16 +489,17 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _data.customerSubscriptionsStream(),
       builder: (context, snapshot) {
         final subscriptions = snapshot.data ?? <Map<String, dynamic>>[];
-        final subscription = subscriptions
-            .cast<Map<String, dynamic>?>()
-            .firstWhere(
-              (item) => item?['id'] == widget.subscriptionId,
-              orElse: () => null,
-            );
+        final subscription =
+            subscriptions.cast<Map<String, dynamic>?>().firstWhere(
+                  (item) => item?['id'] == widget.subscriptionId,
+                  orElse: () => null,
+                );
         final activePackageSubscriptions = _activePaidPackageSubscriptions(
           subscriptions,
         );
@@ -554,23 +542,20 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         final serverPendingSelections = _aggregateAvailableSelections(
           activePackageSubscriptions,
         );
-        final requiredSelections =
-            _pendingSelectionsOverride ??
+        final requiredSelections = _pendingSelectionsOverride ??
             (includedVisits - usedForAvailability - scheduledVisits)
                 .clamp(0, 99)
                 .toInt();
-        final effectiveRequiredSelections =
-            requiredSelections == 0 &&
+        final effectiveRequiredSelections = requiredSelections == 0 &&
                 _data.isDebugCustomer &&
                 _availableDateKeys.isNotEmpty
             ? 1
             : requiredSelections;
         _schedulePastSelectionCleanup();
-        final selectedEntries =
-            _selectedTimes.entries
-                .where((entry) => !_isPastDateKey(entry.key))
-                .toList()
-              ..sort((a, b) => a.key.compareTo(b.key));
+        final selectedEntries = _selectedTimes.entries
+            .where((entry) => !_isPastDateKey(entry.key))
+            .toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
         final selectedAddonTotal = selectedEntries.fold<int>(0, (total, entry) {
           return total +
               _addonItemsAmount(
@@ -614,13 +599,16 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                       children: [
                         if (selectedAddonTotal > 0) ...[
                           Text(
-                            'Допы к оплате: ${_formatMoney(selectedAddonTotal)}'
-                                .tr(),
+                            "Допы к оплате: {p0}".tr(params: {
+                              'p0':
+                                  (_formatMoney(selectedAddonTotal)).toString()
+                            }),
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w800,
-                              color: DomlyColors.foreground,
+                              color: DomlyPalette.foreground(
+                                  DomlyColors.foreground),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -630,8 +618,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                               ? 'Подтвердить выбранную дату'
                               : 'Подтвердить выбранные даты',
                           isLoading: _submitting,
-                          onPressed:
-                              _submitting ||
+                          onPressed: _submitting ||
                                   effectiveRequiredSelections == 0 ||
                                   _selectedTimes.isEmpty ||
                                   _selectedTimes.length >
@@ -672,7 +659,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                 style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                                  color: DomlyPalette.foreground(Colors.white),
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -680,21 +667,23 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                 effectiveRequiredSelections == 0
                                     ? 'Все уборки уже выбраны'
                                     : _selectedTimes.isEmpty
-                                    ? 'Можно подтверждать даты по одной или сразу несколько. Осталось выбрать: $effectiveRequiredSelections'
-                                    : 'Выбрано ${_selectedTimes.length}. После сохранения останется: $remainingAfterSelection',
-                                style: const TextStyle(
+                                        ? 'Можно подтверждать даты по одной или сразу несколько. Осталось выбрать: $effectiveRequiredSelections'
+                                        : 'Выбрано ${_selectedTimes.length}. После сохранения останется: $remainingAfterSelection',
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xE6FFFFFF),
+                                  color: DomlyPalette.foreground(
+                                      Color(0xE6FFFFFF)),
                                   height: 1.35,
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Площадь: $area м² · Время выбирается после даты'
-                                    .tr(),
-                                style: const TextStyle(
+                                "Площадь: {p0} м² · Время выбирается после даты"
+                                    .tr(params: {'p0': (area).toString()}),
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xCCFFFFFF),
+                                  color: DomlyPalette.foreground(
+                                      Color(0xCCFFFFFF)),
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -762,10 +751,11 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                         ),
                                         child: Text(
                                           _monthYearLabel(_visibleMonth),
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w600,
-                                            color: DomlyColors.muted,
+                                            color: DomlyPalette.foreground(
+                                                DomlyColors.muted),
                                           ),
                                         ),
                                       ),
@@ -781,16 +771,16 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                             initialDate: _initialCalendarDate(),
                                             firstDate:
                                                 LaunchConfig.bookingFloor(
-                                                  DateTime.now(),
-                                                ),
+                                              DateTime.now(),
+                                            ),
                                             lastDate: DateTime(
                                               DateTime.now().year + 1,
                                             ),
                                             onDateChanged: (date) =>
                                                 _handleDateTap(
-                                                  date,
-                                                  effectiveRequiredSelections,
-                                                ),
+                                              date,
+                                              effectiveRequiredSelections,
+                                            ),
                                             onDisplayedMonthChanged: (month) {
                                               final normalized = DateTime(
                                                 month.year,
@@ -817,9 +807,9 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                     Positioned.fill(
                                       child: DecoratedBox(
                                         decoration: BoxDecoration(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.68,
-                                          ),
+                                          color: DomlyPalette.surface(Colors
+                                              .white
+                                              .withValues(alpha: 0.68)),
                                           borderRadius: BorderRadius.circular(
                                             20,
                                           ),
@@ -833,18 +823,25 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                 height: 28,
                                                 child:
                                                     CircularProgressIndicator(
-                                                      strokeWidth: 2.6,
-                                                    ),
+                                                  strokeWidth: 2.6,
+                                                ),
                                               ),
                                               const SizedBox(height: 12),
                                               Text(
-                                                'Подбираем слоты на ${_formatDateKey(_loadingSlotsDateKey!)}'
-                                                    .tr(),
+                                                "Подбираем слоты на {p0}".tr(
+                                                    params: {
+                                                      'p0': (_formatDateKey(
+                                                              _loadingSlotsDateKey!))
+                                                          .toString()
+                                                    }),
                                                 textAlign: TextAlign.center,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w600,
-                                                  color: DomlyColors.foreground,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors
+                                                              .foreground),
                                                 ),
                                               ),
                                             ],
@@ -860,7 +857,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                   .tr(),
                               style: TextStyle(
                                 fontSize: 12,
-                                color: DomlyColors.muted,
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                               ),
                             ),
                           ],
@@ -883,7 +881,9 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                             if (_selectedTimes.isEmpty)
                               Text(
                                 'Пока ничего не выбрано'.tr(),
-                                style: TextStyle(color: DomlyColors.muted),
+                                style: TextStyle(
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.muted)),
                               )
                             else
                               ...selectedEntries.map(
@@ -892,7 +892,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                   child: Container(
                                     padding: const EdgeInsets.all(14),
                                     decoration: BoxDecoration(
-                                      color: DomlyColors.backgroundSoft,
+                                      color: DomlyPalette.surface(
+                                          DomlyColors.backgroundSoft),
                                       borderRadius: BorderRadius.circular(16),
                                     ),
                                     child: Row(
@@ -913,8 +914,10 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                               const SizedBox(height: 4),
                                               Text(
                                                 entry.value,
-                                                style: const TextStyle(
-                                                  color: DomlyColors.muted,
+                                                style: TextStyle(
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors.muted),
                                                 ),
                                               ),
                                               if (_allSelectedAddonsForDate(
@@ -922,12 +925,18 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                               ).isNotEmpty) ...[
                                                 const SizedBox(height: 8),
                                                 Text(
-                                                  'Допы: ${_addonSummary(_allSelectedAddonsForDate(entry.key))}'
-                                                      .tr(),
-                                                  style: const TextStyle(
+                                                  "Допы: {p0}".tr(params: {
+                                                    'p0': (_addonSummary(
+                                                            _allSelectedAddonsForDate(
+                                                                entry.key)))
+                                                        .toString()
+                                                  }),
+                                                  style: TextStyle(
                                                     fontSize: 12,
                                                     color:
-                                                        DomlyColors.foreground,
+                                                        DomlyPalette.foreground(
+                                                            DomlyColors
+                                                                .foreground),
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
@@ -947,8 +956,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                 onPressed: _submitting
                                                     ? null
                                                     : () => _submitSelections([
-                                                        entry,
-                                                      ]),
+                                                          entry,
+                                                        ]),
                                               ),
                                               const SizedBox(height: 6),
                                               DomlySecondaryButton(
@@ -956,9 +965,9 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                 onPressed: _submitting
                                                     ? null
                                                     : () =>
-                                                          _chooseAddonsForDate(
-                                                            entry.key,
-                                                          ),
+                                                        _chooseAddonsForDate(
+                                                          entry.key,
+                                                        ),
                                               ),
                                               const SizedBox(height: 6),
                                               Align(
@@ -971,16 +980,16 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                           setState(() {
                                                             _selectedTimes
                                                                 .remove(
-                                                                  entry.key,
-                                                                );
+                                                              entry.key,
+                                                            );
                                                             _selectedAddonsByDate
                                                                 .remove(
-                                                                  entry.key,
-                                                                );
+                                                              entry.key,
+                                                            );
                                                             _selectedNewAddonsByDate
                                                                 .remove(
-                                                                  entry.key,
-                                                                );
+                                                              entry.key,
+                                                            );
                                                           });
                                                         },
                                                   icon: const Icon(Icons.close),
@@ -1029,9 +1038,9 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
   Future<void> _chooseAddonsForDate(String dateKey) async {
     final subscriptions = await _data.customerSubscriptionsStream().first;
     final subscription = subscriptions.cast<Map<String, dynamic>?>().firstWhere(
-      (item) => item?['id'] == widget.subscriptionId,
-      orElse: () => null,
-    );
+          (item) => item?['id'] == widget.subscriptionId,
+          orElse: () => null,
+        );
     if (subscription == null || !mounted) {
       return;
     }
@@ -1115,8 +1124,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         if (key.isEmpty) {
           continue;
         }
-        usedUnits[key] =
-            (usedUnits[key] ?? 0) +
+        usedUnits[key] = (usedUnits[key] ?? 0) +
             ((item['quantity'] as num?)?.toInt() ?? 1).clamp(1, 999).toInt();
       }
     }
@@ -1169,20 +1177,17 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
           (item) => (item['key'] ?? item['label'] ?? '').toString().isNotEmpty,
         )
         .map((item) {
-          final quantity = ((item['quantity'] as num?)?.toInt() ?? 1)
-              .clamp(1, 999)
-              .toInt();
-          return {...item, 'quantity': quantity};
-        })
-        .toList();
+      final quantity =
+          ((item['quantity'] as num?)?.toInt() ?? 1).clamp(1, 999).toInt();
+      return {...item, 'quantity': quantity};
+    }).toList();
   }
 
   int _addonItemsAmount(List<Map<String, dynamic>> items) {
     return items.fold<int>(0, (total, item) {
       final price = _addonItemPrice(item);
-      final quantity = ((item['quantity'] as num?)?.toInt() ?? 1)
-          .clamp(1, 999)
-          .toInt();
+      final quantity =
+          ((item['quantity'] as num?)?.toInt() ?? 1).clamp(1, 999).toInt();
       return total + price * quantity;
     });
   }
@@ -1218,9 +1223,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         return total;
       }
       final price = _addonItemPrice(item);
-      final quantity = ((item['quantity'] as num?)?.toInt() ?? 1)
-          .clamp(1, 999)
-          .toInt();
+      final quantity =
+          ((item['quantity'] as num?)?.toInt() ?? 1).clamp(1, 999).toInt();
       return total + price * quantity;
     });
   }
@@ -1285,11 +1289,9 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                   label: (item['label'] ?? key).toString(),
                   supportsQuantity: item['supportsQuantity'] == true,
                   price: _addonItemPrice(item),
-                  separatePayment:
-                      item['separatePayment'] == true ||
+                  separatePayment: item['separatePayment'] == true ||
                       item['separate'] == true,
-                  shortInfo:
-                      (item['shortInfo'] ??
+                  shortInfo: (item['shortInfo'] ??
                               item['description'] ??
                               item['note'] ??
                               item['hint'] ??
@@ -1303,24 +1305,23 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                           .isEmpty
                       ? null
                       : (item['shortInfo'] ??
-                                item['description'] ??
-                                item['note'] ??
-                                item['hint'] ??
-                                item['prompt'])
-                            .toString(),
-                  fullInfo:
-                      (item['fullInfo'] ?? item['longDescription'] ?? '')
+                              item['description'] ??
+                              item['note'] ??
+                              item['hint'] ??
+                              item['prompt'])
+                          .toString(),
+                  fullInfo: (item['fullInfo'] ?? item['longDescription'] ?? '')
                           .toString()
                           .trim()
                           .isEmpty
                       ? null
                       : (item['fullInfo'] ?? item['longDescription'])
-                            .toString(),
+                          .toString(),
                   features: item['features'] is List
                       ? (item['features'] as List)
-                            .map((value) => value.toString())
-                            .where((value) => value.trim().isNotEmpty)
-                            .toList()
+                          .map((value) => value.toString())
+                          .where((value) => value.trim().isNotEmpty)
+                          .toList()
                       : const <String>[],
                 );
               })
@@ -1364,7 +1365,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -1468,7 +1469,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                   bottom: 22 + MediaQuery.of(context).viewInsets.bottom,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: DomlyPalette.surface(Colors.white),
                   borderRadius: BorderRadius.circular(28),
                 ),
                 child: Column(
@@ -1476,11 +1477,12 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Допы на ${_formatDateKey(dateKey)}'.tr(),
-                      style: const TextStyle(
+                      "Допы на {p0}".tr(
+                          params: {'p0': (_formatDateKey(dateKey)).toString()}),
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
-                        color: DomlyColors.foreground,
+                        color: DomlyPalette.foreground(DomlyColors.foreground),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -1489,7 +1491,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                           .tr(),
                       style: TextStyle(
                         fontSize: 13,
-                        color: DomlyColors.muted,
+                        color: DomlyPalette.foreground(DomlyColors.muted),
                         height: 1.35,
                       ),
                     ),
@@ -1504,7 +1506,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w800,
-                                color: DomlyColors.foreground,
+                                color: DomlyPalette.foreground(
+                                    DomlyColors.foreground),
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -1521,9 +1524,12 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                 margin: const EdgeInsets.only(bottom: 10),
                                 padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
-                                  color: DomlyColors.backgroundSoft,
+                                  color: DomlyPalette.surface(
+                                      DomlyColors.backgroundSoft),
                                   borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: DomlyColors.border),
+                                  border: Border.all(
+                                      color: DomlyPalette.border(
+                                          DomlyColors.border)),
                                 ),
                                 child: Row(
                                   children: [
@@ -1533,19 +1539,23 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            label,
-                                            style: const TextStyle(
+                                            label.tr(),
+                                            style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w700,
-                                              color: DomlyColors.foreground,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.foreground),
                                             ),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            'Осталось: $maxQuantity'.tr(),
-                                            style: const TextStyle(
+                                            "Осталось: {p0}".tr(params: {
+                                              'p0': (maxQuantity).toString()
+                                            }),
+                                            style: TextStyle(
                                               fontSize: 12,
-                                              color: DomlyColors.muted,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.muted),
                                             ),
                                           ),
                                         ],
@@ -1573,7 +1583,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w800,
-                                color: DomlyColors.foreground,
+                                color: DomlyPalette.foreground(
+                                    DomlyColors.foreground),
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -1589,7 +1600,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 10),
                                 decoration: BoxDecoration(
-                                  color: DomlyColors.backgroundSoft,
+                                  color: DomlyPalette.surface(
+                                      DomlyColors.backgroundSoft),
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: Column(
@@ -1613,10 +1625,13 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                             Expanded(
                                               child: Text(
                                                 group.label,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.w700,
-                                                  color: DomlyColors.foreground,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors
+                                                              .foreground),
                                                 ),
                                               ),
                                             ),
@@ -1627,17 +1642,18 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                 ),
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 3,
-                                                    ),
+                                                  horizontal: 8,
+                                                  vertical: 3,
+                                                ),
                                                 decoration: BoxDecoration(
-                                                  color: DomlyColors
-                                                      .buttonPrimary
-                                                      .withValues(alpha: .12),
+                                                  color: DomlyPalette.surface(
+                                                      DomlyColors.buttonPrimary
+                                                          .withValues(
+                                                              alpha: .12)),
                                                   borderRadius:
                                                       BorderRadius.circular(
-                                                        999,
-                                                      ),
+                                                    999,
+                                                  ),
                                                 ),
                                                 child: Text('$selectedCount'),
                                               ),
@@ -1668,15 +1684,17 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                               ),
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 10,
-                                                  ),
+                                                horizontal: 12,
+                                                vertical: 10,
+                                              ),
                                               decoration: BoxDecoration(
-                                                color: Colors.white,
+                                                color: DomlyPalette.surface(
+                                                    Colors.white),
                                                 borderRadius:
                                                     BorderRadius.circular(14),
                                                 border: Border.all(
-                                                  color: DomlyColors.border,
+                                                  color: DomlyPalette.border(
+                                                      DomlyColors.border),
                                                 ),
                                               ),
                                               child: Row(
@@ -1686,29 +1704,33 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                   SizedBox(
                                                     width: 28,
                                                     child: Material(
-                                                      color: DomlyColors
-                                                          .backgroundSoft,
+                                                      color: DomlyPalette
+                                                          .surface(DomlyColors
+                                                              .backgroundSoft),
                                                       borderRadius:
                                                           BorderRadius.circular(
-                                                            8,
-                                                          ),
+                                                        8,
+                                                      ),
                                                       child: InkWell(
                                                         onTap: () =>
                                                             _showAddonInfo(
-                                                              item,
-                                                            ),
+                                                          item,
+                                                        ),
                                                         borderRadius:
-                                                            BorderRadius.circular(
-                                                              8,
-                                                            ),
-                                                        child: const Padding(
+                                                            BorderRadius
+                                                                .circular(
+                                                          8,
+                                                        ),
+                                                        child: Padding(
                                                           padding:
                                                               EdgeInsets.all(6),
                                                           child: Icon(
                                                             Icons.info_outline,
                                                             size: 16,
-                                                            color: DomlyColors
-                                                                .buttonPrimary,
+                                                            color: DomlyPalette
+                                                                .foreground(
+                                                                    DomlyColors
+                                                                        .buttonPrimary),
                                                           ),
                                                         ),
                                                       ),
@@ -1725,11 +1747,10 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                           item.label,
                                                           style:
                                                               const TextStyle(
-                                                                fontSize: 14,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                              ),
+                                                            fontSize: 14,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
                                                         ),
                                                         const SizedBox(
                                                           height: 3,
@@ -1744,15 +1765,17 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                             Text(
                                                               item.price > 0
                                                                   ? item.supportsQuantity
-                                                                        ? '${_formatMoney(item.price)} за 1 шт.'
-                                                                        : _formatMoney(
-                                                                            item.price,
-                                                                          )
+                                                                      ? '${_formatMoney(item.price)} за 1 шт.'
+                                                                      : _formatMoney(
+                                                                          item.price,
+                                                                        )
                                                                   : 'Цена уточняется',
-                                                              style: const TextStyle(
+                                                              style: TextStyle(
                                                                 fontSize: 13,
-                                                                color: DomlyColors
-                                                                    .foreground,
+                                                                color: DomlyPalette
+                                                                    .foreground(
+                                                                        DomlyColors
+                                                                            .foreground),
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w800,
@@ -1763,10 +1786,13 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                               Text(
                                                                 'оплачивается отдельно при оценке специалиста'
                                                                     .tr(),
-                                                                style: TextStyle(
+                                                                style:
+                                                                    TextStyle(
                                                                   fontSize: 12,
-                                                                  color: DomlyColors
-                                                                      .buttonPrimary,
+                                                                  color: DomlyPalette
+                                                                      .foreground(
+                                                                          DomlyColors
+                                                                              .buttonPrimary),
                                                                   fontWeight:
                                                                       FontWeight
                                                                           .w700,
@@ -1783,32 +1809,33 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                       maxQuantity: null,
                                                       onMinus: () =>
                                                           setModalState(() {
-                                                            newQuantities[item
-                                                                    .key] =
-                                                                quantity - 1;
-                                                          }),
+                                                        newQuantities[
+                                                                item.key] =
+                                                            quantity - 1;
+                                                      }),
                                                       onPlus: () =>
                                                           setModalState(() {
-                                                            newQuantities[item
-                                                                    .key] =
-                                                                quantity + 1;
-                                                          }),
+                                                        newQuantities[
+                                                                item.key] =
+                                                            quantity + 1;
+                                                      }),
                                                     )
                                                   else
                                                     SizedBox(
                                                       width: 104,
-                                                      child: DomlySecondaryButton(
+                                                      child:
+                                                          DomlySecondaryButton(
                                                         label: quantity > 0
                                                             ? 'Убрать'
                                                             : 'Добавить',
                                                         onPressed: () =>
                                                             setModalState(() {
-                                                              newQuantities[item
-                                                                      .key] =
-                                                                  quantity > 0
+                                                          newQuantities[
+                                                                  item.key] =
+                                                              quantity > 0
                                                                   ? 0
                                                                   : 1;
-                                                            }),
+                                                        }),
                                                       ),
                                                     ),
                                                 ],
@@ -1830,9 +1857,10 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                       decoration: BoxDecoration(
-                        color: DomlyColors.backgroundSoft,
+                        color: DomlyPalette.surface(DomlyColors.backgroundSoft),
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: DomlyColors.border),
+                        border: Border.all(
+                            color: DomlyPalette.border(DomlyColors.border)),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1845,7 +1873,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                   'К оплате'.tr(),
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: DomlyColors.muted,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.muted),
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -1854,9 +1883,10 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                   selectedCount == 0
                                       ? 'Допы не выбраны'
                                       : 'Выбрано: $selectedCount',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: DomlyColors.muted,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.muted),
                                   ),
                                 ),
                                 if (hasSeparatePayment) ...[
@@ -1866,7 +1896,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                         .tr(),
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: DomlyColors.muted,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.muted),
                                       height: 1.25,
                                     ),
                                   ),
@@ -1877,10 +1908,11 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                           const SizedBox(width: 12),
                           Text(
                             _formatMoney(billableTotal),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w800,
-                              color: DomlyColors.foreground,
+                              color: DomlyPalette.foreground(
+                                  DomlyColors.foreground),
                             ),
                           ),
                         ],
@@ -1911,13 +1943,13 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                             onPressed: () {
                               final result =
                                   <String, List<Map<String, dynamic>>>{
-                                    'paid': List<Map<String, dynamic>>.from(
-                                      paidSelection,
-                                    ),
-                                    'new': List<Map<String, dynamic>>.from(
-                                      newSelection,
-                                    ),
-                                  };
+                                'paid': List<Map<String, dynamic>>.from(
+                                  paidSelection,
+                                ),
+                                'new': List<Map<String, dynamic>>.from(
+                                  newSelection,
+                                ),
+                              };
                               Navigator.of(context).pop(result);
                             },
                           ),
@@ -1971,8 +2003,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     try {
       setState(() => _loadingSlotsDateKey = dateKey);
       final date = DateTime.tryParse(dateKey) ?? DateTime.now();
-      final slots =
-          _slotsCache[dateKey] ??
+      final slots = _slotsCache[dateKey] ??
           await (() async {
             final result = await _data.getAvailableSlots(
               subscriptionId: widget.subscriptionId,
@@ -2047,16 +2078,15 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     var useBonusForNewAddons = false;
     var selectedBonusForNewAddons = 0;
     final hasBillableNewAddons = entriesList.any(
-      (entry) =>
-          (_selectedNewAddonsByDate[entry.key] ??
-                  const <Map<String, dynamic>>[])
-              .isNotEmpty,
+      (entry) => (_selectedNewAddonsByDate[entry.key] ??
+              const <Map<String, dynamic>>[])
+          .isNotEmpty,
     );
     if (hasBillableNewAddons) {
       final bonusBalance =
           ((await _data.customerProfileStream().first)?['bonusPoints'] as num?)
-              ?.toInt() ??
-          0;
+                  ?.toInt() ??
+              0;
       if (!mounted) {
         return;
       }
@@ -2093,15 +2123,17 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         return;
       }
       paymentMethod = paymentSelection.method;
-      useBonusForNewAddons =
-          paymentSelection.useBonus ||
+      useBonusForNewAddons = paymentSelection.useBonus ||
           paymentSelection.method == DomlyPaymentMethod.bonus;
       selectedBonusForNewAddons =
           paymentSelection.method == DomlyPaymentMethod.bonus
-          ? newAddonsAmount
-          : paymentSelection.useBonus
-          ? bonusBalance.clamp(0, bonusLimit).clamp(0, newAddonsAmount).toInt()
-          : 0;
+              ? newAddonsAmount
+              : paymentSelection.useBonus
+                  ? bonusBalance
+                      .clamp(0, bonusLimit)
+                      .clamp(0, newAddonsAmount)
+                      .toInt()
+                  : 0;
       if (selectedBonusForNewAddons >= newAddonsAmount) {
         paymentMethod = DomlyPaymentMethod.bonus;
         useBonusForNewAddons = true;
@@ -2140,38 +2172,36 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     }
 
     var remainingBonusForNewAddons = selectedBonusForNewAddons;
-    final selections =
-        entriesList.map((entry) {
-          final addonsDetailed =
-              _selectedAddonsByDate[entry.key] ??
-              const <Map<String, dynamic>>[];
-          final newAddonsDetailed =
-              _selectedNewAddonsByDate[entry.key] ??
-              const <Map<String, dynamic>>[];
-          final newAddonAmount = _addonItemsAmount(newAddonsDetailed);
-          final bonusToSpend = useBonusForNewAddons
-              ? remainingBonusForNewAddons.clamp(0, newAddonAmount).toInt()
-              : 0;
-          remainingBonusForNewAddons -= bonusToSpend;
-          return {
-            'date': entry.key,
-            'time': entry.value,
-            'addonsDetailed': addonsDetailed,
-            'newAddonsDetailed': newAddonsDetailed,
-            if (newAddonsDetailed.isNotEmpty) ...{
-              if (kaspiPhone != null) 'kaspiPhone': kaspiPhone,
-              'bonusToSpend': bonusToSpend,
-            },
-            'addons': addonsDetailed
-                .map((item) => (item['label'] ?? item['key'] ?? '').toString())
-                .where((item) => item.isNotEmpty)
-                .toList(),
-          };
-        }).toList()..sort(
-          (a, b) => (a['date'] ?? '').toString().compareTo(
-            (b['date'] ?? '').toString(),
-          ),
-        );
+    final selections = entriesList.map((entry) {
+      final addonsDetailed =
+          _selectedAddonsByDate[entry.key] ?? const <Map<String, dynamic>>[];
+      final newAddonsDetailed =
+          _selectedNewAddonsByDate[entry.key] ?? const <Map<String, dynamic>>[];
+      final newAddonAmount = _addonItemsAmount(newAddonsDetailed);
+      final bonusToSpend = useBonusForNewAddons
+          ? remainingBonusForNewAddons.clamp(0, newAddonAmount).toInt()
+          : 0;
+      remainingBonusForNewAddons -= bonusToSpend;
+      return {
+        'date': entry.key,
+        'time': entry.value,
+        'addonsDetailed': addonsDetailed,
+        'newAddonsDetailed': newAddonsDetailed,
+        if (newAddonsDetailed.isNotEmpty) ...{
+          if (kaspiPhone != null) 'kaspiPhone': kaspiPhone,
+          'bonusToSpend': bonusToSpend,
+        },
+        'addons': addonsDetailed
+            .map((item) => (item['label'] ?? item['key'] ?? '').toString())
+            .where((item) => item.isNotEmpty)
+            .toList(),
+      };
+    }).toList()
+      ..sort(
+        (a, b) => (a['date'] ?? '').toString().compareTo(
+              (b['date'] ?? '').toString(),
+            ),
+      );
     if (selections.isEmpty) {
       return;
     }
@@ -2221,8 +2251,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       if (remainingInPackage <= 0) {
         break;
       }
-      final subscriptionId = (packagesForScheduling[packageIndex]['id'] ?? '')
-          .toString();
+      final subscriptionId =
+          (packagesForScheduling[packageIndex]['id'] ?? '').toString();
       if (subscriptionId.isEmpty) {
         continue;
       }
@@ -2297,9 +2327,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         }
       });
       await _loadAvailableDates();
-      final remainingSelections = (pendingSelectionsBefore - selections.length)
-          .clamp(0, 99)
-          .toInt();
+      final remainingSelections =
+          (pendingSelectionsBefore - selections.length).clamp(0, 99).toInt();
       if (!mounted) {
         return;
       }
@@ -2311,8 +2340,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         context,
         title: remainingSelections > 0
             ? selections.length == 1
-                  ? 'Дата сохранена'
-                  : 'Даты сохранены'
+                ? 'Дата сохранена'
+                : 'Даты сохранены'
             : 'Расписание сохранено',
         subtitle: remainingSelections > 0
             ? 'Можно выбрать и подтвердить ещё $remainingSelections.'
@@ -2418,7 +2447,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     return showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (sheetContext) {
         String? pendingTime = initiallySelected;
         return StatefulBuilder(
@@ -2434,7 +2463,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                   20 + MediaQuery.of(context).viewInsets.bottom,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: DomlyPalette.surface(Colors.white),
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
@@ -2453,7 +2482,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                         width: 42,
                         height: 4,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE1E9E4),
+                          color: DomlyPalette.surface(const Color(0xFFE1E9E4)),
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),
@@ -2464,15 +2493,15 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: DomlyColors.foreground,
+                        color: DomlyPalette.foreground(DomlyColors.foreground),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _formatDateKey(dateKey),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: DomlyColors.muted,
+                        color: DomlyPalette.foreground(DomlyColors.muted),
                       ),
                     ),
                     const SizedBox(height: 18),
@@ -2483,7 +2512,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                         style: TextStyle(
                           fontSize: 13,
                           height: 1.35,
-                          color: DomlyColors.muted,
+                          color: DomlyPalette.foreground(DomlyColors.muted),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -2497,9 +2526,9 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: Material(
-                                  color: selected
+                                  color: DomlyPalette.surface(selected
                                       ? DomlyColors.buttonSoft
-                                      : DomlyColors.backgroundSoft,
+                                      : DomlyColors.backgroundSoft),
                                   borderRadius: BorderRadius.circular(18),
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(18),
@@ -2515,27 +2544,34 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                           Expanded(
                                             child: Text(
                                               time,
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.w700,
-                                                color: DomlyColors.foreground,
+                                                color: DomlyPalette.foreground(
+                                                    DomlyColors.foreground),
                                               ),
                                             ),
                                           ),
                                           if ((slot['availableCleaners'] ?? 0)
                                               is num)
                                             Text(
-                                              '${slot['availableCleaners']} исполн.',
-                                              style: const TextStyle(
+                                              "{p0} исполн.".tr(params: {
+                                                'p0':
+                                                    (slot['availableCleaners'])
+                                                        .toString()
+                                              }),
+                                              style: TextStyle(
                                                 fontSize: 12,
-                                                color: DomlyColors.muted,
+                                                color: DomlyPalette.foreground(
+                                                    DomlyColors.muted),
                                               ),
                                             ),
                                           if (selected) ...[
                                             const SizedBox(width: 8),
-                                            const Icon(
+                                            Icon(
                                               Icons.check_circle,
-                                              color: DomlyColors.buttonPrimary,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.buttonPrimary),
                                               size: 20,
                                             ),
                                           ],
@@ -2579,32 +2615,34 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       'ноябрь',
       'декабрь',
     ];
-    return '${months[date.month - 1]} ${date.year}';
+    return '${months[date.month - 1].tr()} ${date.year}';
   }
 
   Widget _metricChip(String label, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0x1FFFFFFF),
+        color: DomlyPalette.surface(const Color(0x1FFFFFFF)),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0x33FFFFFF)),
+        border: Border.all(color: DomlyPalette.border(const Color(0x33FFFFFF))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            label,
-            style: const TextStyle(fontSize: 11, color: Color(0xCCFFFFFF)),
+            label.tr(),
+            style: TextStyle(
+                fontSize: 11,
+                color: DomlyPalette.foreground(Color(0xCCFFFFFF))),
           ),
           const SizedBox(height: 2),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: DomlyPalette.foreground(Colors.white),
             ),
           ),
         ],

@@ -1,3 +1,4 @@
+import '../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../app/app_brand.dart';
@@ -17,6 +18,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return DomlyShell(
       child: SafeArea(
         child: Padding(
@@ -28,7 +31,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 width: 112,
                 height: 112,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.72),
+                  color: DomlyPalette.surface(
+                      Colors.white.withValues(alpha: 0.72)),
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
@@ -53,7 +57,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
-                  color: DomlyColors.foreground,
+                  color: DomlyPalette.foreground(DomlyColors.foreground),
                 ),
               ),
               const SizedBox(height: 6),
@@ -62,7 +66,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  color: DomlyColors.muted,
+                  color: DomlyPalette.foreground(DomlyColors.muted),
                 ),
               ),
               const SizedBox(height: 24),
@@ -136,10 +140,12 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
         decoration: BoxDecoration(
-          color: isSelected ? DomlyColors.primary : Colors.white,
+          color: DomlyPalette.surface(
+              isSelected ? DomlyColors.primary : Colors.white),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: isSelected ? DomlyColors.primary : DomlyColors.border,
+            color: DomlyPalette.border(
+                isSelected ? DomlyColors.primary : DomlyColors.border),
             width: 1.2,
           ),
           boxShadow: [
@@ -158,7 +164,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: isSelected ? Colors.white : DomlyColors.backgroundSoft,
+                color: DomlyPalette.surface(
+                    isSelected ? Colors.white : DomlyColors.backgroundSoft),
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Center(
@@ -166,20 +173,21 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   symbol,
                   style: TextStyle(
                     fontSize: 24,
-                    color: isSelected
+                    color: DomlyPalette.foreground(isSelected
                         ? DomlyColors.buttonPrimary
-                        : DomlyColors.primary,
+                        : DomlyColors.primary),
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 22),
             Text(
-              title,
+              title.tr(),
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: isSelected ? Colors.white : DomlyColors.foreground,
+                color: DomlyPalette.foreground(
+                    isSelected ? Colors.white : DomlyColors.foreground),
               ),
             ),
             const SizedBox(height: 8),
@@ -188,9 +196,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: isSelected
+                color: DomlyPalette.foreground(isSelected
                     ? Colors.white.withValues(alpha: 0.9)
-                    : DomlyColors.muted,
+                    : DomlyColors.muted),
               ),
             ),
           ],

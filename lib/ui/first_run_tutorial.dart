@@ -1,3 +1,4 @@
+import '../theme/domly_palette.dart';
 import '../services/backend_api_service.dart';
 import '../services/auth_service.dart';
 import 'dart:async';
@@ -388,6 +389,8 @@ class _DomlyCoachTutorial extends StatefulWidget {
 class _DomlyCoachTutorialState extends State<_DomlyCoachTutorial> {
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final step = widget.step;
     final isLast = widget.index == widget.total - 1;
     final size = MediaQuery.sizeOf(context);
@@ -400,7 +403,7 @@ class _DomlyCoachTutorialState extends State<_DomlyCoachTutorial> {
         : (targetRect.bottom + 18).clamp(safe.top + 12, size.height - 260);
 
     return Material(
-      color: Colors.transparent,
+      color: DomlyPalette.surface(Colors.transparent),
       child: Stack(
         children: [
           Positioned.fill(
@@ -415,7 +418,8 @@ class _DomlyCoachTutorialState extends State<_DomlyCoachTutorial> {
                 key: const ValueKey('tutorial-highlight'),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white, width: 3),
+                  border: Border.all(
+                      color: DomlyPalette.border(Colors.white), width: 3),
                 ),
               ),
             ),
@@ -566,6 +570,8 @@ class _CoachBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -573,7 +579,7 @@ class _CoachBubble extends StatelessWidget {
         Container(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DomlyPalette.surface(Colors.white),
             borderRadius: BorderRadius.circular(24),
             boxShadow: const [
               BoxShadow(
@@ -605,8 +611,9 @@ class _CoachBubble extends StatelessWidget {
                       children: [
                         Text(
                           step.title.tr(),
-                          style: const TextStyle(
-                            color: DomlyColors.foreground,
+                          style: TextStyle(
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                             fontSize: 19,
                             fontWeight: FontWeight.w800,
                             height: 1.12,
@@ -614,9 +621,12 @@ class _CoachBubble extends StatelessWidget {
                         ),
                         const SizedBox(height: 5),
                         Text(
-                          '${index + 1} из $total'.tr(),
-                          style: const TextStyle(
-                            color: DomlyColors.muted,
+                          "{p0} из {p1}".tr(params: {
+                            'p0': (index + 1).toString(),
+                            'p1': (total).toString()
+                          }),
+                          style: TextStyle(
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),
@@ -635,8 +645,8 @@ class _CoachBubble extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 step.body.tr(),
-                style: const TextStyle(
-                  color: DomlyColors.muted,
+                style: TextStyle(
+                  color: DomlyPalette.foreground(DomlyColors.muted),
                   fontSize: 14,
                   height: 1.35,
                   fontWeight: FontWeight.w500,
@@ -652,9 +662,9 @@ class _CoachBubble extends StatelessWidget {
                       height: 4,
                       margin: const EdgeInsets.symmetric(horizontal: 2),
                       decoration: BoxDecoration(
-                        color: dotIndex <= index
+                        color: DomlyPalette.surface(dotIndex <= index
                             ? DomlyColors.buttonPrimary
-                            : DomlyColors.border,
+                            : DomlyColors.border),
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
@@ -678,8 +688,9 @@ class _CoachBubble extends StatelessWidget {
                     ),
                   FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: DomlyColors.buttonPrimary,
-                      foregroundColor: Colors.white,
+                      backgroundColor:
+                          DomlyPalette.surface(DomlyColors.buttonPrimary),
+                      foregroundColor: DomlyPalette.foreground(Colors.white),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -705,20 +716,24 @@ class _CoachArrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Transform.rotate(
       angle: pointsDown ? 3.14159 : 0,
       child: CustomPaint(
         size: const Size(34, 18),
-        painter: _CoachArrowPainter(),
+        painter: _CoachArrowPainter(DomlyPalette.surface(Colors.white)),
       ),
     );
   }
 }
 
 class _CoachArrowPainter extends CustomPainter {
+  _CoachArrowPainter(this.color);
+  final Color color;
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white;
+    final paint = Paint()..color = color;
     final path = Path()
       ..moveTo(size.width / 2, 0)
       ..lineTo(size.width, size.height)
@@ -728,7 +743,8 @@ class _CoachArrowPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _CoachArrowPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _CoachOverlayPainter extends CustomPainter {

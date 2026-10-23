@@ -1,3 +1,5 @@
+import '../../theme/domly_palette.dart';
+import '../../localization/translation_controller.dart';
 import '../../ui/chat_interaction.dart';
 import 'package:flutter/material.dart';
 import '../../app/app_scope.dart';
@@ -75,92 +77,94 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => DomlyShell(
-          child: SafeArea(
-              child: Column(children: [
-        const Padding(
-            padding: EdgeInsets.all(20),
-            child: Text('Помощник Domly',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
-        TextButton(
-            onPressed: () async {
-              try {
-                await AssistantGuestService.instance.enablePush();
-              } catch (error) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text(error.toString())));
-                }
+  Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+    return DomlyShell(
+        child: SafeArea(
+            child: Column(children: [
+      Padding(
+          padding: EdgeInsets.all(20),
+          child: Text('Помощник Domly'.tr(),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
+      TextButton(
+          onPressed: () async {
+            try {
+              await AssistantGuestService.instance.enablePush();
+            } catch (error) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text(error.toString())));
               }
-            },
-            child: const Text('Включить уведомления о новых сообщениях')),
-        Expanded(
-            child: _error != null
-                ? Center(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Text(_error!),
-                    TextButton(
-                        onPressed: _initialize, child: const Text('Повторить'))
-                  ]))
-                : _messages == null
-                    ? const Center(child: CircularProgressIndicator())
-                    : StreamBuilder<List<Map<String, dynamic>>>(
-                        stream: _messages,
-                        builder: (context, snapshot) {
-                          if (snapshot.hasError) {
-                            return const Center(
-                                child: Text(
-                                    'Не удалось загрузить сообщения. Попробуйте позже.'));
-                          }
-                          final messages = snapshot.data ?? [];
-                          if (snapshot.hasData)
-                            _interaction.update(context, messages,
-                                incoming: (m) => m['sender_kind'] != 'guest');
-                          if (messages.isEmpty) {
-                            return const Center(
-                                child: Text(
-                                    'Задайте вопрос о заказе или уборке.'));
-                          }
-                          return ListView.builder(
-                              controller: _interaction.scroll,
-                              reverse: true,
-                              padding: const EdgeInsets.all(16),
-                              itemCount: messages.length,
-                              itemBuilder: (context, index) {
-                                final message =
-                                        messages[messages.length - 1 - index],
-                                    mine = message['sender_kind'] == 'guest';
-                                return Align(
-                                    alignment: mine
-                                        ? Alignment.centerRight
-                                        : Alignment.centerLeft,
-                                    child: Container(
-                                        margin:
-                                            const EdgeInsets.only(bottom: 10),
-                                        padding: const EdgeInsets.all(14),
-                                        decoration: BoxDecoration(
-                                            color: mine
-                                                ? DomlyColors.backgroundSoft
-                                                : Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(18)),
-                                        child: Text(
-                                            (message['message_ru'] ?? '')
-                                                .toString())));
-                              });
-                        })),
-        Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(children: [
-              Expanded(
-                  child: ChatComposerField(
-                      controller: _text,
-                      focusNode: _interaction.inputFocus,
-                      onSend: _send,
-                      hint: 'Сообщение')),
-              IconButton(
-                  onPressed: _messages == null || _sending ? null : _send,
-                  icon: const Icon(Icons.send))
-            ])),
-      ])));
+            }
+          },
+          child: Text('Включить уведомления о новых сообщениях'.tr())),
+      Expanded(
+          child: _error != null
+              ? Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_error!),
+                  TextButton(
+                      onPressed: _initialize, child: Text('Повторить'.tr()))
+                ]))
+              : _messages == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: _messages,
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return Center(
+                              child: Text(
+                                  'Не удалось загрузить сообщения. Попробуйте позже.'
+                                      .tr()));
+                        }
+                        final messages = snapshot.data ?? [];
+                        if (snapshot.hasData)
+                          _interaction.update(context, messages,
+                              incoming: (m) => m['sender_kind'] != 'guest');
+                        if (messages.isEmpty) {
+                          return Center(
+                              child: Text(
+                                  'Задайте вопрос о заказе или уборке.'.tr()));
+                        }
+                        return ListView.builder(
+                            controller: _interaction.scroll,
+                            reverse: true,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: messages.length,
+                            itemBuilder: (context, index) {
+                              final message =
+                                      messages[messages.length - 1 - index],
+                                  mine = message['sender_kind'] == 'guest';
+                              return Align(
+                                  alignment: mine
+                                      ? Alignment.centerRight
+                                      : Alignment.centerLeft,
+                                  child: Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                          color: DomlyPalette.surface(mine
+                                              ? DomlyColors.backgroundSoft
+                                              : Colors.white),
+                                          borderRadius:
+                                              BorderRadius.circular(18)),
+                                      child: Text((message['message_ru'] ?? '')
+                                          .toString())));
+                            });
+                      })),
+      Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            Expanded(
+                child: ChatComposerField(
+                    controller: _text,
+                    focusNode: _interaction.inputFocus,
+                    onSend: _send,
+                    hint: 'Сообщение')),
+            IconButton(
+                onPressed: _messages == null || _sending ? null : _send,
+                icon: const Icon(Icons.send))
+          ]))
+    ])));
+  }
 }

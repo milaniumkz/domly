@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../ui/domly_ui.dart';
@@ -13,6 +14,8 @@ class CleanerServiceAreaNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return DomlyCard(
       color: const Color(0xFFFFF7ED),
       padding: const EdgeInsets.all(16),
@@ -26,12 +29,13 @@ class CleanerServiceAreaNotice extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF97316).withValues(alpha: 0.12),
+                  color: DomlyPalette.surface(
+                      const Color(0xFFF97316).withValues(alpha: 0.12)),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.map_outlined,
-                  color: Color(0xFFF97316),
+                  color: DomlyPalette.foreground(Color(0xFFF97316)),
                   size: 20,
                 ),
               ),
@@ -45,7 +49,7 @@ class CleanerServiceAreaNotice extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
-                        color: DomlyColors.foreground,
+                        color: DomlyPalette.foreground(DomlyColors.foreground),
                       ),
                     ),
                     SizedBox(height: 4),
@@ -55,7 +59,7 @@ class CleanerServiceAreaNotice extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         height: 1.35,
-                        color: DomlyColors.muted,
+                        color: DomlyPalette.foreground(DomlyColors.muted),
                       ),
                     ),
                   ],

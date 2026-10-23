@@ -1,3 +1,4 @@
+import '../localization/translation_controller.dart';
 import 'client_telemetry.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -21,7 +22,7 @@ class BackendApiException implements Exception {
   final int statusCode;
 
   @override
-  String toString() => message;
+  String toString() => message.tr();
 }
 
 class BackendApiService {

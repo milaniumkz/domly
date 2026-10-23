@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'dart:async';
 
 import '../../utils/backend_compat.dart';
@@ -47,18 +48,16 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
     });
     final orderId = widget.orderId.trim();
     if (orderId.isNotEmpty) {
-      _checklistSubscription = _data
-          .cleanerChecklistStream(orderId)
-          .listen(_applySavedChecklist);
+      _checklistSubscription =
+          _data.cleanerChecklistStream(orderId).listen(_applySavedChecklist);
     }
     _templateSubscription = _config.cleanerChecklistTemplatesStream().listen((
       groups,
     ) {
       if (!mounted) return;
       setState(() {
-        _templateGroups = groups
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList();
+        _templateGroups =
+            groups.map((item) => Map<String, dynamic>.from(item)).toList();
       });
     });
   }
@@ -106,6 +105,8 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     if (widget.orderId.trim().isEmpty) {
       return _buildChecklistPicker();
     }
@@ -133,7 +134,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                            color: DomlyPalette.foreground(Colors.white),
                           ),
                         ),
                         SizedBox(height: 4),
@@ -142,7 +143,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                               .tr(),
                           style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xCCFFFFFF),
+                            color: DomlyPalette.foreground(Color(0xCCFFFFFF)),
                           ),
                         ),
                       ],
@@ -212,16 +213,18 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w700,
-                                            color: DomlyColors.foreground,
+                                            color: DomlyPalette.foreground(
+                                                DomlyColors.foreground),
                                           ),
                                         ),
                                         const SizedBox(height: 10),
                                         TextField(
                                           controller: _noteController,
                                           maxLines: 4,
-                                          decoration: const InputDecoration(
+                                          decoration: InputDecoration(
                                             hintText:
-                                                'Комментарий по уборке или инциденту',
+                                                'Комментарий по уборке или инциденту'
+                                                    .tr(),
                                           ),
                                         ),
                                       ],
@@ -319,9 +322,8 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
       final simple = request['addons'];
       if (simple is List) {
         for (final item in simple) {
-          final label = item is Map
-              ? _addonLabel(item)
-              : item.toString().trim();
+          final label =
+              item is Map ? _addonLabel(item) : item.toString().trim();
           if (label.isNotEmpty && !labels.contains(label)) {
             labels.add(label);
           }
@@ -383,7 +385,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                     child: Text(
                       'Выберите уборку'.tr(),
                       style: TextStyle(
-                        color: Colors.white,
+                        color: DomlyPalette.foreground(Colors.white),
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
                       ),
@@ -408,15 +410,14 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                   }
                   final active =
                       (snapshot.data ?? const <Map<String, dynamic>>[]).where((
-                          slot,
-                        ) {
-                          final status = (slot['status'] ?? '')
-                              .toString()
-                              .toLowerCase();
-                          return status != 'completed' &&
-                              status != 'canceled' &&
-                              status != 'cancelled';
-                        }).toList()
+                    slot,
+                  ) {
+                    final status =
+                        (slot['status'] ?? '').toString().toLowerCase();
+                    return status != 'completed' &&
+                        status != 'canceled' &&
+                        status != 'cancelled';
+                  }).toList()
                         ..sort((a, b) => _slotDate(a).compareTo(_slotDate(b)));
 
                   if (active.isEmpty) {
@@ -458,8 +459,9 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                             children: [
                               Text(
                                 _slotTitle(slot),
-                                style: const TextStyle(
-                                  color: DomlyColors.foreground,
+                                style: TextStyle(
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.foreground),
                                   fontSize: 16,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -468,8 +470,9 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                               Text(
                                 (slot['address'] ?? 'Адрес не указан')
                                     .toString(),
-                                style: const TextStyle(
-                                  color: DomlyColors.muted,
+                                style: TextStyle(
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.muted),
                                   fontSize: 13,
                                 ),
                               ),
@@ -480,14 +483,16 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                   Text(
                                     'Открыть чек-лист'.tr(),
                                     style: TextStyle(
-                                      color: DomlyColors.primary,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.primary),
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                   SizedBox(width: 6),
                                   Icon(
                                     Icons.chevron_right,
-                                    color: DomlyColors.primary,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.primary),
                                   ),
                                 ],
                               ),
@@ -579,15 +584,14 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
   }
 
   String _addonLabel(Map<dynamic, dynamic> item) {
-    var text =
-        (item['label'] ??
-                item['title'] ??
-                item['name'] ??
-                item['optionLabel'] ??
-                item['key'] ??
-                '')
-            .toString()
-            .trim();
+    var text = (item['label'] ??
+            item['title'] ??
+            item['name'] ??
+            item['optionLabel'] ??
+            item['key'] ??
+            '')
+        .toString()
+        .trim();
     if (text.isEmpty) return '';
     final qty = (item['quantity'] as num?)?.toInt() ?? 1;
     if (qty > 1 && !text.contains('×')) {
@@ -693,7 +697,9 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
           const SizedBox(height: 6),
           Text(
             'Отметьте выполненные доп. услуги по этому заказу.'.tr(),
-            style: TextStyle(fontSize: 13, color: DomlyColors.muted),
+            style: TextStyle(
+                fontSize: 13,
+                color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
           const SizedBox(height: 12),
           ...orderedAddons.map(
@@ -715,7 +721,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
           Text(
             'Предложить доп. услуги'.tr(),
             style: TextStyle(
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
@@ -723,7 +729,9 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
           const SizedBox(height: 6),
           Text(
             'Выберите допы, которые клиент должен согласовать и оплатить.'.tr(),
-            style: TextStyle(color: DomlyColors.muted, fontSize: 13),
+            style: TextStyle(
+                color: DomlyPalette.foreground(DomlyColors.muted),
+                fontSize: 13),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -739,9 +747,8 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
   }
 
   Widget _baseTasksCard(Map<String, dynamic> order, List<String> tasks) {
-    final packageName = (order['package'] ?? order['packageName'] ?? '')
-        .toString()
-        .trim();
+    final packageName =
+        (order['package'] ?? order['packageName'] ?? '').toString().trim();
     return DomlyCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,8 +760,10 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
           if (packageName.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              'Пакет: $packageName'.tr(),
-              style: const TextStyle(fontSize: 13, color: DomlyColors.muted),
+              "Пакет: {p0}".tr(params: {'p0': (packageName).toString()}),
+              style: TextStyle(
+                  fontSize: 13,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ],
           const SizedBox(height: 12),
@@ -913,7 +922,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
   Widget _baseTile(String task) {
     return CheckboxListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      tileColor: DomlyColors.backgroundSoft,
+      tileColor: DomlyPalette.surface(DomlyColors.backgroundSoft),
       value: _completed.contains(task),
       onChanged: (value) {
         setState(() {
@@ -933,7 +942,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
   Widget _addonTile(String task, String description) {
     return CheckboxListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      tileColor: DomlyColors.backgroundSoft,
+      tileColor: DomlyPalette.surface(DomlyColors.backgroundSoft),
       value: _addons.contains(task),
       onChanged: (value) {
         setState(() {
@@ -993,7 +1002,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -1015,8 +1024,8 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
               maxChildSize: 0.95,
               builder: (context, scrollController) {
                 return Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
+                  decoration: BoxDecoration(
+                    color: DomlyPalette.surface(Colors.white),
                     borderRadius: BorderRadius.vertical(
                       top: Radius.circular(28),
                     ),
@@ -1031,7 +1040,8 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                             Text(
                               'Допы для согласования'.tr(),
                               style: TextStyle(
-                                color: DomlyColors.foreground,
+                                color: DomlyPalette.foreground(
+                                    DomlyColors.foreground),
                                 fontSize: 22,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -1041,7 +1051,8 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                               'Клиент увидит запрос. После оплаты и подтверждения админом допы появятся в списке работ.'
                                   .tr(),
                               style: TextStyle(
-                                color: DomlyColors.muted,
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                                 fontSize: 13,
                                 height: 1.35,
                               ),
@@ -1074,8 +1085,9 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                                 group['key'] ??
                                                 'Допы')
                                             .toString(),
-                                        style: const TextStyle(
-                                          color: DomlyColors.foreground,
+                                        style: TextStyle(
+                                          color: DomlyPalette.foreground(
+                                              DomlyColors.foreground),
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
@@ -1084,8 +1096,8 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                         final item = Map<String, dynamic>.from(
                                           raw,
                                         );
-                                        final key = (item['key'] ?? '')
-                                            .toString();
+                                        final key =
+                                            (item['key'] ?? '').toString();
                                         final quantity = quantities[key] ?? 0;
                                         final hasQuantity =
                                             supportsQuantity[key] == true;
@@ -1102,9 +1114,11 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                                   children: [
                                                     Text(
                                                       labels[key] ?? key,
-                                                      style: const TextStyle(
-                                                        color: DomlyColors
-                                                            .foreground,
+                                                      style: TextStyle(
+                                                        color: DomlyPalette
+                                                            .foreground(
+                                                                DomlyColors
+                                                                    .foreground),
                                                         fontWeight:
                                                             FontWeight.w600,
                                                       ),
@@ -1114,8 +1128,10 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                                       Text(
                                                         'Оплата отдельно'.tr(),
                                                         style: TextStyle(
-                                                          color:
-                                                              DomlyColors.muted,
+                                                          color: DomlyPalette
+                                                              .foreground(
+                                                                  DomlyColors
+                                                                      .muted),
                                                           fontSize: 12,
                                                         ),
                                                       ),
@@ -1127,9 +1143,9 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                                   onPressed: quantity <= 0
                                                       ? null
                                                       : () => setModalState(() {
-                                                          quantities[key] =
-                                                              quantity - 1;
-                                                        }),
+                                                            quantities[key] =
+                                                                quantity - 1;
+                                                          }),
                                                   icon: const Icon(
                                                     Icons.remove_circle_outline,
                                                   ),
@@ -1138,9 +1154,9 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                                 IconButton(
                                                   onPressed: () =>
                                                       setModalState(() {
-                                                        quantities[key] =
-                                                            quantity + 1;
-                                                      }),
+                                                    quantities[key] =
+                                                        quantity + 1;
+                                                  }),
                                                   icon: const Icon(
                                                     Icons.add_circle_outline,
                                                   ),
@@ -1150,10 +1166,9 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                                   value: quantity > 0,
                                                   onChanged: (value) =>
                                                       setModalState(() {
-                                                        quantities[key] = value
-                                                            ? 1
-                                                            : 0;
-                                                      }),
+                                                    quantities[key] =
+                                                        value ? 1 : 0;
+                                                  }),
                                                 ),
                                             ],
                                           ),
@@ -1167,10 +1182,11 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                             TextField(
                               controller: noteController,
                               maxLines: 3,
-                              decoration: const InputDecoration(
-                                labelText: 'Комментарий клиенту',
+                              decoration: InputDecoration(
+                                labelText: 'Комментарий клиенту'.tr(),
                                 hintText:
-                                    'Например: холодильник сильно загрязнен',
+                                    'Например: холодильник сильно загрязнен'
+                                        .tr(),
                               ),
                             ),
                           ],
@@ -1178,8 +1194,8 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                       ),
                       Container(
                         padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
+                        decoration: BoxDecoration(
+                          color: DomlyPalette.surface(Colors.white),
                           boxShadow: [
                             BoxShadow(
                               blurRadius: 18,

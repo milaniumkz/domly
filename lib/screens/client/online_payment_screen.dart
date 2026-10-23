@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../localization/translation_controller.dart';
@@ -27,8 +28,10 @@ class OnlinePaymentScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Scaffold(
-      backgroundColor: DomlyColors.background,
+      backgroundColor: DomlyPalette.background(DomlyColors.background),
       appBar: AppBar(
         title: Text('Онлайн-платёж'.tr()),
         leading: IconButton(
@@ -45,7 +48,8 @@ class OnlinePaymentScreen extends StatelessWidget {
           ? Center(
               child: Text(
                 'Не удалось открыть оплату'.tr(),
-                style: const TextStyle(color: DomlyColors.foreground),
+                style: TextStyle(
+                    color: DomlyPalette.foreground(DomlyColors.foreground)),
               ),
             )
           : OnlinePaymentView(

@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 
@@ -56,6 +57,8 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return DomlyShell(
       child: SafeArea(
         child: Stack(
@@ -94,7 +97,8 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                   style: TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.white,
+                                    color:
+                                        DomlyPalette.foreground(Colors.white),
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -102,9 +106,10 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                   hasExistingComplaint
                                       ? 'Обращение сохранено. Здесь показан его текущий статус.'
                                       : 'Опишите проблему и приложите до 5 фото одним выбором',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: Color(0xCCFFFFFF),
+                                    color: DomlyPalette.foreground(
+                                        Color(0xCCFFFFFF)),
                                   ),
                                 ),
                               ],
@@ -158,16 +163,18 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                       style: TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w700,
-                                        color: DomlyColors.foreground,
+                                        color: DomlyPalette.foreground(
+                                            DomlyColors.foreground),
                                       ),
                                     ),
                                     const SizedBox(height: 8),
                                     TextField(
                                       controller: _controller,
                                       maxLines: 5,
-                                      decoration: const InputDecoration(
+                                      decoration: InputDecoration(
                                         hintText:
-                                            'Что произошло во время уборки',
+                                            'Что произошло во время уборки'
+                                                .tr(),
                                       ),
                                     ),
                                   ],
@@ -186,16 +193,18 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                             style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w700,
-                                              color: DomlyColors.foreground,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.foreground),
                                             ),
                                           ),
                                         ),
                                         Text(
                                           '${_photoUrls.length}/$_maxPhotos',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w700,
-                                            color: DomlyColors.muted,
+                                            color: DomlyPalette.foreground(
+                                                DomlyColors.muted),
                                           ),
                                         ),
                                       ],
@@ -205,7 +214,8 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                       Wrap(
                                         spacing: 10,
                                         runSpacing: 10,
-                                        children: List.generate(_photoUrls.length, (
+                                        children:
+                                            List.generate(_photoUrls.length, (
                                           index,
                                         ) {
                                           final url = _photoUrls[index];
@@ -221,58 +231,64 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                                   fit: BoxFit.cover,
                                                   errorBuilder: (_, __, ___) =>
                                                       Container(
-                                                        height: 108,
-                                                        width: 108,
-                                                        decoration: BoxDecoration(
-                                                          color: DomlyColors
-                                                              .backgroundSoft,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                16,
-                                                              ),
-                                                          border: Border.all(
-                                                            color: DomlyColors
-                                                                .border,
-                                                          ),
-                                                        ),
-                                                        child: const Icon(
-                                                          Icons.image_outlined,
-                                                          color:
-                                                              DomlyColors.muted,
-                                                        ),
+                                                    height: 108,
+                                                    width: 108,
+                                                    decoration: BoxDecoration(
+                                                      color: DomlyPalette
+                                                          .surface(DomlyColors
+                                                              .backgroundSoft),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        16,
                                                       ),
+                                                      border: Border.all(
+                                                        color:
+                                                            DomlyPalette.border(
+                                                                DomlyColors
+                                                                    .border),
+                                                      ),
+                                                    ),
+                                                    child: Icon(
+                                                      Icons.image_outlined,
+                                                      color: DomlyPalette
+                                                          .foreground(
+                                                              DomlyColors
+                                                                  .muted),
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
                                               Positioned(
                                                 top: 6,
                                                 right: 6,
                                                 child: GestureDetector(
-                                                  onTap:
-                                                      _loading ||
+                                                  onTap: _loading ||
                                                           _uploadingPhotos
                                                       ? null
                                                       : () {
                                                           setState(
                                                             () => _photoUrls
                                                                 .removeAt(
-                                                                  index,
-                                                                ),
+                                                              index,
+                                                            ),
                                                           );
                                                         },
                                                   child: Container(
                                                     width: 24,
                                                     height: 24,
                                                     decoration: BoxDecoration(
-                                                      color: Colors.black
-                                                          .withValues(
-                                                            alpha: 0.65,
-                                                          ),
+                                                      color: DomlyPalette
+                                                          .surface(Colors.black
+                                                              .withValues(
+                                                                  alpha: 0.65)),
                                                       shape: BoxShape.circle,
                                                     ),
-                                                    child: const Icon(
+                                                    child: Icon(
                                                       Icons.close,
                                                       size: 14,
-                                                      color: Colors.white,
+                                                      color: DomlyPalette
+                                                          .foreground(
+                                                              Colors.white),
                                                     ),
                                                   ),
                                                 ),
@@ -298,9 +314,9 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                         isLoading: _uploadingPhotos,
                                         onPressed:
                                             _photoUrls.length >= _maxPhotos ||
-                                                _loading
-                                            ? null
-                                            : _pickPhotos,
+                                                    _loading
+                                                ? null
+                                                : _pickPhotos,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
@@ -308,9 +324,10 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                       _photoUrls.isEmpty
                                           ? 'После выбора фото сразу появятся здесь.'
                                           : 'Фото прикреплены к жалобе и будут отправлены вместе с текстом.',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
-                                        color: DomlyColors.muted,
+                                        color: DomlyPalette.foreground(
+                                            DomlyColors.muted),
                                       ),
                                     ),
                                   ],
@@ -345,19 +362,19 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                             label: hasExistingComplaint
                                 ? 'Вернуться к заказам'
                                 : _loading
-                                ? 'Отправляем жалобу...'
-                                : 'Отправить жалобу',
+                                    ? 'Отправляем жалобу...'
+                                    : 'Отправить жалобу',
                             isLoading: _loading,
                             onPressed: hasExistingComplaint
                                 ? () => Navigator.pushNamedAndRemoveUntil(
-                                    context,
-                                    '/client/orders',
-                                    (route) => false,
-                                    arguments: {'initialTab': 'history'},
-                                  )
+                                      context,
+                                      '/client/orders',
+                                      (route) => false,
+                                      arguments: {'initialTab': 'history'},
+                                    )
                                 : _loading || _uploadingPhotos
-                                ? null
-                                : _submit,
+                                    ? null
+                                    : _submit,
                           ),
                         );
                       },
@@ -372,7 +389,8 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                   absorbing: true,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.22),
+                      color: DomlyPalette.surface(
+                          Colors.black.withValues(alpha: 0.22)),
                     ),
                     child: Center(
                       child: DomlyCard(
@@ -395,7 +413,8 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: DomlyColors.foreground,
+                                color: DomlyPalette.foreground(
+                                    DomlyColors.foreground),
                               ),
                             ),
                             SizedBox(height: 4),
@@ -403,7 +422,8 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                               'Подождите, пожалуйста'.tr(),
                               style: TextStyle(
                                 fontSize: 12,
-                                color: DomlyColors.muted,
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                               ),
                             ),
                           ],
@@ -503,8 +523,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
         subtitle: 'Мы передадим её менеджеру и проверим заказ.',
         type: DomlySnackBarType.success,
       );
-      final shouldReturnToHistory =
-          DebugSession.enabled &&
+      final shouldReturnToHistory = DebugSession.enabled &&
           DebugSession.value('debug_order_id') == widget.orderId;
       if (shouldReturnToHistory) {
         Navigator.pushNamedAndRemoveUntil(
@@ -554,6 +573,8 @@ class _ComplaintStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final status = (complaint['status'] ?? 'open').toString().toLowerCase();
     final resolution = (complaint['resolution'] ?? '').toString().trim();
     final compensationAmount = _readInt(complaint['compensationAmount']);
@@ -572,7 +593,7 @@ class _ComplaintStatusCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
               ),
@@ -586,10 +607,10 @@ class _ComplaintStatusCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               statusDescription,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
               ),
             ),
           ],
@@ -597,32 +618,40 @@ class _ComplaintStatusCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               resolution,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
               ),
             ),
           ],
           if (createdAt != null && status == 'open') ...[
             const SizedBox(height: 6),
             Text(
-              'На рассмотрении с $createdAt'.tr(),
-              style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+              "На рассмотрении с {p0}"
+                  .tr(params: {'p0': (createdAt).toString()}),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ],
           if (resolvedAt != null && status != 'open') ...[
             const SizedBox(height: 6),
             Text(
-              'Решение от $resolvedAt'.tr(),
-              style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+              "Решение от {p0}".tr(params: {'p0': (resolvedAt).toString()}),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ],
           if (compensationAmount > 0) ...[
             const SizedBox(height: 6),
             Text(
-              'Компенсация: $compensationAmount ₸'.tr(),
-              style: const TextStyle(fontSize: 13, color: DomlyColors.muted),
+              "Компенсация: {p0} ₸"
+                  .tr(params: {'p0': (compensationAmount).toString()}),
+              style: TextStyle(
+                  fontSize: 13,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ],
         ],
@@ -703,6 +732,8 @@ class _ExistingComplaintCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final text = (complaint['text'] ?? '').toString().trim();
     final submittedAt = _formatSubmittedAt(complaint['createdAt']);
     final photoUrls = ((complaint['photoUrls'] as List?) ?? const [])
@@ -722,23 +753,25 @@ class _ExistingComplaintCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           if (submittedAt != null) ...[
             const SizedBox(height: 6),
             Text(
-              'Отправлено $submittedAt'.tr(),
-              style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+              "Отправлено {p0}".tr(params: {'p0': (submittedAt).toString()}),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ],
           if (text.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
               ),
             ),
           ],
@@ -766,7 +799,9 @@ class _ExistingComplaintCard extends StatelessWidget {
           Text(
             'Если потребуется уточнение, менеджер свяжется с вами отдельно.'
                 .tr(),
-            style: TextStyle(fontSize: 12, color: DomlyColors.muted),
+            style: TextStyle(
+                fontSize: 12,
+                color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
         ],
       ),
@@ -802,10 +837,12 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: DomlyPalette.surface(color.withValues(alpha: 0.12)),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -813,7 +850,7 @@ class _StatusChip extends StatelessWidget {
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: color,
+          color: DomlyPalette.foreground(color),
         ),
       ),
     );

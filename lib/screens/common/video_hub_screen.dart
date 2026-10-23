@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/firestore_data_service.dart';
@@ -35,6 +36,8 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final isCleaner = widget.audienceType == 'cleaner';
     final videoStream =
         isCleaner ? _data.cleanerVideosStream() : _data.clientVideosStream();
@@ -47,9 +50,10 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
           return DomlyShell(
             bottomNavigationBar:
                 isCleaner ? null : const DomlyClientBottomNav(currentIndex: 0),
-            child: const SafeArea(
+            child: SafeArea(
               child: Center(
-                child: CircularProgressIndicator(color: _green),
+                child: CircularProgressIndicator(
+                    color: DomlyPalette.foreground(_green)),
               ),
             ),
           );
@@ -66,9 +70,10 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                 bottomNavigationBar: isCleaner
                     ? null
                     : const DomlyClientBottomNav(currentIndex: 0),
-                child: const SafeArea(
+                child: SafeArea(
                   child: Center(
-                    child: CircularProgressIndicator(color: _green),
+                    child: CircularProgressIndicator(
+                        color: DomlyPalette.foreground(_green)),
                   ),
                 ),
               );
@@ -101,7 +106,7 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                   ? null
                   : const DomlyClientBottomNav(currentIndex: 0),
               child: ColoredBox(
-                color: _background,
+                color: DomlyPalette.background(_background),
                 child: SafeArea(
                   bottom: false,
                   child: Center(
@@ -115,7 +120,7 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                             Row(
                               children: [
                                 Material(
-                                  color: Colors.white,
+                                  color: DomlyPalette.surface(Colors.white),
                                   borderRadius: BorderRadius.circular(12),
                                   elevation: 4,
                                   shadowColor:
@@ -123,12 +128,12 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(12),
                                     onTap: () => Navigator.maybePop(context),
-                                    child: const SizedBox(
+                                    child: SizedBox(
                                       width: 36,
                                       height: 36,
                                       child: Icon(
                                         Icons.arrow_back,
-                                        color: _orange,
+                                        color: DomlyPalette.foreground(_orange),
                                         size: 20,
                                       ),
                                     ),
@@ -144,8 +149,9 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                                         widget.title,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: _foreground,
+                                        style: TextStyle(
+                                          color: DomlyPalette.foreground(
+                                              _foreground),
                                           fontSize: 20,
                                           fontWeight: FontWeight.w700,
                                           height: 27 / 20,
@@ -156,8 +162,9 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                                         widget.subtitle,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: _muted,
+                                        style: TextStyle(
+                                          color:
+                                              DomlyPalette.foreground(_muted),
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
                                           height: 16 / 12,
@@ -255,23 +262,26 @@ class _VideoMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 50,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _VideoHubScreenState._orange),
+        border: Border.all(
+            color: DomlyPalette.border(_VideoHubScreenState._orange)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            label,
+            label.tr(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: _VideoHubScreenState._muted,
+            style: TextStyle(
+              color: DomlyPalette.foreground(_VideoHubScreenState._muted),
               fontSize: 13,
               fontWeight: FontWeight.w500,
               height: 18 / 13,
@@ -279,8 +289,8 @@ class _VideoMetricCard extends StatelessWidget {
           ),
           Text(
             value,
-            style: const TextStyle(
-              color: _VideoHubScreenState._foreground,
+            style: TextStyle(
+              color: DomlyPalette.foreground(_VideoHubScreenState._foreground),
               fontSize: 16,
               fontWeight: FontWeight.w700,
               height: 22 / 16,
@@ -305,10 +315,12 @@ class _VideoFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Material(
-      color: selected
+      color: DomlyPalette.surface(selected
           ? _VideoHubScreenState._green
-          : _VideoHubScreenState._chipSoft,
+          : _VideoHubScreenState._chipSoft),
       borderRadius: BorderRadius.circular(999),
       elevation: selected ? 4 : 0,
       shadowColor: Colors.black.withValues(alpha: 0.25),
@@ -321,12 +333,15 @@ class _VideoFilterChip extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             border: selected
                 ? null
-                : Border.all(color: Colors.black.withValues(alpha: 0.13)),
+                : Border.all(
+                    color: DomlyPalette.border(
+                        Colors.black.withValues(alpha: 0.13))),
           ),
           child: Text(
-            label,
+            label.tr(),
             style: TextStyle(
-              color: selected ? Colors.white : _VideoHubScreenState._green,
+              color: DomlyPalette.foreground(
+                  selected ? Colors.white : _VideoHubScreenState._green),
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
@@ -350,12 +365,14 @@ class _VideoTrainingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final duration = (video['duration'] ?? video['durationText'] ?? '5 мин')
         .toString()
         .trim();
     final popularity = viewed ? 'Просмотрено' : 'Популярно';
     return Material(
-      color: Colors.white,
+      color: DomlyPalette.surface(Colors.white),
       borderRadius: BorderRadius.circular(22),
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
@@ -372,7 +389,8 @@ class _VideoTrainingCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: _VideoHubScreenState._border),
+            border: Border.all(
+                color: DomlyPalette.border(_VideoHubScreenState._border)),
           ),
           child: Row(
             children: [
@@ -381,13 +399,14 @@ class _VideoTrainingCard extends StatelessWidget {
                 height: 80,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _VideoHubScreenState._thumb,
+                  color: DomlyPalette.surface(_VideoHubScreenState._thumb),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Text(
+                child: Text(
                   '▶',
                   style: TextStyle(
-                    color: _VideoHubScreenState._foreground,
+                    color: DomlyPalette.foreground(
+                        _VideoHubScreenState._foreground),
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -402,8 +421,9 @@ class _VideoTrainingCard extends StatelessWidget {
                       (video['title'] ?? 'Видео').toString(),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _VideoHubScreenState._foreground,
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(
+                            _VideoHubScreenState._foreground),
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         height: 18 / 16,
@@ -414,8 +434,9 @@ class _VideoTrainingCard extends StatelessWidget {
                       '${duration.isEmpty ? '5 мин' : duration} · $popularity',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _VideoHubScreenState._muted,
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(
+                            _VideoHubScreenState._muted),
                         fontSize: 12,
                         fontWeight: FontWeight.w400,
                       ),
@@ -436,18 +457,21 @@ class _VideoEmptyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 116,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _VideoHubScreenState._border),
+        border: Border.all(
+            color: DomlyPalette.border(_VideoHubScreenState._border)),
       ),
       child: Text(
         'Видео пока нет'.tr(),
         style: TextStyle(
-          color: _VideoHubScreenState._foreground,
+          color: DomlyPalette.foreground(_VideoHubScreenState._foreground),
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),

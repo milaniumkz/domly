@@ -1,3 +1,5 @@
+import '../localization/translation_controller.dart';
+
 String orderDisplayId(Map<String, dynamic>? data, {String fallback = '—'}) {
   String safeFallback() {
     final raw = fallback.trim();
@@ -53,7 +55,10 @@ String orderDisplayId(Map<String, dynamic>? data, {String fallback = '—'}) {
   return safeFallback();
 }
 
-String orderStatusLabel(String status, {String fallback = 'Ожидание'}) {
+String orderStatusLabel(String status, {String fallback = 'Ожидание'}) =>
+    _orderStatusLabel(status, fallback: fallback).tr();
+
+String _orderStatusLabel(String status, {String fallback = 'Ожидание'}) {
   switch (status.trim().toLowerCase()) {
     case 'created':
       return 'Создан';
@@ -93,6 +98,8 @@ String orderStatusLabel(String status, {String fallback = 'Ожидание'}) {
     case 'paid':
     case 'success':
       return 'Оплачено';
+    case 'rejected':
+      return 'Отклонено';
     case 'failed':
       return 'Ошибка оплаты';
     case 'refunded':
@@ -102,7 +109,10 @@ String orderStatusLabel(String status, {String fallback = 'Ожидание'}) {
   }
 }
 
-String paymentStatusLabel(String status, {String fallback = 'Ожидание'}) {
+String paymentStatusLabel(String status, {String fallback = 'Ожидание'}) =>
+    _paymentStatusLabel(status, fallback: fallback).tr();
+
+String _paymentStatusLabel(String status, {String fallback = 'Ожидание'}) {
   switch (status.trim().toLowerCase()) {
     case 'paid':
     case 'success':
@@ -115,6 +125,8 @@ String paymentStatusLabel(String status, {String fallback = 'Ожидание'})
       return 'Ожидает счёт';
     case 'pending':
       return 'Ожидание оплаты';
+    case 'rejected':
+      return 'Отклонено';
     case 'failed':
       return 'Ошибка оплаты';
     case 'canceled':

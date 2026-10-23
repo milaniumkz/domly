@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -20,6 +21,8 @@ class CleanerProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final data = FirestoreDataService.instance;
     final config = AppConfigService.instance;
 
@@ -109,7 +112,8 @@ class CleanerProfileScreen extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.w700,
-                                      color: Colors.white,
+                                      color:
+                                          DomlyPalette.foreground(Colors.white),
                                     ),
                                   ),
                                 ),
@@ -120,7 +124,8 @@ class CleanerProfileScreen extends StatelessWidget {
                                     'Личные данные и карьера'.tr(),
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Color(0xCCFFFFFF),
+                                      color: DomlyPalette.foreground(
+                                          Color(0xCCFFFFFF)),
                                     ),
                                   ),
                                 ),
@@ -128,18 +133,19 @@ class CleanerProfileScreen extends StatelessWidget {
                                 Container(
                                   width: 72,
                                   height: 72,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.white,
+                                  decoration: BoxDecoration(
+                                    color: DomlyPalette.surface(Colors.white),
                                     shape: BoxShape.circle,
                                   ),
                                   alignment: Alignment.center,
                                   child: Text(
                                     _initials((profile['name'] ?? 'Исполнитель')
                                         .toString()),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
-                                      color: DomlyColors.foreground,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.foreground),
                                     ),
                                   ),
                                 ),
@@ -147,10 +153,11 @@ class CleanerProfileScreen extends StatelessWidget {
                                 Text(
                                   (profile['name'] ?? 'Исполнитель').toString(),
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.white,
+                                    color:
+                                        DomlyPalette.foreground(Colors.white),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -161,13 +168,16 @@ class CleanerProfileScreen extends StatelessWidget {
                                         label: statusLabel,
                                         color: Colors.white),
                                     const SizedBox(width: 10),
-                                    const Icon(Icons.star,
-                                        size: 16, color: Colors.white),
+                                    Icon(Icons.star,
+                                        size: 16,
+                                        color: DomlyPalette.foreground(
+                                            Colors.white)),
                                     const SizedBox(width: 4),
                                     Text(
                                       rating,
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color: DomlyPalette.foreground(
+                                            Colors.white),
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -178,9 +188,10 @@ class CleanerProfileScreen extends StatelessWidget {
                                   Text(
                                     progressText,
                                     textAlign: TextAlign.center,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12,
-                                      color: Color(0xD9FFFFFF),
+                                      color: DomlyPalette.foreground(
+                                          Color(0xD9FFFFFF)),
                                     ),
                                   ),
                                 ],
@@ -341,11 +352,12 @@ class CleanerProfileScreen extends StatelessWidget {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        const Padding(
+                                        Padding(
                                           padding: EdgeInsets.only(top: 2),
                                           child: Icon(
                                               Icons.calendar_today_outlined,
-                                              color: DomlyColors.buttonPrimary),
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.buttonPrimary)),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
@@ -357,15 +369,20 @@ class CleanerProfileScreen extends StatelessWidget {
                                                 'Дата начала работы'.tr(),
                                                 style: TextStyle(
                                                     fontSize: 16,
-                                                    color: DomlyColors.muted),
+                                                    color:
+                                                        DomlyPalette.foreground(
+                                                            DomlyColors.muted)),
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
                                                 workStartDate,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w600,
-                                                  color: DomlyColors.foreground,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors
+                                                              .foreground),
                                                 ),
                                               ),
                                             ],
@@ -385,16 +402,18 @@ class CleanerProfileScreen extends StatelessWidget {
                                           'Карьерный статус'.tr(),
                                           style: TextStyle(
                                             fontSize: 13,
-                                            color: DomlyColors.muted,
+                                            color: DomlyPalette.foreground(
+                                                DomlyColors.muted),
                                           ),
                                         ),
                                         const SizedBox(height: 6),
                                         Text(
-                                          statusLabel,
-                                          style: const TextStyle(
+                                          statusLabel.tr(),
+                                          style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w700,
-                                            color: DomlyColors.foreground,
+                                            color: DomlyPalette.foreground(
+                                                DomlyColors.foreground),
                                           ),
                                         ),
                                         if (nextStatus.isNotEmpty) ...[
@@ -406,7 +425,8 @@ class CleanerProfileScreen extends StatelessWidget {
                                               minHeight: 8,
                                               value: progress,
                                               backgroundColor:
-                                                  DomlyColors.border,
+                                                  DomlyPalette.surface(
+                                                      DomlyColors.border),
                                               valueColor:
                                                   const AlwaysStoppedAnimation<
                                                           Color>(
@@ -416,9 +436,10 @@ class CleanerProfileScreen extends StatelessWidget {
                                           const SizedBox(height: 8),
                                           Text(
                                             progressText,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 13,
-                                              color: DomlyColors.muted,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.muted),
                                             ),
                                           ),
                                         ] else
@@ -429,7 +450,8 @@ class CleanerProfileScreen extends StatelessWidget {
                                                   .tr(),
                                               style: TextStyle(
                                                 fontSize: 13,
-                                                color: DomlyColors.muted,
+                                                color: DomlyPalette.foreground(
+                                                    DomlyColors.muted),
                                               ),
                                             ),
                                           ),
@@ -452,13 +474,15 @@ class CleanerProfileScreen extends StatelessWidget {
                                           width: 40,
                                           height: 40,
                                           decoration: BoxDecoration(
-                                            color: DomlyColors.backgroundSoft,
+                                            color: DomlyPalette.surface(
+                                                DomlyColors.backgroundSoft),
                                             borderRadius:
                                                 BorderRadius.circular(12),
                                           ),
-                                          child: const Icon(
+                                          child: Icon(
                                             Icons.touch_app_outlined,
-                                            color: DomlyColors.buttonPrimary,
+                                            color: DomlyPalette.foreground(
+                                                DomlyColors.buttonPrimary),
                                           ),
                                         ),
                                         title: Text('Пройти обучение'.tr()),
@@ -466,9 +490,10 @@ class CleanerProfileScreen extends StatelessWidget {
                                           'Покажем кнопки и основные действия'
                                               .tr(),
                                         ),
-                                        trailing: const Icon(
+                                        trailing: Icon(
                                           Icons.chevron_right,
-                                          color: DomlyColors.muted,
+                                          color: DomlyPalette.foreground(
+                                              DomlyColors.muted),
                                         ),
                                       ),
                                       if (menu.isNotEmpty) _divider(),
@@ -487,24 +512,28 @@ class CleanerProfileScreen extends StatelessWidget {
                                                 width: 40,
                                                 height: 40,
                                                 decoration: BoxDecoration(
-                                                  color: DomlyColors
-                                                      .backgroundSoft,
+                                                  color: DomlyPalette.surface(
+                                                      DomlyColors
+                                                          .backgroundSoft),
                                                   borderRadius:
                                                       BorderRadius.circular(12),
                                                 ),
-                                                child: const Icon(
+                                                child: Icon(
                                                     Icons.settings_outlined,
-                                                    color: DomlyColors
-                                                        .buttonPrimary),
+                                                    color: DomlyPalette
+                                                        .foreground(DomlyColors
+                                                            .buttonPrimary)),
                                               ),
                                               title: Text((item['title'] ?? '')
                                                   .toString()),
                                               subtitle: Text(
                                                   (item['subtitle'] ?? '')
                                                       .toString()),
-                                              trailing: const Icon(
+                                              trailing: Icon(
                                                   Icons.chevron_right,
-                                                  color: DomlyColors.muted),
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors.muted)),
                                             ),
                                             if (item != menu.last) _divider(),
                                           ],
@@ -525,7 +554,8 @@ class CleanerProfileScreen extends StatelessWidget {
                                   const SizedBox(height: 12),
                                   DomlySecondaryButton(
                                     label: 'Выйти из аккаунта',
-                                    foregroundColor: DomlyColors.danger,
+                                    foregroundColor: DomlyPalette.foreground(
+                                        DomlyColors.danger),
                                     onPressed: () async {
                                       final navigator = Navigator.of(context);
                                       await AppScope.of(context)
@@ -541,7 +571,8 @@ class CleanerProfileScreen extends StatelessWidget {
                                   const SizedBox(height: 12),
                                   DomlySecondaryButton(
                                     label: 'Удалить аккаунт',
-                                    foregroundColor: DomlyColors.danger,
+                                    foregroundColor: DomlyPalette.foreground(
+                                        DomlyColors.danger),
                                     onPressed: () => _deleteAccount(context),
                                   ),
                                   const SizedBox(height: 24),
@@ -609,25 +640,27 @@ class CleanerProfileScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
       child: Column(
         children: [
-          Icon(icon, size: 22, color: DomlyColors.buttonPrimary),
+          Icon(icon,
+              size: 22,
+              color: DomlyPalette.foreground(DomlyColors.buttonPrimary)),
           const SizedBox(height: 6),
           Text(
-            label,
+            label.tr(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           const SizedBox(height: 4),
           Text(
             value,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
         ],
@@ -643,11 +676,11 @@ class CleanerProfileScreen extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 10),
           child: Text(
-            title,
-            style: const TextStyle(
+            title.tr(),
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
             ),
           ),
         ),
@@ -663,13 +696,14 @@ class CleanerProfileScreen extends StatelessWidget {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: DomlyColors.backgroundSoft,
+          color: DomlyPalette.surface(DomlyColors.backgroundSoft),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(icon, color: DomlyColors.buttonPrimary),
+        child: Icon(icon,
+            color: DomlyPalette.foreground(DomlyColors.buttonPrimary)),
       ),
       title: Text(
-        title,
+        title.tr(),
         style: const TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w600,
@@ -682,7 +716,8 @@ class CleanerProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _divider() => const Divider(height: 1, color: DomlyColors.border);
+  Widget _divider() =>
+      Divider(height: 1, color: DomlyPalette.border(DomlyColors.border));
 
   void _showMenuDetails(BuildContext context, String title, String subtitle) {
     showModalBottomSheet<void>(
@@ -697,20 +732,20 @@ class CleanerProfileScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
-                  style: const TextStyle(
+                  title.tr(),
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
                   subtitle.isEmpty ? 'Данные будут добавлены позже.' : subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     height: 1.45,
-                    color: DomlyColors.muted,
+                    color: DomlyPalette.foreground(DomlyColors.muted),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -790,7 +825,8 @@ class CleanerProfileScreen extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -808,11 +844,14 @@ class CleanerProfileScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Громкость: ${(volume * 100).round()}%'.tr(),
-                        style: const TextStyle(
+                        "Громкость: {p0}%".tr(params: {
+                          'p0': ((volume * 100).round()).toString()
+                        }),
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
                       Slider(
@@ -828,7 +867,7 @@ class CleanerProfileScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       DropdownButtonFormField<int>(
                         initialValue: soundIndex,
-                        decoration: const InputDecoration(labelText: 'Мелодия'),
+                        decoration: InputDecoration(labelText: 'Мелодия'.tr()),
                         items: [
                           for (var i = 0;
                               i < OfferAlertSound.soundOptions.length;
@@ -974,7 +1013,8 @@ class CleanerProfileScreen extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -984,16 +1024,18 @@ class CleanerProfileScreen extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 13,
                             height: 1.35,
-                            color: DomlyColors.muted,
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Доступно к выводу: $availableAmount ₸'.tr(),
-                          style: const TextStyle(
+                          "Доступно к выводу: {p0} ₸"
+                              .tr(params: {'p0': (availableAmount).toString()}),
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                         const SizedBox(height: 18),
@@ -1001,8 +1043,8 @@ class CleanerProfileScreen extends StatelessWidget {
                           controller: kaspiController,
                           keyboardType: TextInputType.phone,
                           textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(
-                            labelText: 'Номер Kaspi *',
+                          decoration: InputDecoration(
+                            labelText: 'Номер Kaspi *'.tr(),
                             prefixIcon: Icon(Icons.phone_outlined),
                           ),
                         ),
@@ -1014,8 +1056,8 @@ class CleanerProfileScreen extends StatelessWidget {
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                           ],
-                          decoration: const InputDecoration(
-                            labelText: 'Сумма к выводу, ₸ *',
+                          decoration: InputDecoration(
+                            labelText: 'Сумма к выводу, ₸ *'.tr(),
                             prefixIcon:
                                 Icon(Icons.account_balance_wallet_outlined),
                           ),
@@ -1025,8 +1067,9 @@ class CleanerProfileScreen extends StatelessWidget {
                           const SizedBox(height: 12),
                           Text(
                             errorText!,
-                            style: const TextStyle(
-                              color: DomlyColors.danger,
+                            style: TextStyle(
+                              color:
+                                  DomlyPalette.foreground(DomlyColors.danger),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -1077,8 +1120,9 @@ class CleanerProfileScreen extends StatelessWidget {
       houses = zones.isEmpty ? await data.housesStream().first : [];
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Не удалось загрузить районы: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("Не удалось загрузить районы: {p0}"
+                .tr(params: {'p0': (error).toString()}))));
       }
       return;
     }
@@ -1210,21 +1254,23 @@ class CleanerProfileScreen extends StatelessWidget {
                     Text(
                       'Все поля обязательны для работы аккаунта исполнителя.'
                           .tr(),
-                      style: TextStyle(fontSize: 13, color: DomlyColors.muted),
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: DomlyPalette.foreground(DomlyColors.muted)),
                     ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: nameController,
                       style: const TextStyle(fontSize: 15),
-                      decoration: const InputDecoration(labelText: 'ФИО *'),
+                      decoration: InputDecoration(labelText: 'ФИО *'.tr()),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: addressController,
                       style: const TextStyle(fontSize: 15),
                       decoration: InputDecoration(
-                        labelText: 'Домашний адрес *',
-                        hintText: 'Введите адрес или нажмите поиск',
+                        labelText: 'Домашний адрес *'.tr(),
+                        hintText: 'Введите адрес или нажмите поиск'.tr(),
                         suffixIcon: IconButton(
                           onPressed: () async {
                             final selected = await showAddressSearchSheet(
@@ -1239,7 +1285,7 @@ class CleanerProfileScreen extends StatelessWidget {
                             addressController.text = selected.fullText;
                           },
                           icon: const Icon(Icons.search),
-                          tooltip: 'Найти адрес',
+                          tooltip: 'Найти адрес'.tr(),
                         ),
                       ),
                     ),
@@ -1253,8 +1299,9 @@ class CleanerProfileScreen extends StatelessWidget {
                     if (zoneOptions.isEmpty && sortedAreaOptions.isEmpty)
                       Text(
                         'Сначала добавьте районы или дома в админке.'.tr(),
-                        style:
-                            TextStyle(fontSize: 13, color: DomlyColors.muted),
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: DomlyPalette.foreground(DomlyColors.muted)),
                       )
                     else
                       Wrap(
@@ -1300,15 +1347,15 @@ class CleanerProfileScreen extends StatelessWidget {
                       controller: emergencyPhoneController,
                       style: const TextStyle(fontSize: 15),
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
-                          labelText: 'Доп. номер знакомого *'),
+                      decoration: InputDecoration(
+                          labelText: 'Доп. номер знакомого *'.tr()),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: emergencyRelationController,
                       style: const TextStyle(fontSize: 15),
                       decoration:
-                          const InputDecoration(labelText: 'Кем приходится *'),
+                          InputDecoration(labelText: 'Кем приходится *'.tr()),
                     ),
                     const SizedBox(height: 16),
                     DomlyPrimaryButton(

@@ -1,3 +1,4 @@
+import '../theme/domly_palette.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -65,6 +66,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return DomlyShell(
       child: Stack(
         children: [
@@ -77,7 +80,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 width: 130,
                 height: 130,
                 decoration: BoxDecoration(
-                  color: DomlyColors.buttonPrimary.withValues(alpha: 0.06),
+                  color: DomlyPalette.surface(
+                      DomlyColors.buttonPrimary.withValues(alpha: 0.06)),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -92,7 +96,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 width: 160,
                 height: 160,
                 decoration: BoxDecoration(
-                  color: DomlyColors.accent.withValues(alpha: 0.10),
+                  color: DomlyPalette.surface(
+                      DomlyColors.accent.withValues(alpha: 0.10)),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -104,12 +109,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 const SizedBox(height: 26),
                 FadeTransition(
                   opacity: _fadeAnimation,
-                  child: const Text(
+                  child: Text(
                     'DOMLY',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: DomlyColors.foreground,
+                      color: DomlyPalette.foreground(DomlyColors.foreground),
                     ),
                   ),
                 ),
@@ -129,7 +134,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         width: 144,
                         height: 144,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.82),
+                          color: DomlyPalette.surface(
+                              Colors.white.withValues(alpha: 0.82)),
                           shape: BoxShape.circle,
                         ),
                         alignment: Alignment.center,
@@ -168,7 +174,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                             style: TextStyle(
                               fontSize: 26,
                               fontWeight: FontWeight.w700,
-                              color: DomlyColors.foreground,
+                              color: DomlyPalette.foreground(
+                                  DomlyColors.foreground),
                             ),
                             textAlign: TextAlign.left,
                           ),

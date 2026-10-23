@@ -1,3 +1,4 @@
+import '../theme/domly_palette.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -85,6 +86,8 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Padding(
       padding: EdgeInsets.only(
         left: 24,
@@ -104,15 +107,17 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
             const SizedBox(height: 10),
             Text(
               'Адрес'.tr(),
-              style: TextStyle(fontSize: 12, color: DomlyColors.muted),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _controller,
               autofocus: true,
               onChanged: _search,
-              decoration: const InputDecoration(
-                labelText: 'ЖК или адрес рядом',
+              decoration: InputDecoration(
+                labelText: 'ЖК или адрес рядом'.tr(),
                 suffixIcon: Icon(Icons.search),
               ),
             ),
@@ -124,17 +129,17 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                       ? Icons.near_me_disabled_outlined
                       : Icons.near_me_outlined,
                   size: 16,
-                  color: _searchBias == null
+                  color: DomlyPalette.foreground(_searchBias == null
                       ? DomlyColors.muted
-                      : DomlyColors.buttonPrimary,
+                      : DomlyColors.buttonPrimary),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     _locationStatus,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                     ),
                   ),
                 ),
@@ -179,7 +184,9 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                           child: Text(
                             'Подходящие варианты появятся после ввода адреса.'
                                 .tr(),
-                            style: TextStyle(color: DomlyColors.muted),
+                            style: TextStyle(
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted)),
                             textAlign: TextAlign.center,
                           ),
                         )
@@ -191,7 +198,8 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: DomlyColors.foreground,
+                                color: DomlyPalette.foreground(
+                                    DomlyColors.foreground),
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -203,7 +211,8 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                                 itemBuilder: (context, index) {
                                   final item = _suggestions[index];
                                   return Material(
-                                    color: DomlyColors.backgroundSoft,
+                                    color: DomlyPalette.surface(
+                                        DomlyColors.backgroundSoft),
                                     borderRadius: BorderRadius.circular(18),
                                     child: InkWell(
                                       borderRadius: BorderRadius.circular(18),
@@ -223,9 +232,10 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                                           crossAxisAlignment:
                                               WrapCrossAlignment.center,
                                           children: [
-                                            const Icon(
+                                            Icon(
                                               Icons.location_on_outlined,
-                                              color: DomlyColors.buttonPrimary,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.buttonPrimary),
                                             ),
                                             SizedBox(
                                               width: 230,
@@ -242,12 +252,14 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                                                     children: [
                                                       Text(
                                                         item.title,
-                                                        style: const TextStyle(
+                                                        style: TextStyle(
                                                           fontSize: 14,
                                                           fontWeight:
                                                               FontWeight.w700,
-                                                          color: DomlyColors
-                                                              .foreground,
+                                                          color: DomlyPalette
+                                                              .foreground(
+                                                                  DomlyColors
+                                                                      .foreground),
                                                         ),
                                                       ),
                                                       if (item
@@ -261,11 +273,12 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                                                           ),
                                                           decoration:
                                                               BoxDecoration(
-                                                            color: DomlyColors
-                                                                .buttonPrimary
-                                                                .withValues(
-                                                                    alpha:
-                                                                        0.12),
+                                                            color: DomlyPalette
+                                                                .surface(DomlyColors
+                                                                    .buttonPrimary
+                                                                    .withValues(
+                                                                        alpha:
+                                                                            0.12)),
                                                             borderRadius:
                                                                 BorderRadius
                                                                     .circular(
@@ -278,8 +291,10 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                                                               fontWeight:
                                                                   FontWeight
                                                                       .w700,
-                                                              color: DomlyColors
-                                                                  .buttonPrimary,
+                                                              color: DomlyPalette
+                                                                  .foreground(
+                                                                      DomlyColors
+                                                                          .buttonPrimary),
                                                             ),
                                                           ),
                                                         ),
@@ -290,10 +305,12 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                                                     const SizedBox(height: 4),
                                                     Text(
                                                       item.subtitle,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                         fontSize: 12,
-                                                        color:
-                                                            DomlyColors.muted,
+                                                        color: DomlyPalette
+                                                            .foreground(
+                                                                DomlyColors
+                                                                    .muted),
                                                       ),
                                                     ),
                                                   ],
@@ -304,10 +321,11 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                                                       _formatDistance(
                                                         item.distanceMeters!,
                                                       ),
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                         fontSize: 11,
-                                                        color: DomlyColors
-                                                            .buttonPrimary,
+                                                        color: DomlyPalette
+                                                            .foreground(DomlyColors
+                                                                .buttonPrimary),
                                                         fontWeight:
                                                             FontWeight.w700,
                                                       ),

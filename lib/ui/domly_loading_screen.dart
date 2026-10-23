@@ -1,3 +1,4 @@
+import '../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
 import 'domly_ui.dart';
@@ -17,19 +18,21 @@ class DomlyLoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Scaffold(
-      backgroundColor: DomlyColors.background,
+      backgroundColor: DomlyPalette.background(DomlyColors.background),
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              DomlyColors.background,
-              DomlyColors.backgroundSoft,
-              DomlyColors.backgroundSoft2,
+              DomlyPalette.surface(DomlyColors.background),
+              DomlyPalette.surface(DomlyColors.backgroundSoft),
+              DomlyPalette.surface(DomlyColors.backgroundSoft2),
             ],
           ),
         ),
@@ -44,7 +47,7 @@ class DomlyLoadingScreen extends StatelessWidget {
                   height: 245,
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: DomlyPalette.surface(Colors.white),
                     borderRadius: BorderRadius.circular(32),
                     boxShadow: [
                       BoxShadow(
@@ -58,10 +61,10 @@ class DomlyLoadingScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 22),
                 Text(
-                  subtitle,
+                  subtitle.tr(),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: DomlyColors.muted,
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(DomlyColors.muted),
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     height: 1.35,
@@ -83,7 +86,7 @@ class DomlyLoadingScreen extends StatelessWidget {
                   'Проверяем профиль, адрес и заказы'.tr(),
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: DomlyColors.muted,
+                    color: DomlyPalette.foreground(DomlyColors.muted),
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),

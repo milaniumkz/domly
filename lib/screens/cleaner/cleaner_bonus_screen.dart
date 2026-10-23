@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -20,6 +21,8 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _config.workerBonusConfigStream(),
       builder: (context, configSnap) {
@@ -158,11 +161,11 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  title,
-                  style: const TextStyle(
+                  title.tr(),
+                  style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -170,7 +173,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
                   'Статусы, бонусы и правила начисления.'.tr(),
                   style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xCCFFFFFF),
+                    color: DomlyPalette.foreground(Color(0xCCFFFFFF)),
                   ),
                 ),
               ],
@@ -196,10 +199,10 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           Expanded(
             child: Text(
               description,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 height: 1.4,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
               ),
             ),
           ),
@@ -244,7 +247,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
             ),
           ),
           const SizedBox(height: 12),
@@ -271,9 +274,10 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             'Легенда',
             'От $legendArea м² • карьерный бонус $legendBonus ₸',
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 14),
-            child: Divider(height: 1, color: DomlyColors.border),
+            child: Divider(
+                height: 1, color: DomlyPalette.border(DomlyColors.border)),
           ),
           _ruleRow(
             Icons.square_foot_outlined,
@@ -299,7 +303,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             style: TextStyle(
               fontSize: 12,
               height: 1.4,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
             ),
           ),
         ],
@@ -322,7 +326,8 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.card_giftcard_outlined, color: Colors.white),
+              Icon(Icons.card_giftcard_outlined,
+                  color: DomlyPalette.foreground(Colors.white)),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -330,7 +335,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                   ),
                 ),
               ),
@@ -339,10 +344,10 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           const SizedBox(height: 14),
           Text(
             '$unlocked ₸',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: DomlyPalette.foreground(Colors.white),
             ),
           ),
           const SizedBox(height: 6),
@@ -350,26 +355,27 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             locked > 0
                 ? 'Доступно к выводу через 7 дней'
                 : 'Доступно к выводу сейчас',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
-              color: Colors.white70,
+              color: DomlyPalette.foreground(Colors.white70),
             ),
           ),
           if (locked > 0) ...[
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.lock_clock_outlined,
                   size: 16,
-                  color: Colors.white70,
+                  color: DomlyPalette.foreground(Colors.white70),
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Заблокировано: $locked ₸'.tr(),
-                  style: const TextStyle(
+                  "Заблокировано: {p0} ₸"
+                      .tr(params: {'p0': (locked).toString()}),
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white70,
+                    color: DomlyPalette.foreground(Colors.white70),
                   ),
                 ),
               ],
@@ -377,22 +383,24 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           ],
           if (totalBonusAwarded > 0) ...[
             const SizedBox(height: 12),
-            const Divider(color: Colors.white24),
+            Divider(color: DomlyPalette.border(Colors.white24)),
             const SizedBox(height: 6),
             Row(
               children: [
                 Expanded(
                   child: Text(
                     'Всего начислено'.tr(),
-                    style: TextStyle(fontSize: 12, color: Colors.white70),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: DomlyPalette.foreground(Colors.white70)),
                   ),
                 ),
                 Text(
                   '$totalBonusAwarded ₸',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                   ),
                 ),
               ],
@@ -433,7 +441,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
             ),
           ),
           const SizedBox(height: 12),
@@ -488,24 +496,25 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
             ),
           ),
           const SizedBox(height: 10),
           Text(
             '$nextStatus • $nextCareerBonus ₸',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            'Осталось убрать $remainingArea м² до следующего статуса.'.tr(),
-            style: const TextStyle(
+            "Осталось убрать {p0} м² до следующего статуса."
+                .tr(params: {'p0': (remainingArea).toString()}),
+            style: TextStyle(
               fontSize: 13,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
             ),
           ),
         ],
@@ -521,7 +530,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           children: [
             Expanded(
               child: Text(
-                label,
+                label.tr(),
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -530,8 +539,10 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             ),
             const SizedBox(width: 12),
             Text(
-              subtitle,
-              style: const TextStyle(fontSize: 11, color: DomlyColors.muted),
+              subtitle.tr(),
+              style: TextStyle(
+                  fontSize: 11,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ],
         ),
@@ -541,7 +552,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           child: LinearProgressIndicator(
             minHeight: 6,
             value: progress,
-            backgroundColor: DomlyColors.border,
+            backgroundColor: DomlyPalette.surface(DomlyColors.border),
             valueColor:
                 const AlwaysStoppedAnimation<Color>(DomlyColors.buttonPrimary),
           ),
@@ -558,10 +569,12 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: DomlyColors.backgroundSoft,
+            color: DomlyPalette.surface(DomlyColors.backgroundSoft),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(icon, size: 18, color: DomlyColors.buttonPrimary),
+          child: Icon(icon,
+              size: 18,
+              color: DomlyPalette.foreground(DomlyColors.buttonPrimary)),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -569,20 +582,20 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                title,
-                style: const TextStyle(
+                title.tr(),
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: DomlyColors.foreground,
+                  color: DomlyPalette.foreground(DomlyColors.foreground),
                 ),
               ),
               const SizedBox(height: 3),
               Text(
-                subtitle,
-                style: const TextStyle(
+                subtitle.tr(),
+                style: TextStyle(
                   fontSize: 12,
                   height: 1.35,
-                  color: DomlyColors.muted,
+                  color: DomlyPalette.foreground(DomlyColors.muted),
                 ),
               ),
             ],
@@ -612,7 +625,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
             ),
           ),
           const SizedBox(height: 12),
@@ -664,10 +677,12 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: DomlyColors.backgroundSoft,
+            color: DomlyPalette.surface(DomlyColors.backgroundSoft),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(icon, size: 18, color: DomlyColors.buttonPrimary),
+          child: Icon(icon,
+              size: 18,
+              color: DomlyPalette.foreground(DomlyColors.buttonPrimary)),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -675,7 +690,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                label,
+                label.tr(),
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -683,8 +698,9 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                statusText,
-                style: TextStyle(fontSize: 11, color: statusColor),
+                statusText.tr(),
+                style: TextStyle(
+                    fontSize: 11, color: DomlyPalette.foreground(statusColor)),
               ),
             ],
           ),
@@ -692,10 +708,10 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
         const SizedBox(width: 12),
         Text(
           '+$amount ₸',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: DomlyColors.foreground,
+            color: DomlyPalette.foreground(DomlyColors.foreground),
           ),
         ),
       ],

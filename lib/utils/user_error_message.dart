@@ -1,3 +1,5 @@
+import '../localization/translation_controller.dart';
+
 class UserErrorMessage {
   const UserErrorMessage._();
 
@@ -14,7 +16,15 @@ class UserErrorMessage {
         text.contains('401');
   }
 
-  static String title(
+  static String title(Object? error,
+          {String fallback = 'Не удалось выполнить'}) =>
+      _title(error, fallback: fallback).tr();
+
+  static String message(Object? error,
+          {String fallback = 'Попробуйте ещё раз.'}) =>
+      _message(error, fallback: fallback).tr();
+
+  static String _title(
     Object? error, {
     String fallback = 'Не удалось выполнить',
   }) {
@@ -27,7 +37,7 @@ class UserErrorMessage {
     return fallback;
   }
 
-  static String message(
+  static String _message(
     Object? error, {
     String fallback = 'Попробуйте ещё раз.',
   }) {

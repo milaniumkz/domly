@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 
@@ -72,6 +73,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return DomlyShell(
       child: SafeArea(
         child: Column(
@@ -106,7 +109,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                                color: DomlyPalette.foreground(Colors.white),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -114,9 +117,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
                               hasExistingReview
                                   ? 'Ваш отзыв сохранен и уже учтен в системе.'
                                   : 'Оцените уборщицу и оставьте отзыв о визите',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: Color(0xCCFFFFFF),
+                                color:
+                                    DomlyPalette.foreground(Color(0xCCFFFFFF)),
                               ),
                             ),
                           ],
@@ -142,12 +146,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
                       .cast<Map<String, dynamic>?>()
                       .firstWhere((item) => item != null, orElse: () => null);
                   final hasExistingReview = existingReview != null;
-                  final traitOptions = _rating < 3
-                      ? _negativeTraits
-                      : _positiveTraits;
-                  final traitsTitle = _rating < 3
-                      ? 'Что не понравилось'
-                      : 'Что понравилось';
+                  final traitOptions =
+                      _rating < 3 ? _negativeTraits : _positiveTraits;
+                  final traitsTitle =
+                      _rating < 3 ? 'Что не понравилось' : 'Что понравилось';
                   return SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                     child: Column(
@@ -167,7 +169,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,
-                                    color: DomlyColors.foreground,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.foreground),
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -188,7 +191,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                         value <= _rating
                                             ? Icons.star
                                             : Icons.star_border,
-                                        color: const Color(0xFFFFA500),
+                                        color: DomlyPalette.foreground(
+                                            const Color(0xFFFFA500)),
                                         size: 32,
                                       ),
                                     );
@@ -199,8 +203,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                   _rating < 3
                                       ? 'Если оценка ниже 3 звезд, отметьте причины.'
                                       : 'Отметьте сильные стороны уборщицы.',
-                                  style: const TextStyle(
-                                    color: DomlyColors.muted,
+                                  style: TextStyle(
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.muted),
                                   ),
                                 ),
                               ],
@@ -213,10 +218,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
                               children: [
                                 Text(
                                   traitsTitle,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,
-                                    color: DomlyColors.foreground,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.foreground),
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -247,9 +253,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                 TextField(
                                   controller: _textController,
                                   maxLines: 4,
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     hintText:
-                                        'Что понравилось, что нужно улучшить',
+                                        'Что понравилось, что нужно улучшить'
+                                            .tr(),
                                   ),
                                 ),
                               ],
@@ -265,7 +272,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,
-                                    color: DomlyColors.foreground,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.foreground),
                                   ),
                                 ),
                                 const SizedBox(height: 10),
@@ -274,17 +282,20 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(18),
                                     decoration: BoxDecoration(
-                                      color: DomlyColors.backgroundSoft,
+                                      color: DomlyPalette.surface(
+                                          DomlyColors.backgroundSoft),
                                       borderRadius: BorderRadius.circular(18),
                                       border: Border.all(
-                                        color: DomlyColors.border,
+                                        color: DomlyPalette.border(
+                                            DomlyColors.border),
                                       ),
                                     ),
                                     child: Row(
                                       children: [
                                         Icon(
                                           Icons.check_circle,
-                                          color: DomlyColors.primary,
+                                          color: DomlyPalette.foreground(
+                                              DomlyColors.primary),
                                         ),
                                         SizedBox(width: 12),
                                         Expanded(
@@ -297,7 +308,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   fontWeight: FontWeight.w700,
-                                                  color: DomlyColors.foreground,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors
+                                                              .foreground),
                                                 ),
                                               ),
                                               SizedBox(height: 2),
@@ -306,7 +320,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                                     .tr(),
                                                 style: TextStyle(
                                                   fontSize: 12,
-                                                  color: DomlyColors.muted,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors.muted),
                                                 ),
                                               ),
                                             ],
@@ -362,18 +378,18 @@ class _ReviewScreenState extends State<ReviewScreen> {
                         label: hasExistingReview
                             ? 'Вернуться к заказам'
                             : _loading
-                            ? 'Отправляем...'
-                            : 'Отправить отзыв',
+                                ? 'Отправляем...'
+                                : 'Отправить отзыв',
                         onPressed: hasExistingReview
                             ? () => Navigator.pushNamedAndRemoveUntil(
-                                context,
-                                '/client/orders',
-                                (route) => false,
-                                arguments: {'initialTab': 'history'},
-                              )
+                                  context,
+                                  '/client/orders',
+                                  (route) => false,
+                                  arguments: {'initialTab': 'history'},
+                                )
                             : _loading
-                            ? null
-                            : _submit,
+                                ? null
+                                : _submit,
                       ),
                     );
                   },
@@ -433,12 +449,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
         orderId: widget.orderId,
         rating: _rating,
         text: _textController.text.trim(),
-        positiveTraits: _rating >= 3
-            ? _selectedTraits.toList(growable: false)
-            : const [],
-        negativeTraits: _rating < 3
-            ? _selectedTraits.toList(growable: false)
-            : const [],
+        positiveTraits:
+            _rating >= 3 ? _selectedTraits.toList(growable: false) : const [],
+        negativeTraits:
+            _rating < 3 ? _selectedTraits.toList(growable: false) : const [],
         photoUrl: _photoUrl,
       );
       if (!mounted) {
@@ -450,8 +464,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
         subtitle: 'Спасибо, ваша оценка сохранена.',
         type: DomlySnackBarType.success,
       );
-      final shouldReturnToHistory =
-          DebugSession.enabled &&
+      final shouldReturnToHistory = DebugSession.enabled &&
           DebugSession.value('debug_order_id') == widget.orderId;
       if (shouldReturnToHistory) {
         Navigator.pushNamedAndRemoveUntil(
@@ -504,6 +517,8 @@ class _ExistingReviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final rating = _readInt(review['rating']);
     final submittedAt = _formatSubmittedAt(review['createdAt']);
     final summary = _ratingSummary(rating);
@@ -528,7 +543,7 @@ class _ExistingReviewCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
               ),
@@ -541,18 +556,18 @@ class _ExistingReviewCard extends StatelessWidget {
                       5,
                       (index) => Icon(
                         index < rating ? Icons.star : Icons.star_border,
-                        color: const Color(0xFFFFA500),
+                        color: DomlyPalette.foreground(const Color(0xFFFFA500)),
                         size: 18,
                       ),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '$rating из 5'.tr(),
-                    style: const TextStyle(
+                    "{p0} из 5".tr(params: {'p0': (rating).toString()}),
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                     ),
                   ),
                 ],
@@ -562,17 +577,19 @@ class _ExistingReviewCard extends StatelessWidget {
           if (submittedAt != null) ...[
             const SizedBox(height: 6),
             Text(
-              'Отправлено $submittedAt'.tr(),
-              style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+              "Отправлено {p0}".tr(params: {'p0': (submittedAt).toString()}),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ],
           const SizedBox(height: 10),
           Text(
             summary,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           if (traits.isNotEmpty) ...[
@@ -588,14 +605,15 @@ class _ExistingReviewCard extends StatelessWidget {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF3F6EF),
+                        color: DomlyPalette.surface(const Color(0xFFF3F6EF)),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
                         trait,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
                     ),
@@ -607,9 +625,9 @@ class _ExistingReviewCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
               ),
             ),
           ],

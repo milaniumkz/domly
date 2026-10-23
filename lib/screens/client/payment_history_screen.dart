@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 
@@ -7,7 +8,9 @@ import '../../utils/order_display.dart';
 import '../../localization/translation_controller.dart';
 
 class PaymentHistoryScreen extends StatefulWidget {
-  const PaymentHistoryScreen({super.key});
+  const PaymentHistoryScreen({super.key, this.payments});
+
+  final Stream<List<Map<String, dynamic>>>? payments;
 
   @override
   State<PaymentHistoryScreen> createState() => _PaymentHistoryScreenState();
@@ -20,46 +23,50 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
   static const _border = Color(0xFFDDEAE3);
   static const _green = Color(0xFF439F73);
 
-  final _data = FirestoreDataService.instance;
+  late final _payments =
+      widget.payments ?? FirestoreDataService.instance.customerPaymentsStream();
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return DomlyShell(
+      showBackButton: false,
       bottomNavigationBar: const DomlyClientBottomNav(currentIndex: 2),
       child: ColoredBox(
-        color: _background,
+        color: DomlyPalette.background(_background),
         child: SafeArea(
           bottom: false,
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 390),
               child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: _data.customerPaymentsStream(),
+                stream: _payments,
                 builder: (context, paymentsSnap) {
                   if (paymentsSnap.hasError) {
                     return const _PaymentHistoryError();
                   }
                   final loading =
                       paymentsSnap.connectionState == ConnectionState.waiting &&
-                      !paymentsSnap.hasData;
+                          !paymentsSnap.hasData;
                   if (loading) {
-                    return const Center(
+                    return Center(
                       child: SizedBox(
                         width: 28,
                         height: 28,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.4,
-                          color: _green,
+                          color: DomlyPalette.foreground(_green),
                         ),
                       ),
                     );
                   }
 
-                  final payments =
-                      (paymentsSnap.data ?? []).where(_isPaymentOrder).toList()
-                        ..sort(
-                          (a, b) => _paymentDate(b).compareTo(_paymentDate(a)),
-                        );
+                  final payments = List<Map<String, dynamic>>.from(
+                      paymentsSnap.data ?? const [])
+                    ..sort(
+                      (a, b) => _paymentDate(b).compareTo(_paymentDate(a)),
+                    );
 
                   return SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(15, 0, 15, 120),
@@ -73,7 +80,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                           child: Text(
                             'Последние платежи'.tr(),
                             style: TextStyle(
-                              color: _foreground,
+                              color: DomlyPalette.foreground(_foreground),
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
@@ -85,7 +92,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                           child: Text(
                             'Оплачено, ожидает, отклонено'.tr(),
                             style: TextStyle(
-                              color: _muted,
+                              color: DomlyPalette.foreground(_muted),
                               fontSize: 12,
                               fontWeight: FontWeight.w400,
                             ),
@@ -101,8 +108,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                               child: _PaymentHistoryCard(order: order),
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          const _PaymentEmptyCard(),
                         ],
                       ],
                     ),
@@ -114,18 +119,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
         ),
       ),
     );
-  }
-
-  static bool _isPaymentOrder(Map<String, dynamic> order) {
-    final status = (order['paymentStatus'] ?? '').toString().toLowerCase();
-    final orderStatus = (order['orderStatus'] ?? '').toString().toLowerCase();
-    return status == 'paid' ||
-        status == 'invoice_requested' ||
-        status == 'initiated' ||
-        status == 'failed' ||
-        status == 'canceled' ||
-        status == 'cancelled' ||
-        orderStatus == 'pending_payment';
   }
 
   static DateTime _paymentDate(Map<String, dynamic> order) {
@@ -145,7 +138,9 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
   static String _paymentTitle(Map<String, dynamic> order) {
     final status = (order['paymentStatus'] ?? '').toString().toLowerCase();
     if (order['bccTestMode'] == true && status != 'paid') {
-      return order['bccBankStatus'] == 'paid' ? 'Тест BCC выполнен' : 'Тестовая оплата BCC';
+      return order['bccBankStatus'] == 'paid'
+          ? 'Тест BCC выполнен'
+          : 'Тестовая оплата BCC';
     }
     final orderStatus = (order['orderStatus'] ?? '').toString().toLowerCase();
     if (status == 'paid') {
@@ -156,7 +151,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
         orderStatus == 'pending_payment') {
       return 'Ожидает счет';
     }
-    if (status == 'failed') {
+    if (status == 'failed' || status == 'rejected') {
       return 'Отклонено';
     }
     if (status == 'canceled' || status == 'cancelled') {
@@ -170,15 +165,14 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     if (order['bccTestMode'] == true && status != 'paid') {
       return 'Реальная покупка ещё не оплачена';
     }
-    final price =
-        (order['price'] as num?)?.toInt() ??
+    final price = (order['price'] as num?)?.toInt() ??
         (order['amount'] as num?)?.toInt() ??
         (order['total'] as num?)?.toInt() ??
         0;
     if (status == 'paid') {
       return '$price ₸ · ${_dateText(_paymentDate(order))}';
     }
-    if (status == 'failed') {
+    if (status == 'failed' || status == 'rejected') {
       return '$price ₸ · ошибка оплаты';
     }
     if (status == 'canceled' || status == 'cancelled') {
@@ -207,11 +201,16 @@ class _PaymentHistoryHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 130,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF439F73), Color(0xFF80D4B0)],
+        gradient: LinearGradient(
+          colors: [
+            DomlyPalette.surface(Color(0xFF439F73)),
+            DomlyPalette.surface(Color(0xFF80D4B0))
+          ],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -225,7 +224,8 @@ class _PaymentHistoryHeader extends StatelessWidget {
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -237,7 +237,8 @@ class _PaymentHistoryHeader extends StatelessWidget {
               width: 138,
               height: 138,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -246,19 +247,19 @@ class _PaymentHistoryHeader extends StatelessWidget {
             left: 8,
             top: 20,
             child: Material(
-              color: const Color(0xFFF5F5F5),
+              color: DomlyPalette.surface(const Color(0xFFF5F5F5)),
               borderRadius: BorderRadius.circular(12),
               elevation: 4,
               shadowColor: Colors.black.withValues(alpha: 0.25),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: () => Navigator.maybePop(context),
-                child: const SizedBox(
+                child: SizedBox(
                   width: 36,
                   height: 36,
                   child: Icon(
                     Icons.arrow_back,
-                    color: Color(0xFF2E7D5B),
+                    color: DomlyPalette.foreground(Color(0xFF2E7D5B)),
                     size: 22,
                   ),
                 ),
@@ -273,9 +274,9 @@ class _PaymentHistoryHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'История плат'.tr(),
+                  'История платежей'.tr(),
                   style: TextStyle(
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                     height: 31 / 20,
@@ -284,7 +285,7 @@ class _PaymentHistoryHeader extends StatelessWidget {
                 Text(
                   'Все статусы счетов и платежей'.tr(),
                   style: TextStyle(
-                    color: Color(0xFFEDFAF2),
+                    color: DomlyPalette.foreground(Color(0xFFEDFAF2)),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     height: 16 / 12,
@@ -306,35 +307,39 @@ class _PaymentHistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 88,
       padding: const EdgeInsets.fromLTRB(26, 16, 26, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _PaymentHistoryScreenState._border),
+        border: Border.all(
+            color: DomlyPalette.border(_PaymentHistoryScreenState._border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            _PaymentHistoryScreenState._paymentTitle(order),
+            _PaymentHistoryScreenState._paymentTitle(order).tr(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: _PaymentHistoryScreenState._foreground,
+            style: TextStyle(
+              color: DomlyPalette.foreground(
+                  _PaymentHistoryScreenState._foreground),
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            _PaymentHistoryScreenState._paymentSubtitle(order),
+            _PaymentHistoryScreenState._paymentSubtitle(order).tr(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: _PaymentHistoryScreenState._muted,
+            style: TextStyle(
+              color: DomlyPalette.foreground(_PaymentHistoryScreenState._muted),
               fontSize: 12,
               fontWeight: FontWeight.w400,
             ),
@@ -350,19 +355,23 @@ class _PaymentEmptyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 96,
       padding: const EdgeInsets.fromLTRB(27, 0, 27, 0),
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _PaymentHistoryScreenState._border),
+        border: Border.all(
+            color: DomlyPalette.border(_PaymentHistoryScreenState._border)),
       ),
       child: Text(
         'История пока пуста'.tr(),
         style: TextStyle(
-          color: _PaymentHistoryScreenState._foreground,
+          color:
+              DomlyPalette.foreground(_PaymentHistoryScreenState._foreground),
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
@@ -376,6 +385,8 @@ class _PaymentHistoryError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return const Center(
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 24),

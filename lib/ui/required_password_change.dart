@@ -1,3 +1,5 @@
+import '../theme/domly_palette.dart';
+import '../localization/translation_controller.dart';
 import 'package:flutter/material.dart';
 import '../services/backend_api_service.dart';
 import '../services/session_store.dart';
@@ -39,7 +41,9 @@ class _RequiredPasswordChangeState extends State<RequiredPasswordChange> {
   }
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+  Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+    return ValueListenableBuilder<bool>(
         valueListenable: BackendApiService.passwordChangeRequired,
         builder: (context, needsChange, _) => needsChange
             ? Scaffold(
@@ -51,32 +55,34 @@ class _RequiredPasswordChangeState extends State<RequiredPasswordChange> {
                             child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Text('Смените временный пароль',
+                                  Text('Смените временный пароль'.tr(),
                                       style: TextStyle(fontSize: 24)),
                                   const SizedBox(height: 16),
                                   TextField(
                                       controller: current,
                                       obscureText: true,
-                                      decoration: const InputDecoration(
-                                          labelText: 'Текущий пароль')),
+                                      decoration: InputDecoration(
+                                          labelText: 'Текущий пароль'.tr())),
                                   TextField(
                                       controller: next,
                                       obscureText: true,
-                                      decoration: const InputDecoration(
+                                      decoration: InputDecoration(
                                           labelText:
-                                              'Новый пароль — от 12 символов'),
+                                              'Новый пароль — от 12 символов'
+                                                  .tr()),
                                       onSubmitted: (_) => save()),
                                   if (error != null)
                                     Text(error!,
-                                        style:
-                                            const TextStyle(color: Colors.red)),
+                                        style: TextStyle(
+                                            color: DomlyPalette.foreground(
+                                                Colors.red))),
                                   const SizedBox(height: 20),
                                   FilledButton(
                                       onPressed: busy ? null : save,
                                       child: Text(busy
                                           ? 'Сохранение…'
-                                          : 'Сменить пароль и войти заново')),
+                                          : 'Сменить пароль и войти заново'))
                                 ])))))
-            : widget.child,
-      );
+            : widget.child);
+  }
 }

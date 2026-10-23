@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 
@@ -17,6 +18,8 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _data.cleanerProfileStream(),
       builder: (context, profileSnap) {
@@ -111,7 +114,8 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
-                                color: DomlyColors.muted,
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -119,13 +123,12 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
                               'Что пишут клиенты'.tr(),
                               style: TextStyle(
                                 fontSize: 12,
-                                color: DomlyColors.muted,
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                               ),
                             ),
                             const SizedBox(height: 12),
-                            ...reviews
-                                .take(10)
-                                .map(
+                            ...reviews.take(10).map(
                                   (r) => Padding(
                                     padding: const EdgeInsets.only(bottom: 12),
                                     child: _reviewCard(r),
@@ -167,13 +170,15 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                   ),
                 ),
                 SizedBox(height: 4),
                 Text(
                   'Отзывы и средняя оценка'.tr(),
-                  style: TextStyle(fontSize: 12, color: Color(0xCCFFFFFF)),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: DomlyPalette.foreground(Color(0xCCFFFFFF))),
                 ),
               ],
             ),
@@ -250,16 +255,16 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           const SizedBox(height: 10),
           Text(
             stats['average'].toStringAsFixed(1),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           Row(
@@ -268,15 +273,18 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
               final filled = i < stats['average'].round();
               return Icon(
                 Icons.star,
-                color: filled ? const Color(0xFFFFA500) : DomlyColors.border,
+                color: DomlyPalette.foreground(
+                    filled ? const Color(0xFFFFA500) : DomlyColors.border),
                 size: 12,
               );
             }),
           ),
           const SizedBox(height: 8),
           Text(
-            'по ${stats['total']} отзывам',
-            style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+            "по {p0} отзывам".tr(params: {'p0': (stats['total']).toString()}),
+            style: TextStyle(
+                fontSize: 12,
+                color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
         ],
       ),
@@ -294,7 +302,7 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
             ),
           ),
           const SizedBox(height: 12),
@@ -321,7 +329,9 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.star, size: 14, color: Color(0xFFFFA500)),
+                  Icon(Icons.star,
+                      size: 14,
+                      color: DomlyPalette.foreground(Color(0xFFFFA500))),
                   const SizedBox(width: 8),
                   Expanded(
                     child: ClipRRect(
@@ -331,7 +341,8 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
                         value: stats['total'] > 0
                             ? (entry['count'] as int) / stats['total']
                             : 0,
-                        backgroundColor: DomlyColors.border,
+                        backgroundColor:
+                            DomlyPalette.surface(DomlyColors.border),
                         valueColor: const AlwaysStoppedAnimation<Color>(
                           Color(0xFFFFA500),
                         ),
@@ -388,14 +399,15 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: color,
+            color: DomlyPalette.foreground(color),
           ),
         ),
         const SizedBox(height: 4),
         Text(
-          label,
+          label.tr(),
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 11, color: DomlyColors.muted),
+          style: TextStyle(
+              fontSize: 11, color: DomlyPalette.foreground(DomlyColors.muted)),
         ),
       ],
     );
@@ -410,10 +422,10 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
       final d = date.toDate();
       dateStr = '${d.day}.${d.month}.${d.year}';
     }
-    final positiveTraits = ((review['positiveTraits'] ?? []) as List)
-        .cast<String>();
-    final negativeTraits = ((review['negativeTraits'] ?? []) as List)
-        .cast<String>();
+    final positiveTraits =
+        ((review['positiveTraits'] ?? []) as List).cast<String>();
+    final negativeTraits =
+        ((review['negativeTraits'] ?? []) as List).cast<String>();
     final traits = positiveTraits.isNotEmpty ? positiveTraits : negativeTraits;
 
     return DomlyCard(
@@ -429,9 +441,9 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
                   return Icon(
                     Icons.star,
                     size: 16,
-                    color: i < rating
+                    color: DomlyPalette.foreground(i < rating
                         ? const Color(0xFFFFA500)
-                        : DomlyColors.border,
+                        : DomlyColors.border),
                   );
                 }),
               ),
@@ -441,9 +453,9 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
                   child: Text(
                     dateStr,
                     textAlign: TextAlign.right,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                     ),
                   ),
                 ),
@@ -461,9 +473,10 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
                       label: Text(t, style: const TextStyle(fontSize: 11)),
                       padding: EdgeInsets.zero,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      backgroundColor: positiveTraits.isNotEmpty
-                          ? DomlyColors.backgroundSoft
-                          : DomlyColors.danger.withValues(alpha: 0.1),
+                      backgroundColor: DomlyPalette.surface(
+                          positiveTraits.isNotEmpty
+                              ? DomlyColors.backgroundSoft
+                              : DomlyColors.danger.withValues(alpha: 0.1)),
                     ),
                   )
                   .toList(),

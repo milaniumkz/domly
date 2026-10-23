@@ -1,3 +1,5 @@
+import '../../theme/domly_palette.dart';
+import '../../utils/service_coverage.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -131,11 +133,11 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
           borderRadius: BorderRadius.circular(24),
         ),
         title: Text(
-          title,
-          style: const TextStyle(
+          title.tr(),
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: DomlyColors.foreground,
+            color: DomlyPalette.foreground(DomlyColors.foreground),
           ),
         ),
         content: Column(
@@ -144,9 +146,9 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
           children: [
             Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
                 height: 1.4,
               ),
             ),
@@ -611,7 +613,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w800,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
               ),
             ),
             content: Column(
@@ -624,7 +626,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
                   style: TextStyle(
                     fontSize: 14,
                     height: 1.4,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -650,7 +652,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: selectedTime,
                   decoration: InputDecoration(
-                    labelText: 'Время',
+                    labelText: 'Время'.tr(),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -805,6 +807,9 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
       ..._latestProfile,
       if (apartment != null) ...apartment,
     };
+    if (base['serviceAvailable'] == true ||
+        hasCityWideService(base['city']?.toString()))
+      return {...base, 'houseStatus': 'ACTIVE', 'serviceAvailable': true};
     final existingHouseId = (base['houseId'] ?? '').toString().trim();
     if (existingHouseId.isNotEmpty) {
       return base;
@@ -1024,6 +1029,8 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _profileStream,
       initialData: const <String, dynamic>{},
@@ -1066,7 +1073,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
             return DomlyShell(
               bottomNavigationBar: const DomlyClientBottomNav(currentIndex: 0),
               child: ColoredBox(
-                color: const Color(0xFFF2FAF7),
+                color: DomlyPalette.background(const Color(0xFFF2FAF7)),
                 child: SafeArea(
                   bottom: false,
                   child: Center(
@@ -1327,10 +1334,15 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
               .toString()
               .trim()
               .toUpperCase();
-      if (houseId.isEmpty) {
+      final cityWideService = apartment?['serviceAvailable'] == true ||
+          hasCityWideService(
+              (apartment?['city'] ?? _latestProfile['city'])?.toString());
+      if (houseId.isEmpty && !cityWideService) {
         throw 'Выберите адрес из списка подключенных домов.';
       }
-      if (houseStatus.isNotEmpty && houseStatus != 'ACTIVE') {
+      if (!cityWideService &&
+          houseStatus.isNotEmpty &&
+          houseStatus != 'ACTIVE') {
         throw 'Этот дом еще не активирован для заказов. Выберите активный адрес.';
       }
       final paymentSelection = isDebugAutoSubmit
@@ -1524,11 +1536,16 @@ class _PackageSelectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 130,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF439F73), Color(0xFF80D4B0)],
+        gradient: LinearGradient(
+          colors: [
+            DomlyPalette.surface(Color(0xFF439F73)),
+            DomlyPalette.surface(Color(0xFF80D4B0))
+          ],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -1542,7 +1559,8 @@ class _PackageSelectionHeader extends StatelessWidget {
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -1554,7 +1572,8 @@ class _PackageSelectionHeader extends StatelessWidget {
               width: 138,
               height: 138,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -1563,19 +1582,19 @@ class _PackageSelectionHeader extends StatelessWidget {
             left: 8,
             top: 20,
             child: Material(
-              color: const Color(0xFFF5F5F5),
+              color: DomlyPalette.surface(const Color(0xFFF5F5F5)),
               borderRadius: BorderRadius.circular(12),
               elevation: 4,
               shadowColor: Colors.black.withValues(alpha: 0.25),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: () => Navigator.maybePop(context),
-                child: const SizedBox(
+                child: SizedBox(
                   width: 36,
                   height: 36,
                   child: Icon(
                     Icons.arrow_back,
-                    color: Color(0xFF2E7D5B),
+                    color: DomlyPalette.foreground(Color(0xFF2E7D5B)),
                     size: 22,
                   ),
                 ),
@@ -1592,7 +1611,7 @@ class _PackageSelectionHeader extends StatelessWidget {
                 Text(
                   'Пакеты'.tr(),
                   style: TextStyle(
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                     height: 31 / 20,
@@ -1601,7 +1620,7 @@ class _PackageSelectionHeader extends StatelessWidget {
                 Text(
                   'Подберите формат подписки'.tr(),
                   style: TextStyle(
-                    color: Color(0xFFEDFAF2),
+                    color: DomlyPalette.foreground(Color(0xFFEDFAF2)),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     height: 16 / 12,
@@ -1643,12 +1662,14 @@ class _PackagePickerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(19, 25, 19, 15),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1658,7 +1679,7 @@ class _PackagePickerCard extends StatelessWidget {
             child: Text(
               'Выберите пакет'.tr(),
               style: TextStyle(
-                color: Color(0xFF2B4338),
+                color: DomlyPalette.foreground(Color(0xFF2B4338)),
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 height: 23 / 18,
@@ -1723,6 +1744,8 @@ class _PackageOptionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1730,7 +1753,8 @@ class _PackageOptionRow extends StatelessWidget {
           children: [
             Expanded(
               child: Material(
-                color: selected ? const Color(0xFFF0F7F2) : Colors.white,
+                color: DomlyPalette.surface(
+                    selected ? const Color(0xFFF0F7F2) : Colors.white),
                 borderRadius: BorderRadius.circular(20),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
@@ -1741,9 +1765,9 @@ class _PackageOptionRow extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: selected
+                        color: DomlyPalette.border(selected
                             ? const Color(0xFF439F73)
-                            : const Color(0xFFDEECE3),
+                            : const Color(0xFFDEECE3)),
                         width: selected ? 2 : 1,
                       ),
                     ),
@@ -1757,14 +1781,13 @@ class _PackageOptionRow extends StatelessWidget {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      (package['name'] ??
-                                              package['title'] ??
-                                              'Пакет')
-                                          .toString(),
+                                      package.trValue(['name', 'title'],
+                                          fallback: 'Пакет'),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Color(0xFF2B4338),
+                                      style: TextStyle(
+                                        color: DomlyPalette.foreground(
+                                            Color(0xFF2B4338)),
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
                                         height: 21 / 16,
@@ -1778,8 +1801,9 @@ class _PackageOptionRow extends StatelessWidget {
                                 price > 0
                                     ? '$price ₸'
                                     : 'Стоимость после выбора площади',
-                                style: const TextStyle(
-                                  color: Color(0xFF2B4338),
+                                style: TextStyle(
+                                  color: DomlyPalette.foreground(
+                                      Color(0xFF2B4338)),
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
                                   height: 18 / 14,
@@ -1790,8 +1814,9 @@ class _PackageOptionRow extends StatelessWidget {
                                 caption,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Color(0xFF658170),
+                                style: TextStyle(
+                                  color: DomlyPalette.foreground(
+                                      Color(0xFF658170)),
                                   fontSize: 11,
                                   fontWeight: FontWeight.w500,
                                   height: 14 / 11,
@@ -1805,21 +1830,21 @@ class _PackageOptionRow extends StatelessWidget {
                           width: 20,
                           height: 20,
                           decoration: BoxDecoration(
-                            color: selected
+                            color: DomlyPalette.surface(selected
                                 ? const Color(0xFF439F73)
-                                : Colors.white,
+                                : Colors.white),
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: selected
+                              color: DomlyPalette.border(selected
                                   ? const Color(0xFF439F73)
-                                  : const Color(0xFFDEECE3),
+                                  : const Color(0xFFDEECE3)),
                             ),
                           ),
                           child: selected
-                              ? const Icon(
+                              ? Icon(
                                   Icons.check,
                                   size: 14,
-                                  color: Colors.white,
+                                  color: DomlyPalette.foreground(Colors.white),
                                 )
                               : null,
                         ),
@@ -1831,21 +1856,21 @@ class _PackageOptionRow extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Material(
-              color: const Color(0xFFCF7548),
+              color: DomlyPalette.surface(const Color(0xFFCF7548)),
               shape: const CircleBorder(),
               elevation: 10,
               shadowColor: const Color(0xFFCF7548).withValues(alpha: 0.75),
               child: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: onInfo,
-                child: const SizedBox(
+                child: SizedBox(
                   width: 23,
                   height: 23,
                   child: Center(
                     child: Text(
                       'i',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: DomlyPalette.foreground(Colors.white),
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1866,21 +1891,22 @@ class _PackageOptionRow extends StatelessWidget {
               children: quarterlyOptions.map((value) {
                 final selectedVisits = value == quarterlyVisitsPerMonth;
                 return ChoiceChip(
-                  label: Text('$value уборки/мес'.tr()),
+                  label: Text(
+                      "{p0} уборки/мес".tr(params: {'p0': (value).toString()})),
                   selected: selectedVisits,
                   onSelected: (_) => onQuarterlyVisitsSelect(value),
                   selectedColor: const Color(0xFFF0F7F2),
-                  backgroundColor: Colors.white,
+                  backgroundColor: DomlyPalette.surface(Colors.white),
                   side: BorderSide(
-                    color: selectedVisits
+                    color: DomlyPalette.border(selectedVisits
                         ? const Color(0xFF439F73)
-                        : const Color(0xFFDEECE3),
+                        : const Color(0xFFDEECE3)),
                     width: selectedVisits ? 2 : 1,
                   ),
                   labelStyle: TextStyle(
-                    color: selectedVisits
+                    color: DomlyPalette.foreground(selectedVisits
                         ? const Color(0xFF2B4338)
-                        : const Color(0xFF658170),
+                        : const Color(0xFF658170)),
                     fontSize: 12,
                     fontWeight:
                         selectedVisits ? FontWeight.w700 : FontWeight.w600,
@@ -1905,10 +1931,12 @@ class _CreateCustomPackageButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18),
       child: Material(
-        color: const Color(0xFFC96A4A),
+        color: DomlyPalette.surface(const Color(0xFFC96A4A)),
         borderRadius: BorderRadius.circular(18),
         elevation: 4,
         shadowColor: Colors.black.withValues(alpha: 0.25),
@@ -1921,7 +1949,7 @@ class _CreateCustomPackageButton extends StatelessWidget {
               child: Text(
                 'Создать свой пакет'.tr(),
                 style: TextStyle(
-                  color: Colors.white,
+                  color: DomlyPalette.foreground(Colors.white),
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   height: 18 / 14,
@@ -1952,6 +1980,8 @@ class _PackageInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1960,20 +1990,21 @@ class _PackageInfoCard extends StatelessWidget {
             height: height,
             padding: const EdgeInsets.fromLTRB(26, 11, 26, 10),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DomlyPalette.surface(Colors.white),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: const Color(0xFFDEECE3)),
+              border: Border.all(
+                  color: DomlyPalette.border(const Color(0xFFDEECE3))),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  title,
+                  title.tr(),
                   maxLines: titleBold ? 2 : 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: const Color(0xFF2B4338),
+                    color: DomlyPalette.foreground(const Color(0xFF2B4338)),
                     fontSize: titleBold ? 18 : 16,
                     fontWeight: titleBold ? FontWeight.w700 : FontWeight.w600,
                     height: titleBold ? 23 / 18 : 21 / 16,
@@ -1981,11 +2012,11 @@ class _PackageInfoCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  subtitle,
+                  subtitle.tr(),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF658170),
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(Color(0xFF658170)),
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     height: 17 / 13,
@@ -1999,21 +2030,21 @@ class _PackageInfoCard extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Material(
-            color: const Color(0xFFCF7548),
+            color: DomlyPalette.surface(const Color(0xFFCF7548)),
             shape: const CircleBorder(),
             elevation: 10,
             shadowColor: const Color(0xFFCF7548).withValues(alpha: 0.75),
             child: InkWell(
               customBorder: const CircleBorder(),
               onTap: onInfo,
-              child: const SizedBox(
+              child: SizedBox(
                 width: 23,
                 height: 23,
                 child: Center(
                   child: Text(
                     'i',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: DomlyPalette.foreground(Colors.white),
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -2041,12 +2072,14 @@ class _ApartmentPickerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2054,7 +2087,7 @@ class _ApartmentPickerCard extends StatelessWidget {
           Text(
             'Квартира для заказа'.tr(),
             style: TextStyle(
-              color: Color(0xFF2B4338),
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -2078,7 +2111,8 @@ class _ApartmentPickerCard extends StatelessWidget {
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Material(
-                color: selected ? const Color(0xFFF0F7F2) : Colors.white,
+                color: DomlyPalette.surface(
+                    selected ? const Color(0xFFF0F7F2) : Colors.white),
                 borderRadius: BorderRadius.circular(18),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(18),
@@ -2088,9 +2122,9 @@ class _ApartmentPickerCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
-                        color: selected
+                        color: DomlyPalette.border(selected
                             ? const Color(0xFF439F73)
-                            : const Color(0xFFDEECE3),
+                            : const Color(0xFFDEECE3)),
                         width: selected ? 2 : 1,
                       ),
                     ),
@@ -2102,8 +2136,9 @@ class _ApartmentPickerCard extends StatelessWidget {
                             children: [
                               Text(
                                 summary.isNotEmpty ? summary : 'Квартира',
-                                style: const TextStyle(
-                                  color: Color(0xFF2B4338),
+                                style: TextStyle(
+                                  color: DomlyPalette.foreground(
+                                      Color(0xFF2B4338)),
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -2112,8 +2147,9 @@ class _ApartmentPickerCard extends StatelessWidget {
                                 const SizedBox(height: 4),
                                 Text(
                                   address,
-                                  style: const TextStyle(
-                                    color: Color(0xFF658170),
+                                  style: TextStyle(
+                                    color: DomlyPalette.foreground(
+                                        Color(0xFF658170)),
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -2127,21 +2163,21 @@ class _ApartmentPickerCard extends StatelessWidget {
                           width: 20,
                           height: 20,
                           decoration: BoxDecoration(
-                            color: selected
+                            color: DomlyPalette.surface(selected
                                 ? const Color(0xFF439F73)
-                                : Colors.white,
+                                : Colors.white),
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: selected
+                              color: DomlyPalette.border(selected
                                   ? const Color(0xFF439F73)
-                                  : const Color(0xFFDEECE3),
+                                  : const Color(0xFFDEECE3)),
                             ),
                           ),
                           child: selected
-                              ? const Icon(
+                              ? Icon(
                                   Icons.check,
                                   size: 14,
-                                  color: Colors.white,
+                                  color: DomlyPalette.foreground(Colors.white),
                                 )
                               : null,
                         ),
@@ -2173,12 +2209,14 @@ class _SelectedPackageFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = (package['name'] ?? 'Пакет').toString();
+    DomlyPalette.watch(context);
+
+    final name = package.trValue(['name', 'title'], fallback: 'Пакет');
     return Container(
       height: 107,
       padding: const EdgeInsets.fromLTRB(31, 6, 31, 6),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF6F7F9),
+      decoration: BoxDecoration(
+        color: DomlyPalette.surface(Color(0xFFF6F7F9)),
         boxShadow: [
           BoxShadow(
             color: Color(0x33000000),
@@ -2193,7 +2231,7 @@ class _SelectedPackageFooter extends StatelessWidget {
           Text(
             'Выбран пакет'.tr(),
             style: TextStyle(
-              color: Color(0xFF658170),
+              color: DomlyPalette.foreground(Color(0xFF658170)),
               fontSize: 12,
               fontWeight: FontWeight.w700,
               height: 16 / 12,
@@ -2207,8 +2245,8 @@ class _SelectedPackageFooter extends StatelessWidget {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF2B4338),
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(Color(0xFF2B4338)),
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     height: 23 / 18,
@@ -2217,8 +2255,8 @@ class _SelectedPackageFooter extends StatelessWidget {
               ),
               Text(
                 price > 0 ? '$price ₸' : '—',
-                style: const TextStyle(
-                  color: Color(0xFF2B4338),
+                style: TextStyle(
+                  color: DomlyPalette.foreground(Color(0xFF2B4338)),
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   height: 23 / 18,
@@ -2228,7 +2266,7 @@ class _SelectedPackageFooter extends StatelessWidget {
           ),
           const Spacer(),
           Material(
-            color: const Color(0xFFC96A4A),
+            color: DomlyPalette.surface(const Color(0xFFC96A4A)),
             borderRadius: BorderRadius.circular(16),
             elevation: 4,
             shadowColor: Colors.black.withValues(alpha: 0.25),
@@ -2239,18 +2277,18 @@ class _SelectedPackageFooter extends StatelessWidget {
                 height: 34,
                 child: Center(
                   child: submitting
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: DomlyPalette.foreground(Colors.white),
                           ),
                         )
                       : Text(
                           'Продолжить'.tr(),
                           style: TextStyle(
-                            color: Colors.white,
+                            color: DomlyPalette.foreground(Colors.white),
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             height: 17 / 14,

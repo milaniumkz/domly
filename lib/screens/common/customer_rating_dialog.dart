@@ -1,3 +1,5 @@
+import '../../theme/domly_palette.dart';
+import '../../localization/translation_controller.dart';
 import 'package:flutter/material.dart';
 import '../../ui/domly_ui.dart';
 
@@ -46,35 +48,37 @@ class _CustomerRatingDialogState extends State<_CustomerRatingDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+    return AlertDialog(
         title: Text('Оцените клиента'.tr()),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               Text('Эта оценка будет влиять на рейтинг клиента.'.tr()),
               const SizedBox(height: 14),
               Wrap(alignment: WrapAlignment.center, children: [
                 for (var i = 1; i <= 5; i++)
                   IconButton(
-                    onPressed:
-                        _submitting ? null : () => setState(() => _rating = i),
-                    icon: Icon(i <= _rating ? Icons.star : Icons.star_border,
-                        color: const Color(0xFFD06D45), size: 32),
-                  ),
+                      onPressed: _submitting
+                          ? null
+                          : () => setState(() => _rating = i),
+                      icon: Icon(i <= _rating ? Icons.star : Icons.star_border,
+                          color:
+                              DomlyPalette.foreground(const Color(0xFFD06D45)),
+                          size: 32))
               ]),
               const SizedBox(height: 10),
               TextField(
                   controller: _note,
                   enabled: !_submitting,
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                      labelText: 'Комментарий',
-                      hintText: 'Например: всё было готово к уборке')),
-            ],
-          ),
-        ),
+                  decoration: InputDecoration(
+                      labelText: 'Комментарий'.tr(),
+                      hintText: 'Например: всё было готово к уборке'.tr()))
+            ])),
         actions: [
           TextButton(
               onPressed:
@@ -87,7 +91,7 @@ class _CustomerRatingDialogState extends State<_CustomerRatingDialog> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text('Сохранить'.tr())),
-        ],
-      );
+                  : Text('Сохранить'.tr()))
+        ]);
+  }
 }

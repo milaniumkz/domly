@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 
@@ -19,6 +20,8 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _data.cleanerScheduleSlotsStream(),
       builder: (context, snap) {
@@ -65,7 +68,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                 style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                                  color: DomlyPalette.foreground(Colors.white),
                                 ),
                               ),
                               SizedBox(height: 4),
@@ -73,15 +76,16 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                 'График уборок по дням'.tr(),
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xCCFFFFFF),
+                                  color: DomlyPalette.foreground(
+                                      Color(0xCCFFFFFF)),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const Icon(
+                        Icon(
                           Icons.calendar_today,
-                          color: Color(0x99FFFFFF),
+                          color: DomlyPalette.foreground(Color(0x99FFFFFF)),
                           size: 22,
                         ),
                       ],
@@ -116,10 +120,11 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                       child: Text(
                                         _monthLabel(_selectedMonth),
                                         textAlign: TextAlign.center,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w700,
-                                          color: DomlyColors.foreground,
+                                          color: DomlyPalette.foreground(
+                                              DomlyColors.foreground),
                                         ),
                                       ),
                                     ),
@@ -144,12 +149,13 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                             vertical: 8,
                                           ),
                                           child: Text(
-                                            day,
+                                            day.tr(),
                                             textAlign: TextAlign.center,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 12,
                                               fontWeight: FontWeight.w700,
-                                              color: DomlyColors.muted,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.muted),
                                             ),
                                           ),
                                         ),
@@ -168,19 +174,23 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                             Expanded(
                               child: Text(
                                 '${_selectedDate.day} ${_monthNameGenitive(_selectedDate.month)}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
-                                  color: DomlyColors.foreground,
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.foreground),
                                 ),
                               ),
                             ),
                             if (selected.isNotEmpty)
                               Text(
-                                '${selected.length} уборок'.tr(),
-                                style: const TextStyle(
+                                "{p0} уборок".tr(params: {
+                                  'p0': (selected.length).toString()
+                                }),
+                                style: TextStyle(
                                   fontSize: 13,
-                                  color: DomlyColors.muted,
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.muted),
                                 ),
                               ),
                           ],
@@ -204,11 +214,12 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Padding(
+                                    Padding(
                                       padding: EdgeInsets.only(top: 2),
                                       child: Icon(
                                         Icons.schedule_outlined,
-                                        color: DomlyColors.buttonPrimary,
+                                        color: DomlyPalette.foreground(
+                                            DomlyColors.buttonPrimary),
                                       ),
                                     ),
                                     const SizedBox(width: 10),
@@ -218,25 +229,55 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Занято ${summary['occupiedHours'] ?? 0} ч из ${summary['limitHours'] ?? 8.5} ч',
+                                            "Занято {p0} ч из {p1} ч"
+                                                .tr(params: {
+                                              'p0': (summary['occupiedHours'] ??
+                                                      0)
+                                                  .toString(),
+                                              'p1':
+                                                  (summary['limitHours'] ?? 8.5)
+                                                      .toString()
+                                            }),
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            'Площадь: ${summary['totalArea'] ?? 0} м² из ${summary['limitArea'] ?? 220} м²',
-                                            style: const TextStyle(
+                                            "Площадь: {p0} м² из {p1} м²"
+                                                .tr(params: {
+                                              'p0': (summary['totalArea'] ?? 0)
+                                                  .toString(),
+                                              'p1':
+                                                  (summary['limitArea'] ?? 220)
+                                                      .toString()
+                                            }),
+                                            style: TextStyle(
                                               fontSize: 12,
-                                              color: DomlyColors.muted,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.muted),
                                             ),
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            'Остаток: ${summary['remainingMinutes'] ?? 0} мин • ${summary['remainingArea'] ?? 0} м² • Доп. услуг: ${summary['totalAddonCount'] ?? 0}',
-                                            style: const TextStyle(
+                                            "Остаток: {p0} мин • {p1} м² • Доп. услуг: {p2}"
+                                                .tr(params: {
+                                              'p0': (summary[
+                                                          'remainingMinutes'] ??
+                                                      0)
+                                                  .toString(),
+                                              'p1': (summary['remainingArea'] ??
+                                                      0)
+                                                  .toString(),
+                                              'p2':
+                                                  (summary['totalAddonCount'] ??
+                                                          0)
+                                                      .toString()
+                                            }),
+                                            style: TextStyle(
                                               fontSize: 12,
-                                              color: DomlyColors.muted,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.muted),
                                             ),
                                           ),
                                         ],
@@ -244,7 +285,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                     ),
                                     if (summary['overbooked'] == true) ...[
                                       const SizedBox(width: 10),
-                                      const DomlyStatusChip(
+                                      DomlyStatusChip(
                                         label: 'Перегруз',
                                         color: DomlyColors.danger,
                                       ),
@@ -274,10 +315,12 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                       width: 52,
                                       height: 52,
                                       decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
+                                        gradient: LinearGradient(
                                           colors: [
-                                            DomlyColors.primary,
-                                            DomlyColors.accent,
+                                            DomlyPalette.surface(
+                                                DomlyColors.primary),
+                                            DomlyPalette.surface(
+                                                DomlyColors.accent),
                                           ],
                                         ),
                                         borderRadius: BorderRadius.circular(16),
@@ -288,8 +331,9 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                             .toString()
                                             .split(' ')
                                             .first,
-                                        style: const TextStyle(
-                                          color: Colors.white,
+                                        style: TextStyle(
+                                          color: DomlyPalette.foreground(
+                                              Colors.white),
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
                                         ),
@@ -308,28 +352,40 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                               Expanded(
                                                 child: Text(
                                                   '${(item['time'] ?? '—').toString()} · ${((item['residentialComplex'] ?? item['address'] ?? 'Адрес будет уточнен').toString())}',
-                                                  style: const TextStyle(
+                                                  style: TextStyle(
                                                     fontSize: 15,
                                                     fontWeight: FontWeight.w700,
                                                     color:
-                                                        DomlyColors.foreground,
+                                                        DomlyPalette.foreground(
+                                                            DomlyColors
+                                                                .foreground),
                                                   ),
                                                 ),
                                               ),
                                               const SizedBox(width: 12),
-                                              const Icon(
+                                              Icon(
                                                 Icons.chevron_right,
-                                                color: DomlyColors.muted,
+                                                color: DomlyPalette.foreground(
+                                                    DomlyColors.muted),
                                                 size: 18,
                                               ),
                                             ],
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
-                                            '${item['area'] ?? 0} м² · ${(item['customerName'] ?? item['client'] ?? 'Клиент').toString()}',
-                                            style: const TextStyle(
+                                            "{p0} м² · {p1}".tr(params: {
+                                              'p0': (item['area'] ?? 0)
+                                                  .toString(),
+                                              'p1': ((item['customerName'] ??
+                                                          item['client'] ??
+                                                          'Клиент')
+                                                      .toString())
+                                                  .toString()
+                                            }),
+                                            style: TextStyle(
                                               fontSize: 12,
-                                              color: DomlyColors.muted,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.muted),
                                             ),
                                           ),
                                           const SizedBox(height: 8),
@@ -362,15 +418,16 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                             child: DomlyCard(
                               color: DomlyColors.backgroundSoft,
                               border: Border.all(
-                                color: DomlyColors.buttonPrimary.withValues(
-                                  alpha: 0.10,
-                                ),
+                                color: DomlyPalette.border(DomlyColors
+                                    .buttonPrimary
+                                    .withValues(alpha: 0.10)),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.schedule,
-                                    color: DomlyColors.buttonPrimary,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.buttonPrimary),
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
@@ -382,11 +439,14 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                     ),
                                   ),
                                   Text(
-                                    '${selected.length} заказ(ов)'.tr(),
-                                    style: const TextStyle(
+                                    "{p0} заказ(ов)".tr(params: {
+                                      'p0': (selected.length).toString()
+                                    }),
+                                    style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
-                                      color: DomlyColors.foreground,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.foreground),
                                     ),
                                   ),
                                 ],
@@ -407,7 +467,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
 
   Widget _monthButton(IconData icon, VoidCallback onTap) {
     return Material(
-      color: DomlyColors.backgroundSoft,
+      color: DomlyPalette.surface(DomlyColors.backgroundSoft),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -415,7 +475,8 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
         child: SizedBox(
           width: 40,
           height: 40,
-          child: Icon(icon, color: DomlyColors.foreground),
+          child: Icon(icon,
+              color: DomlyPalette.foreground(DomlyColors.foreground)),
         ),
       ),
     );
@@ -447,12 +508,10 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
             status != 'cancelled' &&
             status != 'canceled';
       });
-      final isSelected =
-          _selectedDate.year == date.year &&
+      final isSelected = _selectedDate.year == date.year &&
           _selectedDate.month == date.month &&
           _selectedDate.day == date.day;
-      final isToday =
-          DateTime.now().year == date.year &&
+      final isToday = DateTime.now().year == date.year &&
           DateTime.now().month == date.month &&
           DateTime.now().day == date.day;
 
@@ -464,20 +523,25 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
             margin: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               gradient: isSelected
-                  ? const LinearGradient(
-                      colors: [DomlyColors.primary, DomlyColors.accent],
+                  ? LinearGradient(
+                      colors: [
+                        DomlyPalette.surface(DomlyColors.primary),
+                        DomlyPalette.surface(DomlyColors.accent)
+                      ],
                     )
                   : null,
-              color: isSelected
+              color: DomlyPalette.surface(isSelected
                   ? null
                   : isToday
-                  ? DomlyColors.backgroundSoft
-                  : hasOrders
-                  ? DomlyColors.accent.withValues(alpha: 0.15)
-                  : DomlyColors.backgroundSoft.withValues(alpha: 0.45),
+                      ? DomlyColors.backgroundSoft
+                      : hasOrders
+                          ? DomlyColors.accent.withValues(alpha: 0.15)
+                          : DomlyColors.backgroundSoft.withValues(alpha: 0.45)),
               borderRadius: BorderRadius.circular(14),
               border: isToday && !isSelected
-                  ? Border.all(color: DomlyColors.buttonPrimary, width: 1.4)
+                  ? Border.all(
+                      color: DomlyPalette.border(DomlyColors.buttonPrimary),
+                      width: 1.4)
                   : null,
             ),
             child: Stack(
@@ -488,7 +552,8 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: isSelected ? Colors.white : DomlyColors.foreground,
+                    color: DomlyPalette.foreground(
+                        isSelected ? Colors.white : DomlyColors.foreground),
                   ),
                 ),
                 if (hasOrders)
@@ -498,7 +563,8 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                       width: 4,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: isSelected ? Colors.white : DomlyColors.primary,
+                        color: DomlyPalette.surface(
+                            isSelected ? Colors.white : DomlyColors.primary),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -554,7 +620,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
       'Ноябрь',
       'Декабрь',
     ];
-    return months[month - 1];
+    return months[month - 1].tr();
   }
 
   String _monthNameGenitive(int month) {
@@ -572,7 +638,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
       'ноября',
       'декабря',
     ];
-    return months[month - 1];
+    return months[month - 1].tr();
   }
 
   static const _weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -581,15 +647,15 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: DomlyColors.backgroundSoft,
+        color: DomlyPalette.surface(DomlyColors.backgroundSoft),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        label,
-        style: const TextStyle(
+        label.tr(),
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: DomlyColors.foreground,
+          color: DomlyPalette.foreground(DomlyColors.foreground),
         ),
       ),
     );

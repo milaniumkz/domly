@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/app_config_service.dart';
@@ -27,10 +28,12 @@ class _ReferralStatsScreenState extends State<ReferralStatsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return DomlyShell(
       bottomNavigationBar: const DomlyClientBottomNav(currentIndex: 2),
       child: ColoredBox(
-        color: _background,
+        color: DomlyPalette.background(_background),
         child: SafeArea(
           bottom: false,
           child: Center(
@@ -65,13 +68,13 @@ class _ReferralStatsScreenState extends State<ReferralStatsScreen> {
                               !profileSnap.hasData &&
                               !statsSnap.hasData;
                           if (loading) {
-                            return const Center(
+                            return Center(
                               child: SizedBox(
                                 width: 28,
                                 height: 28,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2.4,
-                                  color: _green,
+                                  color: DomlyPalette.foreground(_green),
                                 ),
                               ),
                             );
@@ -194,11 +197,16 @@ class _ReferralStatsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 130,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF439F73), Color(0xFF80D4B0)],
+        gradient: LinearGradient(
+          colors: [
+            DomlyPalette.surface(Color(0xFF439F73)),
+            DomlyPalette.surface(Color(0xFF80D4B0))
+          ],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -212,7 +220,8 @@ class _ReferralStatsHeader extends StatelessWidget {
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -224,7 +233,8 @@ class _ReferralStatsHeader extends StatelessWidget {
               width: 138,
               height: 138,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -233,19 +243,19 @@ class _ReferralStatsHeader extends StatelessWidget {
             left: 8,
             top: 20,
             child: Material(
-              color: const Color(0xFFF5F5F5),
+              color: DomlyPalette.surface(const Color(0xFFF5F5F5)),
               borderRadius: BorderRadius.circular(12),
               elevation: 4,
               shadowColor: Colors.black.withValues(alpha: 0.25),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: () => Navigator.maybePop(context),
-                child: const SizedBox(
+                child: SizedBox(
                   width: 36,
                   height: 36,
                   child: Icon(
                     Icons.arrow_back,
-                    color: Color(0xFF2E7D5B),
+                    color: DomlyPalette.foreground(Color(0xFF2E7D5B)),
                     size: 22,
                   ),
                 ),
@@ -264,7 +274,7 @@ class _ReferralStatsHeader extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                     height: 31 / 20,
@@ -275,7 +285,7 @@ class _ReferralStatsHeader extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Color(0xFFEDFAF2),
+                    color: DomlyPalette.foreground(Color(0xFFEDFAF2)),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     height: 16 / 12,
@@ -307,6 +317,8 @@ class _ReferralFunnelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return _ReferralCard(
       height: 297,
       padding: const EdgeInsets.fromLTRB(20, 17, 35, 18),
@@ -316,7 +328,8 @@ class _ReferralFunnelCard extends StatelessWidget {
           Text(
             'Воронка рефералов'.tr(),
             style: TextStyle(
-              color: _ReferralStatsScreenState._foreground,
+              color: DomlyPalette.foreground(
+                  _ReferralStatsScreenState._foreground),
               fontSize: 18,
               fontWeight: FontWeight.w700,
               height: 23 / 18,
@@ -366,6 +379,8 @@ class _ReferralProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final progress = nextDiscountThreshold > 0
         ? (monthlyActivated / nextDiscountThreshold).clamp(0.0, 1.0)
         : 1.0;
@@ -382,7 +397,8 @@ class _ReferralProgressCard extends StatelessWidget {
           Text(
             'Прогресс скидки'.tr(),
             style: TextStyle(
-              color: _ReferralStatsScreenState._foreground,
+              color: DomlyPalette.foreground(
+                  _ReferralStatsScreenState._foreground),
               fontSize: 18,
               fontWeight: FontWeight.w700,
               height: 23 / 18,
@@ -390,9 +406,9 @@ class _ReferralProgressCard extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            subtitle,
-            style: const TextStyle(
-              color: _ReferralStatsScreenState._muted,
+            subtitle.tr(),
+            style: TextStyle(
+              color: DomlyPalette.foreground(_ReferralStatsScreenState._muted),
               fontSize: 13,
               fontWeight: FontWeight.w500,
               height: 17 / 13,
@@ -406,14 +422,16 @@ class _ReferralProgressCard extends StatelessWidget {
                 Container(
                   height: 12,
                   width: double.infinity,
-                  color: _ReferralStatsScreenState._greenSoft,
+                  color: DomlyPalette.surface(
+                      _ReferralStatsScreenState._greenSoft),
                 ),
                 FractionallySizedBox(
                   widthFactor: progress <= 0 ? 0.68 : progress,
                   child: Container(
                     height: 12,
                     decoration: BoxDecoration(
-                      color: _ReferralStatsScreenState._orange,
+                      color: DomlyPalette.surface(
+                          _ReferralStatsScreenState._orange),
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
@@ -456,6 +474,8 @@ class _ReferralPotentialCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final potential = paid * bonusPerReferral;
     return _ReferralCard(
       height: 120,
@@ -467,7 +487,8 @@ class _ReferralPotentialCard extends StatelessWidget {
           Text(
             'Потенциал бонусов'.tr(),
             style: TextStyle(
-              color: _ReferralStatsScreenState._foreground,
+              color: DomlyPalette.foreground(
+                  _ReferralStatsScreenState._foreground),
               fontSize: 16,
               fontWeight: FontWeight.w600,
               height: 21 / 16,
@@ -478,8 +499,8 @@ class _ReferralPotentialCard extends StatelessWidget {
             '$paid оплат × $bonusPerReferral ₸ = ${_formatMoney(potential)} ₸\n'
                     'Уже начислено: ${_formatMoney(bonus)} ₸'
                 .tr(),
-            style: const TextStyle(
-              color: _ReferralStatsScreenState._muted,
+            style: TextStyle(
+              color: DomlyPalette.foreground(_ReferralStatsScreenState._muted),
               fontSize: 13,
               fontWeight: FontWeight.w500,
               height: 17 / 13,
@@ -504,14 +525,17 @@ class _ReferralCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: height,
       margin: const EdgeInsets.symmetric(horizontal: 8),
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _ReferralStatsScreenState._border),
+        border: Border.all(
+            color: DomlyPalette.border(_ReferralStatsScreenState._border)),
       ),
       child: child,
     );
@@ -533,22 +557,25 @@ class _ReferralMetricRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 34,
       padding: const EdgeInsets.only(left: 12, right: 13),
       decoration: BoxDecoration(
-        color: background,
+        color: DomlyPalette.surface(background),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
           Expanded(
             child: Text(
-              label,
+              label.tr(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: _ReferralStatsScreenState._foreground,
+              style: TextStyle(
+                color: DomlyPalette.foreground(
+                    _ReferralStatsScreenState._foreground),
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 height: 17 / 13,
@@ -560,7 +587,7 @@ class _ReferralMetricRow extends StatelessWidget {
             value,
             textAlign: TextAlign.right,
             style: TextStyle(
-              color: valueColor,
+              color: DomlyPalette.foreground(valueColor),
               fontSize: 13,
               fontWeight: FontWeight.w700,
               height: 17 / 13,
@@ -585,21 +612,23 @@ class _ReferralDiscountPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       width: 130,
       height: 30,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: background,
+        color: DomlyPalette.surface(background),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
-        label,
+        label.tr(),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.center,
         style: TextStyle(
-          color: foreground,
+          color: DomlyPalette.foreground(foreground),
           fontSize: 12,
           fontWeight: FontWeight.w600,
           height: 16 / 12,
@@ -614,6 +643,8 @@ class _ReferralStatsError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return const Center(
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 24),

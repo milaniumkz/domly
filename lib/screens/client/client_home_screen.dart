@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../common/order_payment_retry.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -147,7 +148,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   }) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       isScrollControlled: true,
       builder: (sheetContext) {
         return SafeArea(
@@ -156,7 +157,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DomlyPalette.surface(Colors.white),
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: const [
                   BoxShadow(
@@ -189,20 +190,22 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      title,
-                                      style: const TextStyle(
+                                      title.tr(),
+                                      style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.w700,
-                                        color: DomlyColors.foreground,
+                                        color: DomlyPalette.foreground(
+                                            DomlyColors.foreground),
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      subtitle,
-                                      style: const TextStyle(
+                                      subtitle.tr(),
+                                      style: TextStyle(
                                         fontSize: 12,
                                         height: 1.35,
-                                        color: DomlyColors.muted,
+                                        color: DomlyPalette.foreground(
+                                            DomlyColors.muted),
                                       ),
                                     ),
                                   ],
@@ -245,7 +248,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                               package,
                                             );
                                   return Material(
-                                    color: const Color(0xFFF7FBF8),
+                                    color: DomlyPalette.surface(
+                                        const Color(0xFFF7FBF8)),
                                     borderRadius: BorderRadius.circular(20),
                                     child: InkWell(
                                       borderRadius: BorderRadius.circular(20),
@@ -270,23 +274,27 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                     CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
-                                                    packageName,
-                                                    style: const TextStyle(
+                                                    packageName.tr(),
+                                                    style: TextStyle(
                                                       fontSize: 15,
                                                       fontWeight:
                                                           FontWeight.w700,
-                                                      color: DomlyColors
-                                                          .foreground,
+                                                      color: DomlyPalette
+                                                          .foreground(
+                                                              DomlyColors
+                                                                  .foreground),
                                                     ),
                                                   ),
                                                   if (frequency.isNotEmpty) ...[
                                                     const SizedBox(height: 4),
                                                     Text(
-                                                      frequency,
-                                                      style: const TextStyle(
+                                                      frequency.tr(),
+                                                      style: TextStyle(
                                                         fontSize: 12,
-                                                        color:
-                                                            DomlyColors.muted,
+                                                        color: DomlyPalette
+                                                            .foreground(
+                                                                DomlyColors
+                                                                    .muted),
                                                       ),
                                                     ),
                                                   ],
@@ -294,10 +302,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                               ),
                                             ),
                                             const SizedBox(width: 12),
-                                            const Icon(
+                                            Icon(
                                               Icons.arrow_forward_ios_rounded,
                                               size: 16,
-                                              color: DomlyColors.buttonPrimary,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.buttonPrimary),
                                             ),
                                           ],
                                         ),
@@ -594,7 +603,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     final status = (selected['houseStatus'] ?? '').toString();
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
           BoxShadow(
@@ -605,7 +614,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         ],
       ),
       child: Material(
-        color: Colors.transparent,
+        color: DomlyPalette.surface(Colors.transparent),
         child: InkWell(
           borderRadius: BorderRadius.circular(24),
           onTap: addresses.length < 2
@@ -619,12 +628,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF2FAF7),
+                    color: DomlyPalette.surface(const Color(0xFFF2FAF7)),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
                     Icons.location_on_outlined,
-                    color: _addressStatusColor(status),
+                    color: DomlyPalette.foreground(_addressStatusColor(status)),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -636,7 +645,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         'Дом ожидает подключения'.tr(),
                         style: TextStyle(
                           fontSize: 11,
-                          color: DomlyColors.muted,
+                          color: DomlyPalette.foreground(DomlyColors.muted),
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -644,10 +653,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         _addressTitle(selected),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -655,10 +665,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         _addressConnectionProgressText(selected),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           height: 1.25,
-                          color: DomlyColors.muted,
+                          color: DomlyPalette.foreground(DomlyColors.muted),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -671,10 +681,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                           if (addresses.length > 1) ...[
                             const SizedBox(width: 8),
                             Text(
-                              '${addresses.length} адреса'.tr(),
-                              style: const TextStyle(
+                              "{p0} адреса".tr(params: {
+                                'p0': (addresses.length).toString()
+                              }),
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: DomlyColors.muted,
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                               ),
                             ),
                           ],
@@ -684,9 +697,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   ),
                 ),
                 if (addresses.length > 1)
-                  const Icon(
+                  Icon(
                     Icons.keyboard_arrow_down_rounded,
-                    color: DomlyColors.muted,
+                    color: DomlyPalette.foreground(DomlyColors.muted),
                   ),
               ],
             ),
@@ -703,7 +716,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   ) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       isScrollControlled: true,
       builder: (sheetContext) {
         return SafeArea(
@@ -712,7 +725,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: DomlyPalette.surface(Colors.white),
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: const [
                   BoxShadow(
@@ -739,7 +752,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
-                                  color: DomlyColors.foreground,
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.foreground),
                                 ),
                               ),
                               SizedBox(height: 4),
@@ -749,7 +763,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   height: 1.35,
-                                  color: DomlyColors.muted,
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.muted),
                                 ),
                               ),
                             ],
@@ -775,9 +790,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                       (selected['houseId'] ?? '').toString();
                           final status = (item['houseStatus'] ?? '').toString();
                           return Material(
-                            color: isSelected
+                            color: DomlyPalette.surface(isSelected
                                 ? const Color(0xFFF2FAF7)
-                                : const Color(0xFFF7FBF8),
+                                : const Color(0xFFF7FBF8)),
                             borderRadius: BorderRadius.circular(20),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(20),
@@ -813,10 +828,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                         children: [
                                           Text(
                                             _addressTitle(item),
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w700,
-                                              color: DomlyColors.foreground,
+                                              color: DomlyPalette.foreground(
+                                                  DomlyColors.foreground),
                                             ),
                                           ),
                                           const SizedBox(height: 6),
@@ -833,9 +849,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                           ? Icons.check_circle
                                           : Icons.arrow_forward_ios_rounded,
                                       size: isSelected ? 22 : 16,
-                                      color: isSelected
+                                      color: DomlyPalette.foreground(isSelected
                                           ? DomlyColors.buttonPrimary
-                                          : DomlyColors.buttonPrimary,
+                                          : DomlyColors.buttonPrimary),
                                     ),
                                   ],
                                 ),
@@ -857,6 +873,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final isAuthenticated = AppScope.of(context).authController.isAuthenticated;
     AppLogger.d('HOME', 'Building client home. authenticated=$isAuthenticated');
 
@@ -1113,7 +1131,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                     'Добро пожаловать'.tr(),
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Color(0xCCFFFFFF),
+                                      color: DomlyPalette.foreground(
+                                          Color(0xCCFFFFFF)),
                                     ),
                                   ),
                                   const SizedBox(height: 2),
@@ -1121,10 +1140,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                     userName,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
-                                      color: Colors.white,
+                                      color:
+                                          DomlyPalette.foreground(Colors.white),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
@@ -1176,9 +1196,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                                   .tr(),
                                                               style: TextStyle(
                                                                 fontSize: 12,
-                                                                color:
-                                                                    DomlyColors
-                                                                        .muted,
+                                                                color: DomlyPalette
+                                                                    .foreground(
+                                                                        DomlyColors
+                                                                            .muted),
                                                               ),
                                                             ),
                                                             const SizedBox(
@@ -1193,14 +1214,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                                       ),
                                                                     )
                                                                   : 'Не запланировано',
-                                                              style:
-                                                                  const TextStyle(
+                                                              style: TextStyle(
                                                                 fontSize: 16,
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w700,
-                                                                color: DomlyColors
-                                                                    .foreground,
+                                                                color: DomlyPalette
+                                                                    .foreground(
+                                                                        DomlyColors
+                                                                            .foreground),
                                                               ),
                                                             ),
                                                           ],
@@ -1250,7 +1272,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                   const SizedBox(height: 16),
                                                   Container(
                                                     height: 1,
-                                                    color: DomlyColors.border,
+                                                    color: DomlyPalette.surface(
+                                                        DomlyColors.border),
                                                   ),
                                                   const SizedBox(height: 14),
                                                   Row(
@@ -1262,14 +1285,16 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                         width: 42,
                                                         height: 42,
                                                         decoration:
-                                                            const BoxDecoration(
+                                                            BoxDecoration(
                                                           gradient:
                                                               LinearGradient(
                                                             colors: [
-                                                              DomlyColors
-                                                                  .buttonPrimary,
-                                                              DomlyColors
-                                                                  .buttonAccent,
+                                                              DomlyPalette.surface(
+                                                                  DomlyColors
+                                                                      .buttonPrimary),
+                                                              DomlyPalette.surface(
+                                                                  DomlyColors
+                                                                      .buttonAccent),
                                                             ],
                                                           ),
                                                           shape:
@@ -1284,9 +1309,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                                     ?.toString() ??
                                                                 'DP',
                                                           ),
-                                                          style:
-                                                              const TextStyle(
-                                                            color: Colors.white,
+                                                          style: TextStyle(
+                                                            color: DomlyPalette
+                                                                .foreground(
+                                                                    Colors
+                                                                        .white),
                                                             fontWeight:
                                                                 FontWeight.w700,
                                                           ),
@@ -1304,14 +1331,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                                           'cleanerName'] ??
                                                                       'Исполнитель будет назначен')
                                                                   .toString(),
-                                                              style:
-                                                                  const TextStyle(
+                                                              style: TextStyle(
                                                                 fontSize: 14,
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w600,
-                                                                color: DomlyColors
-                                                                    .foreground,
+                                                                color: DomlyPalette
+                                                                    .foreground(
+                                                                        DomlyColors
+                                                                            .foreground),
                                                               ),
                                                             ),
                                                             const SizedBox(
@@ -1319,12 +1347,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                             ),
                                                             Text(
                                                               planName,
-                                                              style:
-                                                                  const TextStyle(
+                                                              style: TextStyle(
                                                                 fontSize: 12,
-                                                                color:
-                                                                    DomlyColors
-                                                                        .muted,
+                                                                color: DomlyPalette
+                                                                    .foreground(
+                                                                        DomlyColors
+                                                                            .muted),
                                                               ),
                                                             ),
                                                             if (activeSubscription !=
@@ -1342,11 +1370,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                                         slots,
                                                                   ),
                                                                   style:
-                                                                      const TextStyle(
+                                                                      TextStyle(
                                                                     fontSize:
                                                                         12,
-                                                                    color: DomlyColors
-                                                                        .muted,
+                                                                    color: DomlyPalette.foreground(
+                                                                        DomlyColors
+                                                                            .muted),
                                                                   ),
                                                                 ),
                                                               ),
@@ -1383,8 +1412,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                                     fontWeight:
                                                                         FontWeight
                                                                             .w700,
-                                                                    color: DomlyColors
-                                                                        .primary,
+                                                                    color: DomlyPalette.foreground(
+                                                                        DomlyColors
+                                                                            .primary),
                                                                   ),
                                                                 ),
                                                               ),
@@ -1399,7 +1429,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                     alignment:
                                                         Alignment.centerLeft,
                                                     child: Material(
-                                                      color: Colors.transparent,
+                                                      color:
+                                                          DomlyPalette.surface(
+                                                              Colors
+                                                                  .transparent),
                                                       child: InkWell(
                                                         borderRadius:
                                                             BorderRadius
@@ -1427,8 +1460,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                               fontWeight:
                                                                   FontWeight
                                                                       .w600,
-                                                              color: DomlyColors
-                                                                  .buttonPrimary,
+                                                              color: DomlyPalette
+                                                                  .foreground(
+                                                                      DomlyColors
+                                                                          .buttonPrimary),
                                                             ),
                                                           ),
                                                         ),
@@ -1580,7 +1615,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w600,
-                                        color: DomlyColors.muted,
+                                        color: DomlyPalette.foreground(
+                                            DomlyColors.muted),
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -1589,7 +1625,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                           .tr(),
                                       style: TextStyle(
                                         fontSize: 14,
-                                        color: DomlyColors.muted,
+                                        color: DomlyPalette.foreground(
+                                            DomlyColors.muted),
                                         height: 1.3,
                                       ),
                                     ),
@@ -1604,7 +1641,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                               ),
                               sliver: SliverToBoxAdapter(
                                 child: Material(
-                                  color: Colors.transparent,
+                                  color:
+                                      DomlyPalette.surface(Colors.transparent),
                                   child: InkWell(
                                     onTap: () => Navigator.pushNamed(
                                       context,
@@ -1617,10 +1655,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                         vertical: 20,
                                       ),
                                       decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
+                                        gradient: LinearGradient(
                                           colors: [
-                                            Color(0xFFFFD700),
-                                            Color(0xFFFFA500),
+                                            DomlyPalette.surface(
+                                                Color(0xFFFFD700)),
+                                            DomlyPalette.surface(
+                                                Color(0xFFFFA500)),
                                           ],
                                         ),
                                         borderRadius: BorderRadius.circular(20),
@@ -1638,7 +1678,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                         children: [
                                           Icon(
                                             Icons.card_giftcard,
-                                            color: Colors.white,
+                                            color: DomlyPalette.foreground(
+                                                Colors.white),
                                             size: 28,
                                           ),
                                           SizedBox(width: 14),
@@ -1652,7 +1693,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                   style: TextStyle(
                                                     fontSize: 16,
                                                     fontWeight: FontWeight.w700,
-                                                    color: Colors.white,
+                                                    color:
+                                                        DomlyPalette.foreground(
+                                                            Colors.white),
                                                   ),
                                                 ),
                                                 SizedBox(height: 2),
@@ -1661,7 +1704,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                       .tr(),
                                                   style: TextStyle(
                                                     fontSize: 12,
-                                                    color: Color(0xCCFFFFFF),
+                                                    color:
+                                                        DomlyPalette.foreground(
+                                                            Color(0xCCFFFFFF)),
                                                   ),
                                                 ),
                                               ],
@@ -1670,7 +1715,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                           SizedBox(width: 12),
                                           Icon(
                                             Icons.arrow_forward_ios,
-                                            color: Colors.white,
+                                            color: DomlyPalette.foreground(
+                                                Colors.white),
                                             size: 16,
                                           ),
                                         ],
@@ -1782,9 +1828,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                   child: SelectableText(
                                     error.toString(),
                                     textAlign: TextAlign.center,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12,
-                                      color: DomlyColors.muted,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.muted),
                                     ),
                                   ),
                                 ),
@@ -1896,7 +1943,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     return DomlyShell(
       bottomNavigationBar: const _FigmaClientBottomNav(currentIndex: 0),
       child: Container(
-        color: const Color(0xFFFBFDF9),
+        color: DomlyPalette.surface(const Color(0xFFFBFDF9)),
         child: SafeArea(
           bottom: false,
           child: SingleChildScrollView(
@@ -1938,8 +1985,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         isCurrentCleaning
                             ? 'Текущая уборка'
                             : 'Следующая уборка',
-                        style: const TextStyle(
-                          color: Color(0xFF658170),
+                        style: TextStyle(
+                          color: DomlyPalette.foreground(Color(0xFF658170)),
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                           height: 19 / 14,
@@ -1953,8 +2000,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                               dateText,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF2B4338),
+                              style: TextStyle(
+                                color:
+                                    DomlyPalette.foreground(Color(0xFF2B4338)),
                                 fontSize: 27,
                                 fontWeight: FontWeight.w700,
                                 height: 38 / 28,
@@ -2071,7 +2119,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     return DomlyShell(
       bottomNavigationBar: const _FigmaClientBottomNav(currentIndex: 0),
       child: Container(
-        color: const Color(0xFFFBFDF9),
+        color: DomlyPalette.surface(const Color(0xFFFBFDF9)),
         child: SafeArea(
           bottom: false,
           child: SingleChildScrollView(
@@ -2118,7 +2166,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         Text(
                           'Следующая уборка'.tr(),
                           style: TextStyle(
-                            color: Color(0xFF658170),
+                            color: DomlyPalette.foreground(Color(0xFF658170)),
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                             height: 19 / 14,
@@ -2133,7 +2181,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: Color(0xFF2B4338),
+                                  color: DomlyPalette.foreground(
+                                      Color(0xFF2B4338)),
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
                                   height: 38 / 16,
@@ -2200,8 +2249,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       'У Вас нет активной подписки\n'
                               'Оформите ее, чтобы начать пользоваться сервисом'
                           .tr(),
-                      style: const TextStyle(
-                        color: Color(0xFF658170),
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(Color(0xFF658170)),
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         height: 18 / 13,
@@ -2277,7 +2326,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     return DomlyShell(
       bottomNavigationBar: const _FigmaClientBottomNav(currentIndex: 0),
       child: Container(
-        color: const Color(0xFFFBFDF9),
+        color: DomlyPalette.surface(const Color(0xFFFBFDF9)),
         child: SafeArea(
           bottom: false,
           child: SingleChildScrollView(
@@ -2318,7 +2367,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       Text(
                         'Следующая уборка'.tr(),
                         style: TextStyle(
-                          color: Color(0xFF658170),
+                          color: DomlyPalette.foreground(Color(0xFF658170)),
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                           height: 19 / 14,
@@ -2334,8 +2383,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                   : 'Ожидает назначения',
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF2B4338),
+                              style: TextStyle(
+                                color:
+                                    DomlyPalette.foreground(Color(0xFF2B4338)),
                                 fontSize: 22,
                                 fontWeight: FontWeight.w700,
                                 height: 28 / 22,
@@ -2423,7 +2473,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Widget _figmaBonusBanner(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      color: DomlyPalette.surface(Colors.transparent),
       child: InkWell(
         onTap: () => _runProtectedAction(
           () => Navigator.pushNamed(context, '/client/bonus'),
@@ -2433,10 +2483,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           constraints: const BoxConstraints(minHeight: 120),
           padding: const EdgeInsets.fromLTRB(22, 20, 18, 20),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: [Color(0xFFE3F1DF), Color(0xFFF8F0CC)],
+              colors: [
+                DomlyPalette.surface(Color(0xFFE3F1DF)),
+                DomlyPalette.surface(Color(0xFFF8F0CC))
+              ],
             ),
             borderRadius: BorderRadius.circular(22),
           ),
@@ -2450,7 +2503,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     Text(
                       'Получи бонусы'.tr(),
                       style: TextStyle(
-                        color: Color(0xFF143E21),
+                        color: DomlyPalette.foreground(Color(0xFF143E21)),
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
                         height: 28 / 22,
@@ -2460,7 +2513,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     Text(
                       'Приглашай друзей — получай 2000₸\nза каждого'.tr(),
                       style: TextStyle(
-                        color: Color(0xFF143E21),
+                        color: DomlyPalette.foreground(Color(0xFF143E21)),
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                         height: 18 / 14,
@@ -2474,8 +2527,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 width: 58,
                 height: 58,
                 alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
+                decoration: BoxDecoration(
+                  color: DomlyPalette.surface(Colors.white),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
@@ -2485,9 +2538,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     ),
                   ],
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.arrow_forward,
-                  color: Color(0xFF143E21),
+                  color: DomlyPalette.foreground(Color(0xFF143E21)),
                   size: 28,
                 ),
               ),
@@ -2527,7 +2580,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           return DomlyCard(
             child: Text(
               'Не удалось загрузить информацию по дому.'.tr(),
-              style: TextStyle(color: DomlyColors.muted),
+              style:
+                  TextStyle(color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           );
         }
@@ -2561,10 +2615,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                             : status == 'IN_PROGRESS'
                                 ? 'Дом почти подключен'
                                 : 'Мы скоро стартуем в вашем доме',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -2585,31 +2640,48 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   const SizedBox(height: 10),
                   Text(
                     (stats['activationText'] ?? '').toString(),
-                    style: const TextStyle(color: DomlyColors.muted),
+                    style: TextStyle(
+                        color: DomlyPalette.foreground(DomlyColors.muted)),
                   ),
                   const SizedBox(height: 14),
                   LinearProgressIndicator(
                     value: progress,
-                    backgroundColor: DomlyColors.backgroundSoft,
-                    color: DomlyColors.buttonPrimary,
+                    backgroundColor:
+                        DomlyPalette.surface(DomlyColors.backgroundSoft),
+                    color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
                   ),
                   const SizedBox(height: 10),
-                  Text('Заявок: $current из $threshold'.tr()),
-                  Text('До запуска осталось: $remaining'.tr()),
+                  Text("Заявок: {p0} из {p1}".tr(params: {
+                    'p0': (current).toString(),
+                    'p1': (threshold).toString()
+                  })),
+                  Text("До запуска осталось: {p0}"
+                      .tr(params: {'p0': (remaining).toString()})),
                   if (status == 'ACTIVE')
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Пользователей: ${house['total_users'] ?? 0}'),
+                          Text("Пользователей: {p0}".tr(params: {
+                            'p0': (house['total_users'] ?? 0).toString()
+                          })),
                           Text(
-                            'Популярный пакет: ${stats['popularPackage'] ?? '—'}',
+                            "Популярный пакет: {p0}".tr(params: {
+                              'p0': (stats['popularPackage'] ?? '—').toString()
+                            }),
                           ),
                           if (packageBreakdown.isNotEmpty)
                             Text(
-                              'Пакеты: ${packageBreakdown.entries.map((e) => '.tr()${e.key}: ${e.value}').join(' · ')}',
-                              style: const TextStyle(color: DomlyColors.muted),
+                              "Пакеты: {p0}".tr(params: {
+                                'p0': (packageBreakdown.entries
+                                        .map((e) => '.tr()${e.key}: ${e.value}')
+                                        .join(' · '))
+                                    .toString()
+                              }),
+                              style: TextStyle(
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.muted)),
                             ),
                         ],
                       ),
@@ -2671,17 +2743,19 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       children: [
         Expanded(
           child: Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+            label.tr(),
+            style: TextStyle(
+                fontSize: 12,
+                color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
         ),
         const SizedBox(width: 8),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: DomlyColors.foreground,
+            color: DomlyPalette.foreground(DomlyColors.foreground),
           ),
         ),
       ],
@@ -2714,10 +2788,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: DomlyColors.buttonPrimary.withValues(alpha: 0.08),
+            color: DomlyPalette.surface(
+                DomlyColors.buttonPrimary.withValues(alpha: 0.08)),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, size: 18, color: DomlyColors.buttonPrimary),
+          child: Icon(icon,
+              size: 18,
+              color: DomlyPalette.foreground(DomlyColors.buttonPrimary)),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -2725,16 +2802,18 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                title,
-                style: const TextStyle(fontSize: 11, color: DomlyColors.muted),
+                title.tr(),
+                style: TextStyle(
+                    fontSize: 11,
+                    color: DomlyPalette.foreground(DomlyColors.muted)),
               ),
               Text(
                 value,
                 maxLines: 3,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DomlyColors.foreground,
+                  color: DomlyPalette.foreground(DomlyColors.foreground),
                 ),
               ),
             ],
@@ -2752,7 +2831,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     required bool reverse,
   }) {
     return Material(
-      color: Colors.transparent,
+      color: DomlyPalette.surface(Colors.transparent),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
@@ -2767,8 +2846,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   width: 72,
                   height: 72,
                   decoration: BoxDecoration(
-                    color: (reverse ? DomlyColors.accent : DomlyColors.primary)
-                        .withValues(alpha: 0.08),
+                    color: DomlyPalette.surface(
+                        (reverse ? DomlyColors.accent : DomlyColors.primary)
+                            .withValues(alpha: 0.08)),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -2791,19 +2871,19 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    title,
-                    style: const TextStyle(
+                    title.tr(),
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: DomlyColors.foreground,
+                      color: DomlyPalette.foreground(DomlyColors.foreground),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    subtitle,
-                    style: const TextStyle(
+                    subtitle.tr(),
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                     ),
                   ),
                 ],
@@ -2817,7 +2897,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Widget _recentOrderCard(Map<String, dynamic> order, {VoidCallback? onTap}) {
     return Material(
-      color: Colors.transparent,
+      color: DomlyPalette.surface(Colors.transparent),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
@@ -2835,18 +2915,19 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       children: [
                         Text(
                           domlyDateText(_slotDate(order)),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           (order['time'] ?? '10:00').toString(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: DomlyColors.muted,
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                           ),
                         ),
                       ],
@@ -2865,11 +2946,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   Container(
                     width: 42,
                     height: 42,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          DomlyColors.buttonPrimary,
-                          DomlyColors.buttonAccent,
+                          DomlyPalette.surface(DomlyColors.buttonPrimary),
+                          DomlyPalette.surface(DomlyColors.buttonAccent),
                         ],
                       ),
                       shape: BoxShape.circle,
@@ -2880,8 +2961,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         (order['cleanerName'] ?? order['cleaner'] ?? 'DP')
                             .toString(),
                       ),
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(Colors.white),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -2896,10 +2977,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                   order['cleaner'] ??
                                   'Исполнитель будет назначен')
                               .toString(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -2910,9 +2992,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                               .toString(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: DomlyColors.muted,
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                           ),
                         ),
                       ],
@@ -2925,16 +3007,18 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       if (((order['price'] as num?)?.toInt() ?? 0) > 0)
                         Text(
                           '${order['price']} ₸',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                       if (onTap != null)
-                        const Icon(
+                        Icon(
                           Icons.chevron_right_rounded,
-                          color: DomlyColors.buttonPrimary,
+                          color: DomlyPalette.foreground(
+                              DomlyColors.buttonPrimary),
                         ),
                     ],
                   ),
@@ -3088,8 +3172,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   messenger.showSnackBar(
                     SnackBar(
                       content: Text(
-                        'Предварительная запись сохранена на $selectedDateText. Мы напишем для подтверждения информации и оплаты.'
-                            .tr(),
+                        "Предварительная запись сохранена на {p0}. Мы напишем для подтверждения информации и оплаты."
+                            .tr(params: {'p0': (selectedDateText).toString()}),
                       ),
                     ),
                   );
@@ -3101,7 +3185,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 setDialogState(() => saving = false);
                 messenger.showSnackBar(
                   SnackBar(
-                    content: Text('Не удалось сохранить запись: $error'.tr()),
+                    content: Text("Не удалось сохранить запись: {p0}"
+                        .tr(params: {'p0': (error).toString()})),
                   ),
                 );
               }
@@ -3126,7 +3211,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       TextFormField(
                         controller: nameController,
                         textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(labelText: 'Имя'),
+                        decoration: InputDecoration(labelText: 'Имя'.tr()),
                         validator: (value) =>
                             value == null || value.trim().isEmpty
                                 ? 'Введите имя'
@@ -3136,8 +3221,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       TextFormField(
                         controller: phoneController,
                         keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(
-                          labelText: 'Телефон',
+                        decoration: InputDecoration(
+                          labelText: 'Телефон'.tr(),
                           hintText: '+7 777 000 00 00',
                         ),
                         validator: (value) =>
@@ -3151,8 +3236,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Площадь, м²',
+                        decoration: InputDecoration(
+                          labelText: 'Площадь, м²'.tr(),
                         ),
                         validator: (value) {
                           final parsed = _parseAreaForRequest(value ?? '');
@@ -3166,14 +3251,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: DomlyColors.buttonPrimary.withValues(
-                            alpha: 0.06,
-                          ),
+                          color: DomlyPalette.surface(DomlyColors.buttonPrimary
+                              .withValues(alpha: 0.06)),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: DomlyColors.buttonPrimary.withValues(
-                              alpha: 0.18,
-                            ),
+                            color: DomlyPalette.border(DomlyColors.buttonPrimary
+                                .withValues(alpha: 0.18)),
                           ),
                         ),
                         child: Row(
@@ -3186,16 +3269,18 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                     'Желаемая дата'.tr(),
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: DomlyColors.muted,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.muted),
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     dateText(selectedDate),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 16,
-                                      color: DomlyColors.foreground,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.foreground),
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
@@ -3231,8 +3316,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       ),
                       DropdownButtonFormField<String>(
                         initialValue: selectedTime,
-                        decoration: const InputDecoration(
-                          labelText: 'Удобное время',
+                        decoration: InputDecoration(
+                          labelText: 'Удобное время'.tr(),
                         ),
                         items: [
                           for (final option in timeOptions)
@@ -4096,7 +4181,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) => _BookingSheet(
         subscription: subscription,
         profile: profile,
@@ -4113,11 +4198,16 @@ class _FigmaHomeHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 64,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF439F73), Color(0xFF80D4B0)],
+        gradient: LinearGradient(
+          colors: [
+            DomlyPalette.surface(Color(0xFF439F73)),
+            DomlyPalette.surface(Color(0xFF80D4B0))
+          ],
         ),
         borderRadius: BorderRadius.circular(24),
       ),
@@ -4131,7 +4221,8 @@ class _FigmaHomeHero extends StatelessWidget {
               width: 132,
               height: 132,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -4148,7 +4239,7 @@ class _FigmaHomeHero extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     height: 18 / 13,
@@ -4159,8 +4250,8 @@ class _FigmaHomeHero extends StatelessWidget {
                   userName.trim().isEmpty ? 'Пользователь' : userName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(Colors.white),
                     fontSize: 23,
                     fontWeight: FontWeight.w700,
                     height: 29 / 23,
@@ -4183,6 +4274,8 @@ class _FigmaStatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final isLong = label.length > 12;
     return Container(
       constraints: BoxConstraints(
@@ -4196,9 +4289,12 @@ class _FigmaStatusPill extends StatelessWidget {
       ),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: muted ? const Color(0xFFF1F1F1) : const Color(0xFFF8E7DD),
+        color: DomlyPalette.surface(
+            muted ? const Color(0xFFF1F1F1) : const Color(0xFFF8E7DD)),
         borderRadius: BorderRadius.circular(18),
-        border: muted ? Border.all(color: const Color(0x12000000)) : null,
+        border: muted
+            ? Border.all(color: DomlyPalette.border(const Color(0x12000000)))
+            : null,
         boxShadow: muted
             ? null
             : const [
@@ -4216,21 +4312,21 @@ class _FigmaStatusPill extends StatelessWidget {
           if (!muted) ...[
             Icon(
               Icons.check_circle,
-              color: const Color(0xFFCF7548),
+              color: DomlyPalette.foreground(const Color(0xFFCF7548)),
               size: isLong ? 16 : 18,
             ),
             SizedBox(width: isLong ? 5 : 7),
           ],
           Flexible(
             child: Text(
-              label,
+              label.tr(),
               maxLines: 2,
               overflow: TextOverflow.visible,
               softWrap: true,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color:
-                    muted ? const Color(0xFF8A8A8A) : const Color(0xFFCF7548),
+                color: DomlyPalette.foreground(
+                    muted ? const Color(0xFF8A8A8A) : const Color(0xFFCF7548)),
                 fontSize: isLong ? 11.5 : 13,
                 fontWeight: FontWeight.w600,
                 height: isLong ? 1.12 : 17 / 13,
@@ -4250,11 +4346,13 @@ class _FigmaEmptyCleaningCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final screenWidth = MediaQuery.sizeOf(context).width;
     final horizontalMargin = screenWidth < 380 ? 4.0 : 10.0;
     final tileGap = screenWidth < 380 ? 10.0 : 14.0;
     return Material(
-      color: Colors.transparent,
+      color: DomlyPalette.surface(Colors.transparent),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(25),
@@ -4263,7 +4361,7 @@ class _FigmaEmptyCleaningCard extends StatelessWidget {
           margin: EdgeInsets.only(left: horizontalMargin, right: 5),
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
           decoration: BoxDecoration(
-            color: const Color(0xFFF3F4F3),
+            color: DomlyPalette.surface(const Color(0xFFF3F4F3)),
             borderRadius: BorderRadius.circular(25),
             boxShadow: const [
               BoxShadow(
@@ -4325,27 +4423,31 @@ class _FigmaEmptyMetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       constraints: const BoxConstraints(minHeight: 78),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F7F2),
+        color: DomlyPalette.surface(const Color(0xFFF0F7F2)),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: const Color(0xFFCF7548)),
+          Icon(icon,
+              size: 16,
+              color: DomlyPalette.foreground(const Color(0xFFCF7548))),
           const SizedBox(height: 7),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
-              label,
+              label.tr(),
               maxLines: 1,
-              style: const TextStyle(
-                color: Color(0xFF658170),
+              style: TextStyle(
+                color: DomlyPalette.foreground(Color(0xFF658170)),
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 height: 16 / 12,
@@ -4359,8 +4461,8 @@ class _FigmaEmptyMetricTile extends StatelessWidget {
             child: Text(
               value,
               maxLines: 1,
-              style: const TextStyle(
-                color: Color(0xFF22352D),
+              style: TextStyle(
+                color: DomlyPalette.foreground(Color(0xFF22352D)),
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 height: 22 / 16,
@@ -4455,6 +4557,8 @@ class _PromoBannersSectionState extends State<_PromoBannersSection> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _banners,
       builder: (context, snapshot) {
@@ -4513,9 +4617,9 @@ class _PromoBannersSectionState extends State<_PromoBannersSection> {
                     width: index == _currentPage ? 16 : 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: index == _currentPage
+                      color: DomlyPalette.surface(index == _currentPage
                           ? const Color(0xFFCF7548)
-                          : const Color(0xFFD7E5DC),
+                          : const Color(0xFFD7E5DC)),
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
@@ -4573,8 +4677,8 @@ class _PromoBannerCard extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context) async {
-    final title = (banner['title'] ?? 'Информация').toString().trim();
-    final subtitle = (banner['subtitle'] ?? '').toString().trim();
+    final title = banner.trValue(['title'], fallback: 'Информация');
+    final subtitle = banner.trValue(['subtitle']);
     final description = (banner['description'] ??
             banner['fullInfo'] ??
             banner['longDescription'] ??
@@ -4617,16 +4721,18 @@ class _PromoBannerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final imageUrl = _imageUrlFrom(banner);
-    final title = (banner['title'] ?? '').toString().trim();
-    final subtitle = (banner['subtitle'] ?? '').toString().trim();
+    final title = banner.trValue(['title']);
+    final subtitle = banner.trValue(['subtitle']);
     final description = (banner['description'] ??
             banner['fullInfo'] ??
             banner['longDescription'] ??
             '')
         .toString()
         .trim();
-    final ctaLabel = (banner['ctaLabel'] ?? '').toString().trim();
+    final ctaLabel = banner.trValue(['ctaLabel']);
     final clickable = ((banner['route'] ?? '').toString().trim().isNotEmpty) ||
         ((banner['externalUrl'] ?? '').toString().trim().isNotEmpty) ||
         ctaLabel.isNotEmpty ||
@@ -4636,12 +4742,15 @@ class _PromoBannerCard extends StatelessWidget {
         imageUrl.isNotEmpty;
 
     final background = imageUrl.isEmpty
-        ? const BoxDecoration(
+        ? BoxDecoration(
             borderRadius: BorderRadius.all(Radius.circular(24)),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF70B68C), Color(0xFFCF7548)],
+              colors: [
+                DomlyPalette.surface(Color(0xFF70B68C)),
+                DomlyPalette.surface(Color(0xFFCF7548))
+              ],
             ),
             boxShadow: [
               BoxShadow(
@@ -4653,10 +4762,10 @@ class _PromoBannerCard extends StatelessWidget {
           )
         : BoxDecoration(
             borderRadius: BorderRadius.circular(24),
-            color: Colors.white,
+            color: DomlyPalette.surface(Colors.white),
             image: DecorationImage(
               image: NetworkImage(imageUrl),
-              fit: BoxFit.contain,
+              fit: BoxFit.cover,
             ),
             boxShadow: const [
               BoxShadow(
@@ -4668,7 +4777,7 @@ class _PromoBannerCard extends StatelessWidget {
           );
 
     return Material(
-      color: Colors.transparent,
+      color: DomlyPalette.surface(Colors.transparent),
       child: InkWell(
         onTap: !clickable ? null : () => _open(context),
         borderRadius: BorderRadius.circular(24),
@@ -4684,11 +4793,11 @@ class _PromoBannerCard extends StatelessWidget {
                     children: [
                       if (title.isNotEmpty)
                         Text(
-                          title,
+                          title.tr(),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: DomlyPalette.foreground(Colors.white),
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                             height: 1.15,
@@ -4697,11 +4806,11 @@ class _PromoBannerCard extends StatelessWidget {
                       if (subtitle.isNotEmpty) ...[
                         const SizedBox(height: 6),
                         Text(
-                          subtitle,
+                          subtitle.tr(),
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xE6FFFFFF),
+                          style: TextStyle(
+                            color: DomlyPalette.foreground(Color(0xE6FFFFFF)),
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                             height: 1.35,
@@ -4716,10 +4825,12 @@ class _PromoBannerCard extends StatelessWidget {
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.18),
+                            color: DomlyPalette.surface(
+                                Colors.white.withValues(alpha: 0.18)),
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.28),
+                              color: DomlyPalette.border(
+                                  Colors.white.withValues(alpha: 0.28)),
                             ),
                           ),
                           child: Row(
@@ -4727,17 +4838,17 @@ class _PromoBannerCard extends StatelessWidget {
                             children: [
                               Text(
                                 ctaLabel,
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: DomlyPalette.foreground(Colors.white),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              const Icon(
+                              Icon(
                                 Icons.arrow_forward_ios,
                                 size: 12,
-                                color: Colors.white,
+                                color: DomlyPalette.foreground(Colors.white),
                               ),
                             ],
                           ),
@@ -4798,6 +4909,8 @@ class _CompanyPromotionsSectionState extends State<_CompanyPromotionsSection> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _promotions,
       builder: (context, snapshot) {
@@ -4839,9 +4952,9 @@ class _CompanyPromotionsSectionState extends State<_CompanyPromotionsSection> {
                     width: index == _page ? 16 : 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: index == _page
+                      color: DomlyPalette.surface(index == _page
                           ? const Color(0xFFCF7548)
-                          : const Color(0xFFD7E5DC),
+                          : const Color(0xFFD7E5DC)),
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
@@ -4862,6 +4975,8 @@ class _CompanyPromotionBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final title = (promotion['title'] ?? 'Важная информация').toString();
     final shortInfo = (promotion['shortInfo'] ??
             promotion['description'] ??
@@ -4900,7 +5015,7 @@ class _CompanyPromotionBanner extends StatelessWidget {
     };
 
     return Material(
-      color: Colors.transparent,
+      color: DomlyPalette.surface(Colors.transparent),
       child: Padding(
         padding: const EdgeInsets.only(bottom: 4),
         child: InkWell(
@@ -4909,17 +5024,20 @@ class _CompanyPromotionBanner extends StatelessWidget {
           child: Ink(
             decoration: BoxDecoration(
               gradient: imageUrl.isEmpty
-                  ? const LinearGradient(
+                  ? LinearGradient(
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
-                      colors: [Color(0xFFEAF7EE), Color(0xFFFFF2DA)],
+                      colors: [
+                        DomlyPalette.surface(Color(0xFFEAF7EE)),
+                        DomlyPalette.surface(Color(0xFFFFF2DA))
+                      ],
                     )
                   : null,
               image: imageUrl.isEmpty
                   ? null
                   : DecorationImage(
                       image: NetworkImage(imageUrl),
-                      fit: BoxFit.contain,
+                      fit: BoxFit.cover,
                       colorFilter: showAnyText
                           ? ColorFilter.mode(
                               Colors.white.withValues(alpha: 0.18),
@@ -4928,7 +5046,8 @@ class _CompanyPromotionBanner extends StatelessWidget {
                           : null,
                     ),
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: const Color(0xFFE2EDE6)),
+              border: Border.all(
+                  color: DomlyPalette.border(const Color(0xFFE2EDE6))),
             ),
             child: Container(
               padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
@@ -4936,10 +5055,13 @@ class _CompanyPromotionBanner extends StatelessWidget {
                 borderRadius: BorderRadius.circular(22),
                 gradient: imageUrl.isEmpty || !showAnyText
                     ? null
-                    : const LinearGradient(
+                    : LinearGradient(
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
-                        colors: [Color(0xEFFFFFFF), Color(0xB3FFFFFF)],
+                        colors: [
+                          DomlyPalette.surface(Color(0xEFFFFFFF)),
+                          DomlyPalette.surface(Color(0xB3FFFFFF))
+                        ],
                       ),
               ),
               child: Row(
@@ -4955,8 +5077,9 @@ class _CompanyPromotionBanner extends StatelessWidget {
                               title.isEmpty ? 'Важная информация' : title,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF143E21),
+                              style: TextStyle(
+                                color:
+                                    DomlyPalette.foreground(Color(0xFF143E21)),
                                 fontSize: 20,
                                 fontWeight: FontWeight.w700,
                                 height: 1.15,
@@ -4971,8 +5094,9 @@ class _CompanyPromotionBanner extends StatelessWidget {
                               shortInfo,
                               maxLines: showReward ? 1 : 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF456557),
+                              style: TextStyle(
+                                color:
+                                    DomlyPalette.foreground(Color(0xFF456557)),
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                                 height: 1.25,
@@ -4984,11 +5108,13 @@ class _CompanyPromotionBanner extends StatelessWidget {
                             const SizedBox(height: 3),
                           if (showReward)
                             Text(
-                              'Бонус: $rewardLabel'.tr(),
+                              "Бонус: {p0}"
+                                  .tr(params: {'p0': (rewardLabel).toString()}),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFFCF7548),
+                              style: TextStyle(
+                                color:
+                                    DomlyPalette.foreground(Color(0xFFCF7548)),
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
                                 height: 1.25,
@@ -5001,8 +5127,8 @@ class _CompanyPromotionBanner extends StatelessWidget {
                     const Spacer(),
                   if (showInfoIcon) ...[
                     const SizedBox(width: 12),
-                    const Material(
-                      color: Colors.white,
+                    Material(
+                      color: DomlyPalette.surface(Colors.white),
                       shape: CircleBorder(),
                       elevation: 4,
                       shadowColor: Color(0x1A000000),
@@ -5011,7 +5137,7 @@ class _CompanyPromotionBanner extends StatelessWidget {
                         height: 52,
                         child: Icon(
                           Icons.info_outline,
-                          color: Color(0xFF143E21),
+                          color: DomlyPalette.foreground(Color(0xFF143E21)),
                           size: 26,
                         ),
                       ),
@@ -5032,12 +5158,17 @@ class _FigmaEmptyAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       width: 55,
       height: 55,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFCF7548), Color(0xFFEEB09B)],
+        gradient: LinearGradient(
+          colors: [
+            DomlyPalette.surface(Color(0xFFCF7548)),
+            DomlyPalette.surface(Color(0xFFEEB09B))
+          ],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -5050,6 +5181,8 @@ class _FigmaEmptyCleanerText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -5058,7 +5191,7 @@ class _FigmaEmptyCleanerText extends StatelessWidget {
           maxLines: 2,
           softWrap: true,
           style: TextStyle(
-            color: Color(0xFF2B4338),
+            color: DomlyPalette.foreground(Color(0xFF2B4338)),
             fontSize: 15,
             fontWeight: FontWeight.w700,
             height: 1.2,
@@ -5070,7 +5203,7 @@ class _FigmaEmptyCleanerText extends StatelessWidget {
           maxLines: 2,
           softWrap: true,
           style: TextStyle(
-            color: Color(0xFF658170),
+            color: DomlyPalette.foreground(Color(0xFF658170)),
             fontSize: 13,
             fontWeight: FontWeight.w500,
             height: 1.25,
@@ -5112,8 +5245,10 @@ class _FigmaNextCleaningCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Material(
-      color: Colors.transparent,
+      color: DomlyPalette.surface(Colors.transparent),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
@@ -5122,7 +5257,7 @@ class _FigmaNextCleaningCard extends StatelessWidget {
           child: Ink(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DomlyPalette.surface(Colors.white),
               borderRadius: BorderRadius.circular(24),
               boxShadow: const [
                 BoxShadow(
@@ -5165,8 +5300,11 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                       height: 60,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFCF7548), Color(0xFFEEB09B)],
+                        gradient: LinearGradient(
+                          colors: [
+                            DomlyPalette.surface(Color(0xFFCF7548)),
+                            DomlyPalette.surface(Color(0xFFEEB09B))
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(30),
                       ),
@@ -5174,8 +5312,8 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                         cleanerName.characters.isEmpty
                             ? 'A'
                             : cleanerName.characters.first.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: DomlyPalette.foreground(Colors.white),
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
                           height: 28 / 22,
@@ -5191,8 +5329,8 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                             cleanerName,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF2B4338),
+                            style: TextStyle(
+                              color: DomlyPalette.foreground(Color(0xFF2B4338)),
                               fontSize: 19,
                               fontWeight: FontWeight.w700,
                               height: 24 / 19,
@@ -5203,8 +5341,8 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                             planName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF658170),
+                            style: TextStyle(
+                              color: DomlyPalette.foreground(Color(0xFF658170)),
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                               height: 18 / 13,
@@ -5236,7 +5374,8 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 20),
-                const Divider(height: 1, color: Color(0xFFDEECE3)),
+                Divider(
+                    height: 1, color: DomlyPalette.border(Color(0xFFDEECE3))),
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -5247,7 +5386,8 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                           padding: EdgeInsets.zero,
                           minimumSize: const Size(126, 18),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          foregroundColor: const Color(0xFFCF7548),
+                          foregroundColor:
+                              DomlyPalette.foreground(const Color(0xFFCF7548)),
                         ),
                         child: Text(
                           'Выбрать даты'.tr(),
@@ -5268,7 +5408,8 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                           padding: EdgeInsets.zero,
                           minimumSize: const Size(70, 18),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          foregroundColor: DomlyColors.danger,
+                          foregroundColor:
+                              DomlyPalette.foreground(DomlyColors.danger),
                         ),
                         child: Text(
                           'Отменить'.tr(),
@@ -5283,7 +5424,7 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                       Container(
                         width: 1,
                         height: 24,
-                        color: const Color(0xFFE4DDD8),
+                        color: DomlyPalette.surface(const Color(0xFFE4DDD8)),
                       ),
                       const SizedBox(width: 18),
                     ],
@@ -5293,7 +5434,8 @@ class _FigmaNextCleaningCard extends StatelessWidget {
                         padding: EdgeInsets.zero,
                         minimumSize: const Size(50, 18),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        foregroundColor: const Color(0xFFCF7548),
+                        foregroundColor:
+                            DomlyPalette.foreground(const Color(0xFFCF7548)),
                       ),
                       child: Text(
                         'Детали'.tr(),
@@ -5327,14 +5469,16 @@ class _FigmaPrimaryHomeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return SizedBox(
       width: double.infinity,
       height: 48,
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFC96A4A),
-          foregroundColor: Colors.white,
+          backgroundColor: DomlyPalette.surface(const Color(0xFFC96A4A)),
+          foregroundColor: DomlyPalette.foreground(Colors.white),
           elevation: 6,
           shadowColor: const Color(0x55C96A4A),
           padding: EdgeInsets.zero,
@@ -5351,11 +5495,12 @@ class _FigmaPrimaryHomeButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+            Icon(Icons.auto_awesome,
+                color: DomlyPalette.foreground(Colors.white), size: 20),
             const SizedBox(width: 10),
             Flexible(
               child: Text(
-                label,
+                label.tr(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
@@ -5383,14 +5528,17 @@ class _FigmaInfoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return SizedBox(
       height: 122,
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFFAFCFB),
+          color: DomlyPalette.surface(const Color(0xFFFAFCFB)),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFDEECE3)),
+          border:
+              Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
           boxShadow: const [
             BoxShadow(
               color: Color(0x12000000),
@@ -5402,12 +5550,14 @@ class _FigmaInfoTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: iconSize, color: const Color(0xFFCF7548)),
+            Icon(icon,
+                size: iconSize,
+                color: DomlyPalette.foreground(const Color(0xFFCF7548))),
             const SizedBox(height: 12),
             Text(
-              title,
-              style: const TextStyle(
-                color: Color(0xFF658170),
+              title.tr(),
+              style: TextStyle(
+                color: DomlyPalette.foreground(Color(0xFF658170)),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 height: 16 / 12,
@@ -5421,8 +5571,8 @@ class _FigmaInfoTile extends StatelessWidget {
                   value,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF2B4338),
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(Color(0xFF2B4338)),
                     fontSize: 17,
                     fontWeight: FontWeight.w600,
                     height: 21 / 17,
@@ -5451,16 +5601,18 @@ class _FigmaSecondaryHomeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return SizedBox(
       width: double.infinity,
       height: 46,
       child: OutlinedButton.icon(
         onPressed: onPressed,
         icon: Icon(icon, size: 20),
-        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        label: Text(label.tr(), maxLines: 1, overflow: TextOverflow.ellipsis),
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFFC96A4A),
-          side: const BorderSide(color: Color(0x80C96A4A)),
+          foregroundColor: DomlyPalette.foreground(const Color(0xFFC96A4A)),
+          side: BorderSide(color: DomlyPalette.border(Color(0x80C96A4A))),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
@@ -5483,6 +5635,8 @@ class _FigmaUsagePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final icon = text.toLowerCase().contains('использ')
         ? Icons.check_circle_outline
         : Icons.schedule_outlined;
@@ -5494,9 +5648,10 @@ class _FigmaUsagePill extends StatelessWidget {
           alignment: Alignment.center,
           padding: EdgeInsets.symmetric(horizontal: isCompact ? 6 : 10),
           decoration: BoxDecoration(
-            color: const Color(0xFFF8E7DD),
+            color: DomlyPalette.surface(const Color(0xFFF8E7DD)),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0x80CF7548)),
+            border:
+                Border.all(color: DomlyPalette.border(const Color(0x80CF7548))),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -5504,7 +5659,7 @@ class _FigmaUsagePill extends StatelessWidget {
               Icon(
                 icon,
                 size: isCompact ? 15 : 18,
-                color: const Color(0xFF4AAA62),
+                color: DomlyPalette.foreground(const Color(0xFF4AAA62)),
               ),
               SizedBox(width: isCompact ? 4 : 7),
               Flexible(
@@ -5514,7 +5669,7 @@ class _FigmaUsagePill extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: const Color(0xFF4AAA62),
+                    color: DomlyPalette.foreground(const Color(0xFF4AAA62)),
                     fontSize: isCompact ? 11 : 13,
                     fontWeight: FontWeight.w600,
                     height: isCompact ? 14 / 11 : 16 / 13,
@@ -5544,11 +5699,13 @@ class _FigmaHomeAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Semantics(
       button: true,
       label: label,
       child: Material(
-        color: Colors.transparent,
+        color: DomlyPalette.surface(Colors.transparent),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(18),
@@ -5565,9 +5722,10 @@ class _FigmaHomeAction extends StatelessWidget {
                   13,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFAFCFB),
+                  color: DomlyPalette.surface(const Color(0xFFFAFCFB)),
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFDEECE3)),
+                  border: Border.all(
+                      color: DomlyPalette.border(const Color(0xFFDEECE3))),
                   boxShadow: const [
                     BoxShadow(
                       color: Color(0x14000000),
@@ -5582,13 +5740,13 @@ class _FigmaHomeAction extends StatelessWidget {
                       width: iconBox,
                       height: iconBox,
                       alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF54B85F),
+                      decoration: BoxDecoration(
+                        color: DomlyPalette.surface(Color(0xFF54B85F)),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         icon,
-                        color: Colors.white,
+                        color: DomlyPalette.foreground(Colors.white),
                         size: isCompact ? 24 : 27,
                       ),
                     ),
@@ -5605,11 +5763,12 @@ class _FigmaHomeAction extends StatelessWidget {
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                label,
+                                label.tr(),
                                 softWrap: false,
                                 maxLines: 1,
                                 style: TextStyle(
-                                  color: const Color(0xFF143E21),
+                                  color: DomlyPalette.foreground(
+                                      const Color(0xFF143E21)),
                                   fontSize: isCompact ? 13 : 15,
                                   fontWeight: FontWeight.w700,
                                   height: isCompact ? 16 / 13 : 19 / 15,
@@ -5623,7 +5782,8 @@ class _FigmaHomeAction extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: const Color(0xFF658170),
+                              color: DomlyPalette.foreground(
+                                  const Color(0xFF658170)),
                               fontSize: isCompact ? 10 : 11,
                               fontWeight: FontWeight.w500,
                               height: isCompact ? 12 / 10 : 14 / 11,
@@ -5633,9 +5793,9 @@ class _FigmaHomeAction extends StatelessWidget {
                       ),
                     ),
                     if (!isCompact)
-                      const Icon(
+                      Icon(
                         Icons.chevron_right,
-                        color: Color(0xFF658170),
+                        color: DomlyPalette.foreground(Color(0xFF658170)),
                         size: 23,
                       ),
                   ],
@@ -5674,6 +5834,8 @@ class _FigmaClientBottomNavState extends State<_FigmaClientBottomNav> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<int>(
       stream: _unread,
       initialData: 0,
@@ -5695,9 +5857,10 @@ class _FigmaClientBottomNavState extends State<_FigmaClientBottomNav> {
                 height: 66,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: DomlyPalette.surface(Colors.white),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFDEECE3)),
+                  border: Border.all(
+                      color: DomlyPalette.border(const Color(0xFFDEECE3))),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -5774,6 +5937,8 @@ class _FigmaNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1),
@@ -5782,7 +5947,8 @@ class _FigmaNavItem extends StatelessWidget {
           onTap: onTap,
           child: Container(
             decoration: BoxDecoration(
-              color: selected ? const Color(0x61EEB09A) : Colors.transparent,
+              color: DomlyPalette.surface(
+                  selected ? const Color(0x61EEB09A) : Colors.transparent),
               borderRadius: BorderRadius.circular(16),
               boxShadow: selected
                   ? [
@@ -5801,16 +5967,19 @@ class _FigmaNavItem extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(icon, size: 20, color: const Color(0xFFCF7548)),
+                      Icon(icon,
+                          size: 20,
+                          color:
+                              DomlyPalette.foreground(const Color(0xFFCF7548))),
                       const SizedBox(height: 3),
                       Text(
-                        label,
+                        label.tr(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: selected
+                          color: DomlyPalette.foreground(selected
                               ? const Color(0xFF2B4338)
-                              : const Color(0xFF658170),
+                              : const Color(0xFF658170)),
                           fontSize: 9,
                           fontWeight:
                               selected ? FontWeight.w600 : FontWeight.w500,
@@ -5842,19 +6011,22 @@ class _FigmaNavBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFFD32F2F),
+        color: DomlyPalette.surface(const Color(0xFFD32F2F)),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white, width: 1.2),
+        border:
+            Border.all(color: DomlyPalette.border(Colors.white), width: 1.2),
       ),
       child: Text(
         count > 99 ? '99+' : '$count',
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: DomlyPalette.foreground(Colors.white),
           fontSize: 9,
           fontWeight: FontWeight.w700,
           height: 1,
@@ -6256,11 +6428,13 @@ class _BookingSheetState extends State<_BookingSheet> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return FractionallySizedBox(
       heightFactor: 0.92,
       child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          color: DomlyPalette.surface(Colors.white),
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: SafeArea(
@@ -6271,7 +6445,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                 height: 4,
                 margin: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: DomlyColors.border,
+                  color: DomlyPalette.surface(DomlyColors.border),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -6286,7 +6460,8 @@ class _BookingSheetState extends State<_BookingSheet> {
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -6294,7 +6469,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                         'Выберите день и доступное окно для уборки.'.tr(),
                         style: TextStyle(
                           fontSize: 14,
-                          color: DomlyColors.muted,
+                          color: DomlyPalette.foreground(DomlyColors.muted),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -6304,17 +6479,22 @@ class _BookingSheetState extends State<_BookingSheet> {
                             'Доступно'.tr(),
                             style: TextStyle(
                               fontSize: 13,
-                              color: DomlyColors.buttonPrimary,
+                              color: DomlyPalette.foreground(
+                                  DomlyColors.buttonPrimary),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            '${_pendingScheduleSelections(widget.subscription)} уборок'
-                                .tr(),
-                            style: const TextStyle(
+                            "{p0} уборок".tr(params: {
+                              'p0': (_pendingScheduleSelections(
+                                      widget.subscription))
+                                  .toString()
+                            }),
+                            style: TextStyle(
                               fontSize: 16,
-                              color: DomlyColors.foreground,
+                              color: DomlyPalette.foreground(
+                                  DomlyColors.foreground),
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -6327,7 +6507,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                         'День'.tr(),
                         style: TextStyle(
                           fontSize: 12,
-                          color: DomlyColors.muted,
+                          color: DomlyPalette.foreground(DomlyColors.muted),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -6345,7 +6525,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                         'Время'.tr(),
                         style: TextStyle(
                           fontSize: 12,
-                          color: DomlyColors.muted,
+                          color: DomlyPalette.foreground(DomlyColors.muted),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -6355,7 +6535,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                               .tr(),
                           style: TextStyle(
                             fontSize: 12,
-                            color: DomlyColors.muted,
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                           ),
                         )
                       else if (_loadingTimeSlots)
@@ -6369,7 +6549,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                               .tr(),
                           style: TextStyle(
                             fontSize: 12,
-                            color: DomlyColors.muted,
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                           ),
                         )
                       else
@@ -6390,16 +6570,15 @@ class _BookingSheetState extends State<_BookingSheet> {
                                     vertical: 10,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: selected
-                                        ? DomlyColors.primary.withValues(
-                                            alpha: 0.10,
-                                          )
-                                        : DomlyColors.backgroundSoft,
+                                    color: DomlyPalette.surface(selected
+                                        ? DomlyColors.primary
+                                            .withValues(alpha: 0.10)
+                                        : DomlyColors.backgroundSoft),
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: selected
+                                      color: DomlyPalette.border(selected
                                           ? DomlyColors.primary
-                                          : DomlyColors.border,
+                                          : DomlyColors.border),
                                       width: selected ? 1.5 : 1,
                                     ),
                                   ),
@@ -6408,9 +6587,9 @@ class _BookingSheetState extends State<_BookingSheet> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: selected
+                                      color: DomlyPalette.foreground(selected
                                           ? DomlyColors.primary
-                                          : DomlyColors.foreground,
+                                          : DomlyColors.foreground),
                                     ),
                                   ),
                                 ),
@@ -6425,7 +6604,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                         'Доступ к квартире'.tr(),
                         style: TextStyle(
                           fontSize: 12,
-                          color: DomlyColors.muted,
+                          color: DomlyPalette.foreground(DomlyColors.muted),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -6433,17 +6612,18 @@ class _BookingSheetState extends State<_BookingSheet> {
                         initialValue: _accessMethod,
                         decoration: InputDecoration(
                           filled: true,
-                          fillColor: DomlyColors.backgroundSoft,
+                          fillColor:
+                              DomlyPalette.surface(DomlyColors.backgroundSoft),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(
-                              color: DomlyColors.border,
+                            borderSide: BorderSide(
+                              color: DomlyPalette.border(DomlyColors.border),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(
-                              color: DomlyColors.border,
+                            borderSide: BorderSide(
+                              color: DomlyPalette.border(DomlyColors.border),
                             ),
                           ),
                         ),
@@ -6467,7 +6647,8 @@ class _BookingSheetState extends State<_BookingSheet> {
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
                           height: 1.1,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -6478,9 +6659,11 @@ class _BookingSheetState extends State<_BookingSheet> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: DomlyColors.backgroundSoft,
+                            color: DomlyPalette.surface(
+                                DomlyColors.backgroundSoft),
                             borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: DomlyColors.border),
+                            border: Border.all(
+                                color: DomlyPalette.border(DomlyColors.border)),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -6490,16 +6673,18 @@ class _BookingSheetState extends State<_BookingSheet> {
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
-                                  color: DomlyColors.foreground,
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.foreground),
                                 ),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 _formatMoney(_billableAddonTotal()),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w800,
-                                  color: DomlyColors.foreground,
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.foreground),
                                 ),
                               ),
                               if (_hasSeparatePaymentAddons()) ...[
@@ -6509,7 +6694,8 @@ class _BookingSheetState extends State<_BookingSheet> {
                                       .tr(),
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: DomlyColors.muted,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.muted),
                                   ),
                                 ),
                               ],
@@ -6769,7 +6955,7 @@ class _BookingSheetState extends State<_BookingSheet> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F7F2),
+        color: DomlyPalette.surface(const Color(0xFFF0F7F2)),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
@@ -6810,10 +6996,11 @@ class _BookingSheetState extends State<_BookingSheet> {
                             group.label,
                             maxLines: group.note == null ? 1 : 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w500,
-                              color: DomlyColors.foreground,
+                              color: DomlyPalette.foreground(
+                                  DomlyColors.foreground),
                             ),
                           ),
                           if (group.note != null) ...[
@@ -6822,9 +7009,10 @@ class _BookingSheetState extends State<_BookingSheet> {
                               group.note!,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
-                                color: DomlyColors.muted,
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                               ),
                             ),
                           ],
@@ -6839,17 +7027,17 @@ class _BookingSheetState extends State<_BookingSheet> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: DomlyColors.buttonPrimary.withValues(
-                            alpha: 0.10,
-                          ),
+                          color: DomlyPalette.surface(DomlyColors.buttonPrimary
+                              .withValues(alpha: 0.10)),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           '$selectedCount',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                       ),
@@ -6857,7 +7045,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                     const SizedBox(width: 10),
                     Icon(
                       expanded ? Icons.expand_less : Icons.expand_more,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                     ),
                   ],
                 ),
@@ -6889,9 +7077,9 @@ class _BookingSheetState extends State<_BookingSheet> {
     final isSeparate = item.separatePayment || item.key == 'carpet_cleaning';
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
@@ -6900,7 +7088,7 @@ class _BookingSheetState extends State<_BookingSheet> {
           SizedBox(
             width: 28,
             child: Material(
-              color: DomlyColors.backgroundSoft,
+              color: DomlyPalette.surface(DomlyColors.backgroundSoft),
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
                 onTap: () => _showAddonInfo(
@@ -6911,12 +7099,12 @@ class _BookingSheetState extends State<_BookingSheet> {
                   features: item.features,
                 ),
                 borderRadius: BorderRadius.circular(8),
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.all(6),
                   child: Icon(
                     Icons.info_outline,
                     size: 16,
-                    color: DomlyColors.buttonPrimary,
+                    color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
                   ),
                 ),
               ),
@@ -6929,19 +7117,19 @@ class _BookingSheetState extends State<_BookingSheet> {
               children: [
                 Text(
                   item.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
                 if (item.note != null) ...[
                   const SizedBox(height: 4),
                   Text(
                     item.note!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                     ),
                   ),
                 ],
@@ -6954,7 +7142,8 @@ class _BookingSheetState extends State<_BookingSheet> {
                           : _formatMoney(unitPrice),
                   style: TextStyle(
                     fontSize: 12,
-                    color: isSeparate ? DomlyColors.primary : DomlyColors.muted,
+                    color: DomlyPalette.foreground(
+                        isSeparate ? DomlyColors.primary : DomlyColors.muted),
                     fontWeight: isSeparate ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
@@ -6978,8 +7167,9 @@ class _BookingSheetState extends State<_BookingSheet> {
                     ? null
                     : () =>
                         _changeAddonQuantity(item.key, quantity > 0 ? 0 : 1),
-                foregroundColor:
-                    quantity > 0 ? DomlyColors.primary : DomlyColors.foreground,
+                foregroundColor: DomlyPalette.foreground(quantity > 0
+                    ? DomlyColors.primary
+                    : DomlyColors.foreground),
                 label: quantity > 0 ? 'Убрать' : 'Добавить',
               ),
             ),
@@ -6996,9 +7186,9 @@ class _BookingSheetState extends State<_BookingSheet> {
     return Container(
       height: 42,
       decoration: BoxDecoration(
-        color: DomlyColors.backgroundSoft,
+        color: DomlyPalette.surface(DomlyColors.backgroundSoft),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -7009,10 +7199,10 @@ class _BookingSheetState extends State<_BookingSheet> {
           ),
           Text(
             '$quantity',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           IconButton(

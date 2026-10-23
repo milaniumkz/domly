@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 
@@ -35,6 +36,8 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _profileStream,
       builder: (context, profileSnap) {
@@ -58,23 +61,22 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
         final profile = profileSnap.data ?? <String, dynamic>{};
         final name = (profile['name'] ?? 'Исполнитель').toString();
         final monthlyEarnings = (profile['monthlyEarnings'] ?? 0).toString();
-        final currentBalance = ((profile['currentWalletBalance'] ?? 0) as num)
-            .toInt();
-        final totalWithdrawn = ((profile['totalWithdrawn'] ?? 0) as num)
-            .toInt();
+        final currentBalance =
+            ((profile['currentWalletBalance'] ?? 0) as num).toInt();
+        final totalWithdrawn =
+            ((profile['totalWithdrawn'] ?? 0) as num).toInt();
         final availableWithdrawal =
             ((profile['availableWithdrawalAmount'] ?? 0) as num).toInt();
-        final statusLabel =
-            (profile['cleanerStatusLabel'] ??
-                    _levelLabel((profile['jobsCount'] ?? 0) as num))
-                .toString();
-        final statusProgressText = (profile['cleanerStatusProgressText'] ?? '')
+        final statusLabel = (profile['cleanerStatusLabel'] ??
+                _levelLabel((profile['jobsCount'] ?? 0) as num))
             .toString();
+        final statusProgressText =
+            (profile['cleanerStatusProgressText'] ?? '').toString();
         final statusProgress =
             ((profile['cleanerStatusProgress'] as num?)?.toDouble() ?? 0).clamp(
-              0.0,
-              1.0,
-            );
+          0.0,
+          1.0,
+        );
         final hasServiceAreas = cleanerHasServiceAreas(profile);
 
         return StreamBuilder<List<Map<String, dynamic>>>(
@@ -168,24 +170,22 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                         shiftsSnap.data ?? <Map<String, dynamic>>[];
                     final payouts =
                         payoutsSnap.data ?? <Map<String, dynamic>>[];
-                    final pendingWithdrawal = payouts
-                        .where((payout) {
-                          final status = (payout['status'] ?? '')
-                              .toString()
-                              .trim()
-                              .toLowerCase();
-                          return status == 'pending' ||
-                              status == 'requested' ||
-                              status == 'processing' ||
-                              status == 'in_review';
-                        })
-                        .fold<int>(
-                          0,
-                          (total, payout) =>
-                              total +
-                              ((payout['net'] ?? payout['amount'] ?? 0) as num)
-                                  .toInt(),
-                        );
+                    final pendingWithdrawal = payouts.where((payout) {
+                      final status = (payout['status'] ?? '')
+                          .toString()
+                          .trim()
+                          .toLowerCase();
+                      return status == 'pending' ||
+                          status == 'requested' ||
+                          status == 'processing' ||
+                          status == 'in_review';
+                    }).fold<int>(
+                      0,
+                      (total, payout) =>
+                          total +
+                          ((payout['net'] ?? payout['amount'] ?? 0) as num)
+                              .toInt(),
+                    );
                     final displayedBalance =
                         (currentBalance - pendingWithdrawal).clamp(0, 1 << 31);
                     final today = DateTime.now();
@@ -200,24 +200,23 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                     final startDayAfterTomorrow = startTomorrow.add(
                       const Duration(days: 1),
                     );
-                    final futureJobs =
-                        allSlots.where((slot) {
-                          final date = _slotDate(slot);
-                          final normalizedDate = DateTime(
-                            date.year,
-                            date.month,
-                            date.day,
-                          );
-                          final status = (slot['status'] ?? '')
-                              .toString()
-                              .toLowerCase();
-                          return !normalizedDate.isBefore(startToday) &&
-                              status != 'completed' &&
-                              status != 'cancelled' &&
-                              status != 'canceled';
-                        }).toList()..sort(
-                          (a, b) => _slotDate(a).compareTo(_slotDate(b)),
-                        );
+                    final futureJobs = allSlots.where((slot) {
+                      final date = _slotDate(slot);
+                      final normalizedDate = DateTime(
+                        date.year,
+                        date.month,
+                        date.day,
+                      );
+                      final status =
+                          (slot['status'] ?? '').toString().toLowerCase();
+                      return !normalizedDate.isBefore(startToday) &&
+                          status != 'completed' &&
+                          status != 'cancelled' &&
+                          status != 'canceled';
+                    }).toList()
+                      ..sort(
+                        (a, b) => _slotDate(a).compareTo(_slotDate(b)),
+                      );
                     final jobs = futureJobs.where((slot) {
                       final date = _slotDate(slot);
                       final normalizedDate = DateTime(
@@ -286,7 +285,9 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                                                     'Добро пожаловать'.tr(),
                                                     style: TextStyle(
                                                       fontSize: 12,
-                                                      color: Color(0xCCFFFFFF),
+                                                      color: DomlyPalette
+                                                          .foreground(Color(
+                                                              0xCCFFFFFF)),
                                                     ),
                                                   ),
                                                   const SizedBox(height: 2),
@@ -295,11 +296,13 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                                                     maxLines: 2,
                                                     overflow:
                                                         TextOverflow.ellipsis,
-                                                    style: const TextStyle(
+                                                    style: TextStyle(
                                                       fontSize: 16,
                                                       fontWeight:
                                                           FontWeight.w700,
-                                                      color: Colors.white,
+                                                      color: DomlyPalette
+                                                          .foreground(
+                                                              Colors.white),
                                                     ),
                                                   ),
                                                   const SizedBox(height: 6),
@@ -316,24 +319,28 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                                                         mainAxisSize:
                                                             MainAxisSize.min,
                                                         children: [
-                                                          const Icon(
+                                                          Icon(
                                                             Icons.star,
                                                             size: 16,
-                                                            color: Colors.white,
+                                                            color: DomlyPalette
+                                                                .foreground(
+                                                                    Colors
+                                                                        .white),
                                                           ),
                                                           const SizedBox(
                                                             width: 4,
                                                           ),
                                                           Text(
                                                             '${profile['rating'] ?? 0}',
-                                                            style:
-                                                                const TextStyle(
-                                                                  color: Colors
-                                                                      .white,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                ),
+                                                            style: TextStyle(
+                                                              color: DomlyPalette
+                                                                  .foreground(
+                                                                      Colors
+                                                                          .white),
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                            ),
                                                           ),
                                                         ],
                                                       ),
@@ -344,30 +351,31 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                                                     const SizedBox(height: 4),
                                                     Text(
                                                       statusProgressText,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                         fontSize: 12,
-                                                        color: Color(
-                                                          0xD9FFFFFF,
-                                                        ),
+                                                        color: DomlyPalette
+                                                            .foreground(Color(
+                                                                0xD9FFFFFF)),
                                                       ),
                                                     ),
                                                     const SizedBox(height: 6),
                                                     ClipRRect(
                                                       borderRadius:
                                                           BorderRadius.circular(
-                                                            999,
-                                                          ),
-                                                      child: LinearProgressIndicator(
+                                                        999,
+                                                      ),
+                                                      child:
+                                                          LinearProgressIndicator(
                                                         minHeight: 6,
                                                         value: statusProgress,
                                                         backgroundColor:
-                                                            const Color(
-                                                              0x33FFFFFF,
-                                                            ),
+                                                            DomlyPalette.surface(
+                                                                const Color(
+                                                                    0x33FFFFFF)),
                                                         valueColor:
                                                             const AlwaysStoppedAnimation<
-                                                              Color
-                                                            >(Colors.white),
+                                                                    Color>(
+                                                                Colors.white),
                                                       ),
                                                     ),
                                                   ],
@@ -386,9 +394,9 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                                                   icon: Icons.person_outline,
                                                   onPressed: () =>
                                                       Navigator.pushNamed(
-                                                        context,
-                                                        '/cleaner/profile',
-                                                      ),
+                                                    context,
+                                                    '/cleaner/profile',
+                                                  ),
                                                 ),
                                               ],
                                             ),
@@ -421,9 +429,10 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                                                                   .tr(),
                                                               style: TextStyle(
                                                                 fontSize: 12,
-                                                                color:
-                                                                    DomlyColors
-                                                                        .muted,
+                                                                color: DomlyPalette
+                                                                    .foreground(
+                                                                        DomlyColors
+                                                                            .muted),
                                                               ),
                                                             ),
                                                             const SizedBox(
@@ -431,55 +440,70 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                                                             ),
                                                             Text(
                                                               '${profile['todayEarnings'] ?? 0} ₸',
-                                                              style: const TextStyle(
+                                                              style: TextStyle(
                                                                 fontSize: 18,
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w700,
-                                                                color:
-                                                                    DomlyColors
-                                                                        .primary,
+                                                                color: DomlyPalette
+                                                                    .foreground(
+                                                                        DomlyColors
+                                                                            .primary),
                                                               ),
                                                             ),
                                                             const SizedBox(
                                                               height: 4,
                                                             ),
                                                             Text(
-                                                              'Баланс: ${displayedBalance.toInt()} ₸'
-                                                                  .tr(),
-                                                              style: const TextStyle(
+                                                              "Баланс: {p0} ₸"
+                                                                  .tr(params: {
+                                                                'p0': (displayedBalance
+                                                                        .toInt())
+                                                                    .toString()
+                                                              }),
+                                                              style: TextStyle(
                                                                 fontSize: 12,
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w600,
-                                                                color: DomlyColors
-                                                                    .foreground,
+                                                                color: DomlyPalette
+                                                                    .foreground(
+                                                                        DomlyColors
+                                                                            .foreground),
                                                               ),
                                                             ),
                                                             const SizedBox(
                                                               height: 3,
                                                             ),
                                                             Text(
-                                                              'Выведено: $totalWithdrawn ₸'
-                                                                  .tr(),
-                                                              style: const TextStyle(
+                                                              "Выведено: {p0} ₸"
+                                                                  .tr(params: {
+                                                                'p0': (totalWithdrawn)
+                                                                    .toString()
+                                                              }),
+                                                              style: TextStyle(
                                                                 fontSize: 12,
-                                                                color:
-                                                                    DomlyColors
-                                                                        .muted,
+                                                                color: DomlyPalette
+                                                                    .foreground(
+                                                                        DomlyColors
+                                                                            .muted),
                                                               ),
                                                             ),
                                                             const SizedBox(
                                                               height: 3,
                                                             ),
                                                             Text(
-                                                              'Доступно к выводу: $availableWithdrawal ₸'
-                                                                  .tr(),
-                                                              style: const TextStyle(
+                                                              "Доступно к выводу: {p0} ₸"
+                                                                  .tr(params: {
+                                                                'p0': (availableWithdrawal)
+                                                                    .toString()
+                                                              }),
+                                                              style: TextStyle(
                                                                 fontSize: 12,
-                                                                color:
-                                                                    DomlyColors
-                                                                        .muted,
+                                                                color: DomlyPalette
+                                                                    .foreground(
+                                                                        DomlyColors
+                                                                            .muted),
                                                               ),
                                                             ),
                                                           ],
@@ -724,23 +748,25 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: DomlyColors.backgroundSoft,
+        color: DomlyPalette.surface(DomlyColors.backgroundSoft),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+            label.tr(),
+            style: TextStyle(
+                fontSize: 12,
+                color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
         ],
@@ -755,17 +781,19 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
         children: [
           Expanded(
             child: Text(
-              title,
-              style: const TextStyle(
+              title.tr(),
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
               ),
             ),
           ),
           Text(
-            '$count уборок'.tr(),
-            style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+            "{p0} уборок".tr(params: {'p0': (count).toString()}),
+            style: TextStyle(
+                fontSize: 12,
+                color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
         ],
       ),
@@ -794,17 +822,19 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              title,
-              style: const TextStyle(
+              title.tr(),
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              subtitle,
-              style: const TextStyle(fontSize: 12, color: DomlyColors.muted),
+              subtitle.tr(),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           ],
         ),
@@ -813,13 +843,12 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
   }
 
   Widget _jobCard(Map<String, dynamic> job) {
-    final orderId =
-        (job['scheduleSlotId'] ??
-                job['slotId'] ??
-                job['id'] ??
-                job['sourceOrderId'] ??
-                job['customerOrderId'])
-            .toString();
+    final orderId = (job['scheduleSlotId'] ??
+            job['slotId'] ??
+            job['id'] ??
+            job['sourceOrderId'] ??
+            job['customerOrderId'])
+        .toString();
     final chatId = (job['chatId'] ?? orderId).toString();
 
     return DomlyCard(
@@ -832,10 +861,10 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
               Expanded(
                 child: Text(
                   '${_slotDateLabel(job)} · ${(job['time'] ?? '—').toString()}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
               ),
@@ -862,21 +891,24 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
           const SizedBox(height: 4),
           Text(
             (job['customerName'] ?? job['client'] ?? 'Клиент').toString(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           const SizedBox(height: 6),
           Text(
             (job['address'] ?? '').toString(),
-            style: const TextStyle(color: DomlyColors.muted),
+            style: TextStyle(color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
           if (((job['area'] ?? 0) as num).toInt() > 0)
             Text(
-              'Площадь: ${((job['area'] ?? 0) as num).toInt()} м²',
-              style: const TextStyle(color: DomlyColors.muted),
+              "Площадь: {p0} м²".tr(params: {
+                'p0': (((job['area'] ?? 0) as num).toInt()).toString()
+              }),
+              style:
+                  TextStyle(color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           if (_shouldShowResidentialComplex(
             (job['address'] ?? '').toString(),
@@ -886,23 +918,31 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
               _formatResidentialComplex(
                 (job['residentialComplex'] ?? '').toString(),
               ),
-              style: const TextStyle(color: DomlyColors.muted),
+              style:
+                  TextStyle(color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           if ((job['customerPhone'] ?? '').toString().isNotEmpty)
             Text(
-              'Телефон: ${(job['customerPhone'] ?? '').toString()}',
-              style: const TextStyle(color: DomlyColors.muted),
+              "Телефон: {p0}".tr(params: {
+                'p0': ((job['customerPhone'] ?? '').toString()).toString()
+              }),
+              style:
+                  TextStyle(color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           if ((job['entrance'] ?? '').toString().isNotEmpty ||
               (job['apartment'] ?? '').toString().isNotEmpty)
             Text(
-              'Подъезд: ${(job['entrance'] ?? '—')} • Квартира: ${(job['apartment'] ?? '—')}',
-              style: const TextStyle(color: DomlyColors.muted),
+              "Подъезд: {p0} • Квартира: {p1}".tr(params: {
+                'p0': ((job['entrance'] ?? '—')).toString(),
+                'p1': ((job['apartment'] ?? '—')).toString()
+              }),
+              style:
+                  TextStyle(color: DomlyPalette.foreground(DomlyColors.muted)),
             ),
           const SizedBox(height: 4),
           Text(
             (job['package'] ?? '').toString(),
-            style: const TextStyle(color: DomlyColors.muted),
+            style: TextStyle(color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
           const SizedBox(height: 6),
           Column(
@@ -956,18 +996,18 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
       decoration: BoxDecoration(
-        color: DomlyColors.backgroundSoft,
+        color: DomlyPalette.surface(DomlyColors.backgroundSoft),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        label,
+        label.tr(),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.center,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: DomlyColors.foreground,
+          color: DomlyPalette.foreground(DomlyColors.foreground),
         ),
       ),
     );
@@ -1022,8 +1062,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
       }
     }
     final scopeType = (job['scopeType'] ?? '').toString();
-    final looksLikeScheduleSlot =
-        scopeType == 'schedule_slot' ||
+    final looksLikeScheduleSlot = scopeType == 'schedule_slot' ||
         job.containsKey('scheduledDateKey') ||
         job.containsKey('scheduledFor');
     if (looksLikeScheduleSlot) {
@@ -1069,7 +1108,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
       'ноября',
       'декабря',
     ];
-    return '${date.day} ${months[date.month - 1]}';
+    return '${date.day} ${months[date.month - 1].tr()}';
   }
 
   String _levelLabel(num jobsCount) {

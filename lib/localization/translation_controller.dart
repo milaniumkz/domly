@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/backend_api_service.dart';
 import 'builtin_translations.dart';
+import 'kazakh_translations.dart';
 import 'default_translation_sources.dart';
 
 class TranslationController extends ChangeNotifier {
@@ -62,12 +63,18 @@ class TranslationController extends ChangeNotifier {
               : translationKey(entry.source);
           nextEntries[key] = entry;
         }
+        final changed = nextEntries.length != _entries.length ||
+            nextEntries.entries.any((item) {
+              final old = _entries[item.key];
+              return old == null ||
+                  old.source != item.value.source ||
+                  !mapEquals(old.locales, item.value.locales);
+            });
         _entries = nextEntries;
         _isReady = true;
-        notifyListeners();
+        if (changed) notifyListeners();
       } catch (_) {
         _isReady = true;
-        notifyListeners();
       }
     }
 
@@ -114,9 +121,12 @@ class TranslationController extends ChangeNotifier {
     final entry = _entries[key];
     final translated = entry?.locales[_localeCode] ??
         kBuiltinTranslations[normalized]?[_localeCode] ??
+        (_localeCode == 'kk'
+            ? kKazakhTranslations[normalized] ?? _translateTemplate(normalized)
+            : null) ??
         entry?.localized(_localeCode, fallbackLocale) ??
         normalized;
-    return _applyParams(translated, params);
+    return _applyParams(translated == normalized ? source : translated, params);
   }
 
   static String translateSource(String source, {Map<String, String>? params}) {
@@ -136,7 +146,7 @@ class TranslationController extends ChangeNotifier {
       if (localizedMap is Map) {
         final exact = localizedMap[locale];
         if (exact is String && exact.trim().isNotEmpty) {
-          return exact.trim();
+          return translateSource(exact.trim());
         }
         final ru = localizedMap['ru'];
         if (ru is String && ru.trim().isNotEmpty) {
@@ -196,8 +206,36 @@ class TranslationController extends ChangeNotifier {
     return result;
   }
 
-  static Map<String, _TranslationEntry> _defaultEntries() {
+  static String? _translateTemplate(String source) {
+    for (final template in _templates) {
+      final match = template.pattern.firstMatch(source);
+      if (match == null) continue;
+      var value = template.translation;
+      for (var i = 0; i < template.parameters.length; i++) {
+        value = value.replaceAll(template.parameters[i], match.group(i + 1)!);
+      }
+      return value;
+    }
+    return null;
+  }
+
+  static final _templates = kKazakhTranslations.entries
+      .where((entry) => RegExp(r'\{p\d+\}').hasMatch(entry.key))
+      .map((entry) => _TranslationTemplate(entry.key, entry.value))
+      .toList()
+    ..sort((a, b) => b.literalLength.compareTo(a.literalLength));
+
+  static final Map<String, _TranslationEntry> _bundledEntries =
+      _buildDefaultEntries();
+  static Map<String, _TranslationEntry> _defaultEntries() =>
+      Map.of(_bundledEntries);
+
+  static Map<String, _TranslationEntry> _buildDefaultEntries() {
     final entries = <String, _TranslationEntry>{};
+    kKazakhTranslations.forEach((source, value) {
+      entries[translationKey(source)] = _TranslationEntry(
+          source: source, locales: {'ru': source, 'kk': value});
+    });
     for (final rawSource in kDefaultTranslationSources) {
       final source = normalizeSource(rawSource);
       if (source.isEmpty) {
@@ -207,6 +245,8 @@ class TranslationController extends ChangeNotifier {
         source: source,
         locales: <String, String>{
           'ru': source,
+          if (kKazakhTranslations[source] != null)
+            'kk': kKazakhTranslations[source]!,
           ...?kBuiltinTranslations[source],
         },
       );
@@ -282,4 +322,21 @@ extension TranslationMapX on Map<String, dynamic> {
   String trValue(List<String> keys, {String fallback = ''}) {
     return TranslationController.localizedValue(this, keys, fallback: fallback);
   }
+}
+
+class _TranslationTemplate {
+  _TranslationTemplate(String source, this.translation)
+      : parameters = RegExp(r'\{p\d+\}')
+            .allMatches(source)
+            .map((m) => m.group(0)!)
+            .toList(),
+        literalLength = source.replaceAll(RegExp(r'\{p\d+\}'), '').length,
+        pattern = RegExp('^' +
+            source.splitMapJoin(RegExp(r'\{p\d+\}'),
+                onMatch: (_) => '(.{1,512}?)', onNonMatch: RegExp.escape) +
+            r'$');
+  final String translation;
+  final List<String> parameters;
+  final int literalLength;
+  final RegExp pattern;
 }

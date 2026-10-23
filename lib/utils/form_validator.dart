@@ -1,14 +1,17 @@
+import '../localization/translation_controller.dart';
+
 /// Client-side validation utilities
 /// Prevents bad data from reaching Firestore
 
 class ValidationResult {
   final bool isValid;
-  final String? error;
+  final String? _error;
+  String? get error => _error?.tr();
 
   const ValidationResult.valid()
       : isValid = true,
-        error = null;
-  const ValidationResult.invalid(String this.error) : isValid = false;
+        _error = null;
+  const ValidationResult.invalid(String this._error) : isValid = false;
 }
 
 class FormValidator {

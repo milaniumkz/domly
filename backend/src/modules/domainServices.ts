@@ -1,3 +1,4 @@
+import {translateKazakh,sendLocalizedPush} from '../localization';
 import {scheduleSignupFollowup, scheduleCheckoutFollowup} from './moonAi';
 import { Queryable } from '../domain/repositories/UnitOfWork';
 import { referralDiscount } from './referrals';
@@ -183,7 +184,7 @@ export class NotificationService {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (user_id, dedupe_key) DO NOTHING
        RETURNING *`,
-      [input.userId ?? null, input.role ?? null, input.titleRu, input.titleKk ?? null, input.bodyRu, input.bodyKk ?? null, input.targetType ?? null, input.targetId ?? null, input.dedupeKey ?? null],
+      [input.userId ?? null, input.role ?? null, input.titleRu, input.titleKk ?? translateKazakh(input.titleRu), input.bodyRu, input.bodyKk ?? translateKazakh(input.bodyRu), input.targetType ?? null, input.targetId ?? null, input.dedupeKey ?? null],
     )).rows);
     return { notification: row, created: Boolean(row) };
   }
@@ -199,18 +200,10 @@ export class NotificationService {
         )).rows;
         for (const user of users) await publishToUser(user.id, { type: 'notification', notification: row });
       }
-      const tokens = (await this.db.query<{ token: string }>(
-        input.userId
-          ? `SELECT token FROM device_tokens WHERE user_id=$1 AND enabled=TRUE`
-          : `SELECT dt.token FROM device_tokens dt JOIN app_users u ON u.id=dt.user_id WHERE u.role=$1 AND dt.enabled=TRUE`,
-        input.userId ? [input.userId] : [input.role],
-      )).rows.map((r: { token: string }) => r.token);
       const isCleanerOrderOffer = Boolean(input.userId && input.targetType === 'order_offer');
       if (!isCleanerOrderOffer) {
-        await this.fcm.send(tokens, input.titleRu, input.bodyRu, {
-          targetType: input.targetType ?? '',
-          targetId: input.targetId ?? '',
-          notificationId: row?.id ?? '',
+        await sendLocalizedPush(this.db,this.fcm,input,{
+          targetType: input.targetType ?? '',targetId: input.targetId ?? '',notificationId: row?.id ?? '',
         });
       }
       if (input.userId && input.targetType === 'order_offer') {

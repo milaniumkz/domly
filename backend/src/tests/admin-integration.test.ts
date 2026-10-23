@@ -61,7 +61,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       const address=await request('/addresses','POST',{city:'Астана',street:'Тәуелсіздік',house:'29/2',area:100},true);
       assert.equal(address.status,201);
       const addresses=await request('/addresses','GET',undefined,true);
-      assert.ok(addresses.json.data.some((item:any)=>item.id===address.json.data.id && item.house==='29/2'));
+      assert.ok(addresses.json.data.some((item:any)=>item.id===address.json.data.id && item.house==='29/2' && item.service_available===true));
     });
     await t.test('Russian and Kazakh searches find the same Astana address in the chosen language', async () => {
       const id=randomUUID(), house='29/2-'+id.slice(0,6);
@@ -71,6 +71,12 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal(result.status,200);
         assert.equal(result.json.data.suggestions.find((row:any)=>row.id===id)?.street,street);
       }
+      const exact=await request('/geo/connected-houses?id='+id);
+      assert.equal(exact.status,200);assert.equal(exact.json.data.length,1);
+      assert.equal(exact.json.data[0].status,'ACTIVE');
+      assert.ok(exact.json.data[0].address.includes(house));
+      assert.equal(exact.json.data[0].id,id);
+      assert.equal((await request('/geo/connected-houses?id=not-a-uuid')).status,400);
       await db.query('DELETE FROM connected_houses WHERE id=$1',[id]);
     });
     await t.test('priced add-ons keep a booking awaiting payment before cleaner search',async()=>{

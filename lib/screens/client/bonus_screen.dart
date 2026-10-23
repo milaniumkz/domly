@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -93,7 +94,7 @@ class _BonusScreenState extends State<BonusScreen> {
           title: Text(
             'Код пригласившего'.tr(),
             style: TextStyle(
-              color: _foreground,
+              color: DomlyPalette.foreground(_foreground),
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -104,18 +105,19 @@ class _BonusScreenState extends State<BonusScreen> {
             decoration: InputDecoration(
               hintText: 'DOMLY-XXXX',
               filled: true,
-              fillColor: _background,
+              fillColor: DomlyPalette.background(_background),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: _border),
+                borderSide: BorderSide(color: DomlyPalette.border(_border)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: _border),
+                borderSide: BorderSide(color: DomlyPalette.border(_border)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: _green, width: 1.4),
+                borderSide:
+                    BorderSide(color: DomlyPalette.border(_green), width: 1.4),
               ),
             ),
           ),
@@ -209,6 +211,8 @@ class _BonusScreenState extends State<BonusScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _data.customerProfileStream(),
       builder: (context, profileSnap) {
@@ -230,7 +234,7 @@ class _BonusScreenState extends State<BonusScreen> {
         }
         if (profileSnap.connectionState == ConnectionState.waiting &&
             !profileSnap.hasData) {
-          return const DomlyShell(
+          return DomlyShell(
             bottomNavigationBar: DomlyClientBottomNav(currentIndex: 2),
             child: SafeArea(
               child: Center(
@@ -239,7 +243,7 @@ class _BonusScreenState extends State<BonusScreen> {
                   height: 28,
                   child: CircularProgressIndicator(
                     strokeWidth: 2.4,
-                    color: _green,
+                    color: DomlyPalette.foreground(_green),
                   ),
                 ),
               ),
@@ -258,7 +262,7 @@ class _BonusScreenState extends State<BonusScreen> {
         return DomlyShell(
           bottomNavigationBar: const DomlyClientBottomNav(currentIndex: 2),
           child: ColoredBox(
-            color: _background,
+            color: DomlyPalette.background(_background),
             child: SafeArea(
               bottom: false,
               child: Center(
@@ -272,19 +276,19 @@ class _BonusScreenState extends State<BonusScreen> {
                         Row(
                           children: [
                             Material(
-                              color: Colors.white,
+                              color: DomlyPalette.surface(Colors.white),
                               borderRadius: BorderRadius.circular(12),
                               elevation: 4,
                               shadowColor: Colors.black.withValues(alpha: 0.12),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(12),
                                 onTap: () => Navigator.maybePop(context),
-                                child: const SizedBox(
+                                child: SizedBox(
                                   width: 36,
                                   height: 36,
                                   child: Icon(
                                     Icons.arrow_back,
-                                    color: _button,
+                                    color: DomlyPalette.foreground(_button),
                                     size: 20,
                                   ),
                                 ),
@@ -294,7 +298,7 @@ class _BonusScreenState extends State<BonusScreen> {
                             Text(
                               'Бонусы'.tr(),
                               style: TextStyle(
-                                color: _foreground,
+                                color: DomlyPalette.foreground(_foreground),
                                 fontSize: 20,
                                 fontWeight: FontWeight.w700,
                                 height: 27 / 20,
@@ -308,7 +312,7 @@ class _BonusScreenState extends State<BonusScreen> {
                           child: Text(
                             'Реферальная программа и ваши скидки'.tr(),
                             style: TextStyle(
-                              color: _muted,
+                              color: DomlyPalette.foreground(_muted),
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
                               height: 16 / 12,
@@ -388,13 +392,16 @@ class _BonusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: height,
       padding: const EdgeInsets.fromLTRB(27, 10, 27, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _BonusScreenState._border),
+        border:
+            Border.all(color: DomlyPalette.border(_BonusScreenState._border)),
       ),
       child: child,
     );
@@ -414,6 +421,8 @@ class _BonusBalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return _BonusCardWithInfo(
       height: 100,
       onTap: onTap,
@@ -425,7 +434,7 @@ class _BonusBalanceCard extends StatelessWidget {
           Text(
             'Ваш бонусный баланс'.tr(),
             style: TextStyle(
-              color: _BonusScreenState._foreground,
+              color: DomlyPalette.foreground(_BonusScreenState._foreground),
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -433,8 +442,8 @@ class _BonusBalanceCard extends StatelessWidget {
           const SizedBox(height: 3),
           Text(
             '$balance ₸',
-            style: const TextStyle(
-              color: _BonusScreenState._foreground,
+            style: TextStyle(
+              color: DomlyPalette.foreground(_BonusScreenState._foreground),
               fontSize: 20,
               fontWeight: FontWeight.w700,
             ),
@@ -443,7 +452,7 @@ class _BonusBalanceCard extends StatelessWidget {
           Text(
             'Реферальная программа активна'.tr(),
             style: TextStyle(
-              color: _BonusScreenState._muted,
+              color: DomlyPalette.foreground(_BonusScreenState._muted),
               fontSize: 12,
               fontWeight: FontWeight.w400,
             ),
@@ -469,6 +478,8 @@ class _ReferralCodeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final code = referralCode.trim().isEmpty
         ? (isGenerating ? 'Создание кода...' : 'Код создается')
         : referralCode.toUpperCase();
@@ -480,7 +491,7 @@ class _ReferralCodeCard extends StatelessWidget {
           Text(
             'Реферальный код'.tr(),
             style: TextStyle(
-              color: _BonusScreenState._foreground,
+              color: DomlyPalette.foreground(_BonusScreenState._foreground),
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -489,7 +500,7 @@ class _ReferralCodeCard extends StatelessWidget {
           Text(
             'Пригласите соседей'.tr(),
             style: TextStyle(
-              color: _BonusScreenState._muted,
+              color: DomlyPalette.foreground(_BonusScreenState._muted),
               fontSize: 12,
               fontWeight: FontWeight.w400,
             ),
@@ -499,8 +510,8 @@ class _ReferralCodeCard extends StatelessWidget {
             code,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: _BonusScreenState._foreground,
+            style: TextStyle(
+              color: DomlyPalette.foreground(_BonusScreenState._foreground),
               fontSize: 22,
               fontWeight: FontWeight.w700,
               height: 1.0,
@@ -545,6 +556,8 @@ class _TierDiscountCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return _BonusCardWithInfo(
       onTap: onTap,
       onInfo: onInfo,
@@ -555,7 +568,7 @@ class _TierDiscountCard extends StatelessWidget {
           Text(
             'Скидка по уровням'.tr(),
             style: TextStyle(
-              color: _BonusScreenState._foreground,
+              color: DomlyPalette.foreground(_BonusScreenState._foreground),
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -564,7 +577,7 @@ class _TierDiscountCard extends StatelessWidget {
           Text(
             'До следующего уровня 1 оплата'.tr(),
             style: TextStyle(
-              color: _BonusScreenState._muted,
+              color: DomlyPalette.foreground(_BonusScreenState._muted),
               fontSize: 12,
               fontWeight: FontWeight.w400,
             ),
@@ -577,14 +590,14 @@ class _TierDiscountCard extends StatelessWidget {
                 Container(
                   height: 12,
                   width: double.infinity,
-                  color: const Color(0xFFE5EFE8),
+                  color: DomlyPalette.surface(const Color(0xFFE5EFE8)),
                 ),
                 FractionallySizedBox(
                   widthFactor: progress <= 0 ? 0.56 : progress,
                   child: Container(
                     height: 12,
                     decoration: BoxDecoration(
-                      color: _BonusScreenState._green,
+                      color: DomlyPalette.surface(_BonusScreenState._green),
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
@@ -593,10 +606,10 @@ class _TierDiscountCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 15),
-          const Text(
+          Text(
             '3% / 7% / 10%',
             style: TextStyle(
-              color: _BonusScreenState._green,
+              color: DomlyPalette.foreground(_BonusScreenState._green),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -618,6 +631,8 @@ class _InvitedByCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final hasCode = referredByCode.trim().isNotEmpty;
     return _BonusCard(
       height: 164,
@@ -628,7 +643,7 @@ class _InvitedByCard extends StatelessWidget {
           Text(
             'Кто вас пригласил'.tr(),
             style: TextStyle(
-              color: _BonusScreenState._foreground,
+              color: DomlyPalette.foreground(_BonusScreenState._foreground),
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -636,8 +651,8 @@ class _InvitedByCard extends StatelessWidget {
           const SizedBox(height: 11),
           Text(
             hasCode ? 'Код указан' : 'Код не указан',
-            style: const TextStyle(
-              color: _BonusScreenState._muted,
+            style: TextStyle(
+              color: DomlyPalette.foreground(_BonusScreenState._muted),
               fontSize: 12,
               fontWeight: FontWeight.w400,
             ),
@@ -645,8 +660,8 @@ class _InvitedByCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             hasCode ? referredByCode.toUpperCase() : 'Код не указан',
-            style: const TextStyle(
-              color: _BonusScreenState._muted,
+            style: TextStyle(
+              color: DomlyPalette.foreground(_BonusScreenState._muted),
               fontSize: 14,
               fontWeight: FontWeight.w400,
             ),
@@ -655,7 +670,7 @@ class _InvitedByCard extends StatelessWidget {
           Text(
             'Можно указать только один раз'.tr(),
             style: TextStyle(
-              color: _BonusScreenState._muted,
+              color: DomlyPalette.foreground(_BonusScreenState._muted),
               fontSize: 12,
               fontWeight: FontWeight.w400,
             ),
@@ -683,6 +698,8 @@ class _BonusTransactionsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final visible = items.take(5).toList();
     return _BonusCard(
       height: visible.isEmpty ? 118 : (92 + visible.length * 54).toDouble(),
@@ -692,7 +709,7 @@ class _BonusTransactionsCard extends StatelessWidget {
           Text(
             'История бонусов'.tr(),
             style: TextStyle(
-              color: _BonusScreenState._foreground,
+              color: DomlyPalette.foreground(_BonusScreenState._foreground),
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
@@ -702,7 +719,7 @@ class _BonusTransactionsCard extends StatelessWidget {
             Text(
               'Пока нет начислений и списаний.'.tr(),
               style: TextStyle(
-                color: _BonusScreenState._muted,
+                color: DomlyPalette.foreground(_BonusScreenState._muted),
                 fontSize: 12,
                 height: 1.35,
               ),
@@ -722,6 +739,8 @@ class _BonusTransactionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final amount = (item['amount'] as num?)?.toInt() ?? 0;
     final positive = amount >= 0;
     final title = (item['title'] ?? (positive ? 'Начисление' : 'Списание'))
@@ -738,18 +757,18 @@ class _BonusTransactionRow extends StatelessWidget {
             height: 34,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: (positive
+              color: DomlyPalette.surface((positive
                       ? _BonusScreenState._green
                       : _BonusScreenState._button)
-                  .withValues(alpha: 0.14),
+                  .withValues(alpha: 0.14)),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               positive ? Icons.add : Icons.remove,
               size: 18,
-              color: positive
+              color: DomlyPalette.foreground(positive
                   ? _BonusScreenState._green
-                  : _BonusScreenState._button,
+                  : _BonusScreenState._button),
             ),
           ),
           const SizedBox(width: 10),
@@ -762,8 +781,9 @@ class _BonusTransactionRow extends StatelessWidget {
                       ? (positive ? 'Начисление' : 'Списание')
                       : title,
                   softWrap: true,
-                  style: const TextStyle(
-                    color: _BonusScreenState._foreground,
+                  style: TextStyle(
+                    color:
+                        DomlyPalette.foreground(_BonusScreenState._foreground),
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -772,8 +792,8 @@ class _BonusTransactionRow extends StatelessWidget {
                 Text(
                   reason.isEmpty ? _dateText(item['createdAt']) : reason,
                   softWrap: true,
-                  style: const TextStyle(
-                    color: _BonusScreenState._muted,
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(_BonusScreenState._muted),
                     fontSize: 11,
                     height: 1.25,
                   ),
@@ -785,9 +805,9 @@ class _BonusTransactionRow extends StatelessWidget {
           Text(
             '${positive ? '+' : ''}$amount ₸',
             style: TextStyle(
-              color: positive
+              color: DomlyPalette.foreground(positive
                   ? _BonusScreenState._green
-                  : _BonusScreenState._button,
+                  : _BonusScreenState._button),
               fontSize: 13,
               fontWeight: FontWeight.w800,
             ),
@@ -828,8 +848,11 @@ class _BonusSmallButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Material(
-      color: onTap == null ? background.withValues(alpha: 0.55) : background,
+      color: DomlyPalette.surface(
+          onTap == null ? background.withValues(alpha: 0.55) : background),
       borderRadius: BorderRadius.circular(14),
       elevation: 4,
       shadowColor: Colors.black.withValues(alpha: 0.25),
@@ -842,15 +865,16 @@ class _BonusSmallButton extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border:
-                borderColor == null ? null : Border.all(color: borderColor!),
+            border: borderColor == null
+                ? null
+                : Border.all(color: DomlyPalette.border(borderColor!)),
           ),
           child: Text(
-            label,
+            label.tr(),
             style: TextStyle(
-              color: onTap == null
+              color: DomlyPalette.foreground(onTap == null
                   ? foreground.withValues(alpha: 0.65)
-                  : foreground,
+                  : foreground),
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -876,13 +900,15 @@ class _BonusCardWithInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return SizedBox(
       height: height,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Material(
-            color: Colors.transparent,
+            color: DomlyPalette.surface(Colors.transparent),
             child: InkWell(
               borderRadius: BorderRadius.circular(22),
               onTap: onTap,
@@ -899,21 +925,21 @@ class _BonusCardWithInfo extends StatelessWidget {
             top: 12,
             right: 12,
             child: Material(
-              color: const Color(0xFFCF7548),
+              color: DomlyPalette.surface(const Color(0xFFCF7548)),
               shape: const CircleBorder(),
               elevation: 8,
               shadowColor: const Color(0xFFCF7548).withValues(alpha: 0.42),
               child: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: onInfo,
-                child: const SizedBox(
+                child: SizedBox(
                   width: 24,
                   height: 24,
                   child: Center(
                     child: Text(
                       'i',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: DomlyPalette.foreground(Colors.white),
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -937,31 +963,34 @@ class _BonusMessageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _BonusScreenState._border),
+        border:
+            Border.all(color: DomlyPalette.border(_BonusScreenState._border)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            title,
+            title.tr(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: _BonusScreenState._foreground,
+            style: TextStyle(
+              color: DomlyPalette.foreground(_BonusScreenState._foreground),
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            subtitle,
+            subtitle.tr(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: _BonusScreenState._muted,
+            style: TextStyle(
+              color: DomlyPalette.foreground(_BonusScreenState._muted),
               fontSize: 12,
               height: 1.35,
             ),

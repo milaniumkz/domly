@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'dart:async';
 import '../../utils/notification_destination.dart';
 import '../../utils/backend_compat.dart';
@@ -24,12 +25,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _notifications,
       builder: (context, snapshot) {
         final notifications = snapshot.data ?? const <Map<String, dynamic>>[];
-        final sortedNotifications = [...notifications]
-          ..sort((a, b) {
+        final sortedNotifications = [...notifications]..sort((a, b) {
             final aRead = a['read'] == true;
             final bRead = b['read'] == true;
             if (aRead != bRead) {
@@ -40,8 +42,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ).compareTo(_timestampMillis(a['createdAt']));
           });
         final hasError = snapshot.hasError;
-        final isLoading =
-            snapshot.connectionState == ConnectionState.waiting &&
+        final isLoading = snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData;
         return DomlyShell(
           bottomNavigationBar: widget.surface == NotificationSurface.client
@@ -67,26 +68,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           children: [
                             Text(
                               'Уведомления'.tr(),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                                color: DomlyPalette.foreground(Colors.white),
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               notifications.isEmpty
                                   ? 'Здесь появятся важные события по заказам и сервису.'
-                                        .tr()
+                                      .tr()
                                   : 'Всего уведомлений: {count}'.tr(
                                       params: {
-                                        'count': notifications.length
-                                            .toString(),
+                                        'count':
+                                            notifications.length.toString(),
                                       },
                                     ),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: Color(0xCCFFFFFF),
+                                color:
+                                    DomlyPalette.foreground(Color(0xCCFFFFFF)),
                               ),
                             ),
                           ],
@@ -105,56 +107,60 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           ),
                         )
                       : hasError
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(32),
-                            child: DomlyEmptyStateCard(
-                              title: 'Не удалось загрузить уведомления',
-                              subtitle: 'Обновите экран и попробуйте снова.',
-                              icon: Icons.error_outline,
-                            ),
-                          ),
-                        )
-                      : sortedNotifications.isEmpty
-                      ? _emptyState()
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 112),
-                          itemCount: sortedNotifications.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final item = sortedNotifications[index];
-                            final previous = index == 0
-                                ? null
-                                : sortedNotifications[index - 1];
-                            final showHeader =
-                                index == 0 || previous?['read'] != item['read'];
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (showHeader) ...[
-                                  Padding(
-                                    padding: EdgeInsets.only(
-                                      top: index == 0 ? 0 : 8,
-                                      bottom: 10,
-                                    ),
-                                    child: Text(
-                                      item['read'] == true
-                                          ? 'Прочитанные'.tr()
-                                          : 'Непрочитанные'.tr(),
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w800,
-                                        color: DomlyColors.foreground,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                _notificationCard(context, item),
-                              ],
-                            );
-                          },
-                        ),
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(32),
+                                child: DomlyEmptyStateCard(
+                                  title: 'Не удалось загрузить уведомления',
+                                  subtitle:
+                                      'Обновите экран и попробуйте снова.',
+                                  icon: Icons.error_outline,
+                                ),
+                              ),
+                            )
+                          : sortedNotifications.isEmpty
+                              ? _emptyState()
+                              : ListView.separated(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      20, 16, 20, 112),
+                                  itemCount: sortedNotifications.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 12),
+                                  itemBuilder: (context, index) {
+                                    final item = sortedNotifications[index];
+                                    final previous = index == 0
+                                        ? null
+                                        : sortedNotifications[index - 1];
+                                    final showHeader = index == 0 ||
+                                        previous?['read'] != item['read'];
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        if (showHeader) ...[
+                                          Padding(
+                                            padding: EdgeInsets.only(
+                                              top: index == 0 ? 0 : 8,
+                                              bottom: 10,
+                                            ),
+                                            child: Text(
+                                              item['read'] == true
+                                                  ? 'Прочитанные'.tr()
+                                                  : 'Непрочитанные'.tr(),
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w800,
+                                                color: DomlyPalette.foreground(
+                                                    DomlyColors.foreground),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        _notificationCard(context, item),
+                                      ],
+                                    );
+                                  },
+                                ),
                 ),
               ],
             ),
@@ -183,18 +189,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       (item['payload'] ?? const {}) as Map,
     );
     final type = (item['type'] ?? payload['type'] ?? '').toString();
-    final orderId = (payload['slotId'] ?? payload['orderId'] ?? '')
-        .toString()
-        .trim();
+    final orderId =
+        (payload['slotId'] ?? payload['orderId'] ?? '').toString().trim();
     return InkWell(
       onTap: () => _handleNotificationTap(context, item, payload),
       borderRadius: BorderRadius.circular(22),
       child: DomlyCard(
         color: isRead ? Colors.white : const Color(0xFFFFF5EF),
         border: Border.all(
-          color: isRead
+          color: DomlyPalette.border(isRead
               ? DomlyColors.border
-              : DomlyColors.buttonPrimary.withValues(alpha: 0.45),
+              : DomlyColors.buttonPrimary.withValues(alpha: 0.45)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -203,15 +208,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: isRead
+                color: DomlyPalette.surface(isRead
                     ? DomlyColors.backgroundSoft
-                    : DomlyColors.primary.withValues(alpha: 0.14),
+                    : DomlyColors.primary.withValues(alpha: 0.14)),
                 borderRadius: BorderRadius.circular(14),
               ),
               alignment: Alignment.center,
               child: Icon(
                 _iconForType((item['type'] ?? '').toString()),
-                color: DomlyColors.buttonPrimary,
+                color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
                 size: 20,
               ),
             ),
@@ -225,13 +230,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          (item['title'] ?? '').toString(),
+                          item.trValue(['title']),
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: isRead
-                                ? FontWeight.w700
-                                : FontWeight.w900,
-                            color: DomlyColors.foreground,
+                            fontWeight:
+                                isRead ? FontWeight.w700 : FontWeight.w900,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                       ),
@@ -244,13 +249,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: DomlyColors.buttonPrimary,
+                            color:
+                                DomlyPalette.surface(DomlyColors.buttonPrimary),
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
                             'Новое'.tr(),
                             style: TextStyle(
-                              color: Colors.white,
+                              color: DomlyPalette.foreground(Colors.white),
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
                               height: 1,
@@ -261,19 +267,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    (item['body'] ?? '').toString(),
-                    style: const TextStyle(
+                    item.trValue(['body']),
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                       height: 1.35,
                     ),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     _timestampLabel(item['createdAt']),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                     ),
                   ),
                   if (type == 'cleaning_start_confirmation' &&
@@ -297,7 +303,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         Expanded(
                           child: DomlySecondaryButton(
                             label: 'Нет',
-                            foregroundColor: DomlyColors.danger,
+                            foregroundColor:
+                                DomlyPalette.foreground(DomlyColors.danger),
                             onPressed: () => _confirmCleaningStartFromInbox(
                               context,
                               orderId,
@@ -334,9 +341,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     final destination = notificationDestination(item,
-      cleaner: widget.surface == NotificationSurface.cleaner);
+        cleaner: widget.surface == NotificationSurface.cleaner);
     if (destination != null) {
-      Navigator.pushNamed(context, destination.route, arguments: destination.arguments);
+      Navigator.pushNamed(context, destination.route,
+          arguments: destination.arguments);
       return;
     }
     final type = (item['type'] ?? '').toString();
@@ -425,11 +433,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       Navigator.pushNamed(context, '/client/payment-history');
       return;
     }
-    await showDialog<void>(context: context, builder: (context) => AlertDialog(
-      title: Text((item['title'] ?? 'Уведомление').toString()),
-      content: Text((item['body'] ?? '').toString()),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text('Закрыть'.tr()))],
-    ));
+    await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: Text(item.trValue(['title'], fallback: 'Уведомление')),
+              content: Text(item.trValue(['body'])),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Закрыть'.tr()))
+              ],
+            ));
   }
 
   bool _isBonusNotification(

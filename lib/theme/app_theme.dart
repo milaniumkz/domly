@@ -1,3 +1,4 @@
+import 'domly_palette.dart';
 import 'package:flutter/material.dart';
 
 class AppTheme {
@@ -16,7 +17,32 @@ class AppTheme {
     brightness: Brightness.dark,
     fontFamily: 'Inter',
     colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryGreen, brightness: Brightness.dark),
+            seedColor: primaryGreen, brightness: Brightness.dark)
+        .copyWith(
+            surface: DomlyPalette.darkSurface,
+            onSurface: DomlyPalette.darkForeground,
+            primary: accentGreen,
+            onPrimary: DomlyPalette.darkBackground,
+            outline: DomlyPalette.darkOutline),
+    dialogTheme:
+        const DialogThemeData(backgroundColor: DomlyPalette.darkSurface),
+    bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: DomlyPalette.darkSurface,
+        modalBackgroundColor: DomlyPalette.darkSurface),
+    inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: DomlyPalette.darkSurface,
+        labelStyle: const TextStyle(color: Color(0xFFC1D0C5)),
+        hintStyle: const TextStyle(color: Color(0xFF9EB3A4)),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: DomlyPalette.darkOutline)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: DomlyPalette.darkOutline)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: accentGreen, width: 2))),
     scaffoldBackgroundColor: const Color(0xFF121C17),
     cardTheme: const CardThemeData(color: Color(0xFF203127)),
   );

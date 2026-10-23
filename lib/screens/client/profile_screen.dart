@@ -1,3 +1,5 @@
+import '../../theme/domly_palette.dart';
+import '../../utils/service_coverage.dart';
 import '../../services/client_telemetry.dart';
 import 'dart:async';
 
@@ -24,6 +26,8 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final data = FirestoreDataService.instance;
 
     return StreamBuilder<Map<String, dynamic>?>(
@@ -73,11 +77,12 @@ class ProfileScreen extends StatelessWidget {
                 subscriptionsSnap.connectionState == ConnectionState.waiting &&
                 !subscriptionsSnap.hasData;
             if (loading) {
-              return const DomlyShell(
+              return DomlyShell(
                 bottomNavigationBar: DomlyClientBottomNav(currentIndex: 2),
                 child: SafeArea(
                   child: Center(
-                    child: CircularProgressIndicator(color: _orange),
+                    child: CircularProgressIndicator(
+                        color: DomlyPalette.foreground(_orange)),
                   ),
                 ),
               );
@@ -109,7 +114,7 @@ class ProfileScreen extends StatelessWidget {
             return DomlyShell(
               bottomNavigationBar: const DomlyClientBottomNav(currentIndex: 2),
               child: ColoredBox(
-                color: _background,
+                color: DomlyPalette.background(_background),
                 child: SafeArea(
                   bottom: false,
                   child: Center(
@@ -125,7 +130,7 @@ class ProfileScreen extends StatelessWidget {
                                 Text(
                                   'Профиль'.tr(),
                                   style: TextStyle(
-                                    color: _foreground,
+                                    color: DomlyPalette.foreground(_foreground),
                                     fontSize: 20,
                                     fontWeight: FontWeight.w700,
                                     height: 27 / 20,
@@ -139,7 +144,7 @@ class ProfileScreen extends StatelessWidget {
                               child: Text(
                                 'Ваши данные и подписка'.tr(),
                                 style: TextStyle(
-                                  color: _muted,
+                                  color: DomlyPalette.foreground(_muted),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
                                   height: 16 / 12,
@@ -236,7 +241,8 @@ class ProfileScreen extends StatelessWidget {
                                   Text(
                                     'Текущая подписка'.tr(),
                                     style: TextStyle(
-                                      color: _foreground,
+                                      color:
+                                          DomlyPalette.foreground(_foreground),
                                       fontSize: 18,
                                       fontWeight: FontWeight.w700,
                                       height: 24 / 18,
@@ -248,8 +254,9 @@ class ProfileScreen extends StatelessWidget {
                                       activeSubscription,
                                       profile,
                                     ),
-                                    style: const TextStyle(
-                                      color: _foreground,
+                                    style: TextStyle(
+                                      color:
+                                          DomlyPalette.foreground(_foreground),
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                       height: 32 / 16,
@@ -257,10 +264,13 @@ class ProfileScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Следующий платеж: ${_nextPaymentText(activeSubscription, profile)}'
-                                        .tr(),
-                                    style: const TextStyle(
-                                      color: _muted,
+                                    "Следующий платеж: {p0}".tr(params: {
+                                      'p0': (_nextPaymentText(
+                                              activeSubscription, profile))
+                                          .toString()
+                                    }),
+                                    style: TextStyle(
+                                      color: DomlyPalette.foreground(_muted),
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
                                       height: 18 / 13,
@@ -289,7 +299,8 @@ class ProfileScreen extends StatelessWidget {
                                         Text(
                                           'Ваш прогресс'.tr(),
                                           style: TextStyle(
-                                            color: _foreground,
+                                            color: DomlyPalette.foreground(
+                                                _foreground),
                                             fontSize: 18,
                                             fontWeight: FontWeight.w700,
                                             height: 24 / 18,
@@ -301,8 +312,9 @@ class ProfileScreen extends StatelessWidget {
                                             (profile['tier'] ?? 'NEWBIE')
                                                 .toString(),
                                           ),
-                                          style: const TextStyle(
-                                            color: _foreground,
+                                          style: TextStyle(
+                                            color: DomlyPalette.foreground(
+                                                _foreground),
                                             fontSize: 20,
                                             fontWeight: FontWeight.w700,
                                             height: 27 / 20,
@@ -313,8 +325,9 @@ class ProfileScreen extends StatelessWidget {
                                           tierDiscountPercent > 0
                                               ? 'Ваша скидка: $tierDiscountPercent%'
                                               : 'Скидка пока не активирована',
-                                          style: const TextStyle(
-                                            color: _orange,
+                                          style: TextStyle(
+                                            color: DomlyPalette.foreground(
+                                                _orange),
                                             fontSize: 14,
                                             fontWeight: FontWeight.w600,
                                             height: 19 / 14,
@@ -330,7 +343,8 @@ class ProfileScreen extends StatelessWidget {
                                               Container(
                                                 height: 10,
                                                 width: double.infinity,
-                                                color: _soft,
+                                                color:
+                                                    DomlyPalette.surface(_soft),
                                               ),
                                               FractionallySizedBox(
                                                 widthFactor: tierProgress <= 0
@@ -338,7 +352,8 @@ class ProfileScreen extends StatelessWidget {
                                                     : tierProgress,
                                                 child: Container(
                                                   height: 10,
-                                                  color: _orange,
+                                                  color: DomlyPalette.surface(
+                                                      _orange),
                                                 ),
                                               ),
                                             ],
@@ -349,8 +364,9 @@ class ProfileScreen extends StatelessWidget {
                                           nextTierThreshold > 0
                                               ? 'Потрачено в этом месяце: ${monthlySpent.toInt()} / ${nextTierThreshold.toInt()} ₸'
                                               : 'Потрачено в этом месяце: ${monthlySpent.toInt()} ₸',
-                                          style: const TextStyle(
-                                            color: _muted,
+                                          style: TextStyle(
+                                            color:
+                                                DomlyPalette.foreground(_muted),
                                             fontSize: 13,
                                             fontWeight: FontWeight.w500,
                                             height: 18 / 13,
@@ -364,7 +380,8 @@ class ProfileScreen extends StatelessWidget {
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8),
                                   child: Material(
-                                    color: const Color(0xFFCF7548),
+                                    color: DomlyPalette.surface(
+                                        const Color(0xFFCF7548)),
                                     shape: const CircleBorder(),
                                     elevation: 10,
                                     shadowColor: const Color(
@@ -377,14 +394,15 @@ class ProfileScreen extends StatelessWidget {
                                         'Ваш прогресс',
                                         'Прогресс зависит от ваших оплат и активности в сервисе. Здесь отображается текущий уровень, доступная скидка и сумма трат за месяц.',
                                       ),
-                                      child: const SizedBox(
+                                      child: SizedBox(
                                         width: 23,
                                         height: 23,
                                         child: Center(
                                           child: Text(
                                             'i',
                                             style: TextStyle(
-                                              color: Colors.white,
+                                              color: DomlyPalette.foreground(
+                                                  Colors.white),
                                               fontSize: 12,
                                               fontWeight: FontWeight.w700,
                                             ),
@@ -408,7 +426,7 @@ class ProfileScreen extends StatelessWidget {
                                     child: Text(
                                       'Обязательные поля'.tr(),
                                       style: TextStyle(
-                                        color: _muted,
+                                        color: DomlyPalette.foreground(_muted),
                                         fontSize: 14,
                                         fontWeight: FontWeight.w600,
                                         height: 19 / 14,
@@ -680,18 +698,18 @@ class ProfileScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
-                  style: const TextStyle(
-                    color: DomlyColors.foreground,
+                  title.tr(),
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  subtitle,
-                  style: const TextStyle(
-                    color: DomlyColors.muted,
+                  subtitle.tr(),
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(DomlyColors.muted),
                     fontSize: 13,
                     height: 1.45,
                   ),
@@ -718,17 +736,17 @@ class ProfileScreen extends StatelessWidget {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: DomlyColors.foreground,
+            color: DomlyPalette.foreground(DomlyColors.foreground),
           ),
         ),
         content: Text(
           phone.isEmpty
               ? 'Телефон пока не добавлен. Обновить его можно через повторный вход по номеру.'
               : 'Номер подтверждён: $phone',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             height: 1.45,
-            color: DomlyColors.foreground,
+            color: DomlyPalette.foreground(DomlyColors.foreground),
           ),
         ),
         actions: [
@@ -779,14 +797,16 @@ class ProfileScreen extends StatelessWidget {
                   Text(
                     'Введите реферальный код знакомого, чтобы активировать бонусы.'
                         .tr(),
-                    style: TextStyle(fontSize: 13, color: DomlyColors.muted),
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: DomlyPalette.foreground(DomlyColors.muted)),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: codeController,
                     textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      labelText: 'Реферальный код',
+                    decoration: InputDecoration(
+                      labelText: 'Реферальный код'.tr(),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -860,6 +880,7 @@ class ProfileScreen extends StatelessWidget {
       text: (profile['phone'] ?? '').toString(),
     );
     var detectedCity = (profile['city'] ?? '').toString().trim();
+    if (detectedCity.isEmpty) detectedCity = 'Астана';
     AddressSuggestion? selectedAddress;
     List<AddressSuggestion> addressOptions = const <AddressSuggestion>[];
     try {
@@ -1080,15 +1101,15 @@ class ProfileScreen extends StatelessWidget {
                           'Поля с * обязательны для работы аккаунта.'.tr(),
                           style: TextStyle(
                             fontSize: 13,
-                            color: DomlyColors.muted,
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                           ),
                         ),
                         const SizedBox(height: 16),
                         TextField(
                           controller: nameController,
-                          decoration: const InputDecoration(
-                            labelText: 'ФИО',
-                            hintText: 'Введите ФИО',
+                          decoration: InputDecoration(
+                            labelText: 'ФИО'.tr(),
+                            hintText: 'Введите ФИО'.tr(),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -1138,9 +1159,9 @@ class ProfileScreen extends StatelessWidget {
                             });
                           },
                           decoration: InputDecoration(
-                            labelText: 'Мой адрес *',
+                            labelText: 'Мой адрес *'.tr(),
                             hintText:
-                                'Начните вводить ЖК, улицу или номер дома',
+                                'Начните вводить ЖК, улицу или номер дома'.tr(),
                             suffixIcon: addressLookupLoading
                                 ? const Padding(
                                     padding: EdgeInsets.all(14),
@@ -1160,24 +1181,27 @@ class ProfileScreen extends StatelessWidget {
                           Container(
                             constraints: const BoxConstraints(maxHeight: 220),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: DomlyPalette.surface(Colors.white),
                               borderRadius: BorderRadius.circular(18),
-                              border: Border.all(color: DomlyColors.border),
+                              border: Border.all(
+                                  color:
+                                      DomlyPalette.border(DomlyColors.border)),
                             ),
                             child: ListView.separated(
                               shrinkWrap: true,
                               itemCount: filteredAddressOptions.length,
-                              separatorBuilder: (_, __) => const Divider(
+                              separatorBuilder: (_, __) => Divider(
                                 height: 1,
-                                color: DomlyColors.border,
+                                color: DomlyPalette.border(DomlyColors.border),
                               ),
                               itemBuilder: (context, index) {
                                 final item = filteredAddressOptions[index];
                                 return ListTile(
                                   dense: true,
-                                  leading: const Icon(
+                                  leading: Icon(
                                     Icons.location_on_outlined,
-                                    color: DomlyColors.buttonPrimary,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.buttonPrimary),
                                   ),
                                   title: Text(
                                     item.title,
@@ -1209,7 +1233,9 @@ class ProfileScreen extends StatelessWidget {
                           ),
                         ] else if (residentialController.text.trim().length >=
                                 2 &&
-                            selectedAddress == null) ...[
+                            selectedAddress == null &&
+                            !addressLookupLoading &&
+                            !hasCityWideService(detectedCity)) ...[
                           const SizedBox(height: 8),
                           DomlyCard(
                             color: DomlyColors.backgroundSoft,
@@ -1222,7 +1248,8 @@ class ProfileScreen extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
-                                    color: DomlyColors.foreground,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.foreground),
                                   ),
                                 ),
                                 const SizedBox(height: 6),
@@ -1231,7 +1258,8 @@ class ProfileScreen extends StatelessWidget {
                                       .tr(),
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: DomlyColors.muted,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.muted),
                                   ),
                                 ),
                                 const SizedBox(height: 10),
@@ -1298,8 +1326,8 @@ class ProfileScreen extends StatelessWidget {
                             Expanded(
                               child: TextField(
                                 controller: entranceController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Подъезд',
+                                decoration: InputDecoration(
+                                  labelText: 'Подъезд'.tr(),
                                 ),
                               ),
                             ),
@@ -1307,8 +1335,8 @@ class ProfileScreen extends StatelessWidget {
                             Expanded(
                               child: TextField(
                                 controller: apartmentController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Квартира',
+                                decoration: InputDecoration(
+                                  labelText: 'Квартира'.tr(),
                                 ),
                               ),
                             ),
@@ -1320,16 +1348,16 @@ class ProfileScreen extends StatelessWidget {
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
-                          decoration: const InputDecoration(
-                            labelText: 'Площадь квартиры *',
+                          decoration: InputDecoration(
+                            labelText: 'Площадь квартиры *'.tr(),
                           ),
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: phoneController,
                           keyboardType: TextInputType.phone,
-                          decoration: const InputDecoration(
-                            labelText: 'Телефон *',
+                          decoration: InputDecoration(
+                            labelText: 'Телефон *'.tr(),
                             hintText: '+7 777 000 00 00',
                           ),
                         ),
@@ -1787,7 +1815,9 @@ class ProfileScreen extends StatelessWidget {
                     Text(
                       'Найдите дом по адресу или поставьте точку на карте.'
                           .tr(),
-                      style: TextStyle(fontSize: 13, color: DomlyColors.muted),
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: DomlyPalette.foreground(DomlyColors.muted)),
                     ),
                     const SizedBox(height: 14),
                     TextField(
@@ -1805,9 +1835,9 @@ class ProfileScreen extends StatelessWidget {
                           }
                         }
                       },
-                      decoration: const InputDecoration(
-                        labelText: 'Город',
-                        hintText: 'Начните вводить город',
+                      decoration: InputDecoration(
+                        labelText: 'Город'.tr(),
+                        hintText: 'Начните вводить город'.tr(),
                       ),
                     ),
                     if (citySuggestions.isNotEmpty) ...[
@@ -1838,7 +1868,7 @@ class ProfileScreen extends StatelessWidget {
                       controller: addressController,
                       onSubmitted: (_) => searchAddress(),
                       decoration: InputDecoration(
-                        labelText: 'Адрес дома',
+                        labelText: 'Адрес дома'.tr(),
                         suffixIcon: IconButton(
                           onPressed: searching ? null : searchAddress,
                           icon: searching
@@ -1865,7 +1895,8 @@ class ProfileScreen extends StatelessWidget {
                             final item = suggestions[index];
                             return ListTile(
                               dense: true,
-                              tileColor: DomlyColors.backgroundSoft,
+                              tileColor: DomlyPalette.surface(
+                                  DomlyColors.backgroundSoft),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
                               ),
@@ -2076,8 +2107,10 @@ class _ProfileMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Material(
-      color: Colors.white,
+      color: DomlyPalette.surface(Colors.white),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -2087,15 +2120,16 @@ class _ProfileMetricCard extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: ProfileScreen._orange),
+            border:
+                Border.all(color: DomlyPalette.border(ProfileScreen._orange)),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                label,
-                style: const TextStyle(
-                  color: ProfileScreen._muted,
+                label.tr(),
+                style: TextStyle(
+                  color: DomlyPalette.foreground(ProfileScreen._muted),
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   height: 18 / 13,
@@ -2105,8 +2139,8 @@ class _ProfileMetricCard extends StatelessWidget {
                 value,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: ProfileScreen._foreground,
+                style: TextStyle(
+                  color: DomlyPalette.foreground(ProfileScreen._foreground),
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   height: 22 / 16,
@@ -2133,13 +2167,15 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: height,
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: ProfileScreen._border),
+        border: Border.all(color: DomlyPalette.border(ProfileScreen._border)),
       ),
       child: child,
     );
@@ -2153,8 +2189,10 @@ class _AddressRequiredBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Material(
-      color: const Color(0xFFFFF7ED),
+      color: DomlyPalette.surface(const Color(0xFFFFF7ED)),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -2163,12 +2201,14 @@ class _AddressRequiredBanner extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFF5C6A6)),
+            border:
+                Border.all(color: DomlyPalette.border(const Color(0xFFF5C6A6))),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.location_on_outlined, color: ProfileScreen._orange),
+              Icon(Icons.location_on_outlined,
+                  color: DomlyPalette.foreground(ProfileScreen._orange)),
               SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -2177,7 +2217,8 @@ class _AddressRequiredBanner extends StatelessWidget {
                     Text(
                       'Заполните адрес'.tr(),
                       style: TextStyle(
-                        color: ProfileScreen._foreground,
+                        color:
+                            DomlyPalette.foreground(ProfileScreen._foreground),
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
                       ),
@@ -2187,7 +2228,7 @@ class _AddressRequiredBanner extends StatelessWidget {
                       'После входа нужно выбрать подключенный дом и параметры квартиры, чтобы заказать уборку.'
                           .tr(),
                       style: TextStyle(
-                        color: ProfileScreen._muted,
+                        color: DomlyPalette.foreground(ProfileScreen._muted),
                         fontSize: 12,
                         height: 1.35,
                         fontWeight: FontWeight.w500,
@@ -2197,7 +2238,8 @@ class _AddressRequiredBanner extends StatelessWidget {
                 ),
               ),
               SizedBox(width: 8),
-              Icon(Icons.chevron_right, color: ProfileScreen._orange),
+              Icon(Icons.chevron_right,
+                  color: DomlyPalette.foreground(ProfileScreen._orange)),
             ],
           ),
         ),
@@ -2221,8 +2263,10 @@ class _ProfileActionBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Material(
-      color: Colors.white,
+      color: DomlyPalette.surface(Colors.white),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -2231,7 +2275,8 @@ class _ProfileActionBanner extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: ProfileScreen._border),
+            border:
+                Border.all(color: DomlyPalette.border(ProfileScreen._border)),
           ),
           child: Row(
             children: [
@@ -2239,10 +2284,12 @@ class _ProfileActionBanner extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFEFE8),
+                  color: DomlyPalette.surface(const Color(0xFFFFEFE8)),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: ProfileScreen._orange, size: 21),
+                child: Icon(icon,
+                    color: DomlyPalette.foreground(ProfileScreen._orange),
+                    size: 21),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2250,11 +2297,12 @@ class _ProfileActionBanner extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
+                      title.tr(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: ProfileScreen._foreground,
+                      style: TextStyle(
+                        color:
+                            DomlyPalette.foreground(ProfileScreen._foreground),
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
                         height: 20 / 15,
@@ -2262,11 +2310,11 @@ class _ProfileActionBanner extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      subtitle,
+                      subtitle.tr(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: ProfileScreen._muted,
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(ProfileScreen._muted),
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                         height: 16 / 12,
@@ -2276,7 +2324,8 @@ class _ProfileActionBanner extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_right, color: ProfileScreen._orange),
+              Icon(Icons.chevron_right,
+                  color: DomlyPalette.foreground(ProfileScreen._orange)),
             ],
           ),
         ),
@@ -2298,8 +2347,10 @@ class _RequiredProfileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Material(
-      color: ProfileScreen._soft,
+      color: DomlyPalette.surface(ProfileScreen._soft),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -2315,22 +2366,23 @@ class _RequiredProfileTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
+                      title.tr(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: ProfileScreen._foreground,
+                      style: TextStyle(
+                        color:
+                            DomlyPalette.foreground(ProfileScreen._foreground),
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         height: 19 / 14,
                       ),
                     ),
                     Text(
-                      subtitle,
+                      subtitle.tr(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: ProfileScreen._muted,
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(ProfileScreen._muted),
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                         height: 16 / 12,
@@ -2339,10 +2391,10 @@ class _RequiredProfileTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const Text(
+              Text(
                 '›',
                 style: TextStyle(
-                  color: ProfileScreen._muted,
+                  color: DomlyPalette.foreground(ProfileScreen._muted),
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
                   height: 1,

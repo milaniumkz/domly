@@ -1,10 +1,13 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../ui/domly_ui.dart';
 import '../../localization/translation_controller.dart';
 
 class TrainingOrderScreen extends StatefulWidget {
-  const TrainingOrderScreen({super.key});
+  const TrainingOrderScreen({super.key, this.referenceDate});
+
+  final DateTime? referenceDate;
 
   @override
   State<TrainingOrderScreen> createState() => _TrainingOrderScreenState();
@@ -13,12 +16,15 @@ class TrainingOrderScreen extends StatefulWidget {
 class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
   int _step = 0;
   String? _package;
-  String? _date;
+  int? _dateIndex;
+  String? get _date => _dateIndex == null ? null : _dates[_dateIndex!];
   String? _time;
   final _addons = <String>{};
 
   static const _packages = ['Разовый пакет', '4 раза в месяц', '8 раз в месяц'];
-  static const _dates = ['2 сентября', '3 сентября', '4 сентября'];
+  late final DateTime _referenceDate = widget.referenceDate ?? DateTime.now();
+  List<String> get _dates =>
+      trainingOrderDates(_referenceDate).map(domlyDateText).toList();
   static const _times = ['10:00 - 13:10', '14:00 - 17:10', '18:00 - 21:10'];
   static const _addonItems = ['Мытье окон', 'Чистка духовки', 'Санузел'];
 
@@ -37,6 +43,8 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final titles = [
       '1. Выберите пакет',
       '2. Выберите дату',
@@ -77,7 +85,7 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w800,
-                        color: DomlyColors.foreground,
+                        color: DomlyPalette.foreground(DomlyColors.foreground),
                       ),
                     ),
                   ),
@@ -88,8 +96,8 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
                 value: (_step + 1) / titles.length,
                 minHeight: 6,
                 borderRadius: BorderRadius.circular(999),
-                color: DomlyColors.buttonPrimary,
-                backgroundColor: DomlyColors.border,
+                color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
+                backgroundColor: DomlyPalette.surface(DomlyColors.border),
               ),
               const SizedBox(height: 18),
               Expanded(
@@ -97,9 +105,10 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: DomlyPalette.surface(Colors.white),
                       borderRadius: BorderRadius.circular(28),
-                      border: Border.all(color: DomlyColors.border),
+                      border: Border.all(
+                          color: DomlyPalette.border(DomlyColors.border)),
                       boxShadow: const [
                         BoxShadow(
                           color: Color(0x14000000),
@@ -112,20 +121,21 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          titles[_step],
-                          style: const TextStyle(
+                          titles[_step].tr(),
+                          style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w800,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _hintForStep(),
-                          style: const TextStyle(
+                          _hintForStep().tr(),
+                          style: TextStyle(
                             fontSize: 14,
                             height: 1.35,
-                            color: DomlyColors.muted,
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -193,7 +203,7 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
         });
       case 1:
         return _choiceList(_dates, _date, (value) {
-          setState(() => _date = value);
+          setState(() => _dateIndex = _dates.indexOf(value));
         }, icon: Icons.calendar_month_outlined);
       case 2:
         return _choiceList(_times, _time, (value) {
@@ -221,7 +231,9 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
             _summaryRow('Время', _time ?? 'Не выбрано'),
             _summaryRow(
               'Допы',
-              _addons.isEmpty ? 'Без допуслуг' : _addons.join(', '),
+              _addons.isEmpty
+                  ? 'Без допуслуг'
+                  : _addons.map((item) => item.tr()).join(', '),
             ),
             const SizedBox(height: 12),
             _choiceTile(
@@ -245,9 +257,9 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
           ],
         );
       default:
-        return const Icon(
+        return Icon(
           Icons.check_circle_rounded,
-          color: DomlyColors.primary,
+          color: DomlyPalette.foreground(DomlyColors.primary),
           size: 92,
         );
     }
@@ -287,34 +299,38 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color:
-                selected ? const Color(0xFFFFF1EA) : DomlyColors.backgroundSoft,
+            color: DomlyPalette.surface(selected
+                ? const Color(0xFFFFF1EA)
+                : DomlyColors.backgroundSoft),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: selected ? DomlyColors.buttonPrimary : DomlyColors.border,
+              color: DomlyPalette.border(
+                  selected ? DomlyColors.buttonPrimary : DomlyColors.border),
               width: selected ? 1.4 : 1,
             ),
           ),
           child: Row(
             children: [
               Icon(icon,
-                  color:
-                      selected ? DomlyColors.buttonPrimary : DomlyColors.muted),
+                  color: DomlyPalette.foreground(selected
+                      ? DomlyColors.buttonPrimary
+                      : DomlyColors.muted)),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  label,
+                  label.tr(),
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
-                    color:
-                        selected ? DomlyColors.foreground : DomlyColors.muted,
+                    color: DomlyPalette.foreground(
+                        selected ? DomlyColors.foreground : DomlyColors.muted),
                   ),
                 ),
               ),
               Icon(
                 selected ? Icons.check_circle : Icons.radio_button_unchecked,
-                color: selected ? DomlyColors.primary : DomlyColors.border,
+                color: DomlyPalette.foreground(
+                    selected ? DomlyColors.primary : DomlyColors.border),
               ),
             ],
           ),
@@ -332,9 +348,9 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
           SizedBox(
             width: 74,
             child: Text(
-              label,
-              style: const TextStyle(
-                color: DomlyColors.muted,
+              label.tr(),
+              style: TextStyle(
+                color: DomlyPalette.foreground(DomlyColors.muted),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -342,8 +358,8 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                color: DomlyColors.foreground,
+              style: TextStyle(
+                color: DomlyPalette.foreground(DomlyColors.foreground),
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -353,3 +369,8 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
     );
   }
 }
+
+List<DateTime> trainingOrderDates(DateTime referenceDate) => List.generate(
+    3,
+    (index) => DateTime(
+        referenceDate.year, referenceDate.month, referenceDate.day + index));

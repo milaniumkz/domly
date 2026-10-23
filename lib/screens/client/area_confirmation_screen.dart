@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -261,6 +262,8 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return PopScope(
       canPop: !_isSubmitting,
       child: DomlyShell(
@@ -323,12 +326,13 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFDF3EE),
+                                color: DomlyPalette.surface(
+                                    const Color(0xFFFDF3EE)),
                                 borderRadius: BorderRadius.circular(18),
                                 border: Border.all(
-                                  color: const Color(
-                                    0xFFCF7548,
-                                  ).withValues(alpha: 0.3),
+                                  color: DomlyPalette.border(
+                                      const Color(0xFFCF7548)
+                                          .withValues(alpha: 0.3)),
                                 ),
                               ),
                               child: Text(
@@ -337,7 +341,8 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
-                                  color: Color(0xFF7B4B37),
+                                  color: DomlyPalette.foreground(
+                                      Color(0xFF7B4B37)),
                                   height: 1.35,
                                 ),
                               ),
@@ -369,8 +374,10 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                                   : null,
                               style: ElevatedButton.styleFrom(
                                 padding: EdgeInsets.zero,
-                                backgroundColor: const Color(0xFFC96A4A),
-                                foregroundColor: Colors.white,
+                                backgroundColor: DomlyPalette.surface(
+                                    const Color(0xFFC96A4A)),
+                                foregroundColor:
+                                    DomlyPalette.foreground(Colors.white),
                                 disabledBackgroundColor: const Color(
                                   0xFFC96A4A,
                                 ).withValues(alpha: 0.55),
@@ -405,11 +412,12 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                                   ? null
                                   : () => Navigator.pop(context, false),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFC96A4A),
+                                foregroundColor: DomlyPalette.foreground(
+                                    const Color(0xFFC96A4A)),
                                 side: BorderSide(
-                                  color: const Color(
-                                    0xFFC96A4A,
-                                  ).withValues(alpha: 0.35),
+                                  color: DomlyPalette.border(
+                                      const Color(0xFFC96A4A)
+                                          .withValues(alpha: 0.35)),
                                 ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(18),
@@ -442,11 +450,16 @@ class _AreaFigmaHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 130,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF439F73), Color(0xFF80D4B0)],
+        gradient: LinearGradient(
+          colors: [
+            DomlyPalette.surface(Color(0xFF439F73)),
+            DomlyPalette.surface(Color(0xFF80D4B0))
+          ],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -460,7 +473,8 @@ class _AreaFigmaHeader extends StatelessWidget {
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -472,7 +486,8 @@ class _AreaFigmaHeader extends StatelessWidget {
               width: 138,
               height: 138,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -481,19 +496,19 @@ class _AreaFigmaHeader extends StatelessWidget {
             left: 8,
             top: 23,
             child: Material(
-              color: const Color(0xFFF5F5F5),
+              color: DomlyPalette.surface(const Color(0xFFF5F5F5)),
               borderRadius: BorderRadius.circular(12),
               elevation: 4,
               shadowColor: Colors.black.withValues(alpha: 0.25),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: () => Navigator.maybePop(context),
-                child: const SizedBox(
+                child: SizedBox(
                   width: 36,
                   height: 36,
                   child: Icon(
                     Icons.arrow_back,
-                    color: Color(0xFF2E7D5B),
+                    color: DomlyPalette.foreground(Color(0xFF2E7D5B)),
                     size: 22,
                   ),
                 ),
@@ -512,7 +527,7 @@ class _AreaFigmaHeader extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                     height: 31 / 20,
@@ -521,7 +536,7 @@ class _AreaFigmaHeader extends StatelessWidget {
                 Text(
                   'Выберите параметры'.tr(),
                   style: TextStyle(
-                    color: Color(0xFFEDFAF2),
+                    color: DomlyPalette.foreground(Color(0xFFEDFAF2)),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     height: 16 / 12,
@@ -544,6 +559,8 @@ class _AreaStatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Align(
       alignment: Alignment.centerLeft,
       child: Padding(
@@ -553,14 +570,15 @@ class _AreaStatusPill extends StatelessWidget {
           height: 28,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: verified ? const Color(0xFFE6F6EC) : const Color(0xFFFEF3DE),
+            color: DomlyPalette.surface(
+                verified ? const Color(0xFFE6F6EC) : const Color(0xFFFEF3DE)),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Text(
-            label,
+            label.tr(),
             style: TextStyle(
-              color:
-                  verified ? const Color(0xFF439F73) : const Color(0xFFF4B330),
+              color: DomlyPalette.foreground(
+                  verified ? const Color(0xFF439F73) : const Color(0xFFF4B330)),
               fontSize: 12,
               fontWeight: FontWeight.w600,
               height: 16 / 12,
@@ -579,13 +597,15 @@ class _AreaValueCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 100,
       padding: const EdgeInsets.fromLTRB(25, 14, 45, 0),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -593,7 +613,7 @@ class _AreaValueCard extends StatelessWidget {
           Text(
             'Площадь квартиры'.tr(),
             style: TextStyle(
-              color: Color(0xFF2B4338),
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 16,
               fontWeight: FontWeight.w600,
               height: 22 / 16,
@@ -607,8 +627,8 @@ class _AreaValueCard extends StatelessWidget {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              style: const TextStyle(
-                color: Color(0xFF2B4338),
+              style: TextStyle(
+                color: DomlyPalette.foreground(Color(0xFF2B4338)),
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 height: 22 / 16,
@@ -617,10 +637,10 @@ class _AreaValueCard extends StatelessWidget {
                 isDense: true,
                 contentPadding: const EdgeInsets.fromLTRB(18, 10, 16, 10),
                 filled: true,
-                fillColor: const Color(0xFFF0F7F2),
+                fillColor: DomlyPalette.surface(const Color(0xFFF0F7F2)),
                 suffixText: 'м²',
-                suffixStyle: const TextStyle(
-                  color: Color(0xFF2B4338),
+                suffixStyle: TextStyle(
+                  color: DomlyPalette.foreground(Color(0xFF2B4338)),
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                   height: 22 / 16,
@@ -635,7 +655,8 @@ class _AreaValueCard extends StatelessWidget {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: Color(0xFF80D4B0)),
+                  borderSide:
+                      BorderSide(color: DomlyPalette.border(Color(0xFF80D4B0))),
                 ),
               ),
             ),
@@ -659,13 +680,15 @@ class _TechPlanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 313,
       padding: const EdgeInsets.fromLTRB(25, 17, 30, 0),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -673,7 +696,7 @@ class _TechPlanCard extends StatelessWidget {
           Text(
             'Фото технического плана'.tr(),
             style: TextStyle(
-              color: Color(0xFF2B4338),
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 16,
               fontWeight: FontWeight.w600,
               height: 22 / 16,
@@ -684,7 +707,7 @@ class _TechPlanCard extends StatelessWidget {
             'Прикрепите фото технического плана квартиры, чтобы подтвердить площадь и получить бонус'
                 .tr(),
             style: TextStyle(
-              color: Color(0xFF658170),
+              color: DomlyPalette.foreground(Color(0xFF658170)),
               fontSize: 13,
               fontWeight: FontWeight.w500,
               height: 18 / 13,
@@ -698,17 +721,20 @@ class _TechPlanCard extends StatelessWidget {
               child: Container(
                 width: double.infinity,
                 height: 170,
-                color: const Color(0xFFF0F7F2),
+                color: DomlyPalette.surface(const Color(0xFFF0F7F2)),
                 child: image == null
-                    ? const Icon(Icons.add, size: 64, color: Color(0xFF606060))
+                    ? Icon(Icons.add,
+                        size: 64,
+                        color: DomlyPalette.foreground(Color(0xFF606060)))
                     : FutureBuilder<Uint8List>(
                         future: image!.readAsBytes(),
                         builder: (context, snapshot) {
                           if (!snapshot.hasData) {
-                            return const Center(
+                            return Center(
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Color(0xFFC96A4A),
+                                color:
+                                    DomlyPalette.foreground(Color(0xFFC96A4A)),
                               ),
                             );
                           }
@@ -732,7 +758,7 @@ class _TechPlanCard extends StatelessWidget {
                   'Если хотите заменить фото\nнажмите на него'.tr(),
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: Colors.black,
+                    color: DomlyPalette.foreground(Colors.black),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     height: 15 / 12,
@@ -743,9 +769,9 @@ class _TechPlanCard extends StatelessWidget {
                 onTap: image == null ? null : onRemove,
                 child: Icon(
                   Icons.delete_outline,
-                  color: image == null
+                  color: DomlyPalette.foreground(image == null
                       ? const Color(0x668A8A8A)
-                      : const Color(0xFFCF7548),
+                      : const Color(0xFFCF7548)),
                   size: 22,
                 ),
               ),
@@ -764,17 +790,21 @@ class _AreaErrorBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: DomlyColors.danger.withValues(alpha: 0.10),
+        color: DomlyPalette.surface(DomlyColors.danger.withValues(alpha: 0.10)),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DomlyColors.danger.withValues(alpha: 0.25)),
+        border: Border.all(
+            color: DomlyPalette.border(
+                DomlyColors.danger.withValues(alpha: 0.25))),
       ),
       child: Text(
         message,
-        style: const TextStyle(
-          color: DomlyColors.danger,
+        style: TextStyle(
+          color: DomlyPalette.foreground(DomlyColors.danger),
           fontSize: 13,
           fontWeight: FontWeight.w500,
         ),

@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -63,6 +64,8 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return FutureBuilder<Map<String, dynamic>?>(
       future: _statsFuture,
       builder: (context, statsSnap) {
@@ -181,7 +184,7 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                                 style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                                  color: DomlyPalette.foreground(Colors.white),
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -189,9 +192,10 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                                 activationText.isEmpty
                                     ? 'Мы скоро стартуем в вашем доме. Пока набираем необходимое количество квартир.'
                                     : activationText,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xCCFFFFFF),
+                                  color: DomlyPalette.foreground(
+                                      Color(0xCCFFFFFF)),
                                   height: 1.35,
                                 ),
                               ),
@@ -220,9 +224,10 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                             const SizedBox(height: 4),
                             Text(
                               houseAddress,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: DomlyColors.muted,
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -239,8 +244,10 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                             const SizedBox(height: 14),
                             LinearProgressIndicator(
                               value: progress,
-                              backgroundColor: DomlyColors.backgroundSoft,
-                              color: DomlyColors.buttonPrimary,
+                              backgroundColor: DomlyPalette.surface(
+                                  DomlyColors.backgroundSoft),
+                              color: DomlyPalette.foreground(
+                                  DomlyColors.buttonPrimary),
                             ),
                             const SizedBox(height: 10),
                             _statRow('Подано заявок', '$current из $threshold'),
@@ -249,10 +256,11 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                               remaining > 0
                                   ? 'Нужно еще $remaining соседей'
                                   : 'Дом готов к запуску',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
-                                color: DomlyColors.foreground,
+                                color: DomlyPalette.foreground(
+                                    DomlyColors.foreground),
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -260,7 +268,8 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                               'До запуска осталось совсем немного'.tr(),
                               style: TextStyle(
                                 fontSize: 12,
-                                color: DomlyColors.muted,
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                               ),
                             ),
                             const SizedBox(height: 14),
@@ -268,9 +277,12 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: DomlyColors.backgroundSoft,
+                                color: DomlyPalette.surface(
+                                    DomlyColors.backgroundSoft),
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: DomlyColors.border),
+                                border: Border.all(
+                                    color: DomlyPalette.border(
+                                        DomlyColors.border)),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -280,15 +292,17 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
-                                      color: DomlyColors.foreground,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.foreground),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     popularPackage,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 14,
-                                      color: DomlyColors.muted,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.muted),
                                     ),
                                   ),
                                 ],
@@ -327,7 +341,8 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                                       .tr(),
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: DomlyColors.muted,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.muted),
                                     height: 1.35,
                                   ),
                                 ),
@@ -343,14 +358,18 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: DomlyColors.backgroundSoft,
+                                      color: DomlyPalette.surface(
+                                          DomlyColors.backgroundSoft),
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(
-                                        color: DomlyColors.border,
+                                        color: DomlyPalette.border(
+                                            DomlyColors.border),
                                       ),
                                     ),
                                     child: Text(
-                                      'Ваш код: $referralCode'.tr(),
+                                      "Ваш код: {p0}".tr(params: {
+                                        'p0': (referralCode).toString()
+                                      }),
                                       style: const TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
@@ -379,10 +398,10 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
       children: [
         Expanded(
           child: Text(
-            label,
-            style: const TextStyle(
+            label.tr(),
+            style: TextStyle(
               fontSize: 13,
-              color: DomlyColors.muted,
+              color: DomlyPalette.foreground(DomlyColors.muted),
             ),
           ),
         ),
@@ -392,7 +411,8 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: mutedValue ? DomlyColors.muted : DomlyColors.foreground,
+            color: DomlyPalette.foreground(
+                mutedValue ? DomlyColors.muted : DomlyColors.foreground),
           ),
         ),
       ],

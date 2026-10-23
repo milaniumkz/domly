@@ -449,7 +449,7 @@ export function buildV1Router(deps: {
   router.get('/me', auth(), asyncHandler(async (req, res) => {
     const user = first((await deps.db.query(`SELECT * FROM app_users WHERE id=$1`, [req.user!.id])).rows);
     const addresses = (await deps.db.query(
-      `SELECT a.*, EXISTS (SELECT 1 FROM quality_check_requests q WHERE q.address_id=a.id AND q.document_file_id IS NOT NULL AND q.status IN ('pending','approved')) AS area_proof_submitted FROM customer_addresses a WHERE user_id=$1 ORDER BY is_primary DESC, created_at DESC`,
+      `SELECT a.*, (lower(regexp_replace(a.city,'[[:space:].-]','','g')) IN ('астана','astana','нурсултан','nursultan')) AS service_available, EXISTS (SELECT 1 FROM quality_check_requests q WHERE q.address_id=a.id AND q.document_file_id IS NOT NULL AND q.status IN ('pending','approved')) AS area_proof_submitted FROM customer_addresses a WHERE user_id=$1 ORDER BY is_primary DESC, created_at DESC`,
       [req.user!.id],
     )).rows;
     const safeUser = {...(user as any)};
@@ -703,7 +703,7 @@ export function buildV1Router(deps: {
 
   router.get('/addresses', auth(['customer']), asyncHandler(async (req, res) => {
     ok(res, (await deps.db.query(
-      `SELECT a.*, EXISTS (SELECT 1 FROM quality_check_requests q WHERE q.address_id=a.id AND q.document_file_id IS NOT NULL AND q.status IN ('pending','approved')) AS area_proof_submitted FROM customer_addresses a WHERE user_id=$1 ORDER BY is_primary DESC, created_at DESC`,
+      `SELECT a.*, (lower(regexp_replace(a.city,'[[:space:].-]','','g')) IN ('астана','astana','нурсултан','nursultan')) AS service_available, EXISTS (SELECT 1 FROM quality_check_requests q WHERE q.address_id=a.id AND q.document_file_id IS NOT NULL AND q.status IN ('pending','approved')) AS area_proof_submitted FROM customer_addresses a WHERE user_id=$1 ORDER BY is_primary DESC, created_at DESC`,
       [req.user!.id],
     )).rows);
   }));
@@ -1012,11 +1012,16 @@ export function buildV1Router(deps: {
     const { limit, offset } = pageParams(req.query);
     const city = req.query.city ? String(req.query.city) : null;
     const search = req.query.search ? `%${String(req.query.search)}%` : null;
+    const houseId = req.query.id ? String(req.query.id) : null;
+    if(houseId && !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(houseId)) throw new ApiError(400,'invalid_id','Некорректный адрес.');
     ok(res, (await deps.db.query(
-      `SELECT h.*, z.name_ru AS zone_name_ru, z.name_kk AS zone_name_kk
+      `SELECT h.*, concat_ws(', ',h.street_ru,h.house) AS address,
+         h.residential_complex_ru AS "residentialComplex", h.latitude AS lat,h.longitude AS lng,
+         CASE WHEN h.active OR lower(regexp_replace(h.city,'[[:space:].-]','','g')) IN ('астана','astana','нурсултан','nursultan') THEN 'ACTIVE' ELSE 'IN_PROGRESS' END AS status, z.name_ru AS zone_name_ru, z.name_kk AS zone_name_kk
        FROM connected_houses h
        LEFT JOIN service_zones z ON z.id=h.zone_id
-       WHERE h.active=TRUE
+       WHERE (h.active=TRUE OR lower(regexp_replace(h.city,'[[:space:].-]','','g')) IN ('астана','astana','нурсултан','nursultan'))
+       AND ($5::text IS NULL OR h.id::text=$5)
        AND ($1::text IS NULL OR h.city ILIKE $1)
        AND (
          $2::text IS NULL
@@ -1026,7 +1031,7 @@ export function buildV1Router(deps: {
        )
        ORDER BY h.city, h.street_ru, h.house
        LIMIT $3 OFFSET $4`,
-      [city, search, limit, offset],
+      [city, search, limit, offset,houseId],
     )).rows);
   }));
 
@@ -1070,8 +1075,8 @@ export function buildV1Router(deps: {
       .sort((a: any, b: any) => b.score - a.score)
       .slice(0, limit)
       .map(({ house }: any) => ({
-        source: house.active ? 'connected_house' : 'address_directory',
-        connected: house.active,
+        source: house.active || ['астана','astana','нур-султан','nur-sultan'].includes(String(house.city).toLowerCase().trim()) ? 'connected_house' : 'address_directory',
+        connected: house.active || ['астана','astana','нур-султан','nur-sultan'].includes(String(house.city).toLowerCase().trim()),
         id: house.id,
         label: formatHouseLabel(lang === 'kk' ? { ...house, street_ru: house.street_kk ?? house.street_ru, residential_complex_ru: house.residential_complex_kk ?? house.residential_complex_ru } : house),
         city: house.city,

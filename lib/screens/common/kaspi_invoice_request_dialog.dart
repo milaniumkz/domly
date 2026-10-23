@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../services/backend_api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -52,7 +53,8 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
   bool onlineAvailable = false;
   bool onlineTest = false;
   try {
-    final methods = await BackendApiService.instance.getMap('/payments/methods', authenticated: false);
+    final methods = await BackendApiService.instance
+        .getMap('/payments/methods', authenticated: false);
     onlineAvailable = methods['online'] == true;
     onlineTest = methods['onlineTest'] == true;
   } catch (_) {}
@@ -78,7 +80,12 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
             borderRadius: BorderRadius.circular(18),
             onTap: enabled
                 ? () => Navigator.of(dialogContext).pop(
-                      DomlyPaymentSelection(method: method, useBonus: method == DomlyPaymentMethod.online && onlineTest ? false : useBonus),
+                      DomlyPaymentSelection(
+                          method: method,
+                          useBonus:
+                              method == DomlyPaymentMethod.online && onlineTest
+                                  ? false
+                                  : useBonus),
                     )
                 : null,
             child: Container(
@@ -86,12 +93,14 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: DomlyColors.border),
-                color: DomlyColors.card,
+                border:
+                    Border.all(color: DomlyPalette.border(DomlyColors.border)),
+                color: DomlyPalette.surface(DomlyColors.card),
               ),
               child: Row(
                 children: [
-                  Icon(icon, color: DomlyColors.primary),
+                  Icon(icon,
+                      color: DomlyPalette.foreground(DomlyColors.primary)),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -100,24 +109,26 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
                       children: [
                         Text(
                           title.tr(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           subtitle.tr(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: DomlyColors.muted,
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right, color: DomlyColors.muted),
+                  Icon(Icons.chevron_right,
+                      color: DomlyPalette.foreground(DomlyColors.muted)),
                 ],
               ),
             ),
@@ -136,10 +147,10 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
             children: [
               Text(
                 'Выберите способ оплаты'.tr(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
-                  color: DomlyColors.foreground,
+                  color: DomlyPalette.foreground(DomlyColors.foreground),
                 ),
               ),
               if (availableBonus > 0) ...[
@@ -154,15 +165,18 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
                         onChanged: (value) {
                           setState(() => useBonus = value ?? false);
                         },
-                        activeColor: DomlyColors.primary,
+                        activeColor:
+                            DomlyPalette.foreground(DomlyColors.primary),
                       ),
                       Expanded(
                         child: Text(
-                          'Оплатить бонусами: доступно $availableBonus ₸'.tr(),
-                          style: const TextStyle(
+                          "Оплатить бонусами: доступно {p0} ₸"
+                              .tr(params: {'p0': (availableBonus).toString()}),
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                       ),
@@ -191,9 +205,9 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
                   const SizedBox(height: 6),
                   Text(
                     'Чтобы оплатить бонусами, сначала поставьте галочку.'.tr(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                     ),
                   ),
                 ],
@@ -201,9 +215,12 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
               const SizedBox(height: 14),
               option(
                 icon: Icons.credit_card,
-                title: onlineTest ? 'Онлайн-платёж — тест BCC' : 'Онлайн-платёж',
+                title:
+                    onlineTest ? 'Онлайн-платёж — тест BCC' : 'Онлайн-платёж',
                 subtitle: onlineAvailable
-                    ? onlineTest ? 'Только тестовые карты. Покупка не будет оплачена настоящими деньгами; бонусы не используются.' : 'Оплата картой внутри приложения'
+                    ? onlineTest
+                        ? 'Только тестовые карты. Покупка не будет оплачена настоящими деньгами; бонусы не используются.'
+                        : 'Оплата картой внутри приложения'
                     : 'Временно недоступно: банк не настроен на сервере',
                 enabled: onlineAvailable,
                 method: DomlyPaymentMethod.online,
@@ -274,10 +291,10 @@ Future<KaspiInvoiceRequestResult?> showKaspiInvoiceRequestOptionsDialog(
                   children: [
                     Text(
                       'Введите номер KASPI.KZ'.tr(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: DomlyColors.foreground,
+                        color: DomlyPalette.foreground(DomlyColors.foreground),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -295,11 +312,15 @@ Future<KaspiInvoiceRequestResult?> showKaspiInvoiceRequestOptionsDialog(
                         final bonusText =
                             bonusAmount > 0 ? ' · бонусами $bonusAmount ₸' : '';
                         return Text(
-                          'Сумма счёта: $payable ₸$bonusText'.tr(),
-                          style: const TextStyle(
+                          "Сумма счёта: {p0} ₸{p1}".tr(params: {
+                            'p0': (payable).toString(),
+                            'p1': (bonusText).toString()
+                          }),
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         );
                       }),
@@ -331,16 +352,20 @@ Future<KaspiInvoiceRequestResult?> showKaspiInvoiceRequestOptionsDialog(
                               onChanged: (value) {
                                 setState(() => useBonus = value ?? false);
                               },
-                              activeColor: DomlyColors.primary,
+                              activeColor:
+                                  DomlyPalette.foreground(DomlyColors.primary),
                             ),
                             Expanded(
                               child: Text(
-                                'Оплатить бонусами: доступно $availableBonus ₸'
-                                    .tr(),
-                                style: const TextStyle(
+                                "Оплатить бонусами: доступно {p0} ₸".tr(
+                                    params: {
+                                      'p0': (availableBonus).toString()
+                                    }),
+                                style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: DomlyColors.foreground,
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.foreground),
                                 ),
                               ),
                             ),

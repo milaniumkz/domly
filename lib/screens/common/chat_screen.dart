@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import '../../ui/chat_interaction.dart';
 import 'package:flutter/material.dart';
 import '../../utils/backend_compat.dart';
@@ -65,6 +66,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _summaryStream,
       builder: (context, summarySnap) {
@@ -95,18 +98,18 @@ class _ChatScreenState extends State<ChatScreen> {
                                     params: {'count': unreadCount.toString()},
                                   )
                                 : 'Чат заказа'.tr(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                          color: DomlyPalette.foreground(Colors.white),
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _chatSubtitle(summarySnap.data),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xCCFFFFFF),
+                          color: DomlyPalette.foreground(Color(0xCCFFFFFF)),
                         ),
                       ),
                     ],
@@ -124,8 +127,9 @@ class _ChatScreenState extends State<ChatScreen> {
                               'Заказ закрыт. Чат доступен только для чтения.'
                                   .tr(),
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: DomlyColors.muted,
+                              style: TextStyle(
+                                color:
+                                    DomlyPalette.foreground(DomlyColors.muted),
                                 fontWeight: FontWeight.w600,
                               ),
                             )
@@ -144,8 +148,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                 IconButton(
                                   onPressed: _sending ? null : _send,
                                   style: IconButton.styleFrom(
-                                    backgroundColor: DomlyColors.primary,
-                                    foregroundColor: Colors.white,
+                                    backgroundColor: DomlyPalette.surface(
+                                        DomlyColors.primary),
+                                    foregroundColor:
+                                        DomlyPalette.foreground(Colors.white),
                                   ),
                                   icon: _sending
                                       ? const SizedBox(
@@ -296,13 +302,13 @@ class _ChatScreenState extends State<ChatScreen> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: DomlyColors.backgroundSoft,
+                      color: DomlyPalette.surface(DomlyColors.backgroundSoft),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
                       (m['text'] ?? '').toString(),
-                      style: const TextStyle(
-                        color: DomlyColors.muted,
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(DomlyColors.muted),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -319,10 +325,14 @@ class _ChatScreenState extends State<ChatScreen> {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color:
-                      isMine ? DomlyColors.primary : DomlyColors.backgroundSoft,
+                  color: DomlyPalette.surface(isMine
+                      ? DomlyColors.primary
+                      : DomlyColors.backgroundSoft),
                   borderRadius: BorderRadius.circular(18),
-                  border: isMine ? null : Border.all(color: DomlyColors.border),
+                  border: isMine
+                      ? null
+                      : Border.all(
+                          color: DomlyPalette.border(DomlyColors.border)),
                 ),
                 child: Column(
                   crossAxisAlignment: isMine
@@ -332,7 +342,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     Text(
                       (m['text'] ?? '').toString(),
                       style: TextStyle(
-                        color: isMine ? Colors.white : DomlyColors.foreground,
+                        color: DomlyPalette.foreground(
+                            isMine ? Colors.white : DomlyColors.foreground),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -343,7 +354,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           timeText,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isMine ? Colors.white70 : DomlyColors.muted,
+                            color: DomlyPalette.foreground(
+                                isMine ? Colors.white70 : DomlyColors.muted),
                           ),
                         ),
                         if (isMine) ...[
@@ -354,9 +366,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                 : isReadByOther
                                     ? 'Прочитано'.tr()
                                     : 'Доставлено'.tr(),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.white70,
+                              color: DomlyPalette.foreground(Colors.white70),
                             ),
                           ),
                         ],

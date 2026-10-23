@@ -1,3 +1,5 @@
+import '../../theme/domly_palette.dart';
+import '../../utils/legal_document_sections.dart';
 import 'package:flutter/material.dart';
 
 import '../../localization/translation_controller.dart';
@@ -29,8 +31,10 @@ class LegalDocumentScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Scaffold(
-      backgroundColor: AppTheme.backgroundCream,
+      backgroundColor: DomlyPalette.background(AppTheme.backgroundCream),
       body: SafeArea(
         child: Stack(
           children: [
@@ -51,7 +55,7 @@ class LegalDocumentScreen extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: DomlyPalette.surface(Colors.white),
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
@@ -65,7 +69,7 @@ class LegalDocumentScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              title,
+                              title.tr(),
                               style: Theme.of(context)
                                   .textTheme
                                   .headlineSmall
@@ -88,16 +92,29 @@ class LegalDocumentScreen extends StatelessWidget {
                               ),
                             ],
                             const SizedBox(height: 22),
-                            Text(
-                              fullInfo,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: AppTheme.darkText,
-                                    height: 1.55,
-                                  ),
-                            ),
+                            for (final section
+                                in legalDocumentSections(fullInfo)) ...[
+                              if (section.heading != null) ...[
+                                SelectableText(section.heading!,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                            color: AppTheme.darkText,
+                                            fontWeight: FontWeight.w800,
+                                            height: 1.4)),
+                                const SizedBox(height: 10),
+                              ],
+                              if (section.body.isNotEmpty)
+                                SelectableText(section.body,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                            color: AppTheme.darkText,
+                                            height: 1.6)),
+                              const SizedBox(height: 24),
+                            ],
                           ],
                         ),
                       ),
@@ -109,12 +126,13 @@ class LegalDocumentScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 0, 0),
               child: Material(
-                color: Colors.white.withValues(alpha: 0.94),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.94)),
                 shape: const CircleBorder(),
                 elevation: 8,
                 shadowColor: Colors.black26,
                 child: IconButton(
-                  tooltip: 'Назад',
+                  tooltip: 'Назад'.tr(),
                   icon: const Icon(Icons.arrow_back_ios_new_rounded),
                   onPressed: () {
                     final navigator = Navigator.of(context);

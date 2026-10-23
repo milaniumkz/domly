@@ -1,3 +1,5 @@
+import '../../ui/quarterly_visits_dialog.dart';
+import '../../theme/domly_palette.dart';
 import '../../services/backend_api_service.dart';
 import 'dart:async';
 
@@ -82,11 +84,11 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
           borderRadius: BorderRadius.circular(24),
         ),
         title: Text(
-          title,
-          style: const TextStyle(
+          title.tr(),
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: DomlyColors.foreground,
+            color: DomlyPalette.foreground(DomlyColors.foreground),
           ),
         ),
         content: Column(
@@ -95,9 +97,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
           children: [
             Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
                 height: 1.4,
               ),
             ),
@@ -520,53 +522,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   }
 
   Future<void> _selectQuarterlyVisits() async {
-    final selected = await showDialog<int>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        title: Text(
-          'Квартальный пакет'.tr(),
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: DomlyColors.foreground,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Выберите количество уборок в месяц:'.tr(),
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.45,
-                color: DomlyColors.foreground,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...[2, 4, 8].map(
-              (value) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  '$value уборки в месяц'.tr(),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: DomlyColors.foreground,
-                  ),
-                ),
-                trailing: value == _quarterlyVisitsPerMonth
-                    ? const Icon(Icons.check, color: DomlyColors.buttonPrimary)
-                    : null,
-                onTap: () => Navigator.pop(context, value),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    final selected = await showQuarterlyVisitsDialog(context,
+        selectedVisits: _quarterlyVisitsPerMonth);
     if (selected != null && mounted) {
       setState(() => _quarterlyVisitsPerMonth = selected);
       _refreshQuote();
@@ -653,6 +610,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _data.customerProfileStream(),
       builder: (context, profileSnap) {
@@ -729,8 +688,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                                 ),
                         style: ElevatedButton.styleFrom(
                           padding: EdgeInsets.zero,
-                          backgroundColor: const Color(0xFFC96A4A),
-                          foregroundColor: Colors.white,
+                          backgroundColor:
+                              DomlyPalette.surface(const Color(0xFFC96A4A)),
+                          foregroundColor:
+                              DomlyPalette.foreground(Colors.white),
                           elevation: 4,
                           shadowColor: Colors.black.withValues(alpha: 0.25),
                           shape: RoundedRectangleBorder(
@@ -757,8 +718,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                       hasProfileArea
                           ? '${_area.ceil()} м²'
                           : 'Заполните площадь в профиле',
-                      style: const TextStyle(
-                        color: Color(0xFF658170),
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(Color(0xFF658170)),
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                         height: 16 / 12,
@@ -812,7 +773,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F7F2),
+        color: DomlyPalette.surface(const Color(0xFFF0F7F2)),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
@@ -845,11 +806,11 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            group.label,
+                            group.label.tr(),
                             maxLines: hasNote ? 2 : 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF2B4338),
+                            style: TextStyle(
+                              color: DomlyPalette.foreground(Color(0xFF2B4338)),
                               fontSize: 15,
                               fontWeight: FontWeight.w500,
                               height: 20 / 15,
@@ -858,11 +819,12 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                           if (hasNote) ...[
                             const SizedBox(height: 7),
                             Text(
-                              group.note!,
+                              group.note!.tr(),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF658170),
+                              style: TextStyle(
+                                color:
+                                    DomlyPalette.foreground(Color(0xFF658170)),
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                                 height: 17 / 13,
@@ -879,14 +841,14 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                         constraints: const BoxConstraints(minWidth: 22),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color:
-                              const Color(0xFFEEB09B).withValues(alpha: 0.38),
+                          color: DomlyPalette.surface(
+                              const Color(0xFFEEB09B).withValues(alpha: 0.38)),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           '$selectedCount',
-                          style: const TextStyle(
-                            color: Color(0xFF2B4338),
+                          style: TextStyle(
+                            color: DomlyPalette.foreground(Color(0xFF2B4338)),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -898,7 +860,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                       expanded
                           ? Icons.keyboard_arrow_up
                           : Icons.keyboard_arrow_down,
-                      color: const Color(0xFF658170),
+                      color: DomlyPalette.foreground(const Color(0xFF658170)),
                       size: 24,
                     ),
                   ],
@@ -932,32 +894,32 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Row(
         children: [
           SizedBox(
             width: 24,
             child: Material(
-              color: const Color(0xFFF0F7F2),
+              color: DomlyPalette.surface(const Color(0xFFF0F7F2)),
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
                 onTap: () => _showAddonInfo(
                   item.key,
-                  title: item.label,
+                  title: item.label.tr(),
                   shortInfo: item.infoText,
                   fullInfo: item.fullInfo,
                   features: item.features,
                 ),
                 borderRadius: BorderRadius.circular(8),
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.all(4),
                   child: Icon(
                     Icons.info_outline,
                     size: 14,
-                    color: Color(0xFFCF7548),
+                    color: DomlyPalette.foreground(Color(0xFFCF7548)),
                   ),
                 ),
               ),
@@ -969,11 +931,11 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.label,
+                  item.label.tr(),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF2B4338),
+                  style: TextStyle(
+                    color: DomlyPalette.foreground(Color(0xFF2B4338)),
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     height: 18 / 13,
@@ -987,9 +949,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                           ? '${_formatMoney(unitPrice)} за 1 шт.'
                           : _formatMoney(unitPrice),
                   style: TextStyle(
-                    color: isSeparate
+                    color: DomlyPalette.foreground(isSeparate
                         ? const Color(0xFFC96A4A)
-                        : const Color(0xFF658170),
+                        : const Color(0xFF658170)),
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                     height: 14 / 11,
@@ -1015,16 +977,16 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                 height: 34,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: quantity > 0
+                  color: DomlyPalette.surface(quantity > 0
                       ? const Color(0xFFC96A4A)
-                      : const Color(0xFFF0F7F2),
+                      : const Color(0xFFF0F7F2)),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
                   quantity > 0 ? 'Убрать' : 'Добавить',
                   style: TextStyle(
-                    color:
-                        quantity > 0 ? Colors.white : const Color(0xFF2B4338),
+                    color: DomlyPalette.foreground(
+                        quantity > 0 ? Colors.white : const Color(0xFF2B4338)),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1061,12 +1023,13 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: selected
+          color: DomlyPalette.surface(selected
               ? DomlyColors.primary.withValues(alpha: 0.08)
-              : DomlyColors.backgroundSoft,
+              : DomlyColors.backgroundSoft),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: selected ? DomlyColors.primary : DomlyColors.border,
+            color: DomlyPalette.border(
+                selected ? DomlyColors.primary : DomlyColors.border),
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -1088,9 +1051,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: selected
+                            color: DomlyPalette.foreground(selected
                                 ? DomlyColors.primary
-                                : DomlyColors.foreground,
+                                : DomlyColors.foreground),
                           ),
                         ),
                       ),
@@ -1100,7 +1063,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: DomlyColors.accent.withValues(alpha: 0.15),
+                            color: DomlyPalette.surface(
+                                DomlyColors.accent.withValues(alpha: 0.15)),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -1108,7 +1072,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color: DomlyColors.accent,
+                              color:
+                                  DomlyPalette.foreground(DomlyColors.accent),
                             ),
                           ),
                         ),
@@ -1121,8 +1086,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                         : isSpecial
                             ? 'Стоимость рассчитывается после площади'
                             : 'Стоимость = цена за уборку × количество уборок',
-                    style: const TextStyle(
-                        fontSize: 11, color: DomlyColors.foreground),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: DomlyPalette.foreground(DomlyColors.foreground)),
                   ),
                 ],
               ),
@@ -1132,15 +1098,18 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               width: 20,
               height: 20,
               decoration: BoxDecoration(
-                color: selected ? DomlyColors.primary : Colors.transparent,
+                color: DomlyPalette.surface(
+                    selected ? DomlyColors.primary : Colors.transparent),
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: selected ? DomlyColors.primary : DomlyColors.border,
+                  color: DomlyPalette.border(
+                      selected ? DomlyColors.primary : DomlyColors.border),
                   width: 2,
                 ),
               ),
               child: selected
-                  ? const Icon(Icons.check, size: 14, color: Colors.white)
+                  ? Icon(Icons.check,
+                      size: 14, color: DomlyPalette.foreground(Colors.white))
                   : null,
             ),
           ],
@@ -1155,9 +1124,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: DomlyColors.backgroundSoft,
+        color: DomlyPalette.surface(DomlyColors.backgroundSoft),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       child: Column(
         children: [
@@ -1181,20 +1150,21 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          group.label,
-                          style: const TextStyle(
+                          group.label.tr(),
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                         if (group.note != null) ...[
                           const SizedBox(height: 4),
                           Text(
-                            group.note!,
-                            style: const TextStyle(
+                            group.note!.tr(),
+                            style: TextStyle(
                               fontSize: 12,
-                              color: DomlyColors.muted,
+                              color: DomlyPalette.foreground(DomlyColors.muted),
                             ),
                           ),
                         ],
@@ -1209,16 +1179,17 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color:
-                            DomlyColors.buttonPrimary.withValues(alpha: 0.10),
+                        color: DomlyPalette.surface(
+                            DomlyColors.buttonPrimary.withValues(alpha: 0.10)),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
                         '$selectedCount',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
                     ),
@@ -1226,7 +1197,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                   const SizedBox(width: 10),
                   Icon(
                     expanded ? Icons.expand_less : Icons.expand_more,
-                    color: DomlyColors.muted,
+                    color: DomlyPalette.foreground(DomlyColors.muted),
                   ),
                 ],
               ),
@@ -1257,9 +1228,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     final isSeparate = item.separatePayment || item.key == 'carpet_cleaning';
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
@@ -1268,23 +1239,23 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
           SizedBox(
             width: 28,
             child: Material(
-              color: DomlyColors.backgroundSoft,
+              color: DomlyPalette.surface(DomlyColors.backgroundSoft),
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
                 onTap: () => _showAddonInfo(
                   item.key,
-                  title: item.label,
+                  title: item.label.tr(),
                   shortInfo: item.infoText,
                   fullInfo: item.fullInfo,
                   features: item.features,
                 ),
                 borderRadius: BorderRadius.circular(8),
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.all(6),
                   child: Icon(
                     Icons.info_outline,
                     size: 16,
-                    color: DomlyColors.buttonPrimary,
+                    color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
                   ),
                 ),
               ),
@@ -1296,19 +1267,20 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.label,
-                  style: const TextStyle(
+                  item.label.tr(),
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
                 if (item.note != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    item.note!,
-                    style:
-                        const TextStyle(fontSize: 12, color: DomlyColors.muted),
+                    item.note!.tr(),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: DomlyPalette.foreground(DomlyColors.muted)),
                   ),
                 ],
                 const SizedBox(height: 4),
@@ -1320,7 +1292,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                           : _formatMoney(unitPrice),
                   style: TextStyle(
                     fontSize: 12,
-                    color: isSeparate ? DomlyColors.primary : DomlyColors.muted,
+                    color: DomlyPalette.foreground(
+                        isSeparate ? DomlyColors.primary : DomlyColors.muted),
                     fontWeight: isSeparate ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
@@ -1342,8 +1315,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               child: DomlySecondaryButton(
                 onPressed: () =>
                     _changeAddonQuantity(item.key, quantity > 0 ? 0 : 1),
-                foregroundColor:
-                    quantity > 0 ? DomlyColors.primary : DomlyColors.foreground,
+                foregroundColor: DomlyPalette.foreground(quantity > 0
+                    ? DomlyColors.primary
+                    : DomlyColors.foreground),
                 label: quantity > 0 ? 'Убрать' : 'Добавить',
               ),
             ),
@@ -1361,9 +1335,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       width: _addonControlWidth,
       height: 42,
       decoration: BoxDecoration(
-        color: DomlyColors.backgroundSoft,
+        color: DomlyPalette.surface(DomlyColors.backgroundSoft),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1400,9 +1374,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: DomlyColors.border),
+        border: Border.all(color: DomlyPalette.border(DomlyColors.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1412,7 +1386,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           // Show selected package
@@ -1421,13 +1395,15 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: DomlyColors.buttonPrimary.withValues(alpha: 0.08),
+                color: DomlyPalette.surface(
+                    DomlyColors.buttonPrimary.withValues(alpha: 0.08)),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle,
-                      color: DomlyColors.buttonPrimary, size: 20),
+                  Icon(Icons.check_circle,
+                      color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
+                      size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -1435,10 +1411,11 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                       children: [
                         Text(
                           selectedPackage['name']?.toString() ?? 'Пакет',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                         if ((_quote['monthlyPrice'] as num?)?.toInt() != null &&
@@ -1446,9 +1423,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                                 0)
                           Text(
                             '${(_quote['monthlyPrice'] as num?)?.toInt() ?? 0} ₸',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: DomlyColors.foreground,
+                              color: DomlyPalette.foreground(
+                                  DomlyColors.foreground),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -1466,7 +1444,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DomlyColors.foreground,
+                color: DomlyPalette.foreground(DomlyColors.foreground),
               ),
             ),
             const SizedBox(height: 6),
@@ -1482,8 +1460,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                   quantity > 1
                       ? '• $label × $quantity — $total ₸'
                       : '• $label — $total ₸',
-                  style: const TextStyle(
-                      fontSize: 13, color: DomlyColors.foreground),
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: DomlyPalette.foreground(DomlyColors.foreground)),
                 ),
               );
             }).toList(),
@@ -1495,7 +1474,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DomlyColors.danger,
+                color: DomlyPalette.foreground(DomlyColors.danger),
               ),
             ),
             const SizedBox(height: 6),
@@ -1506,9 +1485,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   quantity > 1 ? '• $label × $quantity' : '• $label',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: DomlyColors.danger,
+                    color: DomlyPalette.foreground(DomlyColors.danger),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1522,7 +1501,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                 'Выберите пакет или дополнительные услуги'.tr(),
                 style: TextStyle(
                   fontSize: 13,
-                  color: DomlyColors.muted,
+                  color: DomlyPalette.foreground(DomlyColors.muted),
                 ),
               ),
             ),
@@ -1850,11 +1829,16 @@ class _FigmaCalculatorHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       height: 130,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF439F73), Color(0xFF80D4B0)],
+        gradient: LinearGradient(
+          colors: [
+            DomlyPalette.surface(Color(0xFF439F73)),
+            DomlyPalette.surface(Color(0xFF80D4B0))
+          ],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -1868,7 +1852,8 @@ class _FigmaCalculatorHeader extends StatelessWidget {
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -1880,7 +1865,8 @@ class _FigmaCalculatorHeader extends StatelessWidget {
               width: 138,
               height: 138,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color:
+                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
                 shape: BoxShape.circle,
               ),
             ),
@@ -1889,19 +1875,19 @@ class _FigmaCalculatorHeader extends StatelessWidget {
             left: 8,
             top: 23,
             child: Material(
-              color: const Color(0xFFF5F5F5),
+              color: DomlyPalette.surface(const Color(0xFFF5F5F5)),
               borderRadius: BorderRadius.circular(12),
               elevation: 4,
               shadowColor: Colors.black.withValues(alpha: 0.25),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: () => Navigator.maybePop(context),
-                child: const SizedBox(
+                child: SizedBox(
                   width: 36,
                   height: 36,
                   child: Icon(
                     Icons.arrow_back,
-                    color: Color(0xFF2E7D5B),
+                    color: DomlyPalette.foreground(Color(0xFF2E7D5B)),
                     size: 22,
                   ),
                 ),
@@ -1918,7 +1904,7 @@ class _FigmaCalculatorHeader extends StatelessWidget {
                 Text(
                   'Калькулятор'.tr(),
                   style: TextStyle(
-                    color: Colors.white,
+                    color: DomlyPalette.foreground(Colors.white),
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                     height: 31 / 20,
@@ -1927,7 +1913,7 @@ class _FigmaCalculatorHeader extends StatelessWidget {
                 Text(
                   'Выберите параметры'.tr(),
                   style: TextStyle(
-                    color: Color(0xFFEDFAF2),
+                    color: DomlyPalette.foreground(Color(0xFFEDFAF2)),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     height: 16 / 12,
@@ -1953,14 +1939,16 @@ class _FigmaAreaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final hasArea = area != null && area! > 0;
     return Container(
       height: 144,
       padding: const EdgeInsets.fromLTRB(25, 25, 28, 0),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1968,7 +1956,7 @@ class _FigmaAreaCard extends StatelessWidget {
           Text(
             'Площадь квартиры'.tr(),
             style: TextStyle(
-              color: Color(0xFF2B4338),
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 16,
               fontWeight: FontWeight.w600,
               height: 21 / 16,
@@ -1978,7 +1966,7 @@ class _FigmaAreaCard extends StatelessWidget {
           Text(
             'Берется из профиля'.tr(),
             style: TextStyle(
-              color: Color(0xFF658170),
+              color: DomlyPalette.foreground(Color(0xFF658170)),
               fontSize: 12,
               fontWeight: FontWeight.w500,
               height: 16 / 12,
@@ -1992,7 +1980,7 @@ class _FigmaAreaCard extends StatelessWidget {
               height: 40,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF0F7F2),
+                color: DomlyPalette.surface(const Color(0xFFF0F7F2)),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -2002,8 +1990,8 @@ class _FigmaAreaCard extends StatelessWidget {
                       hasArea ? '${area!.ceil()} м²' : 'Заполните в профиле',
                       softWrap: false,
                       overflow: TextOverflow.fade,
-                      style: const TextStyle(
-                        color: Color(0xFF2B4338),
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(Color(0xFF2B4338)),
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         height: 21 / 16,
@@ -2012,9 +2000,9 @@ class _FigmaAreaCard extends StatelessWidget {
                   ),
                   if (!hasArea) ...[
                     const SizedBox(width: 8),
-                    const Icon(
+                    Icon(
                       Icons.chevron_right,
-                      color: Color(0xFFC96A4A),
+                      color: DomlyPalette.foreground(Color(0xFFC96A4A)),
                       size: 22,
                     ),
                   ],
@@ -2039,12 +2027,14 @@ class _FigmaPackageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 22, 18, 18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2052,7 +2042,7 @@ class _FigmaPackageCard extends StatelessWidget {
           Text(
             'Выберите пакет'.tr(),
             style: TextStyle(
-              color: Color(0xFF2B4338),
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 20,
               fontWeight: FontWeight.w700,
               height: 22 / 20,
@@ -2062,7 +2052,7 @@ class _FigmaPackageCard extends StatelessWidget {
           Text(
             'Подписка или разовая уборка'.tr(),
             style: TextStyle(
-              color: Color(0xFF658170),
+              color: DomlyPalette.foreground(Color(0xFF658170)),
               fontSize: 12,
               fontWeight: FontWeight.w500,
               height: 16 / 12,
@@ -2097,12 +2087,14 @@ class _FigmaAddonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFDEECE3)),
+        border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2110,7 +2102,7 @@ class _FigmaAddonCard extends StatelessWidget {
           Text(
             'Дополнительные\nуслуги'.tr(),
             style: TextStyle(
-              color: Color(0xFF2B4338),
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 20,
               fontWeight: FontWeight.w700,
               height: 22 / 20,
@@ -2122,34 +2114,35 @@ class _FigmaAddonCard extends StatelessWidget {
           if (discount > 0 && !loading) ...[
             Center(
                 child: Text('${total + discount} ₸',
-                    style: const TextStyle(
+                    style: TextStyle(
                         decoration: TextDecoration.lineThrough,
-                        color: Colors.grey,
+                        color: DomlyPalette.foreground(Colors.grey),
                         fontSize: 18))),
             Center(
-                child: Text('Выгода $discount ₸',
-                    style: const TextStyle(
-                        color: Color(0xFF328965),
+                child: Text(
+                    "Выгода {p0} ₸".tr(params: {'p0': (discount).toString()}),
+                    style: TextStyle(
+                        color: DomlyPalette.foreground(Color(0xFF328965)),
                         fontWeight: FontWeight.w700))),
           ],
           Center(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
               child: loading
-                  ? const SizedBox(
+                  ? SizedBox(
                       key: ValueKey('loading'),
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Color(0xFFC96A4A),
+                        color: DomlyPalette.foreground(Color(0xFFC96A4A)),
                       ),
                     )
                   : Text(
                       '$total ₸',
                       key: ValueKey(total),
-                      style: const TextStyle(
-                        color: Color(0xFF2B4338),
+                      style: TextStyle(
+                        color: DomlyPalette.foreground(Color(0xFF2B4338)),
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                         height: 26 / 20,
@@ -2164,8 +2157,8 @@ class _FigmaAddonCard extends StatelessWidget {
             child: Text(
               caption,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF658170),
+              style: TextStyle(
+                color: DomlyPalette.foreground(Color(0xFF658170)),
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 height: 16 / 12,
@@ -2177,8 +2170,8 @@ class _FigmaAddonCard extends StatelessWidget {
             Text(
               details!,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF328965),
+              style: TextStyle(
+                color: DomlyPalette.foreground(Color(0xFF328965)),
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
                 height: 15 / 11,
@@ -2204,11 +2197,13 @@ class _FigmaQuantityStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       width: 92,
       height: 34,
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F7F2),
+        color: DomlyPalette.surface(const Color(0xFFF0F7F2)),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -2220,8 +2215,8 @@ class _FigmaQuantityStepper extends StatelessWidget {
           ),
           Text(
             '$quantity',
-            style: const TextStyle(
-              color: Color(0xFF2B4338),
+            style: TextStyle(
+              color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
@@ -2247,6 +2242,8 @@ class _FigmaStepperButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
@@ -2256,8 +2253,9 @@ class _FigmaStepperButton extends StatelessWidget {
         child: Icon(
           icon,
           size: 16,
-          color:
-              onTap == null ? const Color(0x668A8A8A) : const Color(0xFF2B4338),
+          color: DomlyPalette.foreground(onTap == null
+              ? const Color(0x668A8A8A)
+              : const Color(0xFF2B4338)),
         ),
       ),
     );

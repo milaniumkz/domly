@@ -1,3 +1,4 @@
+import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
@@ -39,6 +40,8 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _data.cleanerVerificationStream(),
       builder: (context, snapshot) {
@@ -113,7 +116,8 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
                                     style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.w700,
-                                      color: Colors.white,
+                                      color:
+                                          DomlyPalette.foreground(Colors.white),
                                     ),
                                   ),
                                   SizedBox(height: 2),
@@ -122,7 +126,8 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
                                         .tr(),
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Color(0xCCFFFFFF),
+                                      color: DomlyPalette.foreground(
+                                          Color(0xCCFFFFFF)),
                                     ),
                                   ),
                                 ],
@@ -148,7 +153,9 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
                             Text(
                               'Без подтвержденной верификации заказы не назначаются.'
                                   .tr(),
-                              style: TextStyle(color: DomlyColors.muted),
+                              style: TextStyle(
+                                  color: DomlyPalette.foreground(
+                                      DomlyColors.muted)),
                             ),
                             if ((verification['rejectionReason'] ?? '')
                                 .toString()
@@ -156,9 +163,13 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Text(
-                                  'Причина отказа: ${verification['rejectionReason']}',
-                                  style: const TextStyle(
-                                    color: DomlyColors.danger,
+                                  "Причина отказа: {p0}".tr(params: {
+                                    'p0': (verification['rejectionReason'])
+                                        .toString()
+                                  }),
+                                  style: TextStyle(
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.danger),
                                   ),
                                 ),
                               ),
@@ -197,9 +208,10 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
                             const SizedBox(height: 2),
                             TextField(
                               controller: _expiresController,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText:
-                                    'Срок действия документов (YYYY-MM-DD)',
+                                    'Срок действия документов (YYYY-MM-DD)'
+                                        .tr(),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -240,7 +252,7 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    title.tr(),
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,

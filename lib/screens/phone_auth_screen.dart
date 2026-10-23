@@ -1,3 +1,4 @@
+import '../theme/domly_palette.dart';
 import '../app/app_flavor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
@@ -164,6 +165,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final titleText = widget.title == 'Domly Pro'
         ? 'Вход в Domly Pro'.tr()
         : 'Вход в {title}'.tr(params: {'title': widget.title});
@@ -184,9 +187,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(28),
-                    color: Colors.white,
+                    color: DomlyPalette.surface(Colors.white),
                     border: Border.all(
-                      color: DomlyColors.primary.withValues(alpha: 0.36),
+                      color: DomlyPalette.border(
+                          DomlyColors.primary.withValues(alpha: 0.36)),
                     ),
                     boxShadow: const [
                       BoxShadow(
@@ -199,7 +203,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   child: Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: DomlyPalette.surface(Colors.white),
                       borderRadius: BorderRadius.circular(27),
                     ),
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
@@ -223,10 +227,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   Text(
                     _errorText!,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: DomlyColors.danger,
+                      color: DomlyPalette.foreground(DomlyColors.danger),
                     ),
                   ),
                 ],
@@ -246,7 +250,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           width: 112,
           height: 112,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.82),
+            color: DomlyPalette.surface(Colors.white.withValues(alpha: 0.82)),
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
@@ -268,17 +272,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         const SizedBox(height: 10),
         Text(
           titleText,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,
-            color: DomlyColors.foreground,
+            color: DomlyPalette.foreground(DomlyColors.foreground),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           'Чистота и комфорт по подписке.'.tr(),
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 14, color: DomlyColors.muted),
+          style: TextStyle(
+              fontSize: 14, color: DomlyPalette.foreground(DomlyColors.muted)),
         ),
         const SizedBox(height: 20),
         Align(
@@ -288,7 +293,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: DomlyColors.foreground.withValues(alpha: 0.9),
+              color: DomlyPalette.foreground(
+                  DomlyColors.foreground.withValues(alpha: 0.9)),
             ),
           ),
         ),
@@ -301,23 +307,25 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             hintText: '+7 (700) 000-00-00',
             prefixIcon: const Icon(Icons.phone_outlined),
             suffixIcon: _hasValidPhone
-                ? const Icon(Icons.check_circle,
-                    color: DomlyColors.buttonPrimary)
+                ? Icon(Icons.check_circle,
+                    color: DomlyPalette.foreground(DomlyColors.buttonPrimary))
                 : null,
             filled: true,
-            fillColor: DomlyColors.backgroundSoft,
+            fillColor: DomlyPalette.surface(DomlyColors.backgroundSoft),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(20),
               borderSide: BorderSide.none,
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(20),
-              borderSide: const BorderSide(color: DomlyColors.border),
+              borderSide:
+                  BorderSide(color: DomlyPalette.border(DomlyColors.border)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(20),
-              borderSide: const BorderSide(
-                  color: DomlyColors.buttonPrimary, width: 1.5),
+              borderSide: BorderSide(
+                  color: DomlyPalette.border(DomlyColors.buttonPrimary),
+                  width: 1.5),
             ),
           ),
           onChanged: (_) => setState(() => _errorText = null),
@@ -329,17 +337,20 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           label: _isLoading ? 'Отправляем...'.tr() : 'Получить код'.tr(),
           onPressed: _isLoading || !_acceptedTerms ? null : _sendCode,
         ),
-        if (AppScope.of(context).config.flavor == AppFlavor.customer && !AppScope.of(context).config.adminSurface)
-          TextButton(onPressed: () => Navigator.pushNamed(context, '/assistant'), child: const Text('Помощник Domly')),
+        if (AppScope.of(context).config.flavor == AppFlavor.customer &&
+            !AppScope.of(context).config.adminSurface)
+          TextButton(
+              onPressed: () => Navigator.pushNamed(context, '/assistant'),
+              child: Text('Помощник Domly'.tr())),
         if (!_hasValidPhone) ...[
           const SizedBox(height: 10),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
               'Введите номер полностью, чтобы получить код.'.tr(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: DomlyColors.muted,
+                color: DomlyPalette.foreground(DomlyColors.muted),
               ),
             ),
           ),
@@ -349,22 +360,23 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: DomlyColors.backgroundSoft,
+            color: DomlyPalette.surface(DomlyColors.backgroundSoft),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.chat_outlined,
-                  size: 18, color: DomlyColors.buttonPrimary),
+              Icon(Icons.chat_outlined,
+                  size: 18,
+                  color: DomlyPalette.foreground(DomlyColors.buttonPrimary)),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   'Код подтверждения будет отправлен на указанный номер WhatsApp.'
                       .tr(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: DomlyColors.muted,
+                    color: DomlyPalette.foreground(DomlyColors.muted),
                   ),
                 ),
               ),
@@ -380,12 +392,12 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(10, 8, 12, 10),
       decoration: BoxDecoration(
-        color: DomlyColors.backgroundSoft,
+        color: DomlyPalette.surface(DomlyColors.backgroundSoft),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: _acceptedTerms
+          color: DomlyPalette.border(_acceptedTerms
               ? DomlyColors.primary.withValues(alpha: 0.45)
-              : DomlyColors.border,
+              : DomlyColors.border),
         ),
       ),
       child: Row(
@@ -393,7 +405,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         children: [
           Checkbox(
             value: _acceptedTerms,
-            activeColor: DomlyColors.buttonPrimary,
+            activeColor: DomlyPalette.foreground(DomlyColors.buttonPrimary),
             onChanged: (value) {
               setState(() {
                 _acceptedTerms = value ?? false;
@@ -411,9 +423,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 children: [
                   Text(
                     'Я принимаю условия сервиса, '.tr(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                       height: 1.35,
                     ),
                   ),
@@ -423,9 +435,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   ),
                   Text(
                     ' и '.tr(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: DomlyColors.muted,
+                      color: DomlyPalette.foreground(DomlyColors.muted),
                       height: 1.35,
                     ),
                   ),
@@ -450,23 +462,24 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           width: 56,
           height: 56,
           decoration: BoxDecoration(
-            color: DomlyColors.buttonPrimary.withValues(alpha: 0.14),
+            color: DomlyPalette.surface(
+                DomlyColors.buttonPrimary.withValues(alpha: 0.14)),
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
-          child: const Icon(
+          child: Icon(
             Icons.check,
             size: 24,
-            color: DomlyColors.buttonPrimary,
+            color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
           ),
         ),
         const SizedBox(height: 16),
         Text(
           'Введите код'.tr(),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,
-            color: DomlyColors.foreground,
+            color: DomlyPalette.foreground(DomlyColors.foreground),
           ),
         ),
         const SizedBox(height: 6),
@@ -476,7 +489,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               : 'Код отправлен на номер {phone}'
                   .tr(params: {'phone': _formattedPhone}),
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 14, color: DomlyColors.muted),
+          style: TextStyle(
+              fontSize: 14, color: DomlyPalette.foreground(DomlyColors.muted)),
         ),
         if (_fallbackCode != null) ...[
           const SizedBox(height: 12),
@@ -488,16 +502,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF7F1ED),
+                  color: DomlyPalette.surface(const Color(0xFFF7F1ED)),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Text(
                   'Код: {code}'.tr(params: {'code': _fallbackCode ?? ''}),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
               ),
@@ -523,27 +537,30 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(1),
                   ],
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
-                    color: DomlyColors.foreground,
+                    color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                   decoration: InputDecoration(
                     filled: true,
-                    fillColor: DomlyColors.backgroundSoft,
+                    fillColor: DomlyPalette.surface(DomlyColors.backgroundSoft),
                     contentPadding: EdgeInsets.zero,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: DomlyColors.border),
+                      borderSide: BorderSide(
+                          color: DomlyPalette.border(DomlyColors.border)),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: DomlyColors.border),
+                      borderSide: BorderSide(
+                          color: DomlyPalette.border(DomlyColors.border)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(
-                          color: DomlyColors.buttonPrimary, width: 1.5),
+                      borderSide: BorderSide(
+                          color: DomlyPalette.border(DomlyColors.buttonPrimary),
+                          width: 1.5),
                     ),
                   ),
                   onChanged: (value) => _onCodeChanged(index, value),
@@ -585,21 +602,21 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }) {
     final isEnabled = onTap != null;
     return Material(
-      color: Colors.transparent,
+      color: DomlyPalette.surface(Colors.transparent),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Text(
-            label,
+            label.tr(),
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: isEnabled
+              color: DomlyPalette.foreground(isEnabled
                   ? DomlyColors.buttonPrimary
-                  : DomlyColors.buttonPrimary.withValues(alpha: 0.45),
+                  : DomlyColors.buttonPrimary.withValues(alpha: 0.45)),
             ),
           ),
         ),
@@ -711,18 +728,20 @@ class _TermsLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return InkWell(
       borderRadius: BorderRadius.circular(6),
       onTap: () => Navigator.of(context).pushNamed(routeName),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
         child: Text(
-          label,
-          style: const TextStyle(
+          label.tr(),
+          style: TextStyle(
             fontSize: 12,
             height: 1.35,
             fontWeight: FontWeight.w700,
-            color: DomlyColors.buttonPrimary,
+            color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
             decoration: TextDecoration.underline,
             decorationColor: DomlyColors.buttonPrimary,
           ),

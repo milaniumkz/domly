@@ -1,3 +1,4 @@
+import '../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 import '../localization/translation_controller.dart';
 import '../ui/domly_ui.dart';
@@ -62,6 +63,8 @@ class InfoDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     final hasExtraContent = fullInfo != null && fullInfo!.isNotEmpty;
     final hasFeatures = features != null && features!.isNotEmpty;
     final hasExclusions = exclusions != null && exclusions!.isNotEmpty;
@@ -80,9 +83,12 @@ class InfoDialog extends StatelessWidget {
               // Header
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [DomlyColors.primary, DomlyColors.accent],
+                    colors: [
+                      DomlyPalette.surface(DomlyColors.primary),
+                      DomlyPalette.surface(DomlyColors.accent)
+                    ],
                   ),
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(20),
@@ -95,13 +101,14 @@ class InfoDialog extends StatelessWidget {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: DomlyPalette.surface(
+                            Colors.white.withValues(alpha: 0.2)),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       alignment: Alignment.center,
-                      child: const Icon(
+                      child: Icon(
                         Icons.info_outline,
-                        color: Colors.white,
+                        color: DomlyPalette.foreground(Colors.white),
                         size: 24,
                       ),
                     ),
@@ -109,15 +116,16 @@ class InfoDialog extends StatelessWidget {
                     Expanded(
                       child: Text(
                         title.tr(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                          color: DomlyPalette.foreground(Colors.white),
                         ),
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
+                      icon: Icon(Icons.close,
+                          color: DomlyPalette.foreground(Colors.white)),
                       onPressed: () => Navigator.of(context).pop(),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -146,16 +154,18 @@ class InfoDialog extends StatelessWidget {
                                   vertical: 6,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: DomlyColors.buttonPrimary
-                                      .withValues(alpha: 0.1),
+                                  color: DomlyPalette.surface(DomlyColors
+                                      .buttonPrimary
+                                      .withValues(alpha: 0.1)),
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
                                   '$price ₸',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w700,
-                                    color: DomlyColors.foreground,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.foreground),
                                   ),
                                 ),
                               ),
@@ -166,18 +176,19 @@ class InfoDialog extends StatelessWidget {
                                   vertical: 6,
                                 ),
                                 decoration: BoxDecoration(
-                                  color:
-                                      DomlyColors.accent.withValues(alpha: 0.1),
+                                  color: DomlyPalette.surface(DomlyColors.accent
+                                      .withValues(alpha: 0.1)),
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
                                   '{amount} ₸ бонус'.tr(
                                     params: {'amount': '$bonusAmount'},
                                   ),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w700,
-                                    color: DomlyColors.accent,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.accent),
                                   ),
                                 ),
                               ),
@@ -203,10 +214,11 @@ class InfoDialog extends StatelessWidget {
                       // Description
                       Text(
                         description.tr(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           height: 1.5,
-                          color: DomlyColors.foreground,
+                          color:
+                              DomlyPalette.foreground(DomlyColors.foreground),
                         ),
                       ),
 
@@ -217,10 +229,10 @@ class InfoDialog extends StatelessWidget {
                         const SizedBox(height: 12),
                         Text(
                           fullInfo!.tr(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             height: 1.5,
-                            color: DomlyColors.muted,
+                            color: DomlyPalette.foreground(DomlyColors.muted),
                           ),
                         ),
                       ],
@@ -232,10 +244,11 @@ class InfoDialog extends StatelessWidget {
                         const SizedBox(height: 12),
                         Text(
                           'Что входит:'.tr(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -245,20 +258,22 @@ class InfoDialog extends StatelessWidget {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   '• ',
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: DomlyColors.foreground,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.foreground),
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 Expanded(
                                   child: Text(
                                     feature.tr(),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
-                                      color: DomlyColors.foreground,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.foreground),
                                     ),
                                   ),
                                 ),
@@ -274,10 +289,11 @@ class InfoDialog extends StatelessWidget {
                         const SizedBox(height: 12),
                         Text(
                           'Что не входит:'.tr(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: DomlyColors.foreground,
+                            color:
+                                DomlyPalette.foreground(DomlyColors.foreground),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -287,20 +303,22 @@ class InfoDialog extends StatelessWidget {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   '• ',
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: DomlyColors.muted,
+                                    color: DomlyPalette.foreground(
+                                        DomlyColors.muted),
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 Expanded(
                                   child: Text(
                                     item.tr(),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
-                                      color: DomlyColors.foreground,
+                                      color: DomlyPalette.foreground(
+                                          DomlyColors.foreground),
                                     ),
                                   ),
                                 ),
@@ -391,6 +409,8 @@ class InfoBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DomlyPalette.watch(context);
+
     return Container(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -403,7 +423,7 @@ class InfoBottomSheet extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                color: DomlyPalette.surface(Colors.grey[300]),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -413,10 +433,10 @@ class InfoBottomSheet extends StatelessWidget {
           // Title
           Text(
             title.tr(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
           const SizedBox(height: 12),
@@ -424,10 +444,10 @@ class InfoBottomSheet extends StatelessWidget {
           // Description
           Text(
             description.tr(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               height: 1.5,
-              color: DomlyColors.foreground,
+              color: DomlyPalette.foreground(DomlyColors.foreground),
             ),
           ),
 
@@ -436,10 +456,10 @@ class InfoBottomSheet extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               fullInfo!.tr(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 height: 1.5,
-                color: DomlyColors.muted,
+                color: DomlyPalette.foreground(DomlyColors.muted),
               ),
             ),
           ],
