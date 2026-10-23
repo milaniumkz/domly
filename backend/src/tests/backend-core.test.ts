@@ -978,3 +978,20 @@ test('all web bootstraps preserve detail identifiers before Flutter starts', asy
     assert.equal(window.__domlyBootRoute, route, surface);
   }
 });
+
+test('role notification uses one recipient batch without dropping recipients or bypassing live role filtering',async()=>{
+  const realtime=require('../realtime/sse');const originalOne=realtime.publishToUser,originalMany=realtime.publishToUsers;
+  const users=Array.from({length:100},(_,i)=>({id:'recipient-'+i}));const calls:Array<{ids:string[];event:any}>=[];
+  realtime.publishToUser=async(id:string,event:any)=>{calls.push({ids:[id],event});};
+  realtime.publishToUsers=async(ids:string[],event:any)=>{calls.push({ids,event});};
+  const db:any={query:async(sql:string,params:any[])=>{
+    if(sql.includes('SELECT id FROM app_users WHERE role=')){assert.match(sql,/status <> 'blocked'/);assert.equal(params[0],'admin');return{rows:users};}
+    return {rows:[]};
+  }};
+  try {
+    const row={id:'notification-batch',user_id:null,role:'admin'};
+    await new NotificationService(db,{send:async()=>undefined} as any).deliver(row,{role:'admin',titleRu:'Новый заказ',bodyRu:'Создан заказ'});
+    assert.equal(calls.length,1,'one stored role event must not require one Redis round trip per recipient');
+    assert.deepEqual(calls[0].ids,users.map(u=>u.id));assert.equal(calls[0].event.notification.id,row.id);
+  } finally {realtime.publishToUser=originalOne;if(originalMany)realtime.publishToUsers=originalMany;else delete realtime.publishToUsers;}
+});

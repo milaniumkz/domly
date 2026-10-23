@@ -1020,6 +1020,8 @@ CREATE INDEX IF NOT EXISTS idx_payments_status_created ON payments(status, creat
 CREATE INDEX IF NOT EXISTS idx_payment_events_payment_created ON payment_events(payment_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_bonus_transactions_user ON bonus_transactions(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at, created_at DESC);
+-- Pair with the recipient index for user OR role history/count lookups.
+CREATE INDEX IF NOT EXISTS idx_notifications_broadcast_role_created ON notifications(role, created_at DESC) WHERE user_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_notifications_role_dedupe ON notifications(role, dedupe_key) WHERE role IS NOT NULL AND dedupe_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_notification_reads_user ON notification_reads(user_id, read_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_participants_user ON chat_participants(user_id, last_read_at);

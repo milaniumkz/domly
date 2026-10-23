@@ -1,4 +1,4 @@
-import {buildRealtimeRouter,emitToUser} from '../realtime/sse';
+import {buildRealtimeRouter,emitToUser,publishToUsers} from '../realtime/sse';
 import {buildV1Router} from '../http/routes/v1';
 import {AuthService} from '../modules/domainServices';
 import fs from 'node:fs';
@@ -53,6 +53,41 @@ test('technical center: real PostgreSQL, access boundaries, evidence and operati
    for(const [u,role,path,method]of [[userA,'customer','test-success','GET'],[userA,'customer','test-fail','POST'],[userA,'customer','test-fail','POST'],[userB,'admin','test-success','GET']])await request('/api/v1/'+path,method as string,undefined,owner,{Authorization:'Bearer '+signAccessToken({id:u as string,role:role as any,phone:'fixture'}),'X-Domly-Session':'fixture-session-a','X-Domly-Version':'test-v1'});
    for(let i=0;i<30;i++){if((await db.query("SELECT COUNT(*)::int AS n FROM tech_events WHERE user_id=$1 AND result='failure'",[userA])).rows[0].n===2)break;await new Promise(r=>setTimeout(r,20));}
    const rows=(await db.query('SELECT * FROM tech_events WHERE user_id=$1 ORDER BY started_at',[userA])).rows;assert.equal(rows.length,3);for(const r of rows)assert.equal(r.signature,eventSignature(r));const p=(await db.query("SELECT p.* FROM tech_problems p JOIN tech_events e ON e.problem_id=p.id WHERE e.user_id=$1 LIMIT 1",[userA])).rows[0];assert.equal(Number(p.occurrences),2);eventA=rows[0].id;eventB=(await db.query('SELECT id FROM tech_events WHERE user_id=$1',[userB])).rows[0].id;
+  });
+  await t.test('one live identity read per request still rejects subsequent revocation and never reuses a different token',async()=>{
+   const original=db.query.bind(db);let reads=0;
+   db.query=(async(sql:string,values?:unknown[])=>{if(/^SELECT (id,full_name,role|deleted_at|role,status).*FROM app_users WHERE id=/s.test(sql))reads++;return original(sql,values);}) as typeof db.query;
+   configureAuthDatabase(db);
+   const token=signAccessToken({id:userA,role:'customer',phone:'fixture'});
+   const get=()=>request('/api/v1/me','GET',undefined,owner,{Authorization:'Bearer '+token});
+   try{
+    assert.equal((await get()).status,200);
+    assert.equal(reads,1,'collector, mobile guard and auth must share only this request live identity read');
+    await original("UPDATE app_users SET status='blocked' WHERE id=$1",[userA]);
+    assert.equal((await get()).status,401,'blocking must apply on the very next request');
+    await original("UPDATE app_users SET status='approved',auth_version=auth_version+1 WHERE id=$1",[userA]);
+    assert.equal((await get()).status,401,'revoked token must not reuse a previous request result');
+    await original('UPDATE app_users SET auth_version=0,deleted_at=NOW() WHERE id=$1',[userA]);
+    assert.equal((await get()).status,401);
+    assert.equal((await request('/api/v1/me','GET',undefined,owner,{Authorization:'Bearer invalid'})).status,401);
+   }finally{db.query=original;configureAuthDatabase(null);await original("UPDATE app_users SET status='approved',auth_version=0,deleted_at=NULL WHERE id=$1",[userA]);}
+  });
+  await t.test('notification history and unread count avoid scanning other recipients while retaining role broadcasts',async()=>{
+   await db.query(`INSERT INTO notifications(role,title_ru,body_ru,target_type) SELECT 'admin','Other','Body','perf_fixture' FROM generate_series(1,12000)`);
+   await db.query(`INSERT INTO notifications(user_id,title_ru,body_ru,target_type) SELECT $1,'Own','Body','perf_fixture' FROM generate_series(1,5)`,[userA]);
+   await db.query(`INSERT INTO notifications(role,title_ru,body_ru,target_type) VALUES('customer','Broadcast','Body','perf_fixture'),('cleaner','Hidden','Body','perf_fixture')`);
+   await db.query('ANALYZE notifications');
+   const predicate="FROM notifications n LEFT JOIN notification_reads nr ON nr.notification_id=n.id AND nr.user_id=$1 WHERE (n.user_id=$1 OR (n.user_id IS NULL AND n.role=$2))";
+   const plan=(await db.query('EXPLAIN (FORMAT JSON) SELECT n.*,COALESCE(n.read_at,nr.read_at) AS read_at '+predicate,[userA,'customer'])).rows[0]['QUERY PLAN'][0].Plan;
+   const scansOtherRecipients=(node:any):boolean=>(node['Node Type']==='Seq Scan'&&node['Relation Name']==='notifications')||(node.Plans??[]).some(scansOtherRecipients);
+   assert.equal(scansOtherRecipients(plan),false,'a recipient lookup must not scan all other users notifications');
+   const result=await request('/api/v1/notifications','GET',undefined,owner,{Authorization:'Bearer '+signAccessToken({id:userA,role:'customer',phone:'fixture'})});
+   assert.equal(result.status,200);assert.equal(result.body.data.filter((n:any)=>n.target_type==='perf_fixture').length,6);
+   assert.ok(result.body.data.every((n:any)=>n.user_id===userA||n.user_id===null&&n.role==='customer'));
+   const unread=await request('/api/v1/notifications/unread-count','GET',undefined,owner,{Authorization:'Bearer '+signAccessToken({id:userA,role:'customer',phone:'fixture'})});
+   assert.equal(unread.status,200);assert.equal(unread.body.data.count,result.body.data.filter((n:any)=>n.read_at===null).length);
+   const countPlan=(await db.query('EXPLAIN (FORMAT JSON) SELECT count(*) '+predicate+' AND COALESCE(n.read_at,nr.read_at) IS NULL',[userA,'customer'])).rows[0]['QUERY PLAN'][0].Plan;
+   assert.equal(scansOtherRecipients(countPlan),false);
   });
   await t.test('server request identifiers cannot be forged to merge two user histories',async()=>{
    const supplied=randomUUID();const first=await request('/api/v1/test-success','GET',undefined,owner,{Authorization:'Bearer '+signAccessToken({id:userA,role:'customer',phone:'fixture'}),'X-Request-ID':supplied});const second=await request('/api/v1/test-success','GET',undefined,owner,{Authorization:'Bearer '+signAccessToken({id:userB,role:'admin',phone:'fixture'}),'X-Request-ID':supplied});
@@ -125,6 +160,12 @@ test('technical center: real PostgreSQL, access boundaries, evidence and operati
      const response=await fetch(base+'/api/v1/realtime',{headers:{Authorization:'Bearer '+token},signal:controllers[index].signal});assert.equal(response.status,200);
      const reader=response.body!.getReader();assert.match(new TextDecoder().decode((await reader.read()).value),/connected/);readers.push(reader);
     }
+    await publishToUsers([userA,userA],{type:'fixture.recipient_batch'});
+    const batchText=new TextDecoder().decode((await readers[0].read()).value);
+    assert.equal((batchText.match(/fixture.recipient_batch/g)??[]).length,1,'duplicate recipient IDs must not duplicate an event');
+    emitToUser(userB,{type:'fixture.not_a_recipient'});
+    const otherText=new TextDecoder().decode((await readers[1].read()).value);
+    assert.match(otherText,/fixture.not_a_recipient/);assert.doesNotMatch(otherText,/fixture.recipient_batch/);
     assert.equal((await tech('users/'+userA+'/operation','POST',{action:'revoke_sessions',reason:'Проверка открытого соединения',confirm:true,operatorPassword:password})).status,200);
     const end=async()=>{let text='';while(true){const part=await readers[0].read();if(part.done)return text;text+=new TextDecoder().decode(part.value);}};
     let timeout:ReturnType<typeof setTimeout>|undefined;

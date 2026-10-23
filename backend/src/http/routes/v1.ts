@@ -1,6 +1,6 @@
 import { customerMonthlyProgress } from '../../modules/customerProgress';
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
-import {idempotent} from '../../common/idempotency';
+import {idempotent,idempotentTransaction} from '../../common/idempotency';
 import {ensureChecklistReport,saveChecklist} from '../../modules/checklists';
 import {validateBookingStart} from '../../modules/bookingValidation';
 import {revokeRealtimeSessions} from '../../realtime/sse';
@@ -1406,6 +1406,7 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/orders', auth(['customer']), idempotent(deps.db, 'order_create'), asyncHandler(async (req, res) => {
+    const result = await idempotentTransaction(deps.db, req, async () => {
     validateBookingStart(req.body.date, req.body.startTime);
     const customerPackage = first<{ id: string; package_id: string; address_id: string; available_cleanings: number; total_cleanings: number; status: string; purchase_config: any; freeze_until?: string }>((await deps.db.query(
       `SELECT * FROM customer_packages WHERE id=$1 AND customer_id=$2`,
@@ -1473,7 +1474,9 @@ export function buildV1Router(deps: {
       dedupeKey: `order-${row!.id}`,
     });
     const offer = addonAmount > 0 ? null : await offerNextCleanerAndNotify(row!.id);
-    ok(res, { order: row, offer }, 201);
+    return { order: row, offer };
+    }, 201);
+    ok(res, result, 201);
   }));
 
   router.post('/orders/:id/pay', auth(['customer']), asyncHandler(async (req, res) => {

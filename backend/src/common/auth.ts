@@ -57,6 +57,26 @@ export function verifyAccessToken(token: string): AuthUser {
   return jwt.verify(token, accessKey) as AuthUser;
 }
 
+// Request-local reuse only: every new request reads live account state.
+// Include the token and database so middleware cannot reuse another identity.
+const requestIdentities = new WeakMap<Request, {db: Database; token: string; result: Promise<{user: AuthUser; account: any}>}>();
+export async function requestIdentity(req: Request, db: Database, token: string) {
+  const previous = requestIdentities.get(req);
+  if (previous?.db === db && previous.token === token) return previous.result;
+  const result = (async () => {
+    const user = verifyAccessToken(token);
+    const account = (await db.query('SELECT id,full_name,role,status,deleted_at,auth_version,password_change_required FROM app_users WHERE id=$1', [user.id])).rows[0];
+    return {user, account};
+  })();
+  const entry = {db, token, result};
+  requestIdentities.set(req, entry);
+  try { return await result; }
+  catch (error) {
+    if (requestIdentities.get(req) === entry) requestIdentities.delete(req);
+    throw error;
+  }
+}
+
 export function auth(requiredRoles: AuthUser['role'][] = [], options: { allowQueryToken?: boolean } = {}) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     const raw = req.header('authorization') ?? '';
@@ -66,9 +86,10 @@ export function auth(requiredRoles: AuthUser['role'][] = [], options: { allowQue
     const token = raw.startsWith('Bearer ') ? raw.slice(7) : queryToken;
     if (!token) return next(new ApiError(401, 'unauthorized', 'Войдите в аккаунт заново.'));
     try {
-      const user = verifyAccessToken(token);
+      const identity = authDatabase ? await requestIdentity(req, authDatabase, token) : null;
+      const user = identity?.user ?? verifyAccessToken(token);
       if(authDatabase){
-       const account=(await authDatabase.query('SELECT role,status,deleted_at,auth_version,password_change_required FROM app_users WHERE id=$1',[user.id])).rows[0];
+       const account=identity!.account;
        if(!account||account.deleted_at||account.status==='blocked'||account.role!==user.role||Number(account.auth_version)!==Number(user.authVersion??0))return next(new ApiError(401,'unauthorized','Сессия завершена. Войдите заново.'));
        if(account.password_change_required&&!['/auth/password/change','/auth/logout','/me'].includes(req.path))return next(new ApiError(403,'password_change_required','Сначала смените временный пароль.'));
       }

@@ -799,6 +799,19 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
     assert.equal((await hook(env.kaspiWebhookToken)).status,200);assert.equal((await hook(env.kaspiWebhookToken)).status,200);
     const cp=(await db.query('SELECT status,available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0];assert.equal(cp.status,'active');assert.equal(cp.available_cleanings,1);
     const orderBody={customerPackageId:rows[0].data.customerPackage.id,date:'2035-01-03',startTime:'08:00',idempotencyKey:randomUUID()};
+    for(const stage of ['notification','idempotency']) {
+      const fail='fail_order_completion_'+randomUUID().replace(/-/g,'');
+      const table=stage==='notification'?'notifications':'api_idempotency';
+      const condition=stage==='notification'?"NEW.target_type='order' AND NEW.title_ru='Новый заказ'":`NEW.scope='order_create' AND NEW.user_id='${customer}'::uuid AND NEW.status_code=201`;
+      await db.query(`CREATE FUNCTION ${fail}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF ${condition} THEN RAISE EXCEPTION 'fixture completion unavailable'; END IF; RETURN NEW; END $$`);
+      await db.query(`CREATE TRIGGER ${fail} BEFORE ${stage==='notification'?'INSERT':'UPDATE'} ON ${table} FOR EACH ROW EXECUTE FUNCTION ${fail}()`);
+      try {
+        const failed=await fetch(base+'/orders',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({...orderBody,idempotencyKey:randomUUID()})});
+        assert.ok(failed.status>=500,stage+' fault must be reported');
+        assert.equal((await db.query('SELECT count(*)::int AS n FROM service_orders WHERE customer_id=$1',[customer])).rows[0].n,0,stage+' failure must not leave a hidden booked order');
+        assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].available_cleanings,1);
+      } finally {await db.query(`DROP TRIGGER IF EXISTS ${fail} ON ${table}`);await db.query(`DROP FUNCTION IF EXISTS ${fail}()`);}
+    }
     const orders=await Promise.all([1,2,3].map(()=>fetch(base+'/orders',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(orderBody)})));
     assert.ok(orders.every(r=>r.status===201));
     const booked=await Promise.all(orders.map(r=>r.json() as Promise<any>));assert.equal(new Set(booked.map(r=>r.data.order.id)).size,1);

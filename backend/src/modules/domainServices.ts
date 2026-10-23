@@ -10,7 +10,7 @@ import { first } from '../common/sql';
 import { AuthUser, signAccessToken, signRefreshToken } from '../common/auth';
 import { env } from '../common/env';
 import { WapiOtpService, FcmService } from './integrations';
-import { publishToUser } from '../realtime/sse';
+import { publishToUser, publishToUsers } from '../realtime/sse';
 
 function assertOtpAccountActive(user: {status?: string} | undefined) {
   if (user?.status === 'blocked') throw new ApiError(403, 'account_blocked', 'Аккаунт заблокирован. Обратитесь в поддержку.');
@@ -209,7 +209,7 @@ export class NotificationService {
           `SELECT id FROM app_users WHERE role=$1 AND status <> 'blocked'`,
           [row.role],
         )).rows;
-        for (const user of users) await publishToUser(user.id, { type: 'notification', notification: row });
+        await publishToUsers(users.map(user => user.id), { type: 'notification', notification: row });
       }
       const isCleanerOrderOffer = Boolean(input.userId && input.targetType === 'order_offer');
       if (!isCleanerOrderOffer) {
