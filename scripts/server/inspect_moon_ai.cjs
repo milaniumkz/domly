@@ -4,6 +4,29 @@ const {Queue}=require('bullmq');
 (async()=>{
  console.log('OTP configuration:',JSON.stringify({fallbackOnFailure:process.env.OTP_FAILURE_FALLBACK==='true',showCode:process.env.OTP_SHOW_CODE==='true'||process.env.OTP_SHOW_CODE==='1',legacyWindowActive:Date.parse(process.env.OTP_FAILURE_FALLBACK_UNTIL||'')>Date.now(),provider:process.env.OTP_PROVIDER||'wapi',deliveryConfigured:process.env.OTP_PROVIDER==='greenapi'?!!process.env.GREEN_API_INSTANCE_ID&&!!process.env.GREEN_API_TOKEN:!!process.env.WAPI_TOKEN&&!!process.env.WAPI_PROFILE_ID}));
  console.log('MoonAI configuration:',JSON.stringify({enabled:process.env.MOON_AI_ENABLED==='true',channelUrlConfigured:!!process.env.MOON_AI_CHANNEL_URL,channelKeyConfigured:!!process.env.MOON_AI_CHANNEL_API_KEY,webhookConfigured:!!process.env.MOON_AI_WEBHOOK_TOKEN}));
+ if(process.env.OTP_PROVIDER==='greenapi' && process.env.GREEN_API_INSTANCE_ID && process.env.GREEN_API_TOKEN){
+   const crypto=require('node:crypto');
+   const root='https://7700.api.greenapi.com/waInstance'+process.env.GREEN_API_INSTANCE_ID;
+   async function greenRead(method,suffix=''){
+     try{const response=await fetch(root+'/'+method+'/'+process.env.GREEN_API_TOKEN+suffix,{signal:AbortSignal.timeout(15000)});
+       const data=await response.json().catch(()=>null);
+       console.log('OTP channel probe:',JSON.stringify({method,httpStatus:response.status,state:data?.stateInstance||null}));
+       return response.ok?data:null;
+     }catch(e){console.log('OTP channel probe:',JSON.stringify({method,errorKind:e.name}));return null;}
+   }
+   await greenRead('getStateInstance');
+   if(/^[a-f0-9]{64}$/.test(process.env.OTP_PHONE_SHA256||'')){
+     const outgoing=await greenRead('lastOutgoingMessages','?minutes=1440');
+     const matching=Array.isArray(outgoing)?outgoing.filter(row=>{
+       const phone='+'+String(row.chatId||'').split('@')[0].replace(/\D/g,'');
+       return crypto.createHash('sha256').update(phone).digest('hex')===process.env.OTP_PHONE_SHA256;
+     }):[];
+     console.log('Requested OTP deliveries:',JSON.stringify(matching.slice(0,10).map(row=>({
+       sentAt:row.timestamp?new Date(row.timestamp*1000).toISOString():null,
+       deliveryStatus:row.statusMessage||row.status||null,type:row.typeMessage||null
+     }))));
+   }
+ }
  const apiBase=`https://core.mooonai.com/api/v1/organizations/${process.env.MOON_AI_ORGANIZATION_ID||4649}/agents/${process.env.MOON_AI_AGENT_ID||6875}`;
  const apiKey=process.env.MOON_AI_REST_API_KEY||process.env.MOON_AI_CHANNEL_API_KEY;
  async function read(path){const r=await fetch(apiBase+path,{headers:{Authorization:'Bearer '+apiKey},signal:AbortSignal.timeout(15000)});const data=await r.json().catch(()=>null);console.log('MoonAI read-only API:',JSON.stringify({path,status:r.status,keys:data&&!Array.isArray(data)?Object.keys(data).slice(0,15):[]}));return r.ok?data:null;}
@@ -25,6 +48,7 @@ const {Queue}=require('bullmq');
       const d=await r.json().catch(()=>null);console.log('WABA filtered lookup probe:',JSON.stringify({status:r.status,elapsedMs:Date.now()-started,count:d?.count,channelTypes:d?.results?.map(t=>t.channel_type)}));
     }catch(e){console.log('WABA filtered lookup probe:',JSON.stringify({errorKind:e.name,causeCode:e.cause?.code,elapsedMs:Date.now()-started}));}}
   }
+  if(/^[a-f0-9]{64}$/.test(process.env.OTP_PHONE_SHA256||'')) console.log('Requested OTP attempts:',JSON.stringify((await db.query("SELECT created_at,expires_at,(consumed_at IS NOT NULL) AS used FROM auth_otp_codes WHERE encode(sha256(convert_to(phone,'UTF8')),'hex')=$1 ORDER BY created_at DESC LIMIT 10",[process.env.OTP_PHONE_SHA256])).rows));
   console.log('OTP account eligibility:',JSON.stringify((await db.query("SELECT role,status,COUNT(*)::int AS count FROM app_users GROUP BY role,status ORDER BY role,status")).rows));
   console.log('Outbox:',JSON.stringify((await db.query('SELECT kind,state,failure_code,COUNT(*)::int AS count FROM moon_ai_outbox GROUP BY kind,state,failure_code ORDER BY kind,state')).rows));
   console.log('Recent technical deliveries:',JSON.stringify((await db.query("SELECT kind,state,failure_code,provider_thread_id FROM moon_ai_outbox WHERE installation_id IS NOT NULL ORDER BY created_at DESC LIMIT 5")).rows));
