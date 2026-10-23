@@ -782,9 +782,19 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
     const reminders=(await db.query("SELECT * FROM notifications WHERE user_id=$1 AND target_type='area_verification' AND target_id=$2",[customer,address])).rows;
     assert.equal(reminders.length,1,'Area reminder is stored once even before package payment');
     const id=rows[0].data.payment.id;
+    const failApply='audit_apply_'+customer.replaceAll('-','');
+    await db.query(`CREATE FUNCTION ${failApply}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.customer_id='${customer}'::uuid AND NEW.status='active' THEN RAISE EXCEPTION 'injected application failure'; END IF; RETURN NEW; END $$`);
+    await db.query(`CREATE TRIGGER ${failApply} BEFORE UPDATE ON customer_packages FOR EACH ROW EXECUTE FUNCTION ${failApply}()`);
+
     const hook=(secret?:string)=>fetch(base+'/payments/kaspi/webhook',{method:'POST',headers:{'Content-Type':'application/json',...(secret?{'X-Kaspi-Token':secret}:{})},body:JSON.stringify({paymentId:id,status:'paid'})});
     assert.equal((await hook()).status,401);assert.equal((await hook('wrong')).status,401);
     assert.notEqual((await db.query('SELECT status FROM payments WHERE id=$1',[id])).rows[0].status,'paid');
+    try {
+      assert.equal((await hook(env.kaspiWebhookToken)).status,500);
+      assert.equal((await db.query('SELECT applied_at FROM payments WHERE id=$1',[id])).rows[0].applied_at,null,'failed application must remain retryable');
+    } finally {
+      await db.query(`DROP TRIGGER IF EXISTS ${failApply} ON customer_packages`);await db.query(`DROP FUNCTION IF EXISTS ${failApply}()`);
+    }
     assert.equal((await hook(env.kaspiWebhookToken)).status,200);assert.equal((await hook(env.kaspiWebhookToken)).status,200);
     const cp=(await db.query('SELECT status,available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0];assert.equal(cp.status,'active');assert.equal(cp.available_cleanings,1);
     const orderBody={customerPackageId:rows[0].data.customerPackage.id,date:'2035-01-03',startTime:'08:00',idempotencyKey:randomUUID()};
@@ -812,6 +822,24 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
     assert.equal(finalData.payableAmount,0);assert.equal(finalData.payment.status,'paid');assert.equal(Number(finalData.payment.bonus_amount),2000);
     assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),6000);
     assert.equal((await payRetry(1000)).status,409);
+    // A failed history write must not consume the only chance to cancel/refund.
+    const failName='audit_cancel_'+customer.replaceAll('-','');
+    await db.query(`CREATE FUNCTION ${failName}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.order_id='${orderId}'::uuid AND NEW.new_status='cancelled' THEN RAISE EXCEPTION 'injected cancellation failure'; END IF; RETURN NEW; END $$`);
+    await db.query(`CREATE TRIGGER ${failName} BEFORE INSERT ON order_status_history FOR EACH ROW EXECUTE FUNCTION ${failName}()`);
+    const cancel=()=>fetch(base+'/orders/'+orderId+'/cancel',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
+    try {
+      assert.equal((await cancel()).status,500);
+      assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[orderId])).rows[0].status,savedOrder.status,'failed cancellation must preserve order state');
+      assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].available_cleanings,0);
+      assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),6000);
+    } finally {
+      await db.query(`DROP TRIGGER IF EXISTS ${failName} ON order_status_history`);await db.query(`DROP FUNCTION IF EXISTS ${failName}()`);
+    }
+    const cancelled=await Promise.all([cancel(),cancel(),cancel()]);
+    assert.equal(cancelled.filter(r=>r.status===200).length,1);
+    assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].available_cleanings,1);
+    assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),8000);
+
 
   }finally{
     env.kaspiWebhookToken=previousToken;env.moonAiEnabled=previousMoon;

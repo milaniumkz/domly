@@ -264,6 +264,7 @@ test('AuthService logout revokes sessions and disables device token', async () =
 test('NotificationService creates backend-driven admin events for admin roles', async () => {
   const inserts: Array<{ role: string; dedupeKey: string }> = [];
   const fakeDb = {
+    async afterCommit(effect: () => Promise<void>) { await effect(); },
     async query(sql: string, params?: unknown[]) {
       if (sql.includes("WHERE key='adminNotificationRules'")) {
         return { rows: [{ value: { enabled: true, events: ['new_order'] } }] };

@@ -234,7 +234,10 @@ export class NotificationService {
 
   async create(input: NotificationInput) {
     const saved = await this.persist(input);
-    if (saved.created && saved.notification) await this.deliver(saved.notification, input);
+    if (saved.created && saved.notification) {
+      const row = saved.notification;
+      await this.db.afterCommit(() => this.deliver(row, input));
+    }
     return saved.notification;
   }
 
@@ -329,9 +332,9 @@ export class BonusService {
     return transaction ? work(transaction) : this.db.transaction(work);
   }
 
-  async refund(userId: string, amount: number, reasonRu: string, orderId?: string, paymentId?: string) {
+  async refund(userId: string, amount: number, reasonRu: string, orderId?: string, paymentId?: string, transaction?: Queryable) {
     if (amount <= 0) return null;
-    return this.db.transaction(async tx => {
+    const work = async (tx: Queryable) => {
       const updated = first<{ bonus_balance: string }>((await tx.query(
         `UPDATE app_users SET bonus_balance=bonus_balance+$2, updated_at=NOW() WHERE id=$1 RETURNING bonus_balance`,
         [userId, amount],
@@ -341,7 +344,8 @@ export class BonusService {
          VALUES ($1,$2,$3,'refund',$4,$5,$6) RETURNING *`,
         [userId, orderId ?? null, paymentId ?? null, amount, updated?.bonus_balance ?? amount, reasonRu],
       )).rows);
-    });
+    };
+    return transaction ? work(transaction) : this.db.transaction(work);
   }
 }
 
@@ -415,8 +419,9 @@ export class PaymentService {
     )).rows);
   }
 
-  async refundOrderPayments(orderId: string, reasonRu: string) {
-    const payments = (await this.db.query<{
+  async refundOrderPayments(orderId: string, reasonRu: string, transaction?: Queryable) {
+    const work = async (tx: Queryable) => {
+    const payments = (await tx.query<{
       id: string;
       customer_id: string;
       status: string;
@@ -426,15 +431,15 @@ export class PaymentService {
     }>(
       `SELECT id, customer_id, status, amount, bonus_amount, provider
        FROM payments
-       WHERE order_id=$1 AND status IN ('pending','invoice_requested','paid')`,
+       WHERE order_id=$1 AND status IN ('pending','invoice_requested','paid') ORDER BY id FOR UPDATE`,
       [orderId],
     )).rows;
     for (const payment of payments) {
       if (Number(payment.bonus_amount) > 0) {
-        await this.bonus.refund(payment.customer_id, Number(payment.bonus_amount), reasonRu, orderId, payment.id);
+        await this.bonus.refund(payment.customer_id, Number(payment.bonus_amount), reasonRu, orderId, payment.id, tx);
       }
       const nextStatus = payment.status === 'paid' && Number(payment.amount) > 0 ? 'refunded' : 'cancelled';
-      await this.db.query(
+      await tx.query(
         `UPDATE payments
          SET status=$2, payload=payload || $3::jsonb, updated_at=NOW()
          WHERE id=$1`,
@@ -442,6 +447,8 @@ export class PaymentService {
       );
     }
     return payments;
+    };
+    return transaction ? work(transaction) : this.db.transaction(work);
   }
 }
 

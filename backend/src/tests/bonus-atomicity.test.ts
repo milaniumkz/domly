@@ -60,3 +60,44 @@ test('concurrent payments share only the available bonus balance',{skip:!process
   assert.equal(ledger.reduce((sum,r)=>sum+Number(r.amount),0),-100);
  }finally{await db.query('DELETE FROM bonus_transactions WHERE user_id=$1',[id]);await db.query('DELETE FROM payments WHERE customer_id=$1',[id]);await db.query('DELETE FROM app_users WHERE id=$1',[id]);await db.close();}
 });
+
+
+test('order payment refunds roll back together and serialize concurrent retries',{skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async()=>{
+ const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!),id=randomUUID(),order=randomUUID(),payment=randomUUID(),suffix=randomUUID().replaceAll('-','');
+ const fn='audit_fail_refund_'+suffix;
+ try {
+  await db.query("INSERT INTO app_users(id,phone,role,bonus_balance) VALUES($1,$2,'customer',20)",[id,'refund-'+id]);
+  await db.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,status,bonus_spent) VALUES($1,$2,'2035-01-03','08:00','10:00','pending_payment',80)",[order,id]);
+  await db.query("INSERT INTO payments(id,customer_id,order_id,provider,status,amount,bonus_amount) VALUES($1,$2,$3,'manual','pending',20,80)",[payment,id,order]);
+  await db.query(`CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.id='${payment}'::uuid AND NEW.status='cancelled' THEN RAISE EXCEPTION 'injected refund failure'; END IF; RETURN NEW; END $$`);
+  await db.query(`CREATE TRIGGER ${fn} BEFORE UPDATE ON payments FOR EACH ROW EXECUTE FUNCTION ${fn}()`);
+  const {PaymentService}=await import('../modules/domainServices');const service=new PaymentService(db,new BonusService(db));
+  await assert.rejects(service.refundOrderPayments(order,'test'),/injected refund failure/);
+  assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[id])).rows[0].bonus_balance),20,'failed payment update must roll back bonus refund');
+  assert.equal((await db.query('SELECT id FROM bonus_transactions WHERE user_id=$1',[id])).rows.length,0);
+  await db.query(`DROP TRIGGER ${fn} ON payments`);
+  const results=await Promise.all(Array.from({length:8},()=>service.refundOrderPayments(order,'test')));
+  assert.equal(results.flat().length,1,'only one retry may refund the payment');
+  assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[id])).rows[0].bonus_balance),100);
+  assert.equal((await db.query('SELECT id FROM bonus_transactions WHERE user_id=$1',[id])).rows.length,1);
+ } finally {
+  await db.query(`DROP TRIGGER IF EXISTS ${fn} ON payments`);await db.query(`DROP FUNCTION IF EXISTS ${fn}()`);
+  await db.query('DELETE FROM bonus_transactions WHERE user_id=$1',[id]);await db.query('DELETE FROM payments WHERE customer_id=$1',[id]);await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('DELETE FROM app_users WHERE id=$1',[id]);await db.close();
+ }
+});
+
+
+test('atomic scope rolls back nested services and delivers only after commit',{skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async()=>{
+ const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!),observer=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!),id=randomUUID();
+ let delivered=0;
+ try {
+  await db.query("INSERT INTO app_users(id,phone,role,bonus_balance) VALUES($1,$2,'customer',10)",[id,'scope-'+id]);
+  const effect=async()=>{assert.equal(Number((await observer.query('SELECT bonus_balance FROM app_users WHERE id=$1',[id])).rows[0].bonus_balance),30);delivered++;};
+  await assert.rejects(db.atomic(async()=>{await new BonusService(db).accrue(id,20,'scope');await db.afterCommit(effect);throw Error('rollback');}),/rollback/);
+  assert.equal(delivered,0);assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[id])).rows[0].bonus_balance),10);
+  await db.atomic(async()=>{await new BonusService(db).accrue(id,20,'scope');await db.afterCommit(effect);assert.equal(delivered,0);});
+  assert.equal(delivered,1);
+  await Promise.all(Array.from({length:12},()=>db.atomic(async()=>{await new BonusService(db).accrue(id,1,'concurrent scope');})));
+  assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[id])).rows[0].bonus_balance),42);
+ } finally {await db.query('DELETE FROM bonus_transactions WHERE user_id=$1',[id]);await db.query('DELETE FROM app_users WHERE id=$1',[id]);await db.close();await observer.close();}
+});
