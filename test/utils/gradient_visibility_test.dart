@@ -5,6 +5,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('primary button retains a separate target inside an order card',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Semantics(
+                label: 'Заказ 1',
+                child: Column(children: [
+                  const Text('Запланировано'),
+                  DomlyPrimaryButton(label: 'Начать', onPressed: () {})
+                ])))));
+    final target = find.bySemanticsLabel('Начать');
+    expect(target, findsOneWidget);
+    expect(tester.getSemantics(target).label, 'Начать');
+    semantics.dispose();
+  });
+
   testWidgets(
       'primary action exposes its state and runs only once while pending',
       (tester) async {

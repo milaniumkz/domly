@@ -985,6 +985,7 @@ class _DomlyPrimaryButtonState extends State<DomlyPrimaryButton> {
     final showLoading = widget.isLoading || _isPending;
     final enabled = widget.onPressed != null && !showLoading;
     return Semantics(
+        container: true,
         button: true,
         enabled: enabled,
         label: widget.label.tr(),
