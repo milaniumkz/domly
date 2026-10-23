@@ -38,6 +38,33 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('addon rejection protects other customers and preserves paid addons', async () => {
+      const owner=randomUUID(),orderId=randomUUID(),addonId=randomUUID();
+      try {
+        await db.query("INSERT INTO app_users(id,phone,role) VALUES($1,$2,'customer')",[owner,'addon-owner-'+owner]);
+        await db.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,'2035-02-02','08:00','10:00','assigned')",[orderId,owner]);
+        await db.query("INSERT INTO catalog_addons(id,title_ru,price) VALUES($1,'Проверка доступа',100)",[addonId]);
+        await db.query("INSERT INTO order_addons(order_id,addon_id,quantity,price,payment_status) VALUES($1,$2,1,100,'pending'),($1,$2,1,100,'paid')",[orderId,addonId]);
+        assert.equal((await request(`/orders/${orderId}/addon-requests/reject`,'POST',{},true)).status,404);
+        assert.equal((await db.query('SELECT id FROM order_addons WHERE order_id=$1',[orderId])).rows.length,2,'foreign request must not delete addons');
+        const token=signAccessToken({id:owner,role:'customer',phone:'fixture'});
+        const listing=await fetch(base+'/addon-requests',{headers:{Authorization:'Bearer '+token}});
+        const visible=(await listing.json() as any).data.filter((r:any)=>r.order_id===orderId);
+        assert.equal(visible.length,2);assert.ok(visible.every((r:any)=>r.order_status==='assigned'));
+        const own=await fetch(base+`/orders/${orderId}/addon-requests/reject`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
+        assert.equal(own.status,200);
+        assert.deepEqual((await db.query('SELECT payment_status FROM order_addons WHERE order_id=$1',[orderId])).rows.map(r=>r.payment_status),['paid']);
+        await db.query("INSERT INTO order_addons(order_id,addon_id,quantity,price,payment_status) VALUES($1,$2,1,100,'pending')",[orderId,addonId]);
+        assert.equal((await request(`/orders/${orderId}/addon-requests/reject`,'POST',{})).status,200,'staff may reject a visible order request');
+        assert.equal((await db.query('SELECT id FROM order_addons WHERE order_id=$1',[orderId])).rows.length,1);
+        assert.equal((await request(`/orders/${randomUUID()}/addon-requests/reject`,'POST',{},true)).status,404);
+      } finally {
+        await db.query('DELETE FROM order_addons WHERE order_id=$1',[orderId]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[orderId]);
+        await db.query('DELETE FROM catalog_addons WHERE id=$1',[addonId]);
+        await db.query('DELETE FROM app_users WHERE id=$1',[owner]);
+      }
+    });
     await t.test('parallel offers reuse their transaction connection without exhausting the pool', async () => {
       const ids=Array.from({length:10},()=>randomUUID());
       try {
@@ -379,7 +406,8 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status,scheduled_date,start_time,end_time,estimated_duration_minutes,total_amount) VALUES($1,$3,$4,'assigned','2032-01-01','10:00','12:00',120,22000),($2,$3,$4,'assigned',CURRENT_DATE,'00:01','02:01',120,22000)",[order,late,customer,cleaner]);
         assert.equal((await fetch(base+`/orders/${order}/cancel`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'})).status,403);
         assert.equal((await release(late)).status,409);
-        assert.equal((await release(order)).status,200);
+        const releasedResponse = await release(order);
+        assert.equal(releasedResponse.status,200,JSON.stringify(await releasedResponse.json()));
         const row=(await db.query('SELECT * FROM service_orders WHERE id=$1',[order])).rows[0];
         assert.equal(row.cleaner_id,null);
         assert.ok(['pending_assignment','waiting_cleaner'].includes(row.status));
@@ -755,9 +783,19 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
     const reminders=(await db.query("SELECT * FROM notifications WHERE user_id=$1 AND target_type='area_verification' AND target_id=$2",[customer,address])).rows;
     assert.equal(reminders.length,1,'Area reminder is stored once even before package payment');
     const id=rows[0].data.payment.id;
+    const failApply='audit_apply_'+customer.replaceAll('-','');
+    await db.query(`CREATE FUNCTION ${failApply}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.customer_id='${customer}'::uuid AND NEW.status='active' THEN RAISE EXCEPTION 'injected application failure'; END IF; RETURN NEW; END $$`);
+    await db.query(`CREATE TRIGGER ${failApply} BEFORE UPDATE ON customer_packages FOR EACH ROW EXECUTE FUNCTION ${failApply}()`);
+
     const hook=(secret?:string)=>fetch(base+'/payments/kaspi/webhook',{method:'POST',headers:{'Content-Type':'application/json',...(secret?{'X-Kaspi-Token':secret}:{})},body:JSON.stringify({paymentId:id,status:'paid'})});
     assert.equal((await hook()).status,401);assert.equal((await hook('wrong')).status,401);
     assert.notEqual((await db.query('SELECT status FROM payments WHERE id=$1',[id])).rows[0].status,'paid');
+    try {
+      assert.equal((await hook(env.kaspiWebhookToken)).status,500);
+      assert.equal((await db.query('SELECT applied_at FROM payments WHERE id=$1',[id])).rows[0].applied_at,null,'failed application must remain retryable');
+    } finally {
+      await db.query(`DROP TRIGGER IF EXISTS ${failApply} ON customer_packages`);await db.query(`DROP FUNCTION IF EXISTS ${failApply}()`);
+    }
     assert.equal((await hook(env.kaspiWebhookToken)).status,200);assert.equal((await hook(env.kaspiWebhookToken)).status,200);
     const cp=(await db.query('SELECT status,available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0];assert.equal(cp.status,'active');assert.equal(cp.available_cleanings,1);
     const orderBody={customerPackageId:rows[0].data.customerPackage.id,date:'2035-01-03',startTime:'08:00',idempotencyKey:randomUUID()};
@@ -785,6 +823,24 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
     assert.equal(finalData.payableAmount,0);assert.equal(finalData.payment.status,'paid');assert.equal(Number(finalData.payment.bonus_amount),2000);
     assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),6000);
     assert.equal((await payRetry(1000)).status,409);
+    // A failed history write must not consume the only chance to cancel/refund.
+    const failName='audit_cancel_'+customer.replaceAll('-','');
+    await db.query(`CREATE FUNCTION ${failName}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.order_id='${orderId}'::uuid AND NEW.new_status='cancelled' THEN RAISE EXCEPTION 'injected cancellation failure'; END IF; RETURN NEW; END $$`);
+    await db.query(`CREATE TRIGGER ${failName} BEFORE INSERT ON order_status_history FOR EACH ROW EXECUTE FUNCTION ${failName}()`);
+    const cancel=()=>fetch(base+'/orders/'+orderId+'/cancel',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
+    try {
+      assert.equal((await cancel()).status,500);
+      assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[orderId])).rows[0].status,savedOrder.status,'failed cancellation must preserve order state');
+      assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].available_cleanings,0);
+      assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),6000);
+    } finally {
+      await db.query(`DROP TRIGGER IF EXISTS ${failName} ON order_status_history`);await db.query(`DROP FUNCTION IF EXISTS ${failName}()`);
+    }
+    const cancelled=await Promise.all([cancel(),cancel(),cancel()]);
+    assert.equal(cancelled.filter(r=>r.status===200).length,1);
+    assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].available_cleanings,1);
+    assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),8000);
+
 
   }finally{
     env.kaspiWebhookToken=previousToken;env.moonAiEnabled=previousMoon;

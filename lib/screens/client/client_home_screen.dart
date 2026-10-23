@@ -1943,7 +1943,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         _canCustomerCancelSlot((upcomingSlot['status'] ?? '').toString());
 
     return DomlyShell(
-      bottomNavigationBar: const _FigmaClientBottomNav(currentIndex: 0),
+      bottomNavigationBar: const CustomerHomeBottomNav(currentIndex: 0),
       child: Container(
         color: DomlyPalette.surface(const Color(0xFFFBFDF9)),
         child: SafeArea(
@@ -2104,7 +2104,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     final showHouseWaitlistHome =
         houseId.isNotEmpty && houseStatus.isNotEmpty && houseStatus != 'ACTIVE';
     return DomlyShell(
-      bottomNavigationBar: const _FigmaClientBottomNav(currentIndex: 0),
+      bottomNavigationBar: const CustomerHomeBottomNav(currentIndex: 0),
       child: Container(
         color: DomlyPalette.surface(const Color(0xFFFBFDF9)),
         child: SafeArea(
@@ -2296,7 +2296,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     final usedSelections = _aggregateUsedVisits(allSubscriptions, slots);
 
     return DomlyShell(
-      bottomNavigationBar: const _FigmaClientBottomNav(currentIndex: 0),
+      bottomNavigationBar: const CustomerHomeBottomNav(currentIndex: 0),
       child: Container(
         color: DomlyPalette.surface(const Color(0xFFFBFDF9)),
         child: SafeArea(
@@ -5296,9 +5296,7 @@ class CustomerNextCleaningCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 1),
                           Text(
-                            planName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            planName.tr(),
                             style: TextStyle(
                               color: DomlyPalette.foreground(Color(0xFF658170)),
                               fontSize: 13,
@@ -5616,7 +5614,7 @@ class _FigmaUsagePill extends StatelessWidget {
               SizedBox(width: isCompact ? 4 : 7),
               Flexible(
                 child: Text(
-                  isCompact ? (compactText ?? text) : text,
+                  (isCompact ? (compactText ?? text) : text).tr(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
@@ -5761,8 +5759,8 @@ class _FigmaHomeAction extends StatelessWidget {
   }
 }
 
-class _FigmaClientBottomNav extends StatefulWidget {
-  const _FigmaClientBottomNav({required this.currentIndex});
+class CustomerHomeBottomNav extends StatefulWidget {
+  const CustomerHomeBottomNav({required this.currentIndex});
 
   final int currentIndex;
 
@@ -5775,14 +5773,14 @@ class _FigmaClientBottomNav extends StatefulWidget {
   ];
 
   @override
-  State<_FigmaClientBottomNav> createState() => _FigmaClientBottomNavState();
+  State<CustomerHomeBottomNav> createState() => _CustomerHomeBottomNavState();
 }
 
-class _FigmaClientBottomNavState extends State<_FigmaClientBottomNav> {
+class _CustomerHomeBottomNavState extends State<CustomerHomeBottomNav> {
   late final _unread =
       FirestoreDataService.instance.userUnreadActivityCountStream();
   int get currentIndex => widget.currentIndex;
-  static const _routes = _FigmaClientBottomNav._routes;
+  static const _routes = CustomerHomeBottomNav._routes;
 
   @override
   Widget build(BuildContext context) {
@@ -5806,7 +5804,7 @@ class _FigmaClientBottomNavState extends State<_FigmaClientBottomNav> {
               ),
               child: Container(
                 width: double.infinity,
-                height: 66,
+                height: math.max(66, 20 + MediaQuery.textScalerOf(context).scale(20) + MediaQuery.textScalerOf(context).scale(10) * 2.4),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                 decoration: BoxDecoration(
                   color: DomlyPalette.surface(Colors.white),
@@ -5926,8 +5924,8 @@ class _FigmaNavItem extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         label.tr(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           color: DomlyPalette.foreground(selected
                               ? const Color(0xFF2B4338)
@@ -5935,7 +5933,7 @@ class _FigmaNavItem extends StatelessWidget {
                           fontSize: 9,
                           fontWeight:
                               selected ? FontWeight.w600 : FontWeight.w500,
-                          height: 14 / 9,
+                          height: 1.2,
                         ),
                       ),
                     ],

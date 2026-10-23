@@ -325,9 +325,11 @@ export function buildV1Router(deps: {
     return applied;
   };
 
-  const applyPaidPayment = async (payment: any) => {
+  const applyPaidPayment = async (payment: any) => deps.db.atomic(async () => {
     if (!payment) return null;
     if (payment.status && payment.status !== 'paid') return payment;
+    // Serialize with bonus debit/cancellation without acquiring a second pool connection.
+    await deps.db.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE', [payment.customer_id]);
     const acquiredPayment = await acquirePaymentApplication(deps.db, payment.id);
     if (!acquiredPayment) {
       return { ...payment, alreadyApplied: true };
@@ -361,8 +363,8 @@ export function buildV1Router(deps: {
       );
     }
     if (payment.order_id) {
-      await deps.db.query(`UPDATE service_orders SET status=CASE WHEN cleaner_id IS NULL THEN 'pending_assignment' ELSE 'assigned' END, payable_amount=0, updated_at=NOW() WHERE id=$1`, [payment.order_id]);
-      await deps.db.query(`UPDATE order_addons SET payment_status='paid' WHERE order_id=$1`, [payment.order_id]);
+      await deps.db.query(`UPDATE service_orders SET status=CASE WHEN status='pending_payment' THEN CASE WHEN cleaner_id IS NULL THEN 'pending_assignment' ELSE 'assigned' END ELSE status END, payable_amount=0, updated_at=NOW() WHERE id=$1 AND status<>'cancelled'`, [payment.order_id]);
+      await deps.db.query(`UPDATE order_addons SET payment_status='paid' WHERE order_id=$1 AND payment_status='pending'`, [payment.order_id]);
       const assigned = first<any>((await deps.db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[payment.order_id])).rows);
       if (!assigned?.cleaner_id) await offerNextCleanerAndNotify(payment.order_id);
     }
@@ -377,7 +379,7 @@ export function buildV1Router(deps: {
       });
     }
     return payment;
-  };
+  });
 
   router.post('/auth/otp/request', asyncHandler(async (req, res) => {
     ok(res, await deps.authService.requestOtp(String(req.body.phone ?? ''),req.body.role));
@@ -1476,8 +1478,8 @@ export function buildV1Router(deps: {
 
   router.post('/orders/:id/pay', auth(['customer']), asyncHandler(async (req, res) => {
     if (req.body.provider === 'bcc' && !bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
-    await deps.db.transaction(async tx => {
-      await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`order-payment:${req.params.id}`]);
+    const paymentResult = await deps.db.atomic(async () => {
+      await deps.db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`order-payment:${req.params.id}`]);
     const order = first<{
       id: string;
       customer_id: string;
@@ -1530,8 +1532,9 @@ export function buildV1Router(deps: {
       const provider = await initConfiguredPayment(deps.paymentGateway, result, req, 'Оплата заказа DOMLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (result.payment as any).id, provider);
     }
-    ok(res, result);
+    return result;
     });
+    ok(res, paymentResult);
   }));
 
   router.post('/orders/:id/offer-next-cleaner', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
@@ -1704,24 +1707,28 @@ export function buildV1Router(deps: {
 
   const cancelOrder = async (req: any, res: any) => {
     const previous = await getVisibleOrder(deps.db, String(req.params.id), req.user!);
-    const order = first<{ id: string; customer_id: string; cleaner_id: string | null; customer_package_id: string | null; bonus_spent: string }>((await deps.db.query(
+    const {order, refundedPayments} = await deps.db.atomic(async () => {
+    const tx = deps.db;
+    // Match payment creation: customer balance before order/payment locks.
+    await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE', [(previous as any).customer_id]);
+    const order = first<{ id: string; customer_id: string; cleaner_id: string | null; customer_package_id: string | null; bonus_spent: string }>((await tx.query(
       `UPDATE service_orders SET status='cancelled', cancelled_by=$2, cancellation_reason=$3, updated_at=NOW()
        WHERE id=$1 AND status NOT IN ('completed','cancelled') RETURNING *`,
       [req.params.id, req.user!.id, req.body.reason ?? null],
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден или уже отменён.');
-    await deps.db.query(`INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,'cancelled',$3,$4)`, [order.id,(previous as any).status,req.user!.id,req.body.reason ?? null]);
+    await tx.query(`INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,'cancelled',$3,$4)`, [order.id,(previous as any).status,req.user!.id,req.body.reason ?? null]);
     if (order.customer_package_id) {
-      await deps.db.query(
+      await tx.query(
         `UPDATE customer_packages SET available_cleanings=available_cleanings+1, updated_at=NOW() WHERE id=$1`,
         [order.customer_package_id],
       );
     }
-    await deps.db.query(`UPDATE order_addons SET payment_status='cancelled' WHERE order_id=$1`, [order.id]);
-    await deps.db.query(`UPDATE order_offers SET status='expired' WHERE order_id=$1 AND status='offered'`, [order.id]);
-    const refundedPayments = await deps.payments.refundOrderPayments(order.id, 'Возврат за отменённый заказ');
+    await tx.query(`UPDATE order_addons SET payment_status='cancelled' WHERE order_id=$1`, [order.id]);
+    await tx.query(`UPDATE order_offers SET status='expired' WHERE order_id=$1 AND status='offered'`, [order.id]);
+    const refundedPayments = await deps.payments.refundOrderPayments(order.id, 'Возврат за отменённый заказ', tx);
     if (refundedPayments.length === 0 && Number(order.bonus_spent) > 0) {
-      await deps.bonuses.refund(order.customer_id, Number(order.bonus_spent), 'Возврат бонусов за отменённый заказ', order.id);
+      await deps.bonuses.refund(order.customer_id, Number(order.bonus_spent), 'Возврат бонусов за отменённый заказ', order.id, undefined, tx);
     }
     await deps.notifications.create({
       userId: order.customer_id,
@@ -1748,6 +1755,8 @@ export function buildV1Router(deps: {
       targetType: 'order',
       targetId: order.id,
       dedupeKey: `order-cancelled-${order.id}-admin`,
+    });
+    return {order, refundedPayments};
     });
     ok(res, { order, refundedPayments });
   };
@@ -2062,6 +2071,11 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/orders/:id/addon-requests/reject', auth(['customer', 'admin', 'superadmin']), asyncHandler(async (req, res) => {
+    const order = first((await deps.db.query(
+      'SELECT id FROM service_orders WHERE id=$1 AND ($2::boolean OR customer_id=$3)',
+      [req.params.id, ['admin', 'superadmin'].includes(req.user!.role), req.user!.id],
+    )).rows);
+    if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
     await deps.db.query(`DELETE FROM order_addons WHERE order_id=$1 AND payment_status='pending'`, [req.params.id]);
     ok(res, { requestId: req.params.id, rejected: true });
   }));
@@ -2085,7 +2099,7 @@ export function buildV1Router(deps: {
     }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     const rows = (await deps.db.query(
-      `SELECT oa.*, oa.payment_status AS status, o.id AS order_id, o.customer_id, o.cleaner_id, o.scheduled_date, o.start_time, o.end_time,
+      `SELECT oa.*, oa.payment_status AS status, o.id AS order_id, o.customer_id, o.cleaner_id, o.scheduled_date, o.start_time, o.end_time, o.status AS order_status,
               ca.title_ru AS addon_title_ru, ca.title_kk AS addon_title_kk,
               cu.full_name AS customer_name, cu.phone AS customer_phone,
               cl.full_name AS cleaner_name, cl.phone AS cleaner_phone
@@ -4977,7 +4991,7 @@ export async function acquirePaymentApplication(db: Database, paymentId: string)
   return first((await db.query(
     `UPDATE payments
      SET applied_at=NOW(), updated_at=NOW()
-     WHERE id=$1 AND applied_at IS NULL
+     WHERE id=$1 AND applied_at IS NULL AND status='paid'
      RETURNING *`,
     [paymentId],
   )).rows);

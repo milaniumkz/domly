@@ -6,6 +6,29 @@ import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('continuous events refresh views without waiting for the event stream to become quiet', () async {
+    final source = StreamController<List<int>>();
+    final connected = Completer<void>();
+    var changes = 0;
+    final client = MockClient.streaming((request, body) async {
+      connected.complete();
+      return http.StreamedResponse(source.stream, 200,
+          headers: {'content-type': 'text/event-stream'});
+    });
+    final updates = RealtimeUpdates(createClient: () => client,
+        tokenLoader: () async => 'fixture', onChanged: () => changes++);
+    updates.start('customer');
+    await connected.future;
+    for (var i = 0; i < 15; i++) {
+      source.add(utf8.encode('event: message\ndata: {"type":"notification"}\n\n'));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    final duringStream = changes;
+    updates.stop();
+    await source.close();
+    expect(duringStream, greaterThanOrEqualTo(2));
+    expect(duringStream, lessThan(15));
+  });
   test(
       'authenticated server events refresh views; heartbeats and stopped sessions do not',
       () async {

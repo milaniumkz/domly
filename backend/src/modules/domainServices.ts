@@ -234,7 +234,10 @@ export class NotificationService {
 
   async create(input: NotificationInput) {
     const saved = await this.persist(input);
-    if (saved.created && saved.notification) await this.deliver(saved.notification, input);
+    if (saved.created && saved.notification) {
+      const row = saved.notification;
+      await this.db.afterCommit(() => this.deliver(row, input));
+    }
     return saved.notification;
   }
 
@@ -293,12 +296,12 @@ export class BonusService {
 
   async accrue(userId: string, amount: number, reasonRu: string, reasonKk?: string, orderId?: string, paymentId?: string) {
     if (amount <= 0) return null;
-    return this.db.transaction(async () => {
-      const user = first<{ bonus_balance: string }>((await this.db.query(
+    return this.db.transaction(async tx => {
+      const user = first<{ bonus_balance: string }>((await tx.query(
         `UPDATE app_users SET bonus_balance=bonus_balance+$2, updated_at=NOW() WHERE id=$1 RETURNING bonus_balance`,
         [userId, amount],
       )).rows);
-      return first((await this.db.query(
+      return first((await tx.query(
         `INSERT INTO bonus_transactions (user_id, order_id, payment_id, type, amount, balance_after, reason_ru, reason_kk)
          VALUES ($1,$2,$3,'accrual',$4,$5,$6,$7) RETURNING *`,
         [userId, orderId ?? null, paymentId ?? null, amount, user?.bonus_balance ?? amount, reasonRu, reasonKk ?? null],
@@ -306,41 +309,43 @@ export class BonusService {
     });
   }
 
-  async spend(userId: string, amount: number, reasonRu: string, orderId?: string, paymentId?: string) {
+  async spend(userId: string, amount: number, reasonRu: string, orderId?: string, paymentId?: string, transaction?: Queryable) {
     if (amount <= 0) return null;
-    return this.db.transaction(async () => {
-      const user = first<{ bonus_balance: string }>((await this.db.query(
+    const work = async (tx: Queryable) => {
+      const user = first<{ bonus_balance: string }>((await tx.query(
         `SELECT bonus_balance FROM app_users WHERE id=$1 FOR UPDATE`,
         [userId],
       )).rows);
       if (!user || Number(user.bonus_balance) < amount) {
         throw new ApiError(400, 'not_enough_bonuses', 'Недостаточно бонусов для оплаты.');
       }
-      const updated = first<{ bonus_balance: string }>((await this.db.query(
+      const updated = first<{ bonus_balance: string }>((await tx.query(
         `UPDATE app_users SET bonus_balance=bonus_balance-$2, updated_at=NOW() WHERE id=$1 RETURNING bonus_balance`,
         [userId, amount],
       )).rows);
-      return first((await this.db.query(
+      return first((await tx.query(
         `INSERT INTO bonus_transactions (user_id, order_id, payment_id, type, amount, balance_after, reason_ru)
          VALUES ($1,$2,$3,'spend',$4,$5,$6) RETURNING *`,
         [userId, orderId ?? null, paymentId ?? null, -Math.abs(amount), updated?.bonus_balance ?? 0, reasonRu],
       )).rows);
-    });
+    };
+    return transaction ? work(transaction) : this.db.transaction(work);
   }
 
-  async refund(userId: string, amount: number, reasonRu: string, orderId?: string, paymentId?: string) {
+  async refund(userId: string, amount: number, reasonRu: string, orderId?: string, paymentId?: string, transaction?: Queryable) {
     if (amount <= 0) return null;
-    return this.db.transaction(async () => {
-      const updated = first<{ bonus_balance: string }>((await this.db.query(
+    const work = async (tx: Queryable) => {
+      const updated = first<{ bonus_balance: string }>((await tx.query(
         `UPDATE app_users SET bonus_balance=bonus_balance+$2, updated_at=NOW() WHERE id=$1 RETURNING bonus_balance`,
         [userId, amount],
       )).rows);
-      return first((await this.db.query(
+      return first((await tx.query(
         `INSERT INTO bonus_transactions (user_id, order_id, payment_id, type, amount, balance_after, reason_ru)
          VALUES ($1,$2,$3,'refund',$4,$5,$6) RETURNING *`,
         [userId, orderId ?? null, paymentId ?? null, amount, updated?.bonus_balance ?? amount, reasonRu],
       )).rows);
-    });
+    };
+    return transaction ? work(transaction) : this.db.transaction(work);
   }
 }
 
@@ -360,40 +365,43 @@ export class PaymentService {
     invoicePhone?: string;
     payload?: Record<string, unknown>;
   }) {
-    const user = first<{ bonus_balance: string }>((await this.db.query(
-      `SELECT bonus_balance FROM app_users WHERE id=$1`,
-      [input.customerId],
-    )).rows);
-    const referralPercent = input.applyReferralDiscount === false ? 0 : await referralDiscount(this.db,input.customerId);
-    const referralAmount = Math.round(input.amount * referralPercent / 100);
-    input = {...input, amount: input.amount - referralAmount, payload: {...input.payload, referralDiscountPercent: referralPercent, referralDiscountAmount: referralAmount}};
-    const pricing = new PricingService();
-    const split = input.useBonus
-      ? pricing.splitBonus(input.amount, input.requestedBonus ?? input.amount, Number(user?.bonus_balance ?? 0), input.maxBonusPercent ?? 50)
-      : { bonus: 0, payable: input.amount };
-    const payment = first<{ id: string }>((await this.db.query(
-      `INSERT INTO payments (customer_id, order_id, customer_package_id, provider, status, amount, bonus_amount, invoice_phone, payload, approval_source, approved_at, paid_at)
-       VALUES ($1,$2,$3,$4,$5::payment_status,$6,$7,$8,$9,CASE WHEN $5::payment_status='paid' THEN 'bonus' END,CASE WHEN $5::payment_status='paid' THEN NOW() END,CASE WHEN $5::payment_status='paid' THEN NOW() END) RETURNING *`,
-      [
-        input.customerId,
-        input.orderId ?? null,
-        input.customerPackageId ?? null,
-        split.payable === 0 ? 'bonus' : input.provider,
-        split.payable === 0 ? 'paid' : 'pending',
-        split.payable,
-        split.bonus,
-        input.invoicePhone ?? null,
-        input.payload ?? {},
-      ],
-    )).rows);
-    if (split.bonus > 0) {
-      await this.bonus.spend(input.customerId, split.bonus, 'Оплата бонусами', input.orderId, payment?.id);
-      if (input.orderId) {
-        await this.db.query(`UPDATE service_orders SET bonus_spent=bonus_spent+$2, payable_amount=$3 WHERE id=$1`, [input.orderId, split.bonus, split.payable]);
+    const result = await this.db.transaction(async tx => {
+      const user = first<{ bonus_balance: string }>((await tx.query(
+        `SELECT bonus_balance FROM app_users WHERE id=$1 FOR UPDATE`,
+        [input.customerId],
+      )).rows);
+      const referralPercent = input.applyReferralDiscount === false ? 0 : await referralDiscount(tx,input.customerId);
+      const referralAmount = Math.round(input.amount * referralPercent / 100);
+      input = {...input, amount: input.amount - referralAmount, payload: {...input.payload, referralDiscountPercent: referralPercent, referralDiscountAmount: referralAmount}};
+      const pricing = new PricingService();
+      const split = input.useBonus
+        ? pricing.splitBonus(input.amount, input.requestedBonus ?? input.amount, Number(user?.bonus_balance ?? 0), input.maxBonusPercent ?? 50)
+        : { bonus: 0, payable: input.amount };
+      const payment = first<{ id: string }>((await tx.query(
+        `INSERT INTO payments (customer_id, order_id, customer_package_id, provider, status, amount, bonus_amount, invoice_phone, payload, approval_source, approved_at, paid_at)
+         VALUES ($1,$2,$3,$4,$5::payment_status,$6,$7,$8,$9,CASE WHEN $5::payment_status='paid' THEN 'bonus' END,CASE WHEN $5::payment_status='paid' THEN NOW() END,CASE WHEN $5::payment_status='paid' THEN NOW() END) RETURNING *`,
+        [
+          input.customerId,
+          input.orderId ?? null,
+          input.customerPackageId ?? null,
+          split.payable === 0 ? 'bonus' : input.provider,
+          split.payable === 0 ? 'paid' : 'pending',
+          split.payable,
+          split.bonus,
+          input.invoicePhone ?? null,
+          input.payload ?? {},
+        ],
+      )).rows);
+      if (split.bonus > 0) {
+        await this.bonus.spend(input.customerId, split.bonus, 'Оплата бонусами', input.orderId, payment?.id, tx);
+        if (input.orderId) {
+          await tx.query(`UPDATE service_orders SET bonus_spent=bonus_spent+$2, payable_amount=$3 WHERE id=$1`, [input.orderId, split.bonus, split.payable]);
+        }
       }
-    }
-    await scheduleCheckoutFollowup(this.db, payment);
-    return { payment, bonusSpent: split.bonus, payableAmount: split.payable };
+      return { payment, bonusSpent: split.bonus, payableAmount: split.payable };
+    });
+    await scheduleCheckoutFollowup(this.db, result.payment);
+    return result;
   }
 
   async markPaid(paymentId: string, approvedBy?: string) {
@@ -411,8 +419,9 @@ export class PaymentService {
     )).rows);
   }
 
-  async refundOrderPayments(orderId: string, reasonRu: string) {
-    const payments = (await this.db.query<{
+  async refundOrderPayments(orderId: string, reasonRu: string, transaction?: Queryable) {
+    const work = async (tx: Queryable) => {
+    const payments = (await tx.query<{
       id: string;
       customer_id: string;
       status: string;
@@ -422,15 +431,15 @@ export class PaymentService {
     }>(
       `SELECT id, customer_id, status, amount, bonus_amount, provider
        FROM payments
-       WHERE order_id=$1 AND status IN ('pending','invoice_requested','paid')`,
+       WHERE order_id=$1 AND status IN ('pending','invoice_requested','paid') ORDER BY id FOR UPDATE`,
       [orderId],
     )).rows;
     for (const payment of payments) {
       if (Number(payment.bonus_amount) > 0) {
-        await this.bonus.refund(payment.customer_id, Number(payment.bonus_amount), reasonRu, orderId, payment.id);
+        await this.bonus.refund(payment.customer_id, Number(payment.bonus_amount), reasonRu, orderId, payment.id, tx);
       }
       const nextStatus = payment.status === 'paid' && Number(payment.amount) > 0 ? 'refunded' : 'cancelled';
-      await this.db.query(
+      await tx.query(
         `UPDATE payments
          SET status=$2, payload=payload || $3::jsonb, updated_at=NOW()
          WHERE id=$1`,
@@ -438,6 +447,8 @@ export class PaymentService {
       );
     }
     return payments;
+    };
+    return transaction ? work(transaction) : this.db.transaction(work);
   }
 }
 

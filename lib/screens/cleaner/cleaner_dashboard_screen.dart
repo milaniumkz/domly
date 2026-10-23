@@ -16,6 +16,7 @@ class CleanerDashboardScreen extends StatefulWidget {
 
 class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
   final _data = FirestoreDataService.instance;
+  late final _notificationsStream = _data.userUnreadNotificationCountStream();
   late final Stream<Map<String, dynamic>?> _profileStream;
   late final Stream<List<Map<String, dynamic>>> _ordersStream;
   late final Stream<List<Map<String, dynamic>>> _payoutsStream;
@@ -941,7 +942,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
             ),
           const SizedBox(height: 4),
           Text(
-            (job['package'] ?? '').toString(),
+            (job['package'] ?? '').toString().tr(),
             style: TextStyle(color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
           const SizedBox(height: 6),
@@ -1149,13 +1150,11 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
   }
 
   Widget _notificationsActionButton() {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.userNotificationsStream(),
-      initialData: const <Map<String, dynamic>>[],
+    return StreamBuilder<int>(
+      stream: _notificationsStream,
+      initialData: 0,
       builder: (context, notificationsSnap) {
-        final unreadCount = (notificationsSnap.data ?? const [])
-            .where((item) => item['read'] != true)
-            .length;
+        final unreadCount = notificationsSnap.data ?? 0;
         return domlyTopBadgeIconButton(
           icon: Icons.notifications_none,
           badgeCount: unreadCount,

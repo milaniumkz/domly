@@ -42,6 +42,9 @@ flutter:
     - assets/logo_pro.png
 
   fonts:
+    - family: DomlyCurrency
+      fonts:
+        - asset: assets/fonts/NotoSans-Currency.ttf
     - family: Roboto
       fonts:
         - asset: assets/fonts/Roboto-Variable.ttf

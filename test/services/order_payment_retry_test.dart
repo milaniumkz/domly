@@ -4,6 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('saved unpaid order without a created invoice can retry payment', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: OrderPaymentRetry(
+      data: FirestoreDataService.instance,
+      loadBonusOptions: () async => {'balance': 4000, 'limit': 4000},
+      order: {'id': 'order', 'orderStatus': 'pending_payment', 'payableAmount': 4000},
+    ))));
+    expect(find.text('Попробовать снова'), findsOneWidget);
+    expect(find.text('Оплата не завершена. Выберите способ оплаты.'), findsOneWidget);
+    await tester.tap(find.text('Попробовать снова'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Оплатить бонусами'), findsOneWidget);
+    expect(find.text('Kaspi.kz'), findsOneWidget);
+    expect(find.text('Онлайн-платёж'), findsOneWidget);
+  });
   testWidgets('cancelled invoice offers online payment or a new Kaspi number',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
