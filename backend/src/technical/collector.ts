@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {Request,Response,NextFunction} from 'express';
 import {Database} from '../infrastructure/db/Database';
-import {verifyAccessToken} from '../common/auth';
+import {requestIdentity} from '../common/auth';
 import {health,collectorFailure,sanitize,safeText,problem,seal} from './core';
 
 declare global {namespace Express {interface Request {techEventId?:string;techRequestId?:string;techFileReview?:any;technicalError?:{code:string;kind:string};}}}
@@ -24,7 +24,7 @@ export function collectRequests(db:Database){return async(req:Request,res:Respon
  const clientCorrelation=clientRequestId?{clientRequestId,clientRequestIdSource:'Сообщено клиентом; не является серверным идентификатором запроса.'}:{};
  const requestId=randomUUID();req.techRequestId=requestId;res.setHeader('X-Request-ID',requestId);
  const started=Date.now(),target=entity(req.path),eventId=randomUUID();req.techEventId=eventId;
- let identity:any=null;try{const raw=String(req.headers.authorization??'');if(raw.startsWith('Bearer ')){const jwt=verifyAccessToken(raw.slice(7));identity=(await db.query('SELECT id,full_name,role FROM app_users WHERE id=$1',[jwt.id])).rows[0];if(identity)identity.sessionId=jwt.sessionId;}}catch{}
+ let identity:any=null;try{const raw=String(req.headers.authorization??'');if(raw.startsWith('Bearer ')){const resolved=await requestIdentity(req,db,raw.slice(7));identity=resolved.account ? {...resolved.account,sessionId:resolved.user.sessionId} : null;}}catch{}
  let identityEvidence=identity?'Подписанный токен доступа; разрешение операции проверяется отдельно.':'Исполнитель не установлен.';
  try{if(!identity&&/^\/api\/v1\/auth\/(password\/login|otp\/request|otp\/verify)$/.test(req.path)){let phone=String(req.body?.phone??'').replace(/[^0-9]/g,'');if(phone.length===11&&phone.startsWith('8'))phone='7'+phone.slice(1);if(phone.length===11){identity=await unverifiedPhoneIdentity(db,'+'+phone,req.body?.role);if(identity)identityEvidence='Указан телефон этого аккаунта; личность отправителя ещё не подтверждена.';}}}catch{collectorFailure();}
  if(req.path==='/api/v1/quality-checks/from-file')target.type='quality-checks';

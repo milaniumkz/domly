@@ -1,7 +1,7 @@
 import { updateOrderAddons } from '../../modules/orderAddons';
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
-import { auth, verifyAccessToken } from '../../common/auth';
+import { auth, requestIdentity } from '../../common/auth';
 import { ApiError, asyncHandler, ok } from '../../common/api';
 import { Database } from '../../infrastructure/db/Database';
 import { first } from '../../common/sql';
@@ -12,9 +12,12 @@ export function mobileRouter(db: Database) {
   router.use(asyncHandler(async (req, _res, next) => {
     const token = req.header('authorization')?.replace(/^Bearer /, '') || (req.path.startsWith('/realtime') ? String(req.query.access_token ?? '') : '');
     if (token) {
-      let user;
-      try { user = verifyAccessToken(token); } catch { return next(); }
-      const row = first<any>((await db.query('SELECT deleted_at FROM app_users WHERE id=$1', [user.id])).rows);
+      let identity;
+      try { identity = await requestIdentity(req, db, token); } catch (error: any) {
+        if (['JsonWebTokenError','TokenExpiredError','NotBeforeError'].includes(error?.name)) return next();
+        throw error;
+      }
+      const {user, account: row} = identity;
       if (!row || row.deleted_at) throw new ApiError(401, 'unauthorized', 'Аккаунт удалён.');
       req.user = user;
     }
