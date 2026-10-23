@@ -38,6 +38,17 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('parallel offers reuse their transaction connection without exhausting the pool', async () => {
+      const ids=Array.from({length:10},()=>randomUUID());
+      try {
+        for (const id of ids) await db.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,'2035-02-02','08:00','10:00','pending_assignment')",[id,customer]);
+        const results=await Promise.allSettled(ids.map(id=>new SchedulingService(db).offerNextCleaner(id)));
+        assert.equal(results.filter(r=>r.status==='rejected').length,0,JSON.stringify(results.filter(r=>r.status==='rejected').map((r:any)=>r.reason.message)));
+      } finally {
+        await db.query('DELETE FROM order_offers WHERE order_id=ANY($1::uuid[])',[ids]);
+        await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[ids]);
+      }
+    });
     await t.test('cleaner verification keeps address and emergency contact private to staff', async () => {
       const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});
       const saved=await fetch(base+'/cleaner/profile',{method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({homeAddress:'Тәуелсіздік 29/2',emergencyContactPhone:'+77000000000',emergencyContactRelation:'Сестра'})});

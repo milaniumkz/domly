@@ -477,10 +477,10 @@ export class SchedulingService {
     return !overlap;
   }
 
-  async availableCleaners(date: string, startTime: string, endTime: string, zoneId?: string) {
+  async availableCleaners(date: string, startTime: string, endTime: string, zoneId?: string, queryable: Queryable = this.db) {
     const zoneJoin = zoneId ? `JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$4` : '';
     const params = zoneId ? [date, startTime, endTime, zoneId] : [date, startTime, endTime];
-    return (await this.db.query(
+    return (await queryable.query(
       `SELECT u.id, u.full_name, u.phone
        FROM app_users u
        JOIN cleaner_profiles cp ON cp.user_id=u.id
@@ -507,7 +507,7 @@ export class SchedulingService {
       if (!order?.scheduled_date || !order.start_time || !order.end_time) {
         throw new ApiError(400, 'invalid_order_time', 'У заказа не указаны дата и время.');
       }
-      const cleaners = await this.availableCleaners(order.scheduled_date, order.start_time, order.end_time);
+      const cleaners = await this.availableCleaners(order.scheduled_date, order.start_time, order.end_time, undefined, client);
       const next = cleaners.find((cleaner: any) => !excludeCleanerIds.includes(cleaner.id));
       if (!next) {
         await client.query(`UPDATE service_orders SET status='waiting_cleaner', updated_at=NOW() WHERE id=$1`, [orderId]);
