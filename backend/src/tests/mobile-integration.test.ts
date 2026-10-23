@@ -437,7 +437,10 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         const id=randomUUID();await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,invoice_phone,invoice_requested_at) VALUES($1,$2,'kaspi','invoice_requested',99106,'+77000000000',NOW()-INTERVAL '2 minutes')",[id,user]);
         const callback=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':'fixture-hook-key'},body:JSON.stringify({phone:'+77000000000',amount:99106,status:'invoice_sent',dateTime:new Date(Date.now()-60000).toISOString()})});
         assert.equal(callback.status,200);assert.equal((await callback.json() as any).data.resolution,'matched');
-        assert.equal(httpNotifications.size,1);assert.equal([...httpNotifications.values()][0].userId,user);assert.equal([...httpNotifications.values()][0].targetType,'payments');
+        const paymentNotices=[...httpNotifications.values()].filter(n=>n.targetType==='payments');
+        assert.equal(paymentNotices.length,1);assert.equal(paymentNotices[0].userId,user);
+        const areaNotices=[...httpNotifications.values()].filter(n=>n.targetType==='area_verification');
+        assert.equal(areaNotices.length,1);assert.equal(areaNotices[0].userId,stranger);
         const invalid=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':'fixture-hook-key'},body:JSON.stringify({phone:'+77000000000',amount:99106,status:'success',dateTime:new Date().toISOString()})});assert.equal(invalid.status,400);
         const unsigned=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});assert.equal(unsigned.status,401);
         const legacy=await fetch(base+'/payments/kaspi/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:id,status:'paid'})});assert.equal(legacy.status,409);
@@ -580,5 +583,35 @@ test('trusted bot catalog, quality workflow and whole-package financial settleme
     await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);
     await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
     await db.close();
+  }
+});
+
+test('one phone has isolated customer and cleaner profiles and role-scoped codes', {skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL}, async()=>{
+  const {AuthService}=await import('../modules/domainServices');
+  const {env}=await import('../common/env');
+  const {randomInt}=await import('node:crypto');
+  const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
+  const phone='+7700'+randomInt(1000000,10000000),customer=randomUUID();
+  const oldFallback=env.otpFailureFallback;env.otpFailureFallback=true;
+  const auth=new AuthService(db,{sendOtp:async()=>{throw Error('Isolated delivery unavailable');}} as any);
+  try {
+    await db.query("INSERT INTO app_users(id,phone,role,bonus_balance,status) VALUES($1,$2,'customer',1530,'approved')",[customer,phone]);
+    const customerCode=await auth.requestOtp(phone,'customer');
+    const cleanerCode=await auth.requestOtp(phone,'cleaner');
+    const c=await auth.verifyOtp(phone,customerCode.fallbackCode!,'customer');
+    const pro=await auth.verifyOtp(phone,cleanerCode.fallbackCode!,'cleaner');
+    assert.equal(c.user.id,customer);assert.equal(c.user.role,'customer');
+    assert.equal(pro.user.role,'cleaner');assert.notEqual(pro.user.id,customer);
+    assert.notEqual(c.user.sessionId,pro.user.sessionId);
+    assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),1530);
+    assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM refresh_sessions WHERE user_id=ANY($1::uuid[])',[[customer,pro.user.id]])).rows[0].n,2);
+    await db.query("UPDATE app_users SET status='blocked' WHERE id=$1",[pro.user.id]);
+    await assert.rejects(()=>auth.requestOtp(phone,'cleaner'),(e:any)=>e.code==='account_blocked');
+    const again=await auth.requestOtp(phone,'customer');assert.ok(again.fallbackCode);
+    assert.equal((await auth.verifyOtp(phone,again.fallbackCode!,'customer')).user.id,customer);
+  }finally{
+    env.otpFailureFallback=oldFallback;
+    await db.query('DELETE FROM auth_otp_codes WHERE phone=$1',[phone]);
+    await db.query('DELETE FROM app_users WHERE phone=$1',[phone]);await db.close();
   }
 });

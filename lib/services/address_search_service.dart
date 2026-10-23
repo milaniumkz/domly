@@ -103,20 +103,21 @@ class AddressSearchService {
   Future<List<AddressSuggestion>> search(String query,
       {AddressSearchBias? bias, String city = ''}) async {
     if (query.trim().length < 2) return [];
-    final data = await BackendApiService.instance
-        .getMap('/geo/address-suggestions', authenticated: false, query: {
-      'search': query.trim(),
-      'lang': TranslationController.active?.localeCode ?? 'ru',
-      'city': city,
-      'lat': bias?.lat.toString(),
-      'lng': bias?.lng.toString(),
-      'radiusKm': bias?.radiusKm.toString()
-    });
-    return (data['suggestions'] as List? ?? [])
-        .whereType<Map>()
-        .map((row) =>
-            AddressSuggestion.fromBackend(Map<String, dynamic>.from(row)))
-        .toList();
+    final results = <AddressSuggestion>[];
+    var offset = 0;
+    while (true) {
+      final data = await BackendApiService.instance.getMap('/geo/address-suggestions', authenticated: false, query: {
+        'search': query.trim(), 'lang': TranslationController.active?.localeCode ?? 'ru',
+        'city': city, 'lat': bias?.lat.toString(), 'lng': bias?.lng.toString(),
+        'radiusKm': bias?.radiusKm.toString(), 'limit': '100', 'offset': '$offset',
+      });
+      results.addAll((data['suggestions'] as List? ?? []).whereType<Map>()
+          .map((row) => AddressSuggestion.fromBackend(Map<String, dynamic>.from(row))));
+      final next = (data['nextOffset'] as num?)?.toInt();
+      if (data['exactComplex'] != true || data['hasMore'] != true || next == null || next <= offset) break;
+      offset = next;
+    }
+    return results;
   }
 
   Future<AddressSuggestion?> reverse(double lat, double lng) async {

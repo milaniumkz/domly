@@ -1,3 +1,4 @@
+import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
 import {idempotent} from '../../common/idempotency';
 import {ensureChecklistReport,saveChecklist} from '../../modules/checklists';
 import {validateBookingStart} from '../../modules/bookingValidation';
@@ -378,7 +379,7 @@ export function buildV1Router(deps: {
   };
 
   router.post('/auth/otp/request', asyncHandler(async (req, res) => {
-    ok(res, await deps.authService.requestOtp(String(req.body.phone ?? '')));
+    ok(res, await deps.authService.requestOtp(String(req.body.phone ?? ''),req.body.role));
   }));
 
   router.post('/auth/otp/verify', asyncHandler(async (req, res) => {
@@ -1051,20 +1052,24 @@ export function buildV1Router(deps: {
     const city = req.query.city ? String(req.query.city) : null;
     const lat = req.query.lat ? Number(req.query.lat) : null;
     const lng = req.query.lng ? Number(req.query.lng) : null;
-    const limit = Math.min(Number(req.query.limit ?? 10), 10);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit ?? 10) || 10));
+    const offset = Math.max(0, Math.floor(Number(req.query.offset ?? 0) || 0));
     const radiusKm = Number(req.query.radiusKm ?? 50);
     const normalizedQuery = normalizeText(query);
-    const localRows = (await deps.db.query<any>(
-      `SELECT h.*, z.name_ru AS zone_name_ru, z.name_kk AS zone_name_kk
+    const rawRows = (await deps.db.query<any>(
+      `SELECT h.*, (domly_normalize_address(h.residential_complex_ru)=$5 OR domly_normalize_address(h.residential_complex_kk)=$5) AS exact_complex, z.name_ru AS zone_name_ru, z.name_kk AS zone_name_kk
        FROM connected_houses h
        LEFT JOIN service_zones z ON z.id=h.zone_id
        WHERE ($1::text IS NULL OR h.city ILIKE $1)
        AND domly_normalize_address(concat_ws(' ',h.city,h.street_ru,h.street_kk,
            h.residential_complex_ru,h.residential_complex_kk,h.house)) LIKE ALL($2::text[])
-       ORDER BY h.active DESC, h.city, h.street_ru, h.house
-       LIMIT 100`,
-      [city ? `%${city}%` : null, normalizedQuery.split(' ').filter(Boolean).map(token => `%${token}%`)],
-    )).rows
+       ORDER BY exact_complex DESC NULLS LAST, h.active DESC, h.city, h.street_ru, h.house, h.id
+       LIMIT $3 OFFSET $4`,
+      [city ? `%${city}%` : null, normalizedQuery.split(' ').filter(Boolean).map(token => `%${token}%`), limit + 1, offset, normalizedQuery],
+    )).rows;
+    const hasMore = rawRows.length > limit;
+    const exactComplex = rawRows.some(row => row.exact_complex === true);
+    const localRows = rawRows.slice(0, limit)
       .map((house: any) => {
         const haystack = normalizeText([
           house.city,
@@ -1096,8 +1101,8 @@ export function buildV1Router(deps: {
         lat: house.latitude,
         lng: house.longitude,
       }));
-    if (localRows.length >= Math.min(3, limit)) {
-      ok(res, { suggestions: localRows, source: 'connected_houses' });
+    if (offset > 0 || exactComplex || localRows.length >= Math.min(3, limit)) {
+      ok(res, { suggestions: localRows, source: 'connected_houses', hasMore, exactComplex, nextOffset: hasMore ? offset + limit : null });
       return;
     }
     const externalRows = await deps.addressSearch.externalSuggestions({
@@ -1347,8 +1352,8 @@ export function buildV1Router(deps: {
       [req.body.packageId],
     )).rows);
     if (!pkg) throw new ApiError(404, 'not_found', 'Пакет не найден.');
-    const address = first<{ id: string; area: string; city: string; settlement: string | null; street: string; house: string; apartment: string | null }>((await deps.db.query(
-      `SELECT id, area, city, settlement, street, house, apartment FROM customer_addresses WHERE id=$1 AND user_id=$2`,
+    const address = first<{ id: string; area: string; verified_area: string | null; city: string; settlement: string | null; street: string; house: string; apartment: string | null }>((await deps.db.query(
+      `SELECT id, area, verified_area, city, settlement, street, house, apartment FROM customer_addresses WHERE id=$1 AND user_id=$2`,
       [req.body.addressId, req.user!.id],
     )).rows);
     if (!address?.area) throw new ApiError(400, 'area_required', 'Заполните площадь квартиры в профиле.');
@@ -1383,6 +1388,14 @@ export function buildV1Router(deps: {
     } else {
       const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Покупка пакета DOMLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
+    }
+    if (!address.verified_area) {
+      await deps.notifications.create({
+        userId: req.user!.id, titleRu: 'Проверка площади', titleKk: 'Ауданды тексеру',
+        bodyRu: 'Пакет можно оплатить сейчас. Подтвердите площадь в приложении, загрузив технический план. Если площадь не подтверждена, после оплаты будет назначена проверка отделом контроля качества.',
+        bodyKk: 'Пакетті қазір төлеуге болады. Техникалық жоспарды жүктеп, қосымшада ауданын растаңыз. Аудан расталмаса, төлемнен кейін сапаны бақылау бөлімі тексеру тағайындайды.',
+        targetType: 'area_verification', targetId: address.id, dedupeKey: `area-reminder-${address.id}`,
+      });
     }
     ok(res, { customerPackage, ...payment });
   }));
@@ -1483,10 +1496,11 @@ export function buildV1Router(deps: {
     if (Number(order.payable_amount) <= 0) throw new ApiError(409,'already_paid','Нет услуг к оплате.');
     const previousPayment = (await deps.db.query('SELECT * FROM payments WHERE order_id=$1 ORDER BY created_at DESC LIMIT 1',[order.id])).rows[0];
     if (previousPayment?.status === 'invoice_requested') throw new ApiError(409,'invoice_active','Предыдущий счёт ещё активен. Отмените его в Kaspi перед повторной оплатой.');
-    const resumed = previousPayment?.status === 'pending' ? (await deps.db.query(
+    let resumed = previousPayment?.status === 'pending' ? (await deps.db.query(
       "UPDATE payments SET provider=$2,invoice_phone=$3,updated_at=NOW() WHERE id=$1 AND status='pending' RETURNING *",
       [previousPayment.id, req.body.provider ?? 'kaspi', req.body.invoicePhone ?? null],
     )).rows[0] : null;
+    if (resumed && req.body.useBonus === true) resumed = await topUpPendingBonus(deps.db,resumed.id,Number(req.body.requestedBonus ?? 0),await addonBonusPercent(deps.db,order.id)) ?? resumed;
     const result = resumed ? {payment: resumed, payableAmount: Number(resumed.amount), bonusSpent: Number(resumed.bonus_amount)} : await deps.payments.createPayment({
       customerId: req.user!.id,
       orderId: order.id,
@@ -1494,7 +1508,7 @@ export function buildV1Router(deps: {
       amount: Number(order.payable_amount),
       useBonus: req.body.useBonus === true,
       requestedBonus: Number(req.body.requestedBonus ?? 0),
-      maxBonusPercent: Number(req.body.maxBonusPercent ?? 50),
+      maxBonusPercent: await addonBonusPercent(deps.db, order.id),
       invoicePhone: req.body.invoicePhone,
       applyReferralDiscount: false,
       payload: { kind: 'order_payment', mInfo: formatPaymentAddress(order), ...(previousPayment && ['cancelled','rejected'].includes(previousPayment.status) ? {retryOfPaymentId: previousPayment.id} : {}) },
@@ -2024,7 +2038,7 @@ export function buildV1Router(deps: {
       amount,
       useBonus: Boolean(req.body.bonusToSpend && Number(req.body.bonusToSpend) > 0),
       requestedBonus: Number(req.body.bonusToSpend ?? 0),
-      maxBonusPercent: Number(req.body.maxBonusPercent ?? 50),
+      maxBonusPercent: await addonBonusPercent(deps.db, order.id),
       invoicePhone: req.body.kaspiPhone ?? null,
       payload: { kind: 'addon_request_payment' },
     });
@@ -2653,7 +2667,7 @@ export function buildV1Router(deps: {
     const cleaner = first((await deps.db.query(
       `INSERT INTO app_users (role, phone, full_name, email, language, status, is_phone_verified)
        VALUES ('cleaner',$1,$2,$3,COALESCE($4,'ru'),COALESCE($5,'pending'),TRUE)
-       ON CONFLICT (phone) DO UPDATE SET
+       ON CONFLICT (phone,role) DO UPDATE SET
          role='cleaner',
          full_name=COALESCE(EXCLUDED.full_name, app_users.full_name),
          email=COALESCE(EXCLUDED.email, app_users.email),

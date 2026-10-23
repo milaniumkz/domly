@@ -14,6 +14,10 @@ function entity(path:string){
  const pieces=path.split('/').filter(Boolean);const key=pieces.findIndex(x=>uuid.test(x));
  const type=key>0?pieces[key-1]:pieces.at(-1)??'api';return {type:safeText(type,80),id:key>=0?pieces[key]:null};
 }
+async function unverifiedPhoneIdentity(db:Database, phone:string, role:unknown) {
+ const rows=(await db.query('SELECT id,full_name,role FROM app_users WHERE phone=$1 AND ($2::text IS NULL OR role::text=$2) LIMIT 2',[phone,typeof role==='string'?role:null])).rows;
+ return rows.length===1?rows[0]:null;
+}
 export function collectRequests(db:Database){return async(req:Request,res:Response,next:NextFunction)=>{
  if(!req.path.startsWith('/api/v1')||req.path.startsWith('/api/v1/realtime')||req.path.includes('/files/media')||req.path.includes('/integrations/moon-ai/docs'))return next();
  const clientRequestId=uuid.test(String(req.headers['x-request-id']))?String(req.headers['x-request-id']):null;
@@ -22,7 +26,7 @@ export function collectRequests(db:Database){return async(req:Request,res:Respon
  const started=Date.now(),target=entity(req.path),eventId=randomUUID();req.techEventId=eventId;
  let identity:any=null;try{const raw=String(req.headers.authorization??'');if(raw.startsWith('Bearer ')){const jwt=verifyAccessToken(raw.slice(7));identity=(await db.query('SELECT id,full_name,role FROM app_users WHERE id=$1',[jwt.id])).rows[0];if(identity)identity.sessionId=jwt.sessionId;}}catch{}
  let identityEvidence=identity?'Подписанный токен доступа; разрешение операции проверяется отдельно.':'Исполнитель не установлен.';
- try{if(!identity&&/^\/api\/v1\/auth\/(password\/login|otp\/request|otp\/verify)$/.test(req.path)){let phone=String(req.body?.phone??'').replace(/[^0-9]/g,'');if(phone.length===11&&phone.startsWith('8'))phone='7'+phone.slice(1);if(phone.length===11){identity=(await db.query('SELECT id,full_name,role FROM app_users WHERE phone=$1',['+'+phone])).rows[0];if(identity)identityEvidence='Указан телефон этого аккаунта; личность отправителя ещё не подтверждена.';}}}catch{collectorFailure();}
+ try{if(!identity&&/^\/api\/v1\/auth\/(password\/login|otp\/request|otp\/verify)$/.test(req.path)){let phone=String(req.body?.phone??'').replace(/[^0-9]/g,'');if(phone.length===11&&phone.startsWith('8'))phone='7'+phone.slice(1);if(phone.length===11){identity=await unverifiedPhoneIdentity(db,'+'+phone,req.body?.role);if(identity)identityEvidence='Указан телефон этого аккаунта; личность отправителя ещё не подтверждена.';}}}catch{collectorFailure();}
  if(req.path==='/api/v1/quality-checks/from-file')target.type='quality-checks';
  if(identity&&req.path==='/api/v1/cleaner/verification'){target.type='users';target.id=identity.id;}
  if(identity&&req.path==='/api/v1/me'){target.type='users';target.id=identity.id;}
@@ -56,7 +60,7 @@ export function collectRequests(db:Database){return async(req:Request,res:Respon
    let user=req.user??responseUser??identity;
    if(!user&&/^\/api\/v1\/auth\/(password\/login|otp\/request|otp\/verify)$/.test(req.path)){
     let phone=String(req.body?.phone??'').replace(/[^0-9]/g,'');if(phone.length===11&&phone.startsWith('8'))phone='7'+phone.slice(1);
-    if(phone.length===11){user=(await db.query('SELECT id,full_name,role FROM app_users WHERE phone=$1',['+'+phone])).rows[0];if(user)identityEvidence='Указан телефон аккаунта; личность отправителя ещё не подтверждена.';}
+    if(phone.length===11){user=await unverifiedPhoneIdentity(db,'+'+phone,req.body?.role);if(user)identityEvidence='Указан телефон аккаунта; личность отправителя ещё не подтверждена.';}
    }
    if(responseUser)identityEvidence='Успешная серверная проверка входа. Дальнейшие действия определяются отдельными событиями.';
    const result=interrupted?'interrupted':res.statusCode>=400?'failure':'success';

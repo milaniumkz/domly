@@ -16,7 +16,7 @@ async function main() {
     const admin = (await db.query<{ id: string; password_hash: string | null }>(
       `INSERT INTO app_users (phone, role, password_hash, full_name, status, is_phone_verified)
        VALUES ($1,'superadmin',$2,$4,'approved',TRUE)
-       ON CONFLICT (phone) DO UPDATE SET
+       ON CONFLICT (phone,role) DO UPDATE SET
          role='superadmin',
          password_hash=CASE
            WHEN $3::boolean OR app_users.password_hash IS NULL THEN EXCLUDED.password_hash

@@ -301,6 +301,10 @@ CREATE TABLE IF NOT EXISTS app_users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- A phone identifies a person; customer and cleaner profiles remain separate.
+ALTER TABLE app_users DROP CONSTRAINT IF EXISTS app_users_phone_key;
+CREATE UNIQUE INDEX IF NOT EXISTS app_users_phone_role_key ON app_users(phone,role);
+
 CREATE TABLE IF NOT EXISTS auth_otp_codes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   phone TEXT NOT NULL,
@@ -310,6 +314,9 @@ CREATE TABLE IF NOT EXISTS auth_otp_codes (
   consumed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE auth_otp_codes ADD COLUMN IF NOT EXISTS role app_role;
+CREATE INDEX IF NOT EXISTS auth_otp_phone_role ON auth_otp_codes(phone,role,created_at DESC);
 
 CREATE TABLE IF NOT EXISTS refresh_sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

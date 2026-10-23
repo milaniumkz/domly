@@ -51,6 +51,19 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       assert.equal(details.json.data.cleaner.emergency_contact_relation,'Сестра');
       assert.equal((await request('/admin/cleaners','GET',undefined,true)).status,403);
     });
+    await t.test('complex search lists every building across pages with distinct addresses', async () => {
+      const complex=housePrefix+' ЖК';
+      for(let n=1;n<=23;n++) await db.query("INSERT INTO connected_houses(city,street_ru,house,residential_complex_ru,active) VALUES('Астана',$1,$2,$3,TRUE)",[housePrefix,String(n),complex]);
+      const ids=new Set<string>();let offset=0;
+      do {
+        const page=await request('/geo/address-suggestions?city='+encodeURIComponent('Астана')+'&search='+encodeURIComponent(complex)+'&limit=10&offset='+offset);
+        assert.equal(page.status,200);assert.equal(page.json.data.exactComplex,true);
+        for(const item of page.json.data.suggestions){assert.ok(item.house);assert.equal(item.residentialComplex,complex);assert.ok(!ids.has(item.id));ids.add(item.id);}
+        if(!page.json.data.hasMore)break;
+        assert.ok(page.json.data.nextOffset>offset);offset=page.json.data.nextOffset;
+      } while(offset<100);
+      assert.equal(ids.size,23);
+    });
     await t.test('customer settings and address search persist across requests', async () => {
       const updated=await request('/me/settings','PATCH',{language:'kk',darkMode:true,animations:false,tutorialCompleted_customer:true},true);
       assert.equal(updated.status,200);
@@ -728,6 +741,8 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
     const purchase=()=>fetch(base+'/packages/purchase',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});
     const responses=await Promise.all([purchase(),purchase(),purchase()]);assert.ok(responses.every(r=>r.status===200));const rows=await Promise.all(responses.map(r=>r.json() as Promise<any>));assert.equal(new Set(rows.map(r=>r.data.customerPackage.id)).size,1);
     assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].n,1);
+    const reminders=(await db.query("SELECT * FROM notifications WHERE user_id=$1 AND target_type='area_verification' AND target_id=$2",[customer,address])).rows;
+    assert.equal(reminders.length,1,'Area reminder is stored once even before package payment');
     const id=rows[0].data.payment.id;
     const hook=(secret?:string)=>fetch(base+'/payments/kaspi/webhook',{method:'POST',headers:{'Content-Type':'application/json',...(secret?{'X-Kaspi-Token':secret}:{})},body:JSON.stringify({paymentId:id,status:'paid'})});
     assert.equal((await hook()).status,401);assert.equal((await hook('wrong')).status,401);
@@ -739,15 +754,37 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
     assert.ok(orders.every(r=>r.status===201));
     const booked=await Promise.all(orders.map(r=>r.json() as Promise<any>));assert.equal(new Set(booked.map(r=>r.data.order.id)).size,1);
     assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].available_cleanings,0);
+    const orderId=booked[0].data.order.id;
+    await db.query("UPDATE service_orders SET addon_amount=2000,total_amount=2000,payable_amount=2000,status='pending_payment' WHERE id=$1",[orderId]);
+    await db.query('UPDATE app_users SET bonus_balance=10000 WHERE id=$1',[customer]);
+    await db.query("INSERT INTO promotions(title_ru,package_id,reward_type,reward_value,max_bonus_spend_percent,active,presentation) VALUES('Audit full bonus',$1,'fixed',0,100,TRUE,'{\"rewardTarget\":\"addons\"}')",[pkg]);
+    const paid=await fetch(base+'/orders/'+orderId+'/pay',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({provider:'kaspi',useBonus:true,requestedBonus:2000})});
+    assert.equal(paid.status,200);
+    const bonusResult=(await paid.json()).data;
+    assert.equal(bonusResult.payableAmount,0,'Configured 100% bonus payment must not leave a 50% invoice');
+    assert.equal(bonusResult.payment.status,'paid');
+    assert.equal(bonusResult.payment.provider,'bonus');
+    const savedOrder=(await db.query('SELECT status,payable_amount FROM service_orders WHERE id=$1',[orderId])).rows[0];
+    assert.notEqual(savedOrder.status,'pending_payment');assert.equal(Number(savedOrder.payable_amount),0);
+    const retryOrder=randomUUID();
+    await db.query("INSERT INTO service_orders(id,customer_id,package_id,status,addon_amount,total_amount,payable_amount,scheduled_date,start_time,end_time,estimated_duration_minutes) VALUES($1,$2,$3,'pending_payment',2000,2000,2000,'2035-01-04','08:00','10:00',120)",[retryOrder,customer,pkg]);
+    const payRetry=(requestedBonus:number)=>fetch(base+'/orders/'+retryOrder+'/pay',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({provider:'manual',useBonus:true,requestedBonus})});
+    const firstPart=await payRetry(1000);assert.equal(firstPart.status,200);assert.equal((await firstPart.json()).data.payableAmount,1000);
+    const finalPart=await payRetry(1000);assert.equal(finalPart.status,200,JSON.stringify(await finalPart.clone().json()));const finalData=(await finalPart.json()).data;
+    assert.equal(finalData.payableAmount,0);assert.equal(finalData.payment.status,'paid');assert.equal(Number(finalData.payment.bonus_amount),2000);
+    assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance),6000);
+    assert.equal((await payRetry(1000)).status,409);
+
   }finally{
     env.kaspiWebhookToken=previousToken;env.moonAiEnabled=previousMoon;
+    await db.query('DELETE FROM promotions WHERE package_id=$1',[pkg]);
     await new Promise<void>(r=>server.close(()=>r()));
     await db.query('DELETE FROM notifications WHERE user_id=$1 OR target_id IN(SELECT id::text FROM service_orders WHERE customer_id=$1)',[customer]);
     await db.query('DELETE FROM quality_check_requests WHERE customer_id=$1',[customer]);
-    await db.query('DELETE FROM service_orders WHERE customer_id=$1',[customer]);
     await db.query('DELETE FROM bonus_transactions WHERE user_id=$1',[customer]);
     await db.query('DELETE FROM payment_events WHERE payment_id IN(SELECT id FROM payments WHERE customer_id=$1)',[customer]);
     await db.query('DELETE FROM payments WHERE customer_id=$1',[customer]);
+    await db.query('DELETE FROM service_orders WHERE customer_id=$1',[customer]);
     await db.query('DELETE FROM quality_check_requests WHERE customer_id=$1',[customer]);
     await db.query('DELETE FROM notifications WHERE user_id=$1',[customer]);
     await db.query('DELETE FROM customer_packages WHERE customer_id=$1',[customer]);

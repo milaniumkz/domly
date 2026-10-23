@@ -1,5 +1,6 @@
 import '../../theme/domly_palette.dart';
 import '../../utils/service_coverage.dart';
+import '../../utils/profile_address.dart';
 import '../../services/client_telemetry.dart';
 import 'dart:async';
 
@@ -227,7 +228,8 @@ class ProfileScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 19),
-                            _ProfileCard(
+                            ProfileSummaryCard(
+                              onTap: () => Navigator.pushNamed(context, activeSubscription == null ? '/client/packages' : '/client/package-calendar', arguments: activeSubscription == null ? null : {'subscriptionId': activeSubscription['id']}),
                               height: 120,
                               padding: const EdgeInsets.fromLTRB(
                                 27,
@@ -284,7 +286,8 @@ class ProfileScreen extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Expanded(
-                                  child: _ProfileCard(
+                                  child: ProfileSummaryCard(
+                                    onTap: () => _showInfo(context, 'Ваш прогресс', 'Прогресс зависит от ваших оплат и активности в сервисе. Здесь отображается текущий уровень, доступная скидка и сумма трат за месяц.'),
                                     height: 180,
                                     padding: const EdgeInsets.fromLTRB(
                                       27,
@@ -347,9 +350,7 @@ class ProfileScreen extends StatelessWidget {
                                                     DomlyPalette.surface(_soft),
                                               ),
                                               FractionallySizedBox(
-                                                widthFactor: tierProgress <= 0
-                                                    ? 0.34
-                                                    : tierProgress,
+                                                widthFactor: tierProgress,
                                                 child: Container(
                                                   height: 10,
                                                   color: DomlyPalette.surface(
@@ -415,7 +416,7 @@ class ProfileScreen extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 20),
-                            _ProfileCard(
+                            ProfileSummaryCard(
                               height: 260,
                               padding: const EdgeInsets.fromLTRB(3, 11, 3, 17),
                               child: Column(
@@ -627,7 +628,7 @@ class ProfileScreen extends StatelessWidget {
         ? ' + ещё ${(addresses?.length ?? 1) - 1}'
         : '';
     final parts = [
-      profile['residentialComplex'],
+      profileAddressText(profile),
       profile['entrance'] != null && '${profile['entrance']}'.isNotEmpty
           ? 'подъезд ${profile['entrance']}'
           : null,
@@ -863,8 +864,7 @@ class ProfileScreen extends StatelessWidget {
       text: _editableName(profile['name'] ?? profile['fullName']),
     );
     final residentialController = TextEditingController(
-      text: (profile['residentialComplex'] ?? profile['address'] ?? '')
-          .toString(),
+      text: profileAddressText(profile),
     );
     final initialResidentialText = residentialController.text.trim();
     final entranceController = TextEditingController(
@@ -963,7 +963,7 @@ class ProfileScreen extends StatelessWidget {
         }
         return a.fullText.compareTo(b.fullText);
       });
-      return items.take(10).toList();
+      return items;
     }
 
     AddressSuggestion? resolveTypedAddress(String value) {
@@ -985,9 +985,9 @@ class ProfileScreen extends StatelessWidget {
         final itemText = _normalizeAddressQuery(
           '${item.title} ${item.subtitle} ${item.residentialComplex} ${item.addressLine}',
         );
-        if (itemText.contains(normalized) ||
+        if (options.length == 1 && (itemText.contains(normalized) ||
             normalized.contains(itemText) ||
-            _addressLooksSimilar(value, itemText)) {
+            _addressLooksSimilar(value, itemText))) {
           return item;
         }
       }
@@ -1064,7 +1064,7 @@ class ProfileScreen extends StatelessWidget {
         seen.add(key);
         items.add(item);
       }
-      return items.take(10).toList();
+      return items;
     }
 
     final saved = await showModalBottomSheet<bool>(
@@ -2168,13 +2168,16 @@ class _ProfileMetricCard extends StatelessWidget {
   }
 }
 
-class _ProfileCard extends StatelessWidget {
-  const _ProfileCard({
+class ProfileSummaryCard extends StatelessWidget {
+  const ProfileSummaryCard({
+    super.key,
+    this.onTap,
     required this.height,
     required this.padding,
     required this.child,
   });
 
+  final VoidCallback? onTap;
   final double height;
   final EdgeInsetsGeometry padding;
   final Widget child;
@@ -2183,8 +2186,13 @@ class _ProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     DomlyPalette.watch(context);
 
-    return Container(
-      height: height,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+      constraints: BoxConstraints(minHeight: height),
       padding: padding,
       decoration: BoxDecoration(
         color: DomlyPalette.surface(Colors.white),
@@ -2192,7 +2200,7 @@ class _ProfileCard extends StatelessWidget {
         border: Border.all(color: DomlyPalette.border(ProfileScreen._border)),
       ),
       child: child,
-    );
+    )));
   }
 }
 

@@ -11324,9 +11324,12 @@ class FirestoreDataService {
     required String orderId,
     required String provider,
     String? invoicePhone,
+    int bonusToSpend = 0,
   }) =>
       BackendApiService.instance.postMap('/orders/$orderId/pay', body: {
         'provider': provider,
+        'useBonus': bonusToSpend > 0,
+        'requestedBonus': bonusToSpend,
         if (invoicePhone != null) 'invoicePhone': invoicePhone,
       });
 

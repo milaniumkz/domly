@@ -18,7 +18,6 @@ class CleanerVerificationScreen extends StatefulWidget {
 class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
   final _data = FirestoreDataService.instance;
   final _uploads = VerificationUploadService();
-  final _expiresController = TextEditingController();
 
   final Map<String, String?> _files = {
     'selfieUrl': null,
@@ -34,7 +33,6 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
 
   @override
   void dispose() {
-    _expiresController.dispose();
     super.dispose();
   }
 
@@ -207,14 +205,6 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
                               'residence-proof',
                             ),
                             const SizedBox(height: 2),
-                            TextField(
-                              controller: _expiresController,
-                              decoration: InputDecoration(
-                                labelText:
-                                    'Срок действия документов (YYYY-MM-DD)'
-                                        .tr(),
-                              ),
-                            ),
                             const SizedBox(height: 2),
                             DomlyPrimaryButton(
                               label: isApproved
@@ -288,9 +278,6 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
     try {
       await _data.submitCleanerVerification({
         ..._files,
-        'expiresAt': _expiresController.text.trim().isEmpty
-            ? null
-            : _expiresController.text.trim(),
       });
       if (!mounted) return;
       showDomlySnackBar(

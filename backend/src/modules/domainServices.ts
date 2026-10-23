@@ -20,17 +20,18 @@ function assertOtpAccountActive(user: {status?: string} | undefined) {
 export class AuthService {
   constructor(private readonly db: Database, private readonly wapi: WapiOtpService) {}
 
-  async requestOtp(phone: string) {
+  async requestOtp(phone: string, role?: AuthUser['role']) {
+    if (role !== undefined && !['customer','cleaner'].includes(role)) throw new ApiError(400, 'invalid_role', 'Недопустимый тип аккаунта.');
     const normalized = normalizePhone(phone);
     const user = first<{role: string; status: string}>((await this.db.query(
-      'SELECT role,status FROM app_users WHERE phone=$1', [normalized],
+      'SELECT role,status FROM app_users WHERE phone=$1 AND role=$2', [normalized,role ?? 'customer'],
     )).rows);
     assertOtpAccountActive(user);
     const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = await bcrypt.hash(code, 8);
     await this.db.query(
-      `INSERT INTO auth_otp_codes (phone, code_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')`,
-      [normalized, codeHash],
+      `INSERT INTO auth_otp_codes (phone, code_hash, role, expires_at) VALUES ($1, $2, $3, NOW() + INTERVAL '5 minutes')`,
+      [normalized, codeHash, role ?? null],
     );
     const until = Date.parse(env.otpFailureFallbackUntil);
     const fallbackActive = Number.isFinite(until) && until > Date.now();
@@ -51,16 +52,16 @@ export class AuthService {
     const normalized = normalizePhone(phone);
     const otp = first<{ id: string; code_hash: string }>((await this.db.query(
       `SELECT id, code_hash FROM auth_otp_codes
-       WHERE phone=$1 AND consumed_at IS NULL AND expires_at > NOW()
+       WHERE phone=$1 AND (role=$2 OR role IS NULL) AND consumed_at IS NULL AND expires_at > NOW()
        ORDER BY created_at DESC LIMIT 1`,
-      [normalized],
+      [normalized,role],
     )).rows);
     if (!otp || !(await bcrypt.compare(code, otp.code_hash))) {
       throw new ApiError(400, 'invalid_otp', 'Неверный или истекший код.');
     }
     const existingUser = first<{ id: string; status: string }>((await this.db.query(
-      `SELECT id,status FROM app_users WHERE phone=$1`,
-      [normalized],
+      `SELECT id,status FROM app_users WHERE phone=$1 AND role=$2`,
+      [normalized,role],
     )).rows);
     assertOtpAccountActive(existingUser);
     const consumed = await this.db.query(
@@ -71,7 +72,7 @@ export class AuthService {
     const user = first<AuthUser>((await this.db.query(
       `INSERT INTO app_users (phone, role, is_phone_verified)
        VALUES ($1, $2, TRUE)
-       ON CONFLICT (phone) DO UPDATE SET is_phone_verified=TRUE, last_login_at=NOW()
+       ON CONFLICT (phone,role) DO UPDATE SET is_phone_verified=TRUE, last_login_at=NOW()
        RETURNING id, role, phone, auth_version AS "authVersion", password_change_required AS "passwordChangeRequired"`,
       [normalized, role],
     )).rows);
@@ -89,13 +90,19 @@ export class AuthService {
 
   async loginWithPassword(phone: string, password: string) {
     const normalized = normalizePhone(phone);
-    const user = first<AuthUser & { password_hash: string | null; status: string }>((await this.db.query(
+    const candidates = (await this.db.query<AuthUser & { password_hash: string | null; status: string }>(
       `SELECT id, role, phone, password_hash, status, auth_version AS "authVersion", password_change_required AS "passwordChangeRequired"
        FROM app_users
        WHERE phone=$1 AND role IN ('admin','superadmin','cleaner')`,
       [normalized],
-    )).rows);
-    if (!user?.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
+    )).rows;
+    // Never select an arbitrary profile when multiple password accounts share a phone.
+    const matches = [];
+    for (const candidate of candidates) {
+      if (candidate.password_hash && await bcrypt.compare(password,candidate.password_hash)) matches.push(candidate);
+    }
+    const user = matches.length === 1 ? matches[0] : null;
+    if (!user?.password_hash) {
       throw new ApiError(401, 'invalid_credentials', 'Неверный телефон или пароль.');
     }
     if (user.status === 'blocked') throw new ApiError(403, 'blocked', 'Аккаунт заблокирован.');

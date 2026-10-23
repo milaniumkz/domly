@@ -1,3 +1,5 @@
+import '../../services/app_config_service.dart';
+import '../../utils/bonus_policy_utils.dart';
 import '../../localization/translation_controller.dart';
 import 'package:flutter/material.dart';
 import '../../services/firestore_data_service.dart';
@@ -7,9 +9,10 @@ import '../../utils/user_error_message.dart';
 import 'kaspi_invoice_request_dialog.dart';
 
 class OrderPaymentRetry extends StatefulWidget {
-  const OrderPaymentRetry({super.key, required this.order, required this.data});
+  const OrderPaymentRetry({super.key, required this.order, required this.data, this.loadBonusOptions});
   final Map<String, dynamic> order;
   final FirestoreDataService data;
+  final Future<Map<String, int>> Function()? loadBonusOptions;
   @override
   State<OrderPaymentRetry> createState() => _OrderPaymentRetryState();
 }
@@ -21,11 +24,19 @@ class _OrderPaymentRetryState extends State<OrderPaymentRetry> {
     final id = (order['orderId'] ?? order['id'] ?? '').toString();
     if (!_retryingPayments.add(id)) return;
     try {
+      final amount = (order['payableAmount'] as num? ?? 0).toInt();
+      final options = widget.loadBonusOptions != null ? await widget.loadBonusOptions!() : {
+        'balance': ((await widget.data.customerProfileStream().first)?['bonusPoints'] as num? ?? 0).toInt(),
+        'limit': addonBonusSpendLimit(amount, await AppConfigService.instance.promotionsStream().first),
+      };
+      if (!mounted) return;
       final method = await showPaymentMethodOptionsDialog(context,
-          bonusBalance: 0,
-          maxBonusToSpend: 0,
-          paymentAmount: (order['payableAmount'] as num? ?? 0).toInt());
+          bonusBalance: options['balance'] ?? 0,
+          maxBonusToSpend: options['limit'] ?? 0,
+          paymentAmount: amount);
       if (!mounted || method == null) return;
+      final bonus = method.method == DomlyPaymentMethod.bonus || method.useBonus
+          ? (options['balance'] ?? 0).clamp(0, options['limit'] ?? 0).clamp(0, amount).toInt() : 0;
       String? phone;
       if (method.method == DomlyPaymentMethod.kaspi) {
         phone = await showKaspiInvoiceRequestDialog(context);
@@ -36,10 +47,12 @@ class _OrderPaymentRetryState extends State<OrderPaymentRetry> {
               orderId: id,
               provider:
                   method.method == DomlyPaymentMethod.online ? 'bcc' : 'kaspi',
-              invoicePhone: phone),
+              invoicePhone: phone, bonusToSpend: bonus),
           message: 'Создаём новый платёж...');
       if (!mounted) return;
-      if (method.method == DomlyPaymentMethod.online) {
+      if ((result['payableAmount'] as num? ?? 0) == 0) {
+        showDomlySnackBar(context, title: 'Оплата подтверждена', subtitle: 'Оплачено бонусами', type: DomlySnackBarType.success);
+      } else if (method.method == DomlyPaymentMethod.online) {
         final payment = result['payment'] as Map;
         final session = await widget.data
             .createBccPaymentSession(orderId: payment['id'].toString());
