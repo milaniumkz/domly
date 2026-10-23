@@ -1,0 +1,20 @@
+const fs=require('fs'),assert=require('assert/strict');
+module.exports=async({p,session,root})=>{
+assert.equal(new URL(process.env.DATABASE_URL).pathname,'/domly_audit_20261023');assert.ok(['localhost','127.0.0.1'].includes(new URL(process.env.DATABASE_URL).hostname));
+const {Database}=require('/workspace/domly/backend/dist/infrastructure/db/Database');const db=new Database(process.env.DATABASE_URL);const account=JSON.parse(fs.readFileSync(root+'/private/atomic-ui-account.json'));assert.equal(account.user.id,session.user.id);const id=session.user.id,fn='audit_ui_bonus_failure';let promotion;
+try{
+promotion=(await db.query("INSERT INTO promotions(title_ru,reward_value,max_bonus_spend_percent,presentation) VALUES('Аудит полной оплаты',0,100,'{\"rewardTarget\":\"addons\"}') RETURNING id")).rows[0].id;
+await p.reload();await p.waitForTimeout(2500);await p.evaluate(()=>document.querySelector('flt-semantics-placeholder')?.click());await p.waitForTimeout(1000);
+const {addonBonusPercent}=require('/workspace/domly/backend/dist/modules/bonusPolicy');assert.equal(await addonBonusPercent(db,account.orderId),100,'fixture must use existing 100% promotion');
+await db.query(`CREATE OR REPLACE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.user_id='${id}'::uuid THEN RAISE EXCEPTION 'injected audit ledger failure'; END IF; RETURN NEW; END $$`);await db.query(`CREATE TRIGGER ${fn} BEFORE INSERT ON bonus_transactions FOR EACH ROW EXECUTE FUNCTION ${fn}()`);
+async function pay(){await p.getByRole('button',{name:'Попробовать снова',exact:true}).first().click();await p.getByText('Выберите способ оплаты',{exact:true}).waitFor();await p.getByRole('checkbox').first().click();const response=p.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/orders/'+account.orderId+'/pay'));await p.getByRole('button',{name:'Оплатить бонусами',exact:true}).click();return await response;}
+assert.equal((await pay()).status(),500);await p.waitForTimeout(350);await p.screenshot({path:root+'/evidence/atomic-payment-ui-error.png'});console.log('Error screen:',await p.locator('body').innerText());await p.getByText(/Не удалось повторить оплату/).first().waitFor();
+const afterFailure=(await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[id])).rows[0];assert.equal(Number(afterFailure.bonus_balance),10000);assert.equal((await db.query('SELECT id FROM payments WHERE order_id=$1',[account.orderId])).rows.length,0);
+await p.screenshot({path:root+'/evidence/atomic-payment-ui-error.png'});await db.query(`DROP TRIGGER ${fn} ON bonus_transactions`);
+await p.waitForTimeout(1500);assert.equal((await pay()).status(),200);await p.getByText(/Оплачено бонусами/).first().waitFor();
+const payment=(await db.query('SELECT status,amount,bonus_amount FROM payments WHERE order_id=$1',[account.orderId])).rows;assert.equal(payment.length,1);assert.equal(payment[0].status,'paid');assert.equal(Number(payment[0].amount),0);assert.equal(Number(payment[0].bonus_amount),2000);
+const order=(await db.query('SELECT status,payable_amount FROM service_orders WHERE id=$1',[account.orderId])).rows[0];assert.equal(order.status,'pending_assignment');assert.equal(Number(order.payable_amount),0);
+const balance=Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[id])).rows[0].bonus_balance);assert.equal(balance,8000);await p.waitForTimeout(2500);await p.screenshot({path:root+'/evidence/atomic-payment-ui-success.png'});
+const result={failureHttp:500,balanceAfterFailure:10000,paymentsAfterFailure:0,retryHttp:200,paymentStatus:payment[0].status,orderStatus:order.status,finalBalance:balance,viaVisibleButtons:true};fs.writeFileSync(root+'/evidence/atomic-payment-ui.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+}finally{if(promotion)await db.query('DELETE FROM promotions WHERE id=$1',[promotion]);await db.query(`DROP TRIGGER IF EXISTS ${fn} ON bonus_transactions`);await db.query(`DROP FUNCTION IF EXISTS ${fn}()`);await db.close();}
+};

@@ -69,8 +69,9 @@ class RealtimeUpdates {
         try {
           final data = jsonDecode(line.substring(5));
           if (data is! Map || data['type'] == 'connected') return;
-          _debounce?.cancel();
-          _debounce = Timer(const Duration(milliseconds: 50), () {
+          // Bound refresh latency even while events arrive continuously.
+          _debounce ??= Timer(const Duration(milliseconds: 50), () {
+            _debounce = null;
             if (generation == _generation) _onChanged();
           });
         } catch (_) {}
@@ -97,6 +98,7 @@ class RealtimeUpdates {
     _user = null;
     _retry?.cancel();
     _debounce?.cancel();
+    _debounce = null;
     _subscription?.cancel();
     _client?.close();
   }

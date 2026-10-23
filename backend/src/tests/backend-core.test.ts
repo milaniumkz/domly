@@ -131,6 +131,7 @@ test('PricingService applies bonus limit and keeps payable remainder', () => {
 test('PaymentService turns full bonus payment into paid bonus-only payment', async () => {
   const queries: Array<{ sql: string; params?: unknown[] }> = [];
   const fakeDb = {
+    transaction: async (work: any) => work(fakeDb),
     async query(sql: string, params?: unknown[]) {
       queries.push({ sql, params });
       if (sql.includes('SELECT bonus_balance')) return { rows: [{ bonus_balance: '30000' }] };
@@ -169,13 +170,14 @@ test('PaymentService turns full bonus payment into paid bonus-only payment', asy
   assert.equal((result.payment as any).bonus_amount, 10000);
   assert.equal(result.payableAmount, 0);
   assert.equal(result.bonusSpent, 10000);
-  assert.deepEqual(spends[0], ['user-1', 10000, 'Оплата бонусами', 'order-1', 'pay-1']);
+  assert.deepEqual(spends[0].slice(0,5), ['user-1', 10000, 'Оплата бонусами', 'order-1', 'pay-1']);
   assert.equal(queries.some((entry) => entry.sql.includes('UPDATE service_orders')), true);
 });
 
 test('PaymentService creates external invoice only for payable amount after bonuses', async () => {
   const queries: Array<{ sql: string; params?: unknown[] }> = [];
   const fakeDb = {
+    transaction: async (work: any) => work(fakeDb),
     async query(sql: string, params?: unknown[]) {
       queries.push({ sql, params });
       if (sql.includes('SELECT bonus_balance')) return { rows: [{ bonus_balance: '30000' }] };
@@ -214,7 +216,7 @@ test('PaymentService creates external invoice only for payable amount after bonu
   assert.equal((result.payment as any).bonus_amount, 18000);
   assert.equal(result.payableAmount, 11500);
   assert.equal(result.bonusSpent, 18000);
-  assert.deepEqual(spends[0], ['user-1', 18000, 'Оплата бонусами', 'order-1', 'pay-2']);
+  assert.deepEqual(spends[0].slice(0,5), ['user-1', 18000, 'Оплата бонусами', 'order-1', 'pay-2']);
   const orderUpdate = queries.find((entry) => entry.sql.includes('UPDATE service_orders'));
   assert.deepEqual(orderUpdate?.params, ['order-1', 18000, 11500]);
 });

@@ -80,12 +80,12 @@ class _OrderPaymentRetryState extends State<OrderPaymentRetry> {
   @override
   Widget build(BuildContext context) {
     final status = widget.order['latestPaymentStatus'];
-    if (!['cancelled', 'rejected', 'failed', 'pending'].contains(status) ||
+    if (![null, 'draft', 'cancelled', 'rejected', 'failed', 'pending'].contains(status) ||
         widget.order['orderStatus'] != 'pending_payment')
       return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 12),
-      Text((status == 'pending'
+      Text(([null, 'draft', 'pending'].contains(status)
               ? 'Оплата не завершена. Выберите способ оплаты.'
               : 'Счёт отменён или произошла ошибка оплаты. Заказ сохранён. Вы можете выбрать другой способ оплаты.')
           .tr()),
