@@ -74,7 +74,8 @@ class LegalDocumentScreen extends StatelessWidget {
                                   .textTheme
                                   .headlineSmall
                                   ?.copyWith(
-                                    color: AppTheme.darkText,
+                                    color: DomlyPalette.foreground(
+                                        AppTheme.darkText),
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
@@ -86,7 +87,8 @@ class LegalDocumentScreen extends StatelessWidget {
                                     .textTheme
                                     .bodyMedium
                                     ?.copyWith(
-                                      color: AppTheme.mutedText,
+                                      color: DomlyPalette.foreground(
+                                          AppTheme.mutedText),
                                       height: 1.45,
                                     ),
                               ),
@@ -100,7 +102,8 @@ class LegalDocumentScreen extends StatelessWidget {
                                         .textTheme
                                         .titleMedium
                                         ?.copyWith(
-                                            color: AppTheme.darkText,
+                                            color: DomlyPalette.foreground(
+                                                AppTheme.darkText),
                                             fontWeight: FontWeight.w800,
                                             height: 1.4)),
                                 const SizedBox(height: 10),
@@ -111,7 +114,8 @@ class LegalDocumentScreen extends StatelessWidget {
                                         .textTheme
                                         .bodyMedium
                                         ?.copyWith(
-                                            color: AppTheme.darkText,
+                                            color: DomlyPalette.foreground(
+                                                AppTheme.darkText),
                                             height: 1.6)),
                               const SizedBox(height: 24),
                             ],
