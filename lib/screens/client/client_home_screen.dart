@@ -2347,9 +2347,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       ),
                       const SizedBox(height: 9),
                       CleaningScheduleSummary(
-                          dateText: canSelectDates
-                              ? 'Дата не выбрана'.tr()
-                              : 'Ожидает назначения'.tr(),
+                          dateText: 'Дата не выбрана'.tr(),
                           status: _FigmaStatusPill(label: statusText),
                           fontSize: 22),
                     ],
@@ -3515,6 +3513,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   }) {
     final hiddenIds = hiddenOrderIds ?? const <String>{};
     final relevant = orders.where((order) {
+      if (isFinishedCleaning(order)) return false;
       final orderId = (order['id'] ?? order['orderId'] ?? '').toString();
       if (hiddenIds.contains(orderId)) {
         return false;

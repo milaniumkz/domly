@@ -30,3 +30,14 @@ String areaConfirmationStatus(Map<String, dynamic> profile) {
   if (profile['areaProofSubmitted'] == true) return 'На проверке'.tr();
   return 'Не подтверждена'.tr();
 }
+
+/// A paid historical visit must not become a new pending cleaning on the home.
+bool isFinishedCleaning(Map<String, dynamic> order) => {
+      'completed',
+      'cancelled',
+      'canceled',
+      'rejected'
+    }.contains((order['orderStatus'] ?? order['status'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase());

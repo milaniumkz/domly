@@ -6,6 +6,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('paid historical cleanings are not pending next cleanings', () {
+    for (final status in ['completed', 'cancelled', 'canceled', 'rejected']) {
+      expect(
+          isFinishedCleaning({'orderStatus': status, 'paymentStatus': 'paid'}),
+          isTrue);
+    }
+    for (final status in [
+      'pending_payment',
+      'pending_assignment',
+      'assigned',
+      'in_progress'
+    ]) {
+      expect(isFinishedCleaning({'orderStatus': status}), isFalse);
+    }
+  });
+
   test('missing and invalid dates never become January 1', () {
     for (final data in <Map<String, dynamic>>[
       {},
