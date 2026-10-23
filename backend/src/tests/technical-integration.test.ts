@@ -1,4 +1,4 @@
-import {buildRealtimeRouter,emitToUser} from '../realtime/sse';
+import {buildRealtimeRouter,emitToUser,publishToUsers} from '../realtime/sse';
 import {buildV1Router} from '../http/routes/v1';
 import {AuthService} from '../modules/domainServices';
 import fs from 'node:fs';
@@ -160,6 +160,12 @@ test('technical center: real PostgreSQL, access boundaries, evidence and operati
      const response=await fetch(base+'/api/v1/realtime',{headers:{Authorization:'Bearer '+token},signal:controllers[index].signal});assert.equal(response.status,200);
      const reader=response.body!.getReader();assert.match(new TextDecoder().decode((await reader.read()).value),/connected/);readers.push(reader);
     }
+    await publishToUsers([userA,userA],{type:'fixture.recipient_batch'});
+    const batchText=new TextDecoder().decode((await readers[0].read()).value);
+    assert.equal((batchText.match(/fixture.recipient_batch/g)??[]).length,1,'duplicate recipient IDs must not duplicate an event');
+    emitToUser(userB,{type:'fixture.not_a_recipient'});
+    const otherText=new TextDecoder().decode((await readers[1].read()).value);
+    assert.match(otherText,/fixture.not_a_recipient/);assert.doesNotMatch(otherText,/fixture.recipient_batch/);
     assert.equal((await tech('users/'+userA+'/operation','POST',{action:'revoke_sessions',reason:'Проверка открытого соединения',confirm:true,operatorPassword:password})).status,200);
     const end=async()=>{let text='';while(true){const part=await readers[0].read();if(part.done)return text;text+=new TextDecoder().decode(part.value);}};
     let timeout:ReturnType<typeof setTimeout>|undefined;

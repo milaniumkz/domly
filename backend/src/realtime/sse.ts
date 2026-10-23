@@ -35,9 +35,14 @@ export function buildRealtimeRouter(): Router {
 }
 
 export function emitToUser(userId: string, event: unknown): void {
+  emitToUsers([userId], event);
+}
+
+function emitToUsers(userIds: string[], event: unknown): void {
+  const recipients = new Set(userIds);
   const payload = JSON.stringify(event);
   for (const client of clients) {
-    if (client.userId === userId) {
+    if (recipients.has(client.userId)) {
       client.write(payload);
       if ((event as {type?:string} | null)?.type === 'auth.revoked') { clients.delete(client); client.close(); }
     }
@@ -58,9 +63,12 @@ export function configureRealtimeBus(redisUrl: string): void {
   subscriber.subscribe(realtimeChannel).catch(() => undefined);
   subscriber.on('message', (_channel, message) => {
     try {
-      const event = JSON.parse(message) as { userId?: string; payload?: unknown };
-      if (!event.userId) return;
-      emitToUser(event.userId, event.payload ?? {});
+      const event = JSON.parse(message) as { userId?: string; userIds?: string[]; payload?: unknown };
+      if (Array.isArray(event.userIds) && event.userIds.length <= 250 && event.userIds.every(id => typeof id === 'string')) {
+        emitToUsers(event.userIds, event.payload ?? {});
+      } else if (typeof event.userId === 'string' && event.userId) {
+        emitToUser(event.userId, event.payload ?? {});
+      }
     } catch {
       // Ignore malformed realtime events; API response path must not fail because of SSE.
     }
@@ -76,6 +84,17 @@ export async function publishToUser(userId: string, event: unknown): Promise<voi
     await publisher.publish(realtimeChannel, JSON.stringify({ userId, payload: event }));
   } catch {
     emitToUser(userId, event);
+  }
+}
+
+/** Recipients are resolved from live account state by the caller, not a cached role. */
+export async function publishToUsers(userIds: string[], event: unknown): Promise<void> {
+  const recipients = [...new Set(userIds)];
+  if (!publisher) { emitToUsers(recipients, event); return; }
+  for (let offset = 0; offset < recipients.length; offset += 250) {
+    const batch = recipients.slice(offset, offset + 250);
+    try { await publisher.publish(realtimeChannel, JSON.stringify({userIds: batch, payload: event})); }
+    catch { emitToUsers(batch, event); }
   }
 }
 
