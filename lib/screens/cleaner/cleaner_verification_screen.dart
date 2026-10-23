@@ -18,7 +18,6 @@ class CleanerVerificationScreen extends StatefulWidget {
 class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
   final _data = FirestoreDataService.instance;
   final _uploads = VerificationUploadService();
-  final _expiresController = TextEditingController();
 
   final Map<String, String?> _files = {
     'selfieUrl': null,
@@ -34,7 +33,6 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
 
   @override
   void dispose() {
-    _expiresController.dispose();
     super.dispose();
   }
 
@@ -87,6 +85,7 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
         final isRejected = status == 'rejected';
 
         return DomlyShell(
+          showBackButton: false,
           bottomNavigationBar: const DomlyCleanerBottomNav(currentIndex: 4),
           child: SafeArea(
             child: Center(
@@ -206,14 +205,6 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
                               'residence-proof',
                             ),
                             const SizedBox(height: 2),
-                            TextField(
-                              controller: _expiresController,
-                              decoration: InputDecoration(
-                                labelText:
-                                    'Срок действия документов (YYYY-MM-DD)'
-                                        .tr(),
-                              ),
-                            ),
                             const SizedBox(height: 2),
                             DomlyPrimaryButton(
                               label: isApproved
@@ -239,41 +230,10 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
   }
 
   Widget _stepTile(String title, String key, String type) {
-    final uploaded = (_files[key] ?? '').isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: DomlyCard(
-        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title.tr(),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text((uploaded ? 'Файл загружен' : 'Файл не загружен').tr()),
-                ],
-              ),
-            ),
-            const SizedBox(width: 4),
-            SizedBox(
-              width: 80,
-              child: DomlySecondaryButton(
-                label: uploaded ? 'Заменить' : 'Загрузить',
-                onPressed: () => _pickFile(key, type),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return CleanerVerificationDocumentTile(
+      title: title,
+      uploaded: (_files[key] ?? '').isNotEmpty,
+      onUpload: () => _pickFile(key, type),
     );
   }
 
@@ -318,9 +278,6 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
     try {
       await _data.submitCleanerVerification({
         ..._files,
-        'expiresAt': _expiresController.text.trim().isEmpty
-            ? null
-            : _expiresController.text.trim(),
       });
       if (!mounted) return;
       showDomlySnackBar(
@@ -351,5 +308,54 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
       default:
         return 'На проверке';
     }
+  }
+}
+
+class CleanerVerificationDocumentTile extends StatelessWidget {
+  const CleanerVerificationDocumentTile(
+      {super.key,
+      required this.title,
+      required this.uploaded,
+      required this.onUpload});
+  final String title;
+  final bool uploaded;
+  final VoidCallback onUpload;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: DomlyCard(
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title.tr(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text((uploaded ? 'Файл загружен' : 'Файл не загружен').tr()),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 128,
+              child: DomlySecondaryButton(
+                label: uploaded ? 'Заменить' : 'Загрузить',
+                onPressed: onUpload,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

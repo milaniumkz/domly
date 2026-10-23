@@ -3,7 +3,7 @@ import {scheduleSignupFollowup, scheduleCheckoutFollowup} from './moonAi';
 import { Queryable } from '../domain/repositories/UnitOfWork';
 import { referralDiscount } from './referrals';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
+import { passwordCrypto as bcrypt } from '../common/passwordCrypto';
 import { Database } from '../infrastructure/db/Database';
 import { ApiError } from '../common/api';
 import { first } from '../common/sql';
@@ -20,17 +20,18 @@ function assertOtpAccountActive(user: {status?: string} | undefined) {
 export class AuthService {
   constructor(private readonly db: Database, private readonly wapi: WapiOtpService) {}
 
-  async requestOtp(phone: string) {
+  async requestOtp(phone: string, role?: AuthUser['role']) {
+    if (role !== undefined && !['customer','cleaner'].includes(role)) throw new ApiError(400, 'invalid_role', 'Недопустимый тип аккаунта.');
     const normalized = normalizePhone(phone);
     const user = first<{role: string; status: string}>((await this.db.query(
-      'SELECT role,status FROM app_users WHERE phone=$1', [normalized],
+      'SELECT role,status FROM app_users WHERE phone=$1 AND role=$2', [normalized,role ?? 'customer'],
     )).rows);
     assertOtpAccountActive(user);
     const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = await bcrypt.hash(code, 8);
     await this.db.query(
-      `INSERT INTO auth_otp_codes (phone, code_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')`,
-      [normalized, codeHash],
+      `INSERT INTO auth_otp_codes (phone, code_hash, role, expires_at) VALUES ($1, $2, $3, NOW() + INTERVAL '5 minutes')`,
+      [normalized, codeHash, role ?? null],
     );
     const until = Date.parse(env.otpFailureFallbackUntil);
     const fallbackActive = Number.isFinite(until) && until > Date.now();
@@ -51,23 +52,27 @@ export class AuthService {
     const normalized = normalizePhone(phone);
     const otp = first<{ id: string; code_hash: string }>((await this.db.query(
       `SELECT id, code_hash FROM auth_otp_codes
-       WHERE phone=$1 AND consumed_at IS NULL AND expires_at > NOW()
+       WHERE phone=$1 AND (role=$2 OR role IS NULL) AND consumed_at IS NULL AND expires_at > NOW()
        ORDER BY created_at DESC LIMIT 1`,
-      [normalized],
+      [normalized,role],
     )).rows);
     if (!otp || !(await bcrypt.compare(code, otp.code_hash))) {
       throw new ApiError(400, 'invalid_otp', 'Неверный или истекший код.');
     }
     const existingUser = first<{ id: string; status: string }>((await this.db.query(
-      `SELECT id,status FROM app_users WHERE phone=$1`,
-      [normalized],
+      `SELECT id,status FROM app_users WHERE phone=$1 AND role=$2`,
+      [normalized,role],
     )).rows);
     assertOtpAccountActive(existingUser);
-    await this.db.query(`UPDATE auth_otp_codes SET consumed_at=NOW() WHERE id=$1`, [otp.id]);
+    const consumed = await this.db.query(
+      `UPDATE auth_otp_codes SET consumed_at=NOW()
+       WHERE id=$1 AND consumed_at IS NULL AND expires_at>NOW() RETURNING id`, [otp.id],
+    );
+    if (!consumed.rows.length) throw new ApiError(400, 'invalid_otp', 'Неверный или истекший код.');
     const user = first<AuthUser>((await this.db.query(
       `INSERT INTO app_users (phone, role, is_phone_verified)
        VALUES ($1, $2, TRUE)
-       ON CONFLICT (phone) DO UPDATE SET is_phone_verified=TRUE, last_login_at=NOW()
+       ON CONFLICT (phone,role) DO UPDATE SET is_phone_verified=TRUE, last_login_at=NOW()
        RETURNING id, role, phone, auth_version AS "authVersion", password_change_required AS "passwordChangeRequired"`,
       [normalized, role],
     )).rows);
@@ -85,13 +90,19 @@ export class AuthService {
 
   async loginWithPassword(phone: string, password: string) {
     const normalized = normalizePhone(phone);
-    const user = first<AuthUser & { password_hash: string | null; status: string }>((await this.db.query(
+    const candidates = (await this.db.query<AuthUser & { password_hash: string | null; status: string }>(
       `SELECT id, role, phone, password_hash, status, auth_version AS "authVersion", password_change_required AS "passwordChangeRequired"
        FROM app_users
        WHERE phone=$1 AND role IN ('admin','superadmin','cleaner')`,
       [normalized],
-    )).rows);
-    if (!user?.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
+    )).rows;
+    // Never select an arbitrary profile when multiple password accounts share a phone.
+    const matches = [];
+    for (const candidate of candidates) {
+      if (candidate.password_hash && await bcrypt.compare(password,candidate.password_hash)) matches.push(candidate);
+    }
+    const user = matches.length === 1 ? matches[0] : null;
+    if (!user?.password_hash) {
       throw new ApiError(401, 'invalid_credentials', 'Неверный телефон или пароль.');
     }
     if (user.status === 'blocked') throw new ApiError(403, 'blocked', 'Аккаунт заблокирован.');
@@ -433,6 +444,27 @@ export class PaymentService {
 export class SchedulingService {
   constructor(private readonly db: Database) {}
 
+  async assignOrder(orderId: string, cleanerId: string, actorId: string, comment?: string) {
+    return this.db.transaction(async tx => {
+      // Match acceptOffer's lock order so assignments and offers share one schedule lock.
+      const cleaner = (await tx.query("SELECT id FROM app_users WHERE id=$1 AND role='cleaner' FOR UPDATE", [cleanerId])).rows[0];
+      if (!cleaner) throw new ApiError(400, 'cleaner_required', 'Выберите уборщицу для назначения заказа.');
+      const order = first<any>((await tx.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE', [orderId])).rows);
+      if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
+      if (Number(order.payable_amount) > 0) throw new ApiError(409, 'payment_required', 'Сначала оплатите допуслуги.');
+      if (!['pending_assignment','waiting_cleaner','assigned'].includes(order.status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ нельзя назначить повторно.');
+      if (order.status === 'assigned' && order.cleaner_id === cleanerId) return {order, changed: false};
+      const overlap = (await tx.query(`SELECT id FROM service_orders WHERE cleaner_id=$1 AND scheduled_date=$2
+        AND status NOT IN ('cancelled','completed') AND start_time<$4::time AND end_time>$3::time AND id<>$5 LIMIT 1`,
+        [cleanerId,order.scheduled_date,order.start_time,order.end_time,orderId])).rows;
+      if (overlap.length) throw new ApiError(400, 'cleaner_unavailable', 'Уборщица занята на это время. Выберите другую.');
+      const updated = first((await tx.query("UPDATE service_orders SET cleaner_id=$2,status='assigned',updated_at=NOW() WHERE id=$1 RETURNING *", [orderId,cleanerId])).rows);
+      await tx.query("UPDATE order_offers SET status='expired' WHERE order_id=$1 AND status='offered'", [orderId]);
+      await tx.query("INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,'assigned',$3,$4)", [orderId,order.status,actorId,comment ?? null]);
+      return {order:updated, changed:true};
+    });
+  }
+
   async cleanerAvailable(cleanerId: string, date: string, startTime: string, endTime: string, excludeOrderId?: string): Promise<boolean> {
     const overlap = first<{ id: string }>((await this.db.query(
       `SELECT id FROM service_orders
@@ -445,10 +477,10 @@ export class SchedulingService {
     return !overlap;
   }
 
-  async availableCleaners(date: string, startTime: string, endTime: string, zoneId?: string) {
+  async availableCleaners(date: string, startTime: string, endTime: string, zoneId?: string, queryable: Queryable = this.db) {
     const zoneJoin = zoneId ? `JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$4` : '';
     const params = zoneId ? [date, startTime, endTime, zoneId] : [date, startTime, endTime];
-    return (await this.db.query(
+    return (await queryable.query(
       `SELECT u.id, u.full_name, u.phone
        FROM app_users u
        JOIN cleaner_profiles cp ON cp.user_id=u.id
@@ -465,6 +497,29 @@ export class SchedulingService {
     )).rows;
   }
 
+  async availableSlotCounts(date: string, slots: Array<{ startTime: string; endTime: string }>, zoneId?: string) {
+    if (!slots.length) return [];
+    // Count all requested intervals in one round trip. Do not transfer every
+    // cleaner's name/phone five times just to calculate array lengths.
+    const rows = (await this.db.query<{ ordinal: string; count: number }>(`
+      SELECT s.ordinal, (
+        SELECT COUNT(*)::int FROM app_users u
+        JOIN cleaner_profiles cp ON cp.user_id=u.id
+        ${zoneId ? 'JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$4' : ''}
+        WHERE u.role='cleaner' AND u.status='approved' AND cp.verification_status='approved'
+          AND NOT EXISTS (
+            SELECT 1 FROM service_orders o WHERE o.cleaner_id=u.id AND o.scheduled_date=$1
+              AND o.status NOT IN ('cancelled','completed')
+              AND o.start_time<s.ends AND o.end_time>s.starts
+          )
+      ) AS count
+      FROM unnest($2::time[], $3::time[]) WITH ORDINALITY AS s(starts,ends,ordinal)
+      ORDER BY s.ordinal`,
+    zoneId ? [date,slots.map(s=>s.startTime),slots.map(s=>s.endTime),zoneId]
+      : [date,slots.map(s=>s.startTime),slots.map(s=>s.endTime)])).rows;
+    return rows.map(row=>({...slots[Number(row.ordinal)-1],cleanersCount:row.count}));
+  }
+
   async offerNextCleaner(orderId: string, excludeCleanerIds: string[] = [], ttlMinutes = 2) {
     return this.db.transaction(async client => {
       const order = first<any>((await client.query(
@@ -475,7 +530,7 @@ export class SchedulingService {
       if (!order?.scheduled_date || !order.start_time || !order.end_time) {
         throw new ApiError(400, 'invalid_order_time', 'У заказа не указаны дата и время.');
       }
-      const cleaners = await this.availableCleaners(order.scheduled_date, order.start_time, order.end_time);
+      const cleaners = await this.availableCleaners(order.scheduled_date, order.start_time, order.end_time, undefined, client);
       const next = cleaners.find((cleaner: any) => !excludeCleanerIds.includes(cleaner.id));
       if (!next) {
         await client.query(`UPDATE service_orders SET status='waiting_cleaner', updated_at=NOW() WHERE id=$1`, [orderId]);

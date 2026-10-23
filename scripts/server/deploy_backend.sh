@@ -101,7 +101,8 @@ SQL
       echo "Deploy failed: quality_check_requests.admin_comment is missing" >&2
       exit 1
     fi
-    docker compose -p "$COMPOSE_PROJECT" -f "$CURRENT_DIR/docker-compose.yml" --project-directory "$CURRENT_DIR" exec -T api node dist/scripts/repair-area-bonuses.js
+    # Financial reconciliation is a separate, explicitly authorized operation.
+    # A normal release must not re-confirm historical areas or credit rewards.
     if systemctl is-active --quiet caddy; then
       chmod -R a+rX "$CURRENT_DIR/frontend/releases/current"
       APP_DIR="$APP_DIR" GITHUB_SHA="$COMMIT_SHA" python3 "$CURRENT_DIR/scripts/server/publish_web_caddy.py"

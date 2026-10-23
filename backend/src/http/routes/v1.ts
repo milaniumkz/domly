@@ -1,9 +1,14 @@
+import { customerMonthlyProgress } from '../../modules/customerProgress';
+import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
+import {idempotent} from '../../common/idempotency';
+import {ensureChecklistReport,saveChecklist} from '../../modules/checklists';
+import {validateBookingStart} from '../../modules/bookingValidation';
 import {revokeRealtimeSessions} from '../../realtime/sse';
 import {inspectUpload,registerUploadedFile} from '../../technical/files';
 import {ensureGuestSession, guestSession, bindGuestSession, matchMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
 import {validatePromotionBody} from '../../modules/promotionValidation';
 import {saveOrderReview} from '../../modules/orderReviews';
-import {canonicalMediaUrl, httpsMediaUrl, mediaLinksMiddleware, verifyMediaLink} from '../../modules/mediaLinks';
+import {canonicalMediaUrl, httpsMediaUrl, mediaLinksMiddleware, verifyMediaLink, storageKey} from '../../modules/mediaLinks';
 import { transitionOrder, releaseCleanerAssignment } from '../../modules/orderLifecycle';
 import {confirmArea} from '../../modules/areaVerification';
 import { verifyCleaner } from '../../modules/cleanerVerification';
@@ -375,7 +380,7 @@ export function buildV1Router(deps: {
   };
 
   router.post('/auth/otp/request', asyncHandler(async (req, res) => {
-    ok(res, await deps.authService.requestOtp(String(req.body.phone ?? '')));
+    ok(res, await deps.authService.requestOtp(String(req.body.phone ?? ''),req.body.role));
   }));
 
   router.post('/auth/otp/verify', asyncHandler(async (req, res) => {
@@ -456,6 +461,8 @@ export function buildV1Router(deps: {
     const safeUser = {...(user as any)};
     delete safeUser.password_hash;
     if (req.user!.role === 'customer') {
+      const tierRules = buildRuntimeConfig(await readAppSettings(deps.db)).rules.customerTierRules;
+      Object.assign(safeUser, await customerMonthlyProgress(deps.db, req.user!.id, tierRules));
       const stats = first<any>((await deps.db.query('SELECT COUNT(*)::int AS total FROM user_referrals WHERE inviter_id=$1 AND qualified_at IS NOT NULL', [req.user!.id])).rows);
       const own = first<any>((await deps.db.query("SELECT 'DOMLY-' || u.numeric_id AS code FROM user_referrals r JOIN app_users u ON u.id=r.inviter_id WHERE r.customer_id=$1", [req.user!.id])).rows);
       Object.assign(safeUser, {referralCode: `DOMLY-${safeUser.numeric_id}`, referredByCode: own?.code,
@@ -748,7 +755,7 @@ export function buildV1Router(deps: {
     )).rows);
   }));
 
-  router.post('/bonus/transactions', auth(), asyncHandler(async (req, res) => {
+  router.post('/bonus/transactions', auth(['admin','superadmin']), asyncHandler(async (req, res) => {
     const targetUserId = ['admin', 'superadmin'].includes(req.user!.role)
       ? String(req.body.userId ?? req.user!.id)
       : req.user!.id;
@@ -1048,20 +1055,24 @@ export function buildV1Router(deps: {
     const city = req.query.city ? String(req.query.city) : null;
     const lat = req.query.lat ? Number(req.query.lat) : null;
     const lng = req.query.lng ? Number(req.query.lng) : null;
-    const limit = Math.min(Number(req.query.limit ?? 10), 10);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit ?? 10) || 10));
+    const offset = Math.max(0, Math.floor(Number(req.query.offset ?? 0) || 0));
     const radiusKm = Number(req.query.radiusKm ?? 50);
     const normalizedQuery = normalizeText(query);
-    const localRows = (await deps.db.query<any>(
-      `SELECT h.*, z.name_ru AS zone_name_ru, z.name_kk AS zone_name_kk
+    const rawRows = (await deps.db.query<any>(
+      `SELECT h.*, (domly_normalize_address(h.residential_complex_ru)=$5 OR domly_normalize_address(h.residential_complex_kk)=$5) AS exact_complex, z.name_ru AS zone_name_ru, z.name_kk AS zone_name_kk
        FROM connected_houses h
        LEFT JOIN service_zones z ON z.id=h.zone_id
        WHERE ($1::text IS NULL OR h.city ILIKE $1)
        AND domly_normalize_address(concat_ws(' ',h.city,h.street_ru,h.street_kk,
            h.residential_complex_ru,h.residential_complex_kk,h.house)) LIKE ALL($2::text[])
-       ORDER BY h.active DESC, h.city, h.street_ru, h.house
-       LIMIT 100`,
-      [city ? `%${city}%` : null, normalizedQuery.split(' ').filter(Boolean).map(token => `%${token}%`)],
-    )).rows
+       ORDER BY exact_complex DESC NULLS LAST, h.active DESC, h.city, h.street_ru, h.house, h.id
+       LIMIT $3 OFFSET $4`,
+      [city ? `%${city}%` : null, normalizedQuery.split(' ').filter(Boolean).map(token => `%${token}%`), limit + 1, offset, normalizedQuery],
+    )).rows;
+    const hasMore = rawRows.length > limit;
+    const exactComplex = rawRows.some(row => row.exact_complex === true);
+    const localRows = rawRows.slice(0, limit)
       .map((house: any) => {
         const haystack = normalizeText([
           house.city,
@@ -1093,8 +1104,8 @@ export function buildV1Router(deps: {
         lat: house.latitude,
         lng: house.longitude,
       }));
-    if (localRows.length >= Math.min(3, limit)) {
-      ok(res, { suggestions: localRows, source: 'connected_houses' });
+    if (offset > 0 || exactComplex || localRows.length >= Math.min(3, limit)) {
+      ok(res, { suggestions: localRows, source: 'connected_houses', hasMore, exactComplex, nextOffset: hasMore ? offset + limit : null });
       return;
     }
     const externalRows = await deps.addressSearch.externalSuggestions({
@@ -1337,15 +1348,15 @@ export function buildV1Router(deps: {
     ok(res, { kaspi: Boolean(env.moonAiEnabled && env.moonAiChannelUrl && env.moonAiChannelApiKey), online: bccReady(),onlineTest:bccConfig().test });
   }));
 
-  router.post('/packages/purchase', auth(['customer']), asyncHandler(async (req, res) => {
+  router.post('/packages/purchase', auth(['customer']), idempotent(deps.db,'package_purchase'), asyncHandler(async (req, res) => {
     if (req.body.paymentMethod === 'online' && !bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
     const pkg = first<{ id: string; base_price: string; price_per_m2: string; cleaning_count: number; months: number }>((await deps.db.query(
       `SELECT * FROM catalog_packages WHERE id=$1 AND active=TRUE`,
       [req.body.packageId],
     )).rows);
     if (!pkg) throw new ApiError(404, 'not_found', 'Пакет не найден.');
-    const address = first<{ id: string; area: string; city: string; settlement: string | null; street: string; house: string; apartment: string | null }>((await deps.db.query(
-      `SELECT id, area, city, settlement, street, house, apartment FROM customer_addresses WHERE id=$1 AND user_id=$2`,
+    const address = first<{ id: string; area: string; verified_area: string | null; city: string; settlement: string | null; street: string; house: string; apartment: string | null }>((await deps.db.query(
+      `SELECT id, area, verified_area, city, settlement, street, house, apartment FROM customer_addresses WHERE id=$1 AND user_id=$2`,
       [req.body.addressId, req.user!.id],
     )).rows);
     if (!address?.area) throw new ApiError(400, 'area_required', 'Заполните площадь квартиры в профиле.');
@@ -1381,10 +1392,19 @@ export function buildV1Router(deps: {
       const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Покупка пакета DOMLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
     }
+    if (!address.verified_area) {
+      await deps.notifications.create({
+        userId: req.user!.id, titleRu: 'Проверка площади', titleKk: 'Ауданды тексеру',
+        bodyRu: 'Пакет можно оплатить сейчас. Подтвердите площадь в приложении, загрузив технический план. Если площадь не подтверждена, после оплаты будет назначена проверка отделом контроля качества.',
+        bodyKk: 'Пакетті қазір төлеуге болады. Техникалық жоспарды жүктеп, қосымшада ауданын растаңыз. Аудан расталмаса, төлемнен кейін сапаны бақылау бөлімі тексеру тағайындайды.',
+        targetType: 'area_verification', targetId: address.id, dedupeKey: `area-reminder-${address.id}`,
+      });
+    }
     ok(res, { customerPackage, ...payment });
   }));
 
-  router.post('/orders', auth(['customer']), asyncHandler(async (req, res) => {
+  router.post('/orders', auth(['customer']), idempotent(deps.db, 'order_create'), asyncHandler(async (req, res) => {
+    validateBookingStart(req.body.date, req.body.startTime);
     const customerPackage = first<{ id: string; package_id: string; address_id: string; available_cleanings: number; total_cleanings: number; status: string; purchase_config: any; freeze_until?: string }>((await deps.db.query(
       `SELECT * FROM customer_packages WHERE id=$1 AND customer_id=$2`,
       [req.body.customerPackageId, req.user!.id],
@@ -1412,6 +1432,7 @@ export function buildV1Router(deps: {
     const addonAmount = addons.reduce((sum: number, row) => sum + Number(row.price)*row.quantity, 0);
     const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes ?? 0),0);
     const end = addMinutes(String(req.body.startTime), duration);
+    if (end <= String(req.body.startTime).slice(0,5)) throw new ApiError(400,'invalid_order_time','Уборка должна завершиться в выбранный день.');
     const initialStatus = addonAmount > 0 ? 'pending_payment' : 'pending_assignment';
     const row = await deps.db.transaction(async (tx) => {
       const reserved = first((await tx.query(
@@ -1478,10 +1499,11 @@ export function buildV1Router(deps: {
     if (Number(order.payable_amount) <= 0) throw new ApiError(409,'already_paid','Нет услуг к оплате.');
     const previousPayment = (await deps.db.query('SELECT * FROM payments WHERE order_id=$1 ORDER BY created_at DESC LIMIT 1',[order.id])).rows[0];
     if (previousPayment?.status === 'invoice_requested') throw new ApiError(409,'invoice_active','Предыдущий счёт ещё активен. Отмените его в Kaspi перед повторной оплатой.');
-    const resumed = previousPayment?.status === 'pending' ? (await deps.db.query(
+    let resumed = previousPayment?.status === 'pending' ? (await deps.db.query(
       "UPDATE payments SET provider=$2,invoice_phone=$3,updated_at=NOW() WHERE id=$1 AND status='pending' RETURNING *",
       [previousPayment.id, req.body.provider ?? 'kaspi', req.body.invoicePhone ?? null],
     )).rows[0] : null;
+    if (resumed && req.body.useBonus === true) resumed = await topUpPendingBonus(deps.db,resumed.id,Number(req.body.requestedBonus ?? 0),await addonBonusPercent(deps.db,order.id)) ?? resumed;
     const result = resumed ? {payment: resumed, payableAmount: Number(resumed.amount), bonusSpent: Number(resumed.bonus_amount)} : await deps.payments.createPayment({
       customerId: req.user!.id,
       orderId: order.id,
@@ -1489,7 +1511,7 @@ export function buildV1Router(deps: {
       amount: Number(order.payable_amount),
       useBonus: req.body.useBonus === true,
       requestedBonus: Number(req.body.requestedBonus ?? 0),
-      maxBonusPercent: Number(req.body.maxBonusPercent ?? 50),
+      maxBonusPercent: await addonBonusPercent(deps.db, order.id),
       invoicePhone: req.body.invoicePhone,
       applyReferralDiscount: false,
       payload: { kind: 'order_payment', mInfo: formatPaymentAddress(order), ...(previousPayment && ['cancelled','rejected'].includes(previousPayment.status) ? {retryOfPaymentId: previousPayment.id} : {}) },
@@ -1751,25 +1773,11 @@ export function buildV1Router(deps: {
     if (req.user!.role === 'cleaner' && (order as any).cleaner_id !== req.user!.id) {
       throw new ApiError(403, 'forbidden', 'Нет доступа к этому заказу.');
     }
-    const report = await ensureChecklistReport(deps.db, order);
     const titles = [
       ...(Array.isArray(req.body.completedTasks) ? req.body.completedTasks.map(String) : []),
-      ...(Array.isArray(req.body.orderedAddons) ? req.body.orderedAddons.map(String) : []),
       ...(Array.isArray(req.body.addons) ? req.body.addons.map(String) : []),
     ].map((item) => item.trim()).filter(Boolean);
-    await deps.db.query(`DELETE FROM checklist_report_items WHERE report_id=$1`, [(report as any).id]);
-    for (const title of titles) {
-      await deps.db.query(
-        `INSERT INTO checklist_report_items (report_id, title_ru, checked, checked_at)
-         VALUES ($1,$2,TRUE,NOW())`,
-        [(report as any).id, title],
-      );
-    }
-    const updated = first((await deps.db.query(
-      `UPDATE checklist_reports SET status='completed', cleaner_id=COALESCE($2, cleaner_id), updated_at=NOW()
-       WHERE id=$1 RETURNING *`,
-      [(report as any).id, req.user!.id],
-    )).rows);
+    const updated = await saveChecklist(deps.db,order,req.user!.id,titles,String(req.body.note??''));
     await deps.notifications.create({
       userId: (order as any).customer_id,
       titleRu: 'Чек-лист уборки заполнен',
@@ -1832,6 +1840,10 @@ export function buildV1Router(deps: {
     if (photoUrls.length < 3) {
       throw new ApiError(400, 'photos_required', 'Добавьте минимум 3 фото для отчёта.');
     }
+    const keys = photoUrls.map(storageKey);
+    if (keys.some((key: string | null) => !key)) throw new ApiError(400,'invalid_photos','Загрузите фотографии через приложение.');
+    const uploaded = (await deps.db.query(`SELECT object_key FROM files WHERE bucket=$1 AND owner_id=$2 AND mime_type LIKE 'image/%' AND object_key=ANY($3::text[])`, [env.minioBucket,req.user!.id,[...new Set(keys)]])).rows;
+    if (uploaded.length !== new Set(keys).size) throw new ApiError(400,'invalid_photos','Фото не найдены или принадлежат другому пользователю. Загрузите их повторно.');
     const row = first((await deps.db.query(
       `INSERT INTO photo_reports (order_id, cleaner_id, photo_urls)
        VALUES ($1,$2,$3)
@@ -1870,20 +1882,9 @@ export function buildV1Router(deps: {
       const cleanerId = req.body.cleanerId ?? (order as any).cleaner_id;
       if (req.user!.role === 'cleaner' && cleanerId !== req.user!.id) throw new ApiError(403,'forbidden','Нельзя назначить заказ другой уборщице.');
       if (!cleanerId) throw new ApiError(400, 'cleaner_required', 'Выберите уборщицу для назначения заказа.');
-      if (cleanerId !== (order as any).cleaner_id) {
-        const free = await deps.scheduling.cleanerAvailable(cleanerId, (order as any).scheduled_date, (order as any).start_time, (order as any).end_time);
-        if (!free) throw new ApiError(400, 'cleaner_unavailable', 'Уборщица занята на это время. Выберите другую.');
-      }
-      const row = first((await deps.db.query(
-        `UPDATE service_orders SET cleaner_id=$2, status='assigned', updated_at=NOW() WHERE id=$1 AND status IN ('pending_assignment','waiting_cleaner','assigned') RETURNING *`,
-        [req.params.id, cleanerId],
-      )).rows);
-      if (!row) throw new ApiError(409,'invalid_transition','Статус заказа уже изменился. Обновите страницу.');
-      await deps.db.query(
-        `INSERT INTO order_status_history (order_id, old_status, new_status, actor_id, comment)
-         VALUES ($1,$2,'assigned',$3,$4)`,
-        [req.params.id, (order as any).status, req.user!.id, req.body.comment ?? null],
-      );
+      const assignment = await deps.scheduling.assignOrder(String(req.params.id), cleanerId, req.user!.id, req.body.comment);
+      const row = assignment.order;
+      if (!assignment.changed) { ok(res, row); return; }
       await deps.notifications.create({
         userId: cleanerId,
         titleRu: 'Назначен заказ',
@@ -1908,6 +1909,7 @@ export function buildV1Router(deps: {
       await cancelOrder(req, res);
       return;
     }
+    if (nextStatus === 'completed' && req.user!.role === 'cleaner') await ensureChecklistReport(deps.db, order);
     const row = await transitionOrder(deps.db, deps.notifications, String(req.params.id), req.user!, nextStatus);
     ok(res, row);
   };
@@ -1920,31 +1922,28 @@ export function buildV1Router(deps: {
       [req.params.id, admin, req.user!.id],
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
-    if (!['pending_assignment', 'waiting_cleaner', 'assigned', 'pending_payment'].includes(order.status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ уже нельзя перенести.');
-    const date = req.body.date ?? req.body.scheduledDate ?? order.scheduled_date;
-    const startTime = req.body.time ?? req.body.startTime ?? order.start_time;
-    if (!date || !startTime) throw new ApiError(400, 'invalid_request', 'Выберите дату и время уборки.');
-    const duration = Number(order.estimated_duration_minutes ?? 0) > 0
-      ? Number(order.estimated_duration_minutes)
-      : await estimateCleaningDurationMinutes(deps.db, order.address_id, []);
-    const endTime = addMinutes(String(startTime), duration);
-    if (order.cleaner_id) {
-      const free = await deps.scheduling.cleanerAvailable(order.cleaner_id, String(date), String(startTime), endTime, order.id);
-      if (!free) throw new ApiError(400, 'cleaner_unavailable', 'Уборщица занята на это время. Выберите другое время.');
-    }
-    const row = first((await deps.db.query(
-      `UPDATE service_orders
-       SET scheduled_date=$2, start_time=$3, end_time=$4, updated_at=NOW()
-       WHERE id=$1 AND status IN ('pending_assignment','waiting_cleaner','assigned','pending_payment')
-       RETURNING *`,
-      [req.params.id, date, startTime, endTime],
-    )).rows);
-    if (!row) throw new ApiError(409,'invalid_transition','Статус заказа уже изменился. Обновите страницу.');
-    await deps.db.query(
-      `INSERT INTO order_status_history (order_id, old_status, new_status, actor_id, comment)
-       VALUES ($1,$2,$2,$3,$4)`,
-      [req.params.id, order.status, req.user!.id, req.body.comment ?? 'Дата и время уборки изменены'],
-    );
+    const row = await deps.db.transaction(async tx => {
+      // Use the same lock order as assignment and offer acceptance.
+      if (order.cleaner_id) await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[order.cleaner_id]);
+      const current = first<any>((await tx.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[order.id])).rows);
+      if (!current || current.cleaner_id !== order.cleaner_id) throw new ApiError(409,'order_changed','Назначение изменилось. Обновите страницу.');
+      if (!['pending_assignment', 'waiting_cleaner', 'assigned', 'pending_payment'].includes(current.status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ уже нельзя перенести.');
+      const date = req.body.date ?? req.body.scheduledDate ?? (current.scheduled_date instanceof Date ? current.scheduled_date.toISOString().slice(0,10) : String(current.scheduled_date).slice(0,10));
+      const startTime = req.body.time ?? req.body.startTime ?? current.start_time;
+      validateBookingStart(date,startTime);
+      const duration = Number(current.estimated_duration_minutes) > 0 ? Number(current.estimated_duration_minutes) : await estimateCleaningDurationMinutes(tx,current.address_id,[]);
+      const endTime = addMinutes(String(startTime),duration);
+      if (current.cleaner_id) {
+        const overlap = first((await tx.query(`SELECT id FROM service_orders
+          WHERE cleaner_id=$1 AND scheduled_date=$2 AND status NOT IN ('cancelled','completed')
+          AND start_time < $4::time AND end_time > $3::time AND id<>$5 LIMIT 1`,
+          [current.cleaner_id,date,startTime,endTime,current.id])).rows);
+        if (overlap) throw new ApiError(400,'cleaner_unavailable','Уборщица занята на это время. Выберите другое время.');
+      }
+      const updated = first((await tx.query(`UPDATE service_orders SET scheduled_date=$2,start_time=$3,end_time=$4,updated_at=NOW() WHERE id=$1 RETURNING *`,[current.id,date,startTime,endTime])).rows);
+      await tx.query(`INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,$2,$3,$4)`,[current.id,current.status,req.user!.id,req.body.comment ?? 'Дата и время уборки изменены']);
+      return updated;
+    });
     await deps.notifications.create({userId:order.customer_id,titleRu:'Время уборки изменено',bodyRu:'Дата или время вашего заказа изменены.',targetType:'order',targetId:String(req.params.id)});
     if (order.cleaner_id) {
       await deps.notifications.create({
@@ -2042,7 +2041,7 @@ export function buildV1Router(deps: {
       amount,
       useBonus: Boolean(req.body.bonusToSpend && Number(req.body.bonusToSpend) > 0),
       requestedBonus: Number(req.body.bonusToSpend ?? 0),
-      maxBonusPercent: Number(req.body.maxBonusPercent ?? 50),
+      maxBonusPercent: await addonBonusPercent(deps.db, order.id),
       invoicePhone: req.body.kaspiPhone ?? null,
       payload: { kind: 'addon_request_payment' },
     });
@@ -2113,12 +2112,9 @@ export function buildV1Router(deps: {
     const duration = Number(req.query.durationMinutes ?? 0) > 0
       ? Number(req.query.durationMinutes)
       : await estimateCleaningDurationMinutes(deps.db, req.query.addressId ? String(req.query.addressId) : undefined, addons);
-    const available = [];
-    for (const start of slots) {
-      const end = addMinutes(start, duration);
-      const cleaners = await deps.scheduling.availableCleaners(date, start, end, req.query.zoneId ? String(req.query.zoneId) : undefined);
-      if (cleaners.length > 0) available.push({ startTime: start, endTime: end, cleanersCount: cleaners.length, durationMinutes: duration });
-    }
+    const intervals = slots.map((start: string) => ({startTime: start, endTime: addMinutes(start, duration)}));
+    const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined);
+    const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));
     ok(res, available);
   }));
 
@@ -2437,6 +2433,8 @@ export function buildV1Router(deps: {
 
   router.post('/payments/kaspi/webhook', asyncHandler(async (req, res) => {
     if(env.moonAiEnabled) throw new ApiError(409,'use_signed_callback','Используйте защищённый callback MooonAI для оплаты Kaspi.');
+    const provided=String(req.header('X-Kaspi-Token')??req.header('Authorization')?.replace(/^Bearer /i,'')??'');
+    if(!env.kaspiWebhookToken||!provided||hashToken(provided)!==hashToken(env.kaspiWebhookToken))throw new ApiError(401,'unauthorized','Недействительная подпись платёжного уведомления.');
     const status = normalizeKaspiPaymentStatus(req.body);
     const paymentId = req.body.paymentId ?? req.body.orderId ?? req.body.id;
     const payment = first((await deps.db.query(
@@ -2669,7 +2667,7 @@ export function buildV1Router(deps: {
     const cleaner = first((await deps.db.query(
       `INSERT INTO app_users (role, phone, full_name, email, language, status, is_phone_verified)
        VALUES ('cleaner',$1,$2,$3,COALESCE($4,'ru'),COALESCE($5,'pending'),TRUE)
-       ON CONFLICT (phone) DO UPDATE SET
+       ON CONFLICT (phone,role) DO UPDATE SET
          role='cleaner',
          full_name=COALESCE(EXCLUDED.full_name, app_users.full_name),
          email=COALESCE(EXCLUDED.email, app_users.email),
@@ -4407,23 +4405,14 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
   if (section === 'checklistTemplates') {
     addCommon('ct', ['ct.title_ru', 'ct.title_kk', 'pkg.name_ru']);
     return done(
-      `SELECT ct.*, pkg.name_ru AS package_name_ru,
-              COALESCE(
-                json_agg(
-                  json_build_object(
-                    'id', cti.id,
-                    'title_ru', cti.title_ru,
-                    'title_kk', cti.title_kk,
-                    'sort_order', cti.sort_order
-                  )
-                  ORDER BY cti.sort_order ASC, cti.id ASC
-                ) FILTER (WHERE cti.id IS NOT NULL),
-                '[]'::json
-              ) AS items
+      `SELECT ct.*, pkg.name_ru AS package_name_ru, COALESCE(items.value,'[]'::json) AS items
        FROM checklist_templates ct
        LEFT JOIN catalog_packages pkg ON pkg.id=ct.package_id
-       LEFT JOIN checklist_template_items cti ON cti.template_id=ct.id
-       GROUP BY ct.id, pkg.name_ru`,
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object('id',cti.id,'title_ru',cti.title_ru,
+           'title_kk',cti.title_kk,'sort_order',cti.sort_order) ORDER BY cti.sort_order,cti.id) AS value
+         FROM checklist_template_items cti WHERE cti.template_id=ct.id
+       ) items ON TRUE`,
       'ct.title_ru ASC',
     );
   }
@@ -4493,7 +4482,7 @@ function addMinutes(time: string, minutes: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
-async function readAppSettings(db: Database): Promise<Record<string, any>> {
+async function readAppSettings(db: Pick<Database, 'query'>): Promise<Record<string, any>> {
   return (await db.query<{ key: string; value: any }>(`SELECT key, value FROM app_settings`)).rows
     .reduce((acc: Record<string, any>, row) => ({ ...acc, [row.key]: row.value }), {});
 }
@@ -4873,7 +4862,7 @@ async function ensurePackageQualityCheck(db: Database, notifications: Notificati
 }
 
 async function estimateCleaningDurationMinutes(
-  db: Database,
+  db: Pick<Database, 'query'>,
   addressId?: string,
   addons: Array<{ duration_minutes?: number }> = [],
 ): Promise<number> {
@@ -5003,49 +4992,6 @@ async function getVisibleOrder(db: Database, orderId: string, user: { id: string
     || anyOrder.cleaner_id === user.id;
   if (!canSee) throw new ApiError(403, 'forbidden', 'Нет доступа к этому заказу.');
   return order;
-}
-
-async function ensureChecklistReport(db: Database, order: unknown) {
-  const anyOrder = order as any;
-  const existing = first((await db.query(`SELECT * FROM checklist_reports WHERE order_id=$1`, [anyOrder.id])).rows);
-  if (existing) return existing;
-
-  const report = first((await db.query(
-    `INSERT INTO checklist_reports (order_id, cleaner_id, status) VALUES ($1,$2,'open') RETURNING *`,
-    [anyOrder.id, anyOrder.cleaner_id ?? null],
-  )).rows);
-  const reportId = (report as any).id;
-
-  const templateItems = (await db.query(
-    `SELECT cti.title_ru, cti.title_kk
-     FROM checklist_templates ct
-     JOIN checklist_template_items cti ON cti.template_id=ct.id
-     WHERE ct.active=TRUE AND (ct.package_id=$1 OR ct.package_id IS NULL)
-     ORDER BY cti.sort_order ASC`,
-    [anyOrder.package_id ?? null],
-  )).rows;
-  for (const item of templateItems) {
-    await db.query(
-      `INSERT INTO checklist_report_items (report_id, title_ru, title_kk) VALUES ($1,$2,$3)`,
-      [reportId, (item as any).title_ru, (item as any).title_kk ?? null],
-    );
-  }
-
-  const addons = (await db.query(
-    `SELECT a.title_ru, a.title_kk
-     FROM order_addons oa
-     JOIN catalog_addons a ON a.id=oa.addon_id
-     WHERE oa.order_id=$1 AND oa.payment_status='paid'`,
-    [anyOrder.id],
-  )).rows;
-  for (const addon of addons) {
-    await db.query(
-      `INSERT INTO checklist_report_items (report_id, title_ru, title_kk) VALUES ($1,$2,$3)`,
-      [reportId, `Доп. услуга: ${(addon as any).title_ru}`, (addon as any).title_kk ? `Қосымша қызмет: ${(addon as any).title_kk}` : null],
-    );
-  }
-
-  return report;
 }
 
 function scoreAddressMatch(query: string, text: string): number {

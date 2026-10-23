@@ -902,7 +902,7 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.title,
+                  item.title.tr(),
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: DomlyPalette.foreground(DomlyColors.foreground),
@@ -910,7 +910,7 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  item.subtitle,
+                  item.subtitle.tr(),
                   style: TextStyle(
                     fontSize: 12,
                     color: DomlyPalette.foreground(DomlyColors.muted),

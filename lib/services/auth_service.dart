@@ -148,7 +148,7 @@ class AuthService {
     }
 
     try {
-      final data = await BackendApiService.instance.sendOtp(phone);
+      final data = await BackendApiService.instance.sendOtp(phone, role: _config.flavor == AppFlavor.pro ? 'cleaner' : 'customer');
       return OtpRequestResult(
         codeSent: data['codeSent'] != false,
         fallbackCode: data['fallbackCode']?.toString(),

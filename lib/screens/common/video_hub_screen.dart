@@ -102,6 +102,7 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
             }).toList();
 
             return DomlyShell(
+              showBackButton: false,
               bottomNavigationBar: isCleaner
                   ? null
                   : const DomlyClientBottomNav(currentIndex: 0),
@@ -127,7 +128,10 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                                       Colors.black.withValues(alpha: 0.12),
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(12),
-                                    onTap: () => Navigator.maybePop(context),
+                                    onTap: () {
+                                      if (Navigator.canPop(context)) { Navigator.pop(context); }
+                                      else { Navigator.pushReplacementNamed(context, isCleaner ? '/cleaner/dashboard' : '/client/home'); }
+                                    },
                                     child: SizedBox(
                                       width: 36,
                                       height: 36,

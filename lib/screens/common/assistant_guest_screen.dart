@@ -160,7 +160,7 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
                     controller: _text,
                     focusNode: _interaction.inputFocus,
                     onSend: _send,
-                    hint: 'Сообщение')),
+                    hint: 'Сообщение'.tr())),
             IconButton(
                 onPressed: _messages == null || _sending ? null : _send,
                 icon: const Icon(Icons.send))

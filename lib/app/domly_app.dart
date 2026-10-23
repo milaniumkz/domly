@@ -98,6 +98,7 @@ class _DomlyAppState extends State<DomlyApp> {
   bool _firstRunTutorialInFlight = false;
   late bool _lastAuthenticated;
   String? _bootRequestedRoute;
+  RouteSettings _bootRequestedSettings = const RouteSettings();
   String? _tutorialHandledForUserId;
   StreamSubscription<Map<String, dynamic>>? _notificationTapSubscription;
   StreamSubscription<Uri>? _linkSubscription;
@@ -112,6 +113,10 @@ class _DomlyAppState extends State<DomlyApp> {
     super.initState();
     unawaited(UiPreferences.instance.load());
     _bootRequestedRoute = _incomingRequestedRoute();
+    if (kIsWeb) {
+      _bootRequestedSettings =
+          RouteSettings(name: readBootRoute() ?? Uri.base.fragment);
+    }
     _lastAuthenticated = authController.isAuthenticated;
     authController.addListener(_handleAuthStateChanged);
     _notificationTapSubscription =
@@ -310,7 +315,7 @@ class _DomlyAppState extends State<DomlyApp> {
   }
 
   void _handleRouteChanged(String? routeName) {
-    syncAppUrlRoute(_canonicalUrlRoute(routeName));
+    syncAppUrlRoute(_canonicalRouteWithArguments(routeName));
     _scheduleFirstRunTutorial();
   }
 
@@ -319,8 +324,23 @@ class _DomlyAppState extends State<DomlyApp> {
       if (!mounted) {
         return;
       }
-      syncAppUrlRoute(_canonicalUrlRoute(routeName));
+      syncAppUrlRoute(_canonicalRouteWithArguments(routeName));
     });
+  }
+
+  String? _canonicalRouteWithArguments(String? routeName) {
+    final canonical = _canonicalUrlRoute(routeName);
+    if (canonical == null) return null;
+    final current = _routeObserver.currentRouteSettings;
+    final settings = restoreBootRouteArguments(
+      RouteSettings(
+          name: canonical,
+          arguments: current?.name == Uri.tryParse(canonical)?.path
+              ? current?.arguments
+              : null),
+      _bootRequestedSettings,
+    );
+    return routeUrlWithArguments(settings);
   }
 
   String? _canonicalUrlRoute(String? routeName) {
@@ -590,7 +610,7 @@ class _DomlyAppState extends State<DomlyApp> {
     }
     final windowBootRoute = readBootRoute();
     if (windowBootRoute != null) {
-      return windowBootRoute;
+      return Uri.tryParse(windowBootRoute)?.path;
     }
     final debugRoute = DebugSession.route;
     if (DebugSession.enabled && debugRoute != null) {
@@ -723,7 +743,7 @@ class _DomlyAppState extends State<DomlyApp> {
   }
 
   Route<dynamic> _onGenerateRoute(RouteSettings settings) {
-    settings = routeWithQueryArguments(settings);
+    settings = restoreBootRouteArguments(settings, _bootRequestedSettings);
     final page = _buildPage(settings);
     final routeSettings = RouteSettings(
       name: _normalizedRouteName(settings.name),
@@ -974,6 +994,7 @@ class _DomlyAppState extends State<DomlyApp> {
     String key, {
     List<String> aliases = const [],
   }) {
+    settings = restoreBootRouteArguments(settings, _bootRequestedSettings);
     final names = [key, ...aliases];
     final args = _readArgs(settings.arguments);
     for (final name in names) {
@@ -1041,13 +1062,15 @@ class _DomlyAppState extends State<DomlyApp> {
     if (requestedRoute != null && requestedRoute != '/') {
       final requestedAccess = _routeAccess(requestedRoute);
       if (requestedAccess != _RouteAccess.public) {
-        final canonicalRequestedRoute = _canonicalUrlRoute(requestedRoute);
+        final canonicalRequestedRoute = _canonicalRouteWithArguments(requestedRoute);
         if (canonicalRequestedRoute != null) {
           syncAppUrlRoute(canonicalRequestedRoute);
         }
         return _guarded(
-          child: _buildProtectedPage(RouteSettings(name: requestedRoute)),
-          settings: RouteSettings(name: requestedRoute),
+          child: _buildProtectedPage(restoreBootRouteArguments(
+            RouteSettings(name: requestedRoute), _bootRequestedSettings)),
+          settings: restoreBootRouteArguments(
+            RouteSettings(name: requestedRoute), _bootRequestedSettings),
           access: requestedAccess,
         );
       }
@@ -2094,9 +2117,12 @@ class _DomlyRouteObserver extends NavigatorObserver {
   _DomlyRouteObserver({this.onRouteChanged});
 
   String? currentRouteName;
+  RouteSettings? currentRouteSettings;
   final void Function(String? routeName)? onRouteChanged;
 
   void _setCurrent(Route<dynamic>? route) {
+    if (route is PopupRoute) return;
+    currentRouteSettings = route?.settings;
     currentRouteName = route?.settings.name;
     ClientTelemetry.opened(currentRouteName);
     onRouteChanged?.call(currentRouteName);

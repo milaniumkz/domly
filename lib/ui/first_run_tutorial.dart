@@ -140,6 +140,20 @@ class DomlyFirstRunTutorial {
         return shown;
       }
       if (step.targetKey != null) {
+        // Data-backed pages can mount after their route transition completes.
+        // Wait only while the page is still loading; ready optional sections
+        // that are absent should not add a fixed pause to every step.
+        for (var frame = 0; frame < 125 && navigator.mounted; frame++) {
+          final target = DomlyTutorialTargets.resolveNavigationTarget(
+              step.targetKey, step.routeName)?.currentContext;
+          if (target != null && target.mounted) break;
+          final home = DomlyTutorialTargets.clientHomeTop.currentContext;
+          if (step.routeName == '/client/home' && home != null && home.mounted &&
+              ModalRoute.of(home)?.isCurrent == true) break;
+          await Future<void>.delayed(const Duration(milliseconds: 16));
+          await WidgetsBinding.instance.endOfFrame;
+        }
+        if (!navigator.mounted) return shown;
         if (DomlyTutorialTargets.resolveNavigationTarget(
                     step.targetKey, step.routeName)
                 ?.currentContext ==

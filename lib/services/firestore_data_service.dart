@@ -1,3 +1,7 @@
+import '../utils/calendar_availability.dart';
+import '../utils/schedule_order.dart';
+import '../utils/stored_package_price.dart';
+import '../utils/cleaner_checklist_data.dart';
 import '../utils/stable_polling_stream.dart';
 import '../utils/service_coverage.dart';
 import '../utils/address_payload.dart';
@@ -25,6 +29,11 @@ import 'auth_service.dart';
 import 'session_store.dart';
 import 'backend_api_service.dart';
 import '../utils/package_catalog_utils.dart';
+
+String _newIdempotencyKey() {
+  final random = math.Random.secure();
+  return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+}
 
 class FirestoreDataService {
   FirestoreDataService._();
@@ -412,6 +421,8 @@ class FirestoreDataService {
     final fullName = (user['full_name'] ?? user['fullName'] ?? '').toString();
     return {
       'id': user['id'],
+      for (final key in ['tier', 'monthly_spent', 'next_tier_threshold', 'tier_progress', 'tier_discount_percent'])
+        key: user[key],
       'referralCode': user['referralCode'],
       'referredByCode': user['referredByCode'],
       'referralQualifiedCount': user['referralQualifiedCount'],
@@ -531,6 +542,7 @@ class FirestoreDataService {
       'packageName': packageName,
       'name': packageName,
       'status': item['status'],
+      'price': storedPackagePrice(item),
       'paymentStatus':
           item['status'] == 'pending_payment' ? 'pending_invoice' : 'paid',
       'remainingCleanings': available,
@@ -8267,17 +8279,7 @@ class FirestoreDataService {
       final data = await BackendApiService.instance.getMap(
         '/orders/$orderId/checklist',
       );
-      final report = Map<String, dynamic>.from(
-        (data['report'] as Map?) ?? const <String, dynamic>{},
-      );
-      final items = (data['items'] as List? ?? const [])
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList();
-      if (report.isEmpty && items.isEmpty) {
-        return null;
-      }
-      return {'id': orderId, ...report, 'items': items};
+      return mapCleanerChecklist(orderId, data);
     });
   }
 
@@ -9167,6 +9169,7 @@ class FirestoreDataService {
         final result = await BackendApiService.instance.postMap(
           '/packages/purchase',
           body: {
+            'idempotencyKey': _newIdempotencyKey(),
             'packageId': normalizedPackageId,
             'cleaningsPerMonth': cleaningsPerMonth,
             'addonsDetailed': addonsDetailed,
@@ -10336,34 +10339,22 @@ class FirestoreDataService {
           (slot) =>
               (slot['customer_package_id'] ?? '').toString() == subscriptionId,
         )
-        .map((slot) => (slot['scheduled_date'] ?? '').toString())
+        .map((slot) => calendarDateKey(slot['scheduled_date']))
         .where((key) => key.isNotEmpty)
         .toSet();
-    final dates = <Map<String, dynamic>>[];
+    final candidates = <String>[];
     while (!cursor.isAfter(monthEnd)) {
       final dateKey = _isoDate(cursor);
       final day = DateTime(cursor.year, cursor.month, cursor.day);
       if (!day.isBefore(validFrom) &&
           !day.isAfter(validUntil) &&
           !bookedDateKeys.contains(dateKey)) {
-        try {
-          final slots = await _loadBackendAvailableSlots(
-            dateKey: dateKey,
-            addressId: (subscription['addressId'] ?? '').toString(),
-          );
-          if (slots.isNotEmpty) {
-            dates.add({
-              'date': dateKey,
-              'availableSlotsCount': slots.length,
-              'backend': true,
-            });
-          }
-        } catch (_) {
-          // If backend cannot calculate this day, keep it unavailable.
-        }
+        candidates.add(dateKey);
       }
       cursor = cursor.add(const Duration(days: 1));
     }
+    final dates = await loadAvailableCalendarDays(candidates, loadSlots: (dateKey) =>
+      _loadBackendAvailableSlots(dateKey: dateKey, addressId: (subscription['addressId'] ?? '').toString()));
     return {'ok': true, 'dates': dates, 'backend': true};
   }
 
@@ -10421,19 +10412,8 @@ class FirestoreDataService {
     return _mapBackendCustomerPackage(item);
   }
 
-  bool _isActiveScheduleSlot(Map<String, dynamic> slot) {
-    final status = (slot['status'] ?? '').toString();
-    final orderStatus = (slot['orderStatus'] ?? '').toString();
-    if (status == 'canceled' ||
-        status == 'cancelled' ||
-        status == 'completed' ||
-        orderStatus == 'canceled' ||
-        orderStatus == 'cancelled' ||
-        orderStatus == 'completed') {
-      return false;
-    }
-    return true;
-  }
+  bool _isActiveScheduleSlot(Map<String, dynamic> slot) =>
+      isActiveScheduleOrder(slot);
 
   DateTime? _asDay(dynamic value) {
     DateTime? parsed;
@@ -11037,6 +11017,7 @@ class FirestoreDataService {
       final created = await BackendApiService.instance.postMap(
         '/orders',
         body: {
+          'idempotencyKey': _newIdempotencyKey(),
           'customerPackageId': subscriptionId,
           'date': dateKey,
           'startTime': startTime,
@@ -11337,9 +11318,12 @@ class FirestoreDataService {
     required String orderId,
     required String provider,
     String? invoicePhone,
+    int bonusToSpend = 0,
   }) =>
       BackendApiService.instance.postMap('/orders/$orderId/pay', body: {
         'provider': provider,
+        'useBonus': bonusToSpend > 0,
+        'requestedBonus': bonusToSpend,
         if (invoicePhone != null) 'invoicePhone': invoicePhone,
       });
 
@@ -12054,6 +12038,7 @@ class FirestoreDataService {
 
   Future<Map<String, dynamic>> reviewManualPayment({
     required String orderId,
+    required String paymentId,
     required bool approved,
     String? note,
   }) async {
@@ -12194,7 +12179,7 @@ class FirestoreDataService {
       };
     }
     return BackendApiService.instance.postMap(
-      approved ? '/payments/$orderId/confirm' : '/payments/$orderId/reject',
+      approved ? '/payments/$paymentId/confirm' : '/payments/$paymentId/reject',
       body: {if (note != null && note.trim().isNotEmpty) 'note': note.trim()},
     );
   }

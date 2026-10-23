@@ -10,6 +10,7 @@ void main() {
         home: Scaffold(
             body: OrderPaymentRetry(
       data: FirestoreDataService.instance,
+      loadBonusOptions: () async => {'balance': 0, 'limit': 0},
       order: {
         'id': 'order',
         'orderStatus': 'pending_payment',
@@ -28,6 +29,22 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(TextField), findsOneWidget);
   });
+  testWidgets('retry exposes full bonus payment when saved policy permits 100 percent', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: OrderPaymentRetry(
+      data: FirestoreDataService.instance,
+      loadBonusOptions: () async => {'balance': 10000, 'limit': 4000},
+      order: {'id': 'order', 'orderStatus': 'pending_payment', 'latestPaymentStatus': 'pending', 'payableAmount': 4000},
+    ))));
+    await tester.tap(find.text('Попробовать снова'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Оплатить бонусами: доступно 4000 ₸'), findsOneWidget);
+    expect(find.text('Оплатить бонусами'), findsOneWidget);
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('active invoice and paid order do not offer duplicate payment',
       (tester) async {
     for (final status in ['invoice_requested', 'paid']) {
@@ -35,6 +52,7 @@ void main() {
           home: Scaffold(
               body: OrderPaymentRetry(
         data: FirestoreDataService.instance,
+      loadBonusOptions: () async => {'balance': 0, 'limit': 0},
         order: {
           'id': 'order',
           'orderStatus': 'pending_payment',

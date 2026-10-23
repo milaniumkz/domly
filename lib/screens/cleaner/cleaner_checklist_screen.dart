@@ -23,6 +23,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
   final _data = FirestoreDataService.instance;
   final _config = AppConfigService.instance;
   final Set<String> _completed = <String>{};
+  List<String>? _requiredTasks;
   final Set<String> _addons = <String>{};
   List<String> _orderedAddons = const <String>[];
   List<Map<String, dynamic>> _orderedAddonsDetailed =
@@ -87,6 +88,11 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
         .toSet();
     final note = (checklist['note'] ?? '').toString();
     setState(() {
+      if (checklist['requiredTasks'] is List) {
+        _requiredTasks = (checklist['requiredTasks'] as List)
+            .map((value) => value.toString())
+            .toList();
+      }
       _completed
         ..clear()
         ..addAll(completed);
@@ -111,6 +117,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
       return _buildChecklistPicker();
     }
     return DomlyShell(
+      showBackButton: false,
       child: SafeArea(
         child: Column(
           children: [
@@ -119,10 +126,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  domlyTopIconButton(
-                    icon: Icons.arrow_back,
-                    onPressed: () => Navigator.pop(context),
-                  ),
+                  const CleanerChecklistBackButton(),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -359,6 +363,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
 
   Widget _buildChecklistPicker() {
     return DomlyShell(
+      showBackButton: false,
       bottomNavigationBar: const DomlyCleanerBottomNav(currentIndex: 2),
       child: SafeArea(
         child: Column(
@@ -367,19 +372,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
               child: Row(
                 children: [
-                  domlyTopIconButton(
-                    icon: Icons.arrow_back,
-                    onPressed: () {
-                      if (Navigator.canPop(context)) {
-                        Navigator.pop(context);
-                      } else {
-                        Navigator.pushReplacementNamed(
-                          context,
-                          '/cleaner/orders',
-                        );
-                      }
-                    },
-                  ),
+                  const CleanerChecklistBackButton(),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -893,6 +886,11 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
   }
 
   List<String> _baseTemplateTasks() {
+    if (_requiredTasks != null) {
+      return _requiredTasks!
+          .where((task) => !task.startsWith('Доп. услуга: '))
+          .toList();
+    }
     for (final group in _templateGroups) {
       final key = (group['key'] ?? '').toString();
       if (key != 'base_tasks') {
@@ -934,7 +932,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
           }
         });
       },
-      title: Text(task),
+      title: Text(task.tr()),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     );
   }
@@ -954,7 +952,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
           }
         });
       },
-      title: Text(task),
+      title: Text(task.tr()),
       subtitle: Text(
         description.isEmpty
             ? 'Отметьте, если предложено или выполнено'
@@ -1290,4 +1288,24 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
       );
     }
   }
+}
+
+class CleanerChecklistBackButton extends StatelessWidget {
+  const CleanerChecklistBackButton({super.key});
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: 'Назад'.tr(),
+        button: true,
+        child: domlyTopIconButton(
+          icon: Icons.arrow_back,
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushReplacementNamed(context, '/cleaner/orders');
+            }
+          },
+        ),
+      );
 }

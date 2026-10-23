@@ -60,6 +60,7 @@ export const env = {
   publicApiUrl: process.env.PUBLIC_API_URL ?? 'http://localhost:8080',
   kaspiMerchantId: process.env.KASPI_MERCHANT_ID ?? '',
   kaspiApiKey: process.env.KASPI_API_KEY ?? '',
+  kaspiWebhookToken: process.env.KASPI_WEBHOOK_TOKEN ?? '',
   kaspiBaseUrl: process.env.KASPI_BASE_URL ?? '',
   moonAiWebhookToken: process.env.MOON_AI_WEBHOOK_TOKEN ?? '',
   moonAiEnabled: boolEnv('MOON_AI_ENABLED'),

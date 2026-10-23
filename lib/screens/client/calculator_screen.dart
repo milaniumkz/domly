@@ -1047,7 +1047,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          name,
+                          name.tr(),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -2158,7 +2158,7 @@ class _FigmaAddonCard extends StatelessWidget {
           ),
           Center(
             child: Text(
-              caption,
+              caption.tr(),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: DomlyPalette.foreground(Color(0xFF658170)),

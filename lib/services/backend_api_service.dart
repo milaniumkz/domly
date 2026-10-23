@@ -334,10 +334,10 @@ class BackendApiService {
     }
   }
 
-  Future<Map<String, dynamic>> sendOtp(String phone) {
+  Future<Map<String, dynamic>> sendOtp(String phone, {String role = 'customer'}) {
     return postMap(
       '/auth/otp/request',
-      body: {'phone': phone},
+      body: {'phone': phone, 'role': role},
       authenticated: false,
     );
   }

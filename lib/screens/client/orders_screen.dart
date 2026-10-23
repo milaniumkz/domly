@@ -1205,7 +1205,7 @@ class _OrdersScreenState extends State<OrdersScreen>
               ],
             ),
             OrderPaymentRetry(order: slot, data: _data),
-            if (canEdit) ...[
+            if (canEdit || canCancel) ...[
               const SizedBox(height: 14),
               Wrap(
                 spacing: 8,
@@ -1217,7 +1217,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                       danger: true,
                       onTap: () => _cancelSlot(slot),
                     ),
-                  _SlotActionChip(
+                  if (canEdit) _SlotActionChip(
                     label: _isActiveCleaningStatus(status)
                         ? 'Добавить допы'
                         : 'Редактировать заказ',
@@ -2335,7 +2335,8 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   bool _canCancelSlot(String status) {
     final normalized = status.trim().toLowerCase();
-    return normalized == 'pending_assignment' ||
+    return normalized == 'pending_payment' ||
+        normalized == 'pending_assignment' ||
         normalized == 'assigned' ||
         normalized == 'confirmed';
   }
@@ -2905,7 +2906,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                               absorbing: loadingSlots,
                               child: Localizations.override(
                                 context: context,
-                                locale: const Locale('ru'),
+                                locale: Localizations.localeOf(context),
                                 child: CalendarDatePicker(
                                   key: ValueKey(
                                     '${visibleMonth.year}-${visibleMonth.month}-${selectedDate?.toIso8601String() ?? ''}',

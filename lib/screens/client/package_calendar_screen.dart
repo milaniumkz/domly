@@ -664,11 +664,11 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                effectiveRequiredSelections == 0
+                                (effectiveRequiredSelections == 0
                                     ? 'Все уборки уже выбраны'
                                     : _selectedTimes.isEmpty
                                         ? 'Можно подтверждать даты по одной или сразу несколько. Осталось выбрать: $effectiveRequiredSelections'
-                                        : 'Выбрано ${_selectedTimes.length}. После сохранения останется: $remainingAfterSelection',
+                                        : 'Выбрано ${_selectedTimes.length}. После сохранения останется: $remainingAfterSelection').tr(),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: DomlyPalette.foreground(
@@ -763,7 +763,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                         absorbing: _loadingSlotsDateKey != null,
                                         child: Localizations.override(
                                           context: context,
-                                          locale: const Locale('ru'),
+                                          locale: Localizations.localeOf(context),
                                           child: CalendarDatePicker(
                                             key: ValueKey(
                                               '${_visibleMonth.year}-${_visibleMonth.month}',

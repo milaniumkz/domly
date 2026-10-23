@@ -18,6 +18,28 @@ void main() {
     expect(routeWithQueryArguments(basic), same(basic));
   });
 
+  test('detail IDs survive boot URL rewriting and a browser reload', () {
+    const boot = RouteSettings(name: '/cleaner/checklist?orderId=visit-42');
+    final restored = restoreBootRouteArguments(
+        const RouteSettings(name: '/cleaner/checklist'), boot);
+    expect(restored.arguments, {'orderId': 'visit-42'});
+    final url = routeUrlWithArguments(restored);
+    expect(url, '/cleaner/checklist?orderId=visit-42');
+    expect(routeWithQueryArguments(RouteSettings(name: url)).arguments,
+        {'orderId': 'visit-42'});
+    final newer = restoreBootRouteArguments(
+        const RouteSettings(
+            name: '/cleaner/checklist',
+            arguments: {'orderId': 'new', 'phone': 'private'}),
+        boot);
+    expect(routeUrlWithArguments(newer), '/cleaner/checklist?orderId=new');
+    expect(
+        restoreBootRouteArguments(
+                const RouteSettings(name: '/client/home'), boot)
+            .arguments,
+        isNull);
+  });
+
   test('customer and Pro links open only the matching application', () {
     expect(DomlyLinks.route(Uri.parse(DomlyLinks.customer), AppFlavor.customer),
         '/client/home');

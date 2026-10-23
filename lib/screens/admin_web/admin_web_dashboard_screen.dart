@@ -3560,9 +3560,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               FilledButton(
                 onPressed: () async {
                   await _data.reviewManualPayment(
-                    orderId: isAreaRecalculation && paymentId.isNotEmpty
-                        ? paymentId
-                        : orderId,
+                    orderId: orderId,
+                    paymentId: paymentId,
                     approved: true,
                   );
                 },
@@ -3571,9 +3570,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               OutlinedButton(
                 onPressed: () async {
                   await _data.reviewManualPayment(
-                    orderId: isAreaRecalculation && paymentId.isNotEmpty
-                        ? paymentId
-                        : orderId,
+                    orderId: orderId,
+                    paymentId: paymentId,
                     approved: false,
                   );
                 },

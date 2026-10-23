@@ -55,6 +55,7 @@ class _TrainingOrderScreenState extends State<TrainingOrderScreen> {
     ];
 
     return DomlyShell(
+      showBackButton: false,
       bottomNavigationBar: const DomlyClientBottomNav(currentIndex: 0),
       child: SafeArea(
         child: Padding(

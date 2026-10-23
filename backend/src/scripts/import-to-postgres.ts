@@ -159,7 +159,7 @@ async function importUser(db: Database, collectionKey: string, row: ExportRow) {
   await db.query(
     `INSERT INTO app_users (firebase_uid, role, phone, full_name, email, language, rating, bonus_balance, status, is_phone_verified, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,COALESCE($6,'ru'),COALESCE($7,5),COALESCE($8,0),COALESCE($9,'new'),COALESCE($10,TRUE),COALESCE($11,NOW()),NOW())
-     ON CONFLICT (phone) DO UPDATE SET
+     ON CONFLICT (phone,role) DO UPDATE SET
        firebase_uid=COALESCE(app_users.firebase_uid, EXCLUDED.firebase_uid),
        role=EXCLUDED.role,
        full_name=COALESCE(EXCLUDED.full_name, app_users.full_name),
@@ -187,7 +187,7 @@ async function importUser(db: Database, collectionKey: string, row: ExportRow) {
     await db.query(
       `INSERT INTO cleaner_profiles (user_id, city, registration_status, verification_status, work_start_date, monthly_area_limit, daily_work_limit_minutes, created_at, updated_at)
        SELECT id, COALESCE($2,'Астана'), COALESCE($3,'pending'), COALESCE($4,'pending'), $5, COALESCE($6,220), COALESCE($7,540), NOW(), NOW()
-       FROM app_users WHERE phone=$1
+       FROM app_users WHERE phone=$1 AND role='cleaner'
        ON CONFLICT (user_id) DO UPDATE SET
          city=EXCLUDED.city,
          registration_status=EXCLUDED.registration_status,
@@ -789,8 +789,9 @@ async function findUserId(db: Database, data: Record<string, unknown>, uidKeys: 
   }
   const phone = text(data, phoneKeys);
   if (phone) {
-    const row = (await db.query<{ id: string }>(`SELECT id FROM app_users WHERE phone=$1 LIMIT 1`, [normalizePhone(phone)])).rows[0];
-    if (row?.id) return row.id;
+    const rows = (await db.query<{ id: string }>(`SELECT id FROM app_users WHERE phone=$1 LIMIT 2`, [normalizePhone(phone)])).rows;
+    if (rows.length > 1) throw new Error('Ambiguous phone: migration requires an explicit user ID');
+    if (rows[0]?.id) return rows[0].id;
   }
   return null;
 }

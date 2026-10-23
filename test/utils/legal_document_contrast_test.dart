@@ -1,4 +1,6 @@
 import 'package:domly/screens/common/legal_document_screen.dart';
+import 'package:domly/screens/client/payment_terms_screen.dart';
+import 'package:domly/localization/translation_controller.dart';
 import 'package:domly/services/auth_service.dart';
 import 'package:domly/services/ui_preferences.dart';
 import 'package:domly/theme/app_theme.dart';
@@ -12,6 +14,21 @@ double contrast(Color foreground, Color background) {
 }
 
 void main() {
+  testWidgets('payment terms translate paragraphs and retain dark contrast', (tester) async {
+    TranslationController.forTesting().debugSetTranslations({}, locale: 'kk');
+    UiPreferences.instance.darkMode = true;
+    addTearDown(() { UiPreferences.instance.darkMode = false; TranslationController.forTesting().debugSetTranslations({}, locale: 'ru'); });
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.darkTheme, home: const PaymentTermsScreen()));
+    await tester.pumpAndSettle();
+    const source = 'После успешной оплаты пользователь возвращается в раздел заказов приложения.';
+    expect(find.text(source.tr()), findsOneWidget);
+    expect(find.text(source), findsNothing);
+    final card = tester.widgetList<Container>(find.byType(Container)).firstWhere((w) => w.decoration is BoxDecoration);
+    final background = (card.decoration! as BoxDecoration).color!;
+    for (final text in tester.widgetList<Text>(find.byType(Text))) {
+      if (text.style?.color != null) expect(contrast(text.style!.color!, background), greaterThanOrEqualTo(4.5), reason: text.data);
+    }
+  });
   for (final dark in [false, true]) {
     for (final privacy in [false, true]) {
       testWidgets(

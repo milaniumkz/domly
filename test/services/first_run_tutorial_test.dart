@@ -93,6 +93,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('customer tutorial waits for asynchronously loaded home targets', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(builder: (context) => TextButton(onPressed: () {
+        unawaited(DomlyFirstRunTutorial.show(context, flavor: AppFlavor.customer));
+      }, child: const Text('Start'))),
+      onGenerateRoute: (settings) => MaterialPageRoute<void>(settings: settings, builder: (context) {
+        if (settings.name == '/client/training-order') {
+          WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.of(context).pop());
+          return const SizedBox();
+        }
+        if (settings.name == '/client/home') return const _DelayedTutorialHome();
+        return const DomlyShell(bottomNavigationBar: DomlyClientBottomNav(currentIndex: 1), child: SizedBox());
+      }),
+    ));
+    await tester.tap(find.text('Start'));
+    for (var i = 0; i < 15; i++) await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('1 из 8'), findsOneWidget);
+    expect(find.byKey(const ValueKey('tutorial-highlight')), findsOneWidget);
+    await tester.tap(find.text('Пропустить').first);
+    await tester.pumpAndSettle();
+  });
+
   test(
       'Completion survives application version changes and stays user-specific',
       () async {
@@ -198,4 +220,25 @@ class _RestoredAuth extends AuthController {
   bool get isAuthenticated => true;
   @override
   String? get currentUserId => 'restored-user';
+}
+
+class _DelayedTutorialHome extends StatefulWidget {
+  const _DelayedTutorialHome();
+  @override
+  State<_DelayedTutorialHome> createState() => _DelayedTutorialHomeState();
+}
+class _DelayedTutorialHomeState extends State<_DelayedTutorialHome> {
+  bool ready = false;
+  Timer? timer;
+  @override
+  void initState() {
+    super.initState();
+    timer = Timer(const Duration(milliseconds: 600), () { if (mounted) setState(() => ready = true); });
+  }
+  @override
+  void dispose() { timer?.cancel(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => Scaffold(body: ready
+    ? Column(children: [SizedBox(key: DomlyTutorialTargets.clientHomeTop, height: 60), SizedBox(key: DomlyTutorialTargets.clientOrderButton, height: 50, width: 250)])
+    : const CircularProgressIndicator());
 }

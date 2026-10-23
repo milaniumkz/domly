@@ -1,11 +1,16 @@
 import {Database} from '../infrastructure/db/Database';
 let authDatabase:Database|null=null;
 export function configureAuthDatabase(db:Database|null){authDatabase=db;}
-import { randomUUID } from 'node:crypto';
+import { createSecretKey, randomUUID } from 'node:crypto';
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { ApiError } from './api';
 import { env } from './env';
+
+// Reuse parsed HMAC keys, never authentication results. Signature/expiry and
+// live account revocation checks still run for every protected request.
+const accessKey = createSecretKey(Buffer.from(env.jwtAccessSecret));
+const refreshKey = createSecretKey(Buffer.from(env.jwtRefreshSecret));
 
 export type AuthUser = {
   id: string;
@@ -25,11 +30,11 @@ declare global {
 }
 
 export function signAccessToken(user: AuthUser): string {
-  return jwt.sign({ id: user.id, role: user.role, phone: user.phone, ...(user.sessionId?{sessionId:user.sessionId}:{}), ...(user.authVersion!==undefined?{authVersion:user.authVersion}:{}), ...(user.passwordChangeRequired?{passwordChangeRequired:true}:{}) }, env.jwtAccessSecret, { expiresIn: env.jwtAccessTtlSeconds });
+  return jwt.sign({ id: user.id, role: user.role, phone: user.phone, ...(user.sessionId?{sessionId:user.sessionId}:{}), ...(user.authVersion!==undefined?{authVersion:user.authVersion}:{}), ...(user.passwordChangeRequired?{passwordChangeRequired:true}:{}) }, accessKey, { expiresIn: env.jwtAccessTtlSeconds });
 }
 
 export function signRefreshToken(user: AuthUser): string {
-  return jwt.sign({ id: user.id, role: user.role, phone: user.phone, ...(user.sessionId?{sessionId:user.sessionId}:{}), ...(user.authVersion!==undefined?{authVersion:user.authVersion}:{}), ...(user.passwordChangeRequired?{passwordChangeRequired:true}:{}) }, env.jwtRefreshSecret, {
+  return jwt.sign({ id: user.id, role: user.role, phone: user.phone, ...(user.sessionId?{sessionId:user.sessionId}:{}), ...(user.authVersion!==undefined?{authVersion:user.authVersion}:{}), ...(user.passwordChangeRequired?{passwordChangeRequired:true}:{}) }, refreshKey, {
     expiresIn: env.jwtRefreshTtlSeconds,
     jwtid: randomUUID(),
   });
@@ -37,7 +42,7 @@ export function signRefreshToken(user: AuthUser): string {
 
 export function verifyRefreshToken(token: string): AuthUser {
   try {
-    const decoded = jwt.verify(token, env.jwtRefreshSecret) as jwt.JwtPayload;
+    const decoded = jwt.verify(token, refreshKey) as jwt.JwtPayload;
     if (typeof decoded.id !== 'string' || !decoded.id || typeof decoded.phone !== 'string'
         || !['customer', 'cleaner', 'admin', 'superadmin'].includes(decoded.role)) {
       throw new Error('Invalid refresh identity');
@@ -49,7 +54,7 @@ export function verifyRefreshToken(token: string): AuthUser {
 }
 
 export function verifyAccessToken(token: string): AuthUser {
-  return jwt.verify(token, env.jwtAccessSecret) as AuthUser;
+  return jwt.verify(token, accessKey) as AuthUser;
 }
 
 export function auth(requiredRoles: AuthUser['role'][] = [], options: { allowQueryToken?: boolean } = {}) {

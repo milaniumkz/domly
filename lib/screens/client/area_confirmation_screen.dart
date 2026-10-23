@@ -331,7 +331,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const _AreaFigmaHeader(),
+                        const AreaConfirmationHeader(),
                         const SizedBox(height: 15),
                         _AreaStatusPill(
                           label: areaConfirmationStatus(profile),
@@ -466,15 +466,15 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
   }
 }
 
-class _AreaFigmaHeader extends StatelessWidget {
-  const _AreaFigmaHeader();
+class AreaConfirmationHeader extends StatelessWidget {
+  const AreaConfirmationHeader();
 
   @override
   Widget build(BuildContext context) {
     DomlyPalette.watch(context);
 
     return Container(
-      height: 130,
+      constraints: const BoxConstraints(minHeight: 130),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -536,17 +536,14 @@ class _AreaFigmaHeader extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(
-            left: 52,
-            top: 21,
-            right: 18,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(52, 21, 18, 24),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Подтверждение площади'.tr(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: DomlyPalette.foreground(Colors.white),
                     fontSize: 20,
