@@ -497,6 +497,29 @@ export class SchedulingService {
     )).rows;
   }
 
+  async availableSlotCounts(date: string, slots: Array<{ startTime: string; endTime: string }>, zoneId?: string) {
+    if (!slots.length) return [];
+    // Count all requested intervals in one round trip. Do not transfer every
+    // cleaner's name/phone five times just to calculate array lengths.
+    const rows = (await this.db.query<{ ordinal: string; count: number }>(`
+      SELECT s.ordinal, (
+        SELECT COUNT(*)::int FROM app_users u
+        JOIN cleaner_profiles cp ON cp.user_id=u.id
+        ${zoneId ? 'JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$4' : ''}
+        WHERE u.role='cleaner' AND u.status='approved' AND cp.verification_status='approved'
+          AND NOT EXISTS (
+            SELECT 1 FROM service_orders o WHERE o.cleaner_id=u.id AND o.scheduled_date=$1
+              AND o.status NOT IN ('cancelled','completed')
+              AND o.start_time<s.ends AND o.end_time>s.starts
+          )
+      ) AS count
+      FROM unnest($2::time[], $3::time[]) WITH ORDINALITY AS s(starts,ends,ordinal)
+      ORDER BY s.ordinal`,
+    zoneId ? [date,slots.map(s=>s.startTime),slots.map(s=>s.endTime),zoneId]
+      : [date,slots.map(s=>s.startTime),slots.map(s=>s.endTime)])).rows;
+    return rows.map(row=>({...slots[Number(row.ordinal)-1],cleanersCount:row.count}));
+  }
+
   async offerNextCleaner(orderId: string, excludeCleanerIds: string[] = [], ttlMinutes = 2) {
     return this.db.transaction(async client => {
       const order = first<any>((await client.query(

@@ -2112,12 +2112,9 @@ export function buildV1Router(deps: {
     const duration = Number(req.query.durationMinutes ?? 0) > 0
       ? Number(req.query.durationMinutes)
       : await estimateCleaningDurationMinutes(deps.db, req.query.addressId ? String(req.query.addressId) : undefined, addons);
-    const available = [];
-    for (const start of slots) {
-      const end = addMinutes(start, duration);
-      const cleaners = await deps.scheduling.availableCleaners(date, start, end, req.query.zoneId ? String(req.query.zoneId) : undefined);
-      if (cleaners.length > 0) available.push({ startTime: start, endTime: end, cleanersCount: cleaners.length, durationMinutes: duration });
-    }
+    const intervals = slots.map((start: string) => ({startTime: start, endTime: addMinutes(start, duration)}));
+    const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined);
+    const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));
     ok(res, available);
   }));
 
