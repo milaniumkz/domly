@@ -1,3 +1,4 @@
+import 'notification_count_stream.dart';
 import '../utils/calendar_availability.dart';
 import '../utils/schedule_order.dart';
 import '../utils/stored_package_price.dart';
@@ -2544,15 +2545,20 @@ class FirestoreDataService {
   }
 
   Stream<int> userUnreadActivityCountStream() {
-    final notificationsStream = userNotificationsStream();
+    final recipientId = _uidOrNull;
+    final notificationsStream = _useDebugFixtures ||
+            _isTemporaryCustomerSession || _isTemporaryCleanerSession
+        ? userNotificationsStream().map((items) => items.where((item) => item['read'] != true).length)
+        : recipientId == null
+            ? Stream<int>.value(0)
+            : notificationCountStream(BackendApiService.instance,
+                isCurrentUser: () => _uidOrNull == recipientId);
     final chatsStream = userChatSummariesStream();
     return Stream.multi((controller) {
-      List<Map<String, dynamic>> notifications = const <Map<String, dynamic>>[];
+      var unreadNotifications = 0;
       List<Map<String, dynamic>> chats = const <Map<String, dynamic>>[];
 
       void emit() {
-        final unreadNotifications =
-            notifications.where((item) => item['read'] != true).length;
         final unreadChats = chats.fold<int>(0, (total, item) {
           final value = item['unreadCount'];
           if (value is num) {
@@ -2563,8 +2569,8 @@ class FirestoreDataService {
         controller.add(unreadNotifications + unreadChats);
       }
 
-      final notificationsSub = notificationsStream.listen((items) {
-        notifications = items;
+      final notificationsSub = notificationsStream.listen((count) {
+        unreadNotifications = count;
         emit();
       }, onError: controller.addError);
       final chatsSub = chatsStream.listen((items) {
