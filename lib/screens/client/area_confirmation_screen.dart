@@ -1,3 +1,4 @@
+import '../../utils/customer_home_state.dart';
 import '../../theme/domly_palette.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +12,11 @@ import '../../ui/domly_ui.dart';
 import '../../localization/translation_controller.dart';
 
 class AreaConfirmationScreen extends StatefulWidget {
-  const AreaConfirmationScreen({super.key});
+  const AreaConfirmationScreen(
+      {super.key, this.profileStream, this.configStream});
+
+  final Stream<Map<String, dynamic>?>? profileStream;
+  final Stream<Map<String, dynamic>?>? configStream;
 
   @override
   State<AreaConfirmationScreen> createState() => _AreaConfirmationScreenState();
@@ -22,6 +27,9 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
   final _config = AppConfigService.instance;
   final _areaController = TextEditingController();
   final _imagePicker = ImagePicker();
+  late final _profileStream =
+      widget.profileStream ?? _data.customerProfileStream();
+  late final _configStream = widget.configStream ?? _config.areaConfigStream();
 
   XFile? _selectedImage;
   bool _isSubmitting = false;
@@ -273,7 +281,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
         child: SafeArea(
           bottom: false,
           child: StreamBuilder<Map<String, dynamic>?>(
-            stream: _config.areaConfigStream(),
+            stream: _configStream,
             builder: (context, configSnap) {
               final areaConfig = configSnap.data ?? const <String, dynamic>{};
               final uploadEnabled = _config.getBool(
@@ -286,8 +294,18 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                       _forceTechPlanPrompt;
 
               return StreamBuilder<Map<String, dynamic>?>(
-                stream: _data.customerProfileStream(),
+                stream: _profileStream,
                 builder: (context, snapshot) {
+                  if (!snapshot.hasData &&
+                      snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError && !snapshot.hasData) {
+                    return Center(
+                        child: Text(
+                            'Не удалось загрузить данные. Попробуйте позже.'
+                                .tr()));
+                  }
                   final profile = snapshot.data ?? const <String, dynamic>{};
                   final areaVerified = profile['areaVerified'] == true;
                   final rawArea = _initialAreaFromRoute ??
@@ -297,7 +315,9 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                       _readAreaValue(profile['initialArea']);
                   if (!_areaSeeded && _areaController.text.trim().isEmpty) {
                     if (rawArea != null) {
+                      _areaController.removeListener(_onAreaChanged);
                       _areaController.text = rawArea.toString();
+                      _areaController.addListener(_onAreaChanged);
                     }
                     _areaSeeded = true;
                   }
@@ -314,7 +334,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                         const _AreaFigmaHeader(),
                         const SizedBox(height: 15),
                         _AreaStatusPill(
-                          label: areaVerified ? 'Подтверждено' : 'На проверке',
+                          label: areaConfirmationStatus(profile),
                           verified: areaVerified,
                         ),
                         const SizedBox(height: 8),
@@ -683,14 +703,14 @@ class _TechPlanCard extends StatelessWidget {
     DomlyPalette.watch(context);
 
     return Container(
-      height: 313,
-      padding: const EdgeInsets.fromLTRB(25, 17, 30, 0),
+      padding: const EdgeInsets.fromLTRB(25, 17, 30, 18),
       decoration: BoxDecoration(
         color: DomlyPalette.surface(Colors.white),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: DomlyPalette.border(const Color(0xFFDEECE3))),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(

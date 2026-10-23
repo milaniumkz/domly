@@ -1,3 +1,5 @@
+import '../../ui/cleaning_schedule_summary.dart';
+import '../../utils/customer_home_state.dart';
 import '../../theme/domly_palette.dart';
 import '../common/order_payment_retry.dart';
 import 'dart:async';
@@ -1905,7 +1907,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       );
     }
 
-    final dateText = domlyDateText(_slotDate(upcomingSlot));
+    final dateText = cleaningDateLabel(upcomingSlot);
     final statusText = _slotStatusText(
       (upcomingSlot['status'] ?? '').toString(),
     );
@@ -1993,26 +1995,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 9),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              dateText,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color:
-                                    DomlyPalette.foreground(Color(0xFF2B4338)),
-                                fontSize: 27,
-                                fontWeight: FontWeight.w700,
-                                height: 38 / 28,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          _FigmaStatusPill(label: statusText),
-                        ],
-                      ),
+                      CleaningScheduleSummary(
+                          dateText: dateText,
+                          status: _FigmaStatusPill(label: statusText),
+                          fontSize: 27),
                     ],
                   ),
                 ),
@@ -2173,26 +2159,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                           ),
                         ),
                         SizedBox(height: 13),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Не запланировано'.tr(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: DomlyPalette.foreground(
-                                      Color(0xFF2B4338)),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  height: 38 / 16,
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 14),
-                            _FigmaStatusPill(label: 'Ожидание', muted: true),
-                          ],
-                        ),
+                        CleaningScheduleSummary(
+                            dateText: 'Не запланировано'.tr(),
+                            status: _FigmaStatusPill(
+                                label: 'Ожидание', muted: true),
+                            fontSize: 16),
                       ],
                     ),
                   ),
@@ -2374,28 +2345,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 9),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              canSelectDates
-                                  ? 'Выберите\nвремя'
-                                  : 'Ожидает назначения',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color:
-                                    DomlyPalette.foreground(Color(0xFF2B4338)),
-                                fontSize: 22,
-                                fontWeight: FontWeight.w700,
-                                height: 28 / 22,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          _FigmaStatusPill(label: statusText),
-                        ],
-                      ),
+                      CleaningScheduleSummary(
+                          dateText: canSelectDates
+                              ? 'Дата не выбрана'.tr()
+                              : 'Ожидает назначения'.tr(),
+                          status: _FigmaStatusPill(label: statusText),
+                          fontSize: 22),
                     ],
                   ),
                 ),
@@ -2914,7 +2869,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          domlyDateText(_slotDate(order)),
+                          cleaningDateLabel(order),
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -3406,6 +3361,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     List<Map<String, dynamic>> slots,
   ) {
     final visible = slots.where((slot) {
+      if (slot['type'] == 'package_purchase' ||
+          scheduledCleaningDate(slot) == null) return false;
       final date = _slotMoment(slot);
       return date.isAfter(DateTime.now().subtract(const Duration(days: 1))) &&
           !_isCanceledSlot(slot) &&
@@ -3576,7 +3533,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           packageId != 'addons_only') {
         return false;
       }
-      return orderStatus == 'pending_assignment' ||
+      return orderStatus == 'pending_payment' ||
+          paymentStatus == 'pending_invoice' ||
+          orderStatus == 'pending_assignment' ||
           orderStatus == 'assigned' ||
           paymentStatus == 'paid' ||
           paymentStatus == 'invoice_requested';
