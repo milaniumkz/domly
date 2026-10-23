@@ -942,7 +942,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
             ),
           const SizedBox(height: 4),
           Text(
-            (job['package'] ?? '').toString(),
+            (job['package'] ?? '').toString().tr(),
             style: TextStyle(color: DomlyPalette.foreground(DomlyColors.muted)),
           ),
           const SizedBox(height: 6),

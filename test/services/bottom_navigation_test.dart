@@ -1,3 +1,4 @@
+import 'package:domly/screens/client/client_home_screen.dart';
 import 'package:domly/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:domly/localization/translation_controller.dart';
@@ -9,8 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  for (final cleaner in [false, true]) {
-    testWidgets('Kazakh navigation labels fit 320px: $cleaner', (tester) async {
+  for (final kind in ['customer', 'pro', 'home']) {
+    testWidgets('Kazakh navigation labels fit 320px: $kind', (tester) async {
       await (FontLoader('Roboto')..addFont(rootBundle.load('assets/fonts/Roboto-Variable.ttf'))).load();
       SharedPreferences.setMockInitialValues({});
       TranslationController.forTesting().debugSetTranslations({}, locale: 'kk');
@@ -21,7 +22,7 @@ void main() {
       addTearDown(() => TranslationController.forTesting().debugSetTranslations({}, locale: 'ru'));
       await tester.pumpWidget(MaterialApp(theme: AppTheme.darkTheme,home: MediaQuery(
         data: const MediaQueryData(size: Size(320,900),textScaler: TextScaler.linear(1.3)),
-        child: Scaffold(bottomNavigationBar: cleaner ? DomlyCleanerBottomNav(currentIndex: 0) : DomlyClientBottomNav(currentIndex: 0)),
+        child: Scaffold(bottomNavigationBar: kind == 'home' ? CustomerHomeBottomNav(currentIndex: 0) : kind == 'pro' ? DomlyCleanerBottomNav(currentIndex: 0) : DomlyClientBottomNav(currentIndex: 0)),
       )));
       await tester.pumpAndSettle();
       for (final element in find.byType(RichText).evaluate()) {

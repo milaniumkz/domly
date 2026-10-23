@@ -42,6 +42,8 @@ void main() {
     expect(controller.translate('Потрачено в этом месяце: 1000 / 20000 ₸'), 'Осы айда жұмсалды: 1000 / 20000 ₸');
     expect(controller.translate('Выбрано 3. После сохранения останется: 9'), 'Таңдалды: 3. Сақтағаннан кейін қалады: 9');
     expect(controller.translate('Восемь раз в месяц'), 'Айына сегіз рет');
+    expect(controller.translate('Дорога 15 мин'), 'Жол 15 мин');
+    expect(controller.translate('Допы 2'), 'Қос. 2');
     expect(controller.translate('12 на неделе'), '12 апта ішінде');
     expect(controller.translate('25000 ₸/мес'), '25000 ₸/ай');
     expect(controller.translate('От 12000 м² • карьерный бонус 100000 ₸'), '12000 м² бастап • мансаптық бонус 100000 ₸');
