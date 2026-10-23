@@ -123,7 +123,7 @@ class _Header extends StatelessWidget {
         Text(
           'DOMLY',
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: AppTheme.primaryGreen,
+                color: DomlyPalette.foreground(AppTheme.primaryGreen),
                 fontWeight: FontWeight.w800,
               ),
         ),
@@ -131,7 +131,7 @@ class _Header extends StatelessWidget {
         Text(
           'Условия приема и возврата платежей'.tr(),
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: AppTheme.darkText,
+                color: DomlyPalette.foreground(AppTheme.darkText),
                 fontWeight: FontWeight.w700,
               ),
         ),
@@ -140,7 +140,7 @@ class _Header extends StatelessWidget {
           'Информация для пользователей и платежного провайдера.'.tr(),
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(color: AppTheme.mutedText),
+          ).textTheme.bodyMedium?.copyWith(color: DomlyPalette.foreground(AppTheme.mutedText)),
         ),
       ],
     );
@@ -165,7 +165,7 @@ class _TermsSection extends StatelessWidget {
           Text(
             title.tr(),
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppTheme.darkText,
+                  color: DomlyPalette.foreground(AppTheme.darkText),
                   fontWeight: FontWeight.w800,
                 ),
           ),
@@ -187,10 +187,10 @@ class _TermsSection extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      item,
+                      item.tr(),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             height: 1.45,
-                            color: AppTheme.darkText,
+                            color: DomlyPalette.foreground(AppTheme.darkText),
                           ),
                     ),
                   ),

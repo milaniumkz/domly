@@ -2158,7 +2158,7 @@ class _FigmaAddonCard extends StatelessWidget {
           ),
           Center(
             child: Text(
-              caption,
+              caption.tr(),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: DomlyPalette.foreground(Color(0xFF658170)),

@@ -198,7 +198,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              description,
+              description.tr(),
               style: TextStyle(
                 fontSize: 13,
                 height: 1.4,

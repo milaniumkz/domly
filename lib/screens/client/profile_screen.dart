@@ -311,7 +311,7 @@ class ProfileScreen extends StatelessWidget {
                                           _tierLabel(
                                             (profile['tier'] ?? 'NEWBIE')
                                                 .toString(),
-                                          ),
+                                          ).tr(),
                                           style: TextStyle(
                                             color: DomlyPalette.foreground(
                                                 _foreground),
@@ -322,9 +322,9 @@ class ProfileScreen extends StatelessWidget {
                                         ),
                                         const SizedBox(height: 5),
                                         Text(
-                                          tierDiscountPercent > 0
+                                          (tierDiscountPercent > 0
                                               ? 'Ваша скидка: $tierDiscountPercent%'
-                                              : 'Скидка пока не активирована',
+                                              : 'Скидка пока не активирована').tr(),
                                           style: TextStyle(
                                             color: DomlyPalette.foreground(
                                                 _orange),

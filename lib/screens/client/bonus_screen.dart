@@ -659,7 +659,7 @@ class _InvitedByCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            hasCode ? referredByCode.toUpperCase() : 'Код не указан',
+            hasCode ? referredByCode.toUpperCase() : 'Код не указан'.tr(),
             style: TextStyle(
               color: DomlyPalette.foreground(_BonusScreenState._muted),
               fontSize: 14,
@@ -777,9 +777,9 @@ class _BonusTransactionRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title.isEmpty
+                  (title.isEmpty
                       ? (positive ? 'Начисление' : 'Списание')
-                      : title,
+                      : title).tr(),
                   softWrap: true,
                   style: TextStyle(
                     color:
@@ -790,7 +790,7 @@ class _BonusTransactionRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  reason.isEmpty ? _dateText(item['createdAt']) : reason,
+                  reason.isEmpty ? _dateText(item['createdAt']) : reason.tr(),
                   softWrap: true,
                   style: TextStyle(
                     color: DomlyPalette.foreground(_BonusScreenState._muted),
