@@ -38,6 +38,30 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('addon rejection protects other customers and preserves paid addons', async () => {
+      const owner=randomUUID(),orderId=randomUUID(),addonId=randomUUID();
+      try {
+        await db.query("INSERT INTO app_users(id,phone,role) VALUES($1,$2,'customer')",[owner,'addon-owner-'+owner]);
+        await db.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,'2035-02-02','08:00','10:00','assigned')",[orderId,owner]);
+        await db.query("INSERT INTO catalog_addons(id,title_ru,price) VALUES($1,'Проверка доступа',100)",[addonId]);
+        await db.query("INSERT INTO order_addons(order_id,addon_id,quantity,price,payment_status) VALUES($1,$2,1,100,'pending'),($1,$2,1,100,'paid')",[orderId,addonId]);
+        assert.equal((await request(`/orders/${orderId}/addon-requests/reject`,'POST',{},true)).status,404);
+        assert.equal((await db.query('SELECT id FROM order_addons WHERE order_id=$1',[orderId])).rows.length,2,'foreign request must not delete addons');
+        const token=signAccessToken({id:owner,role:'customer',phone:'fixture'});
+        const own=await fetch(base+`/orders/${orderId}/addon-requests/reject`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
+        assert.equal(own.status,200);
+        assert.deepEqual((await db.query('SELECT payment_status FROM order_addons WHERE order_id=$1',[orderId])).rows.map(r=>r.payment_status),['paid']);
+        await db.query("INSERT INTO order_addons(order_id,addon_id,quantity,price,payment_status) VALUES($1,$2,1,100,'pending')",[orderId,addonId]);
+        assert.equal((await request(`/orders/${orderId}/addon-requests/reject`,'POST',{})).status,200,'staff may reject a visible order request');
+        assert.equal((await db.query('SELECT id FROM order_addons WHERE order_id=$1',[orderId])).rows.length,1);
+        assert.equal((await request(`/orders/${randomUUID()}/addon-requests/reject`,'POST',{},true)).status,404);
+      } finally {
+        await db.query('DELETE FROM order_addons WHERE order_id=$1',[orderId]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[orderId]);
+        await db.query('DELETE FROM catalog_addons WHERE id=$1',[addonId]);
+        await db.query('DELETE FROM app_users WHERE id=$1',[owner]);
+      }
+    });
     await t.test('parallel offers reuse their transaction connection without exhausting the pool', async () => {
       const ids=Array.from({length:10},()=>randomUUID());
       try {
