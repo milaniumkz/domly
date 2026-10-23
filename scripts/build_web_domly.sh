@@ -47,7 +47,7 @@ cache_bust = """  <script>
       function currentHashRoute() {
         var hash = window.location.hash || '';
         if (hash.indexOf('#/') !== 0) return '';
-        return normalizeBootRoute(hash.substring(1).split('?')[0]);
+        return normalizeBootRoute(hash.substring(1));
       }
       function ensureBootRoute() {
         var url = new URL(window.location.href);

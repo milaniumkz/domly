@@ -610,7 +610,7 @@ class _DomlyAppState extends State<DomlyApp> {
     }
     final windowBootRoute = readBootRoute();
     if (windowBootRoute != null) {
-      return windowBootRoute;
+      return Uri.tryParse(windowBootRoute)?.path;
     }
     final debugRoute = DebugSession.route;
     if (DebugSession.enabled && debugRoute != null) {
@@ -994,6 +994,7 @@ class _DomlyAppState extends State<DomlyApp> {
     String key, {
     List<String> aliases = const [],
   }) {
+    settings = restoreBootRouteArguments(settings, _bootRequestedSettings);
     final names = [key, ...aliases];
     final args = _readArgs(settings.arguments);
     for (final name in names) {
@@ -1061,13 +1062,15 @@ class _DomlyAppState extends State<DomlyApp> {
     if (requestedRoute != null && requestedRoute != '/') {
       final requestedAccess = _routeAccess(requestedRoute);
       if (requestedAccess != _RouteAccess.public) {
-        final canonicalRequestedRoute = _canonicalUrlRoute(requestedRoute);
+        final canonicalRequestedRoute = _canonicalRouteWithArguments(requestedRoute);
         if (canonicalRequestedRoute != null) {
           syncAppUrlRoute(canonicalRequestedRoute);
         }
         return _guarded(
-          child: _buildProtectedPage(RouteSettings(name: requestedRoute)),
-          settings: RouteSettings(name: requestedRoute),
+          child: _buildProtectedPage(restoreBootRouteArguments(
+            RouteSettings(name: requestedRoute), _bootRequestedSettings)),
+          settings: restoreBootRouteArguments(
+            RouteSettings(name: requestedRoute), _bootRequestedSettings),
           access: requestedAccess,
         );
       }

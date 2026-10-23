@@ -1905,31 +1905,28 @@ export function buildV1Router(deps: {
       [req.params.id, admin, req.user!.id],
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
-    if (!['pending_assignment', 'waiting_cleaner', 'assigned', 'pending_payment'].includes(order.status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ уже нельзя перенести.');
-    const date = req.body.date ?? req.body.scheduledDate ?? (order.scheduled_date instanceof Date?order.scheduled_date.toISOString().slice(0,10):String(order.scheduled_date).slice(0,10));
-    const startTime = req.body.time ?? req.body.startTime ?? order.start_time;
-    validateBookingStart(date,startTime);
-    const duration = Number(order.estimated_duration_minutes ?? 0) > 0
-      ? Number(order.estimated_duration_minutes)
-      : await estimateCleaningDurationMinutes(deps.db, order.address_id, []);
-    const endTime = addMinutes(String(startTime), duration);
-    if (order.cleaner_id) {
-      const free = await deps.scheduling.cleanerAvailable(order.cleaner_id, String(date), String(startTime), endTime, order.id);
-      if (!free) throw new ApiError(400, 'cleaner_unavailable', 'Уборщица занята на это время. Выберите другое время.');
-    }
-    const row = first((await deps.db.query(
-      `UPDATE service_orders
-       SET scheduled_date=$2, start_time=$3, end_time=$4, updated_at=NOW()
-       WHERE id=$1 AND status IN ('pending_assignment','waiting_cleaner','assigned','pending_payment')
-       RETURNING *`,
-      [req.params.id, date, startTime, endTime],
-    )).rows);
-    if (!row) throw new ApiError(409,'invalid_transition','Статус заказа уже изменился. Обновите страницу.');
-    await deps.db.query(
-      `INSERT INTO order_status_history (order_id, old_status, new_status, actor_id, comment)
-       VALUES ($1,$2,$2,$3,$4)`,
-      [req.params.id, order.status, req.user!.id, req.body.comment ?? 'Дата и время уборки изменены'],
-    );
+    const row = await deps.db.transaction(async tx => {
+      // Use the same lock order as assignment and offer acceptance.
+      if (order.cleaner_id) await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[order.cleaner_id]);
+      const current = first<any>((await tx.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[order.id])).rows);
+      if (!current || current.cleaner_id !== order.cleaner_id) throw new ApiError(409,'order_changed','Назначение изменилось. Обновите страницу.');
+      if (!['pending_assignment', 'waiting_cleaner', 'assigned', 'pending_payment'].includes(current.status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ уже нельзя перенести.');
+      const date = req.body.date ?? req.body.scheduledDate ?? (current.scheduled_date instanceof Date ? current.scheduled_date.toISOString().slice(0,10) : String(current.scheduled_date).slice(0,10));
+      const startTime = req.body.time ?? req.body.startTime ?? current.start_time;
+      validateBookingStart(date,startTime);
+      const duration = Number(current.estimated_duration_minutes) > 0 ? Number(current.estimated_duration_minutes) : await estimateCleaningDurationMinutes(tx,current.address_id,[]);
+      const endTime = addMinutes(String(startTime),duration);
+      if (current.cleaner_id) {
+        const overlap = first((await tx.query(`SELECT id FROM service_orders
+          WHERE cleaner_id=$1 AND scheduled_date=$2 AND status NOT IN ('cancelled','completed')
+          AND start_time < $4::time AND end_time > $3::time AND id<>$5 LIMIT 1`,
+          [current.cleaner_id,date,startTime,endTime,current.id])).rows);
+        if (overlap) throw new ApiError(400,'cleaner_unavailable','Уборщица занята на это время. Выберите другое время.');
+      }
+      const updated = first((await tx.query(`UPDATE service_orders SET scheduled_date=$2,start_time=$3,end_time=$4,updated_at=NOW() WHERE id=$1 RETURNING *`,[current.id,date,startTime,endTime])).rows);
+      await tx.query(`INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,$2,$3,$4)`,[current.id,current.status,req.user!.id,req.body.comment ?? 'Дата и время уборки изменены']);
+      return updated;
+    });
     await deps.notifications.create({userId:order.customer_id,titleRu:'Время уборки изменено',bodyRu:'Дата или время вашего заказа изменены.',targetType:'order',targetId:String(req.params.id)});
     if (order.cleaner_id) {
       await deps.notifications.create({
@@ -4471,7 +4468,7 @@ function addMinutes(time: string, minutes: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
-async function readAppSettings(db: Database): Promise<Record<string, any>> {
+async function readAppSettings(db: Pick<Database, 'query'>): Promise<Record<string, any>> {
   return (await db.query<{ key: string; value: any }>(`SELECT key, value FROM app_settings`)).rows
     .reduce((acc: Record<string, any>, row) => ({ ...acc, [row.key]: row.value }), {});
 }
@@ -4851,7 +4848,7 @@ async function ensurePackageQualityCheck(db: Database, notifications: Notificati
 }
 
 async function estimateCleaningDurationMinutes(
-  db: Database,
+  db: Pick<Database, 'query'>,
   addressId?: string,
   addons: Array<{ duration_minutes?: number }> = [],
 ): Promise<number> {

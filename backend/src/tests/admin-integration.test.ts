@@ -669,6 +669,19 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       }
     });
 
+    await t.test('concurrent rescheduling cannot double-book an assigned cleaner',async()=>{
+      const ids=[randomUUID(),randomUUID()];
+      try {
+        for(let i=0;i<ids.length;i++)await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status,scheduled_date,start_time,end_time,estimated_duration_minutes) VALUES($1,$2,$3,'assigned',$4,'10:00','12:00',120)",[ids[i],customer,cleaner,'2035-02-0'+(i+1)]);
+        const results=await Promise.all(ids.map(id=>request('/orders/'+id+'/reschedule','POST',{date:'2035-02-03',startTime:'10:00'},true)));
+        assert.equal(results.filter(r=>r.status===200).length,1);
+        assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM service_orders WHERE id=ANY($1::uuid[]) AND scheduled_date='2035-02-03'",[ids])).rows[0].n,1);
+      } finally {
+        await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[ids]);
+        await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[ids]);
+      }
+    });
+
     await t.test('checklist template search and date filters remain valid SQL',async()=>{
       for(const query of ['?search=absent','?dateFrom=2000-01-01&dateTo=2099-01-01','?search=absent&offset=5&limit=5'])assert.equal((await request('/admin/checklistTemplates'+query)).status,200);
     });

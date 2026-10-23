@@ -117,6 +117,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
       return _buildChecklistPicker();
     }
     return DomlyShell(
+      showBackButton: false,
       child: SafeArea(
         child: Column(
           children: [
@@ -125,10 +126,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  domlyTopIconButton(
-                    icon: Icons.arrow_back,
-                    onPressed: () => Navigator.pop(context),
-                  ),
+                  const CleanerChecklistBackButton(),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -365,6 +363,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
 
   Widget _buildChecklistPicker() {
     return DomlyShell(
+      showBackButton: false,
       bottomNavigationBar: const DomlyCleanerBottomNav(currentIndex: 2),
       child: SafeArea(
         child: Column(
@@ -373,19 +372,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
               child: Row(
                 children: [
-                  domlyTopIconButton(
-                    icon: Icons.arrow_back,
-                    onPressed: () {
-                      if (Navigator.canPop(context)) {
-                        Navigator.pop(context);
-                      } else {
-                        Navigator.pushReplacementNamed(
-                          context,
-                          '/cleaner/orders',
-                        );
-                      }
-                    },
-                  ),
+                  const CleanerChecklistBackButton(),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -1301,4 +1288,24 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
       );
     }
   }
+}
+
+class CleanerChecklistBackButton extends StatelessWidget {
+  const CleanerChecklistBackButton({super.key});
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: 'Назад'.tr(),
+        button: true,
+        child: domlyTopIconButton(
+          icon: Icons.arrow_back,
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushReplacementNamed(context, '/cleaner/orders');
+            }
+          },
+        ),
+      );
 }

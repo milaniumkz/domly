@@ -958,3 +958,20 @@ test('booking date validation rejects malformed, rolled-over and past local time
   assert.doesNotThrow(()=>validateBookingStart('2026-10-23','15:01',now));
   assert.doesNotThrow(()=>validateBookingStart('2026-11-01','08:00:00',now));
 });
+
+test('all web bootstraps preserve detail identifiers before Flutter starts', async () => {
+  const {runInNewContext} = await import('node:vm');
+  for (const surface of ['domly', 'domly_pro', 'admin']) {
+    const script = fs.readFileSync(`../scripts/build_web_${surface}.sh`, 'utf8');
+    const source = script.split('"""  <script>')[1].split('</script>')[0];
+    const route = '/cleaner/checklist?orderId=11111111-1111-4111-8111-111111111111';
+    const window: any = {
+      location: {hash: '#' + route, href: 'https://example.test/pro/#' + route},
+      history: {replaceState() {}}, setInterval() {}, clearInterval() {},
+      addEventListener() {}, sessionStorage: {getItem() {return null;}, setItem() {}}
+    };
+    runInNewContext(source, {window, URL, Date, navigator: {}, document: {addEventListener() {}}, fetch: () => Promise.resolve({ok: false})});
+    assert.equal(window.name, 'domly_boot_route=' + route, surface);
+    assert.equal(window.__domlyBootRoute, route, surface);
+  }
+});
