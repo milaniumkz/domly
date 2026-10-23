@@ -2090,7 +2090,7 @@ export function buildV1Router(deps: {
     }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     const rows = (await deps.db.query(
-      `SELECT oa.*, oa.payment_status AS status, o.id AS order_id, o.customer_id, o.cleaner_id, o.scheduled_date, o.start_time, o.end_time,
+      `SELECT oa.*, oa.payment_status AS status, o.id AS order_id, o.customer_id, o.cleaner_id, o.scheduled_date, o.start_time, o.end_time, o.status AS order_status,
               ca.title_ru AS addon_title_ru, ca.title_kk AS addon_title_kk,
               cu.full_name AS customer_name, cu.phone AS customer_phone,
               cl.full_name AS cleaner_name, cl.phone AS cleaner_phone

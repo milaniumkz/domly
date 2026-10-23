@@ -48,6 +48,9 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal((await request(`/orders/${orderId}/addon-requests/reject`,'POST',{},true)).status,404);
         assert.equal((await db.query('SELECT id FROM order_addons WHERE order_id=$1',[orderId])).rows.length,2,'foreign request must not delete addons');
         const token=signAccessToken({id:owner,role:'customer',phone:'fixture'});
+        const listing=await fetch(base+'/addon-requests',{headers:{Authorization:'Bearer '+token}});
+        const visible=(await listing.json() as any).data.filter((r:any)=>r.order_id===orderId);
+        assert.equal(visible.length,2);assert.ok(visible.every((r:any)=>r.order_status==='assigned'));
         const own=await fetch(base+`/orders/${orderId}/addon-requests/reject`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
         assert.equal(own.status,200);
         assert.deepEqual((await db.query('SELECT payment_status FROM order_addons WHERE order_id=$1',[orderId])).rows.map(r=>r.payment_status),['paid']);

@@ -1,3 +1,4 @@
+import '../utils/addon_request_data.dart';
 import 'notification_count_stream.dart';
 import '../utils/calendar_availability.dart';
 import '../utils/schedule_order.dart';
@@ -2337,7 +2338,9 @@ class FirestoreDataService {
     }
     return _backendPollingStream(
       () => BackendApiService.instance.getList('/addon-requests'),
-    ).map((items) {
+    ).map((rows) {
+      final items = mapBackendAddonRequests(rows,
+          locale: TranslationController.active?.localeCode ?? 'ru');
       items.sort((a, b) {
         final aMs = _timestampMillis(a['createdAt'] ?? a['updatedAt']);
         final bMs = _timestampMillis(b['createdAt'] ?? b['updatedAt']);
@@ -2354,7 +2357,9 @@ class FirestoreDataService {
     }
     return _backendPollingStream(
       () => BackendApiService.instance.getList('/addon-requests'),
-    ).map((items) {
+    ).map((rows) {
+      final items = mapBackendAddonRequests(rows,
+          locale: TranslationController.active?.localeCode ?? 'ru');
       items.sort((a, b) {
         final aMs = _timestampMillis(a['createdAt'] ?? a['updatedAt']);
         final bMs = _timestampMillis(b['createdAt'] ?? b['updatedAt']);
@@ -2374,7 +2379,9 @@ class FirestoreDataService {
     }
     return _backendPollingStream(
       () => BackendApiService.instance.getList('/addon-requests'),
-    ).map((items) {
+    ).map((rows) {
+      final items = mapBackendAddonRequests(rows,
+          locale: TranslationController.active?.localeCode ?? 'ru');
       final paidStatuses = {'paid', 'payment_confirmed', 'completed'};
       final result = items.where((item) {
         final status = (item['status'] ?? '').toString().toLowerCase().trim();
