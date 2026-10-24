@@ -1,5 +1,6 @@
 const Map<String, Map<String, String>> kBuiltinTranslations =
     <String, Map<String, String>>{
+  'Показать ещё': {'kk': 'Тағы көрсету', 'en': 'Show more'},
   'Главная': {'kk': 'Басты бет', 'en': 'Home'},
   'Заказы': {'kk': 'Тапсырыстар', 'en': 'Orders'},
   'Профиль': {'kk': 'Профиль', 'en': 'Profile'},

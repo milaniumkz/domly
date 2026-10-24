@@ -3149,6 +3149,23 @@ export function buildV1Router(deps: {
     )).rows);
   }));
 
+  router.get('/notifications/page', auth(), asyncHandler(async (req, res) => {
+    const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 2147483647) {
+      throw new ApiError(400, 'invalid_request', 'Некорректный размер страницы.');
+    }
+    const rows = (await deps.db.query(
+      `SELECT n.*, COALESCE(n.read_at, nr.read_at) AS read_at, COUNT(*) OVER()::int AS history_total
+       FROM notifications n
+       LEFT JOIN notification_reads nr ON nr.notification_id=n.id AND nr.user_id=$1
+       WHERE n.user_id=$1 OR (n.user_id IS NULL AND n.role=$2)
+       ORDER BY (COALESCE(n.read_at, nr.read_at) IS NOT NULL), n.created_at DESC, n.id DESC
+       LIMIT $3`, [req.user!.id, req.user!.role, limit],
+    )).rows;
+    ok(res, { total: rows[0]?.history_total ?? 0,
+      items: rows.map(({ history_total, ...item }) => item) });
+  }));
+
   router.get('/notifications/unread-count', auth(), asyncHandler(async (req, res) => {
     const row = first<{ count: string }>((await deps.db.query(
       `SELECT COUNT(*)::text AS count
