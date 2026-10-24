@@ -42,6 +42,7 @@ class _ReferralStatsScreenState extends State<ReferralStatsScreen> {
               child: StreamBuilder<Map<String, dynamic>?>(
                 stream: _config.referralConfigStream(),
                 builder: (context, configSnap) {
+                  TranslationScope.watch(context);
                   if (configSnap.hasError) {
                     return const _ReferralStatsError();
                   }
@@ -52,12 +53,14 @@ class _ReferralStatsScreenState extends State<ReferralStatsScreen> {
                   return StreamBuilder<Map<String, dynamic>?>(
                     stream: _data.customerProfileStream(),
                     builder: (context, profileSnap) {
+                      TranslationScope.watch(context);
                       if (profileSnap.hasError) {
                         return const _ReferralStatsError();
                       }
                       return StreamBuilder<Map<String, dynamic>?>(
                         stream: _data.referralStatsStream(),
                         builder: (context, statsSnap) {
+                          TranslationScope.watch(context);
                           final loading = (configSnap.connectionState ==
                                       ConnectionState.waiting ||
                                   profileSnap.connectionState ==

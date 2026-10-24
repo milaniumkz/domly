@@ -172,6 +172,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: _customerPackages,
                 builder: (context, snapshot) {
+                  TranslationScope.watch(context);
                   final packages = _mergeHomePackages(
                     snapshot.data ?? const [],
                   );
@@ -238,6 +239,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                 separatorBuilder: (_, __) =>
                                     const SizedBox(height: 10),
                                 itemBuilder: (context, index) {
+                                  TranslationScope.watch(context);
                                   final package = packages[index];
                                   final packageName =
                                       PackageCatalogUtils.displayName(package);
@@ -664,7 +666,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        _addressConnectionProgressText(selected),
+                        (_addressConnectionProgressText(selected)).tr(),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -785,6 +787,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         itemCount: addresses.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
+                          TranslationScope.watch(context);
                           final item = addresses[index];
                           final isSelected =
                               _addressTitle(item) == _addressTitle(selected) &&
@@ -883,6 +886,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _customerProfile,
       builder: (context, profileSnap) {
+        TranslationScope.watch(context);
         if (profileSnap.hasError) {
           return const DomlyShell(
             bottomNavigationBar: DomlyClientBottomNav(currentIndex: 0),
@@ -904,6 +908,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: _customerSubscriptions,
           builder: (context, subscriptionsSnap) {
+            TranslationScope.watch(context);
             if (subscriptionsSnap.hasError) {
               return const DomlyShell(
                 bottomNavigationBar: DomlyClientBottomNav(currentIndex: 0),
@@ -927,6 +932,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             return StreamBuilder<List<Map<String, dynamic>>>(
               stream: _customerScheduleSlots,
               builder: (context, slotsSnap) {
+                TranslationScope.watch(context);
                 try {
                   if (slotsSnap.hasError) {
                     return const DomlyShell(
@@ -1015,6 +1021,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     return StreamBuilder<List<Map<String, dynamic>>>(
                       stream: _customerOrders,
                       builder: (context, ordersSnap) {
+                        TranslationScope.watch(context);
                         final orders = List<Map<String, dynamic>>.from(
                           ordersSnap.data ?? const [],
                         );
@@ -1215,7 +1222,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                                         upcomingSlot,
                                                                       ),
                                                                     )
-                                                                  : 'Не запланировано',
+                                                                  : "Не запланировано"
+                                                                      .tr(),
                                                               style: TextStyle(
                                                                 fontSize: 16,
                                                                 fontWeight:
@@ -1331,7 +1339,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                             Text(
                                                               (upcomingSlot?[
                                                                           'cleanerName'] ??
-                                                                      'Исполнитель будет назначен')
+                                                                      "Исполнитель будет назначен"
+                                                                          .tr())
                                                                   .toString(),
                                                               style: TextStyle(
                                                                 fontSize: 14,
@@ -1348,7 +1357,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                               height: 2,
                                                             ),
                                                             Text(
-                                                              planName,
+                                                              (planName).tr(),
                                                               style: TextStyle(
                                                                 fontSize: 12,
                                                                 color: DomlyPalette
@@ -1366,11 +1375,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                                                   top: 2,
                                                                 ),
                                                                 child: Text(
-                                                                  _subscriptionUsageSummary(
-                                                                    activeSubscription,
-                                                                    slots:
-                                                                        slots,
-                                                                  ),
+                                                                  (_subscriptionUsageSummary(
+                                                                          activeSubscription,
+                                                                          slots:
+                                                                              slots))
+                                                                      .tr(),
                                                                   style:
                                                                       TextStyle(
                                                                     fontSize:
@@ -2509,6 +2518,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     return FutureBuilder<Map<String, dynamic>?>(
       future: _data.getHouseStats(houseId: houseId),
       builder: (context, statsSnap) {
+        TranslationScope.watch(context);
         if (statsSnap.connectionState == ConnectionState.waiting &&
             !statsSnap.hasData) {
           return const DomlyCard(
@@ -2552,6 +2562,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         return StreamBuilder<Map<String, dynamic>?>(
           stream: _referralStats,
           builder: (context, referralSnap) {
+            TranslationScope.watch(context);
             final referralStats =
                 referralSnap.data ?? const <String, dynamic>{};
             final invited = (referralStats['invited'] as num?)?.toInt() ?? 0;
@@ -2930,7 +2941,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         Text(
                           (order['cleanerName'] ??
                                   order['cleaner'] ??
-                                  'Исполнитель будет назначен')
+                                  "Исполнитель будет назначен".tr())
                               .toString(),
                           style: TextStyle(
                             fontSize: 14,
@@ -2943,7 +2954,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         Text(
                           (order['residentialComplex'] ??
                                   order['address'] ??
-                                  'Адрес будет уточнен')
+                                  "Адрес будет уточнен".tr())
                               .toString(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -2961,7 +2972,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     children: [
                       if (((order['price'] as num?)?.toInt() ?? 0) > 0)
                         Text(
-                          '${order['price']} ₸',
+                          "{p0} ₸"
+                              .tr(params: {'p0': (order['price']).toString()}),
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
@@ -3001,6 +3013,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _customerPrelaunchBookings,
       builder: (context, prelaunchSnapshot) {
+        TranslationScope.watch(context);
         final hasPrelaunch = _hasActivePrelaunchBooking(prelaunchSnapshot.data);
         final hasPackage = _hasAnyPackagePurchase(subscriptions, orders);
         if (hasPrelaunch || hasPackage) {
@@ -3101,6 +3114,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            TranslationScope.watch(context);
             Future<void> submit() async {
               if (saving || !(formKey.currentState?.validate() ?? false)) {
                 return;
@@ -4093,10 +4107,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _clientVideos,
       builder: (context, videosSnap) {
+        TranslationScope.watch(context);
         final videos = videosSnap.data ?? const <Map<String, dynamic>>[];
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: _userVideoViews,
           builder: (context, viewsSnap) {
+            TranslationScope.watch(context);
             final viewedIds = (viewsSnap.data ?? const <Map<String, dynamic>>[])
                 .where((view) => (view['completed'] ?? false) == true)
                 .map((view) => (view['videoId'] ?? '').toString())
@@ -4122,6 +4138,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       stream: _userUnreadActivityCount,
       initialData: 0,
       builder: (context, notificationsSnap) {
+        TranslationScope.watch(context);
         final unreadCount = notificationsSnap.data ?? 0;
         return domlyTopBadgeIconButton(
           icon: Icons.notifications_none,
@@ -4142,11 +4159,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: DomlyPalette.surface(Colors.transparent),
-      builder: (context) => _BookingSheet(
-        subscription: subscription,
-        profile: profile,
-        data: _data,
-      ),
+      builder: (context) {
+        TranslationScope.watch(context);
+        return _BookingSheet(
+            subscription: subscription, profile: profile, data: _data);
+      },
     );
   }
 }
@@ -4207,7 +4224,7 @@ class _FigmaHomeHero extends StatelessWidget {
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  userName.trim().isEmpty ? 'Пользователь' : userName,
+                  userName.trim().isEmpty ? "Пользователь".tr() : userName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -4522,6 +4539,7 @@ class _PromoBannersSectionState extends State<_PromoBannersSection> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _banners,
       builder: (context, snapshot) {
+        TranslationScope.watch(context);
         final remoteBanners = snapshot.data ?? const <Map<String, dynamic>>[];
         final banners = (remoteBanners.isNotEmpty
                 ? remoteBanners
@@ -4540,6 +4558,7 @@ class _PromoBannersSectionState extends State<_PromoBannersSection> {
           children: [
             LayoutBuilder(
               builder: (context, constraints) {
+                TranslationScope.watch(context);
                 final height = (constraints.maxWidth * 0.34).clamp(
                   124.0,
                   148.0,
@@ -4557,6 +4576,7 @@ class _PromoBannersSectionState extends State<_PromoBannersSection> {
                       setState(() => _currentPage = index);
                     },
                     itemBuilder: (context, index) {
+                      TranslationScope.watch(context);
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: _PromoBannerCard(banner: banners[index]),
@@ -4797,7 +4817,7 @@ class _PromoBannerCard extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                ctaLabel,
+                                (ctaLabel).tr(),
                                 style: TextStyle(
                                   color: DomlyPalette.foreground(Colors.white),
                                   fontSize: 12,
@@ -4874,6 +4894,7 @@ class _CompanyPromotionsSectionState extends State<_CompanyPromotionsSection> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _promotions,
       builder: (context, snapshot) {
+        TranslationScope.watch(context);
         final promotions = (snapshot.data ?? const <Map<String, dynamic>>[])
             .where((item) => item['isActive'] != false)
             .toList();
@@ -4896,6 +4917,7 @@ class _CompanyPromotionsSectionState extends State<_CompanyPromotionsSection> {
                   }
                 },
                 itemBuilder: (context, index) {
+                  TranslationScope.watch(context);
                   return _CompanyPromotionBanner(promotion: promotions[index]);
                 },
               ),
@@ -5034,7 +5056,7 @@ class _CompanyPromotionBanner extends StatelessWidget {
                         children: [
                           if (showTitle)
                             Text(
-                              title.isEmpty ? 'Важная информация' : title,
+                              title.isEmpty ? "Важная информация".tr() : title,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -5229,7 +5251,8 @@ class CustomerNextCleaningCard extends StatelessWidget {
             ),
             child: Column(
               children: [
-                IntrinsicHeight(child: Row(
+                IntrinsicHeight(
+                    child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
@@ -5592,6 +5615,7 @@ class _FigmaUsagePill extends StatelessWidget {
         : Icons.schedule_outlined;
     return LayoutBuilder(
       builder: (context, constraints) {
+        TranslationScope.watch(context);
         final isCompact = constraints.maxWidth < 150;
         return Container(
           height: 40,
@@ -5661,6 +5685,7 @@ class _FigmaHomeAction extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           child: LayoutBuilder(
             builder: (context, constraints) {
+              TranslationScope.watch(context);
               final isCompact = constraints.maxWidth < 170;
               final iconBox = isCompact ? 38.0 : 44.0;
               return Container(
@@ -5790,6 +5815,7 @@ class _CustomerHomeBottomNavState extends State<CustomerHomeBottomNav> {
       stream: _unread,
       initialData: 0,
       builder: (context, snapshot) {
+        TranslationScope.watch(context);
         final navigationKeys = DomlyTutorialTargets.navigationKeys(context);
         final screenWidth = MediaQuery.sizeOf(context).width;
         final sideInset = screenWidth <= 380 ? 10.0 : 16.0;
@@ -5804,7 +5830,11 @@ class _CustomerHomeBottomNavState extends State<CustomerHomeBottomNav> {
               ),
               child: Container(
                 width: double.infinity,
-                height: math.max(66, 20 + MediaQuery.textScalerOf(context).scale(20) + MediaQuery.textScalerOf(context).scale(10) * 2.4),
+                height: math.max(
+                    66,
+                    20 +
+                        MediaQuery.textScalerOf(context).scale(20) +
+                        MediaQuery.textScalerOf(context).scale(10) * 2.4),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                 decoration: BoxDecoration(
                   color: DomlyPalette.surface(Colors.white),
@@ -6943,7 +6973,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            group.label,
+                            (group.label).tr(),
                             maxLines: group.note == null ? 1 : 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -6956,7 +6986,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                           if (group.note != null) ...[
                             const SizedBox(height: 4),
                             Text(
-                              group.note!,
+                              (group.note!).tr(),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -7066,7 +7096,7 @@ class _BookingSheetState extends State<_BookingSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.label,
+                  (item.label).tr(),
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -7076,7 +7106,7 @@ class _BookingSheetState extends State<_BookingSheet> {
                 if (item.note != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    item.note!,
+                    (item.note!).tr(),
                     style: TextStyle(
                       fontSize: 12,
                       color: DomlyPalette.foreground(DomlyColors.muted),
@@ -7086,9 +7116,11 @@ class _BookingSheetState extends State<_BookingSheet> {
                 const SizedBox(height: 4),
                 Text(
                   isSeparate
-                      ? 'Оплачивается отдельно при оценке специалиста'
+                      ? "Оплачивается отдельно при оценке специалиста".tr()
                       : item.supportsQuantity
-                          ? '${_formatMoney(unitPrice)} за 1 шт.'
+                          ? "{p0} за 1 шт.".tr(params: {
+                              'p0': (_formatMoney(unitPrice)).toString()
+                            })
                           : _formatMoney(unitPrice),
                   style: TextStyle(
                     fontSize: 12,

@@ -25,6 +25,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _data.cleanerScheduleSlotsStream(),
       builder: (context, snap) {
+        TranslationScope.watch(context);
         final slots = snap.data ?? <Map<String, dynamic>>[];
         final selected = slots.where((s) {
           final date = _toDate(s['scheduledFor'] ?? s['date']);
@@ -118,7 +119,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Text(
-                                        _monthLabel(_selectedMonth),
+                                        (_monthLabel(_selectedMonth)).tr(),
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                           fontSize: 16,
@@ -201,6 +202,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                             date: _selectedDate,
                           ),
                           builder: (context, scheduleSnap) {
+                            TranslationScope.watch(context);
                             final summary = Map<String, dynamic>.from(
                               scheduleSnap.data?['summary'] as Map? ?? const {},
                             );
@@ -351,7 +353,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                             children: [
                                               Expanded(
                                                 child: Text(
-                                                  '${(item['time'] ?? '—').toString()} · ${((item['residentialComplex'] ?? item['address'] ?? 'Адрес будет уточнен').toString())}',
+                                                  '${(item['time'] ?? '—').toString()} · ${((item['residentialComplex'] ?? item['address'] ?? 'Адрес будет уточнен'.tr()).toString())}',
                                                   style: TextStyle(
                                                     fontSize: 15,
                                                     fontWeight: FontWeight.w700,

@@ -1,3 +1,4 @@
+import 'package:domly/localization/translation_controller.dart';
 import 'package:flutter/material.dart';
 
 class OnlinePaymentView extends StatelessWidget {
@@ -12,6 +13,7 @@ class OnlinePaymentView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    TranslationScope.watch(context);
     return const SizedBox.shrink();
   }
 }

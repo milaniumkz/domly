@@ -160,17 +160,21 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
               child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: _data.cleanerScheduleSlotsStream(),
                 builder: (context, slotsSnapshot) {
+                  TranslationScope.watch(context);
                   return StreamBuilder<List<Map<String, dynamic>>>(
                     stream: _data.cleanerOrdersStream(),
                     builder: (context, ordersSnapshot) {
+                      TranslationScope.watch(context);
                       return StreamBuilder<List<Map<String, dynamic>>>(
                         stream: _data.cleanerPaidAddonRequestsForSlotStream(
                           widget.orderId,
                         ),
                         builder: (context, addonRequestsSnapshot) {
+                          TranslationScope.watch(context);
                           return StreamBuilder<List<Map<String, dynamic>>>(
                             stream: _data.customerPackagesStream(),
                             builder: (context, packagesSnapshot) {
+                              TranslationScope.watch(context);
                               final assignments = _mergeAssignments(
                                 slotsSnapshot.data ??
                                     const <Map<String, dynamic>>[],
@@ -391,6 +395,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
               child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: _data.cleanerScheduleSlotsStream(),
                 builder: (context, snapshot) {
+                  TranslationScope.watch(context);
                   if (snapshot.connectionState == ConnectionState.waiting &&
                       !snapshot.hasData) {
                     return const Center(
@@ -432,6 +437,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                     itemCount: active.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
+                      TranslationScope.watch(context);
                       final slot = active[index];
                       final slotId = _slotTargetId(slot);
                       return DomlyCard(
@@ -461,7 +467,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                (slot['address'] ?? 'Адрес не указан')
+                                (slot['address'] ?? "Адрес не указан".tr())
                                     .toString(),
                                 style: TextStyle(
                                   color: DomlyPalette.foreground(
@@ -528,9 +534,9 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
   String _slotTitle(Map<String, dynamic> slot) {
     final date = _slotDate(slot);
     final dateText = date.millisecondsSinceEpoch == 0
-        ? 'Дата не указана'
+        ? 'Дата не указана'.tr()
         : '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
-    final time = (slot['time'] ?? 'Время не указано').toString();
+    final time = (slot['time'] ?? 'Время не указано'.tr()).toString();
     return '$dateText · $time';
   }
 
@@ -955,7 +961,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
       title: Text(task.tr()),
       subtitle: Text(
         description.isEmpty
-            ? 'Отметьте, если предложено или выполнено'
+            ? "Отметьте, если предложено или выполнено".tr()
             : description,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1004,6 +1010,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            TranslationScope.watch(context);
             final selected = quantities.entries
                 .where((entry) => entry.value > 0)
                 .map(
@@ -1021,6 +1028,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
               minChildSize: 0.55,
               maxChildSize: 0.95,
               builder: (context, scrollController) {
+                TranslationScope.watch(context);
                 return Container(
                   decoration: BoxDecoration(
                     color: DomlyPalette.surface(Colors.white),
@@ -1081,7 +1089,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                       Text(
                                         (group['label'] ??
                                                 group['key'] ??
-                                                'Допы')
+                                                "Допы".tr())
                                             .toString(),
                                         style: TextStyle(
                                           color: DomlyPalette.foreground(
@@ -1111,7 +1119,7 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                                                       CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
-                                                      labels[key] ?? key,
+                                                      (labels[key] ?? key).tr(),
                                                       style: TextStyle(
                                                         color: DomlyPalette
                                                             .foreground(
@@ -1294,18 +1302,19 @@ class CleanerChecklistBackButton extends StatelessWidget {
   const CleanerChecklistBackButton({super.key});
 
   @override
-  Widget build(BuildContext context) => Semantics(
+  Widget build(BuildContext context) {
+    TranslationScope.watch(context);
+    return Semantics(
         label: 'Назад'.tr(),
         button: true,
         child: domlyTopIconButton(
-          icon: Icons.arrow_back,
-          onPressed: () {
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            } else {
-              Navigator.pushReplacementNamed(context, '/cleaner/orders');
-            }
-          },
-        ),
-      );
+            icon: Icons.arrow_back,
+            onPressed: () {
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              } else {
+                Navigator.pushReplacementNamed(context, '/cleaner/orders');
+              }
+            }));
+  }
 }

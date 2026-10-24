@@ -45,44 +45,48 @@ class _RequiredPasswordChangeState extends State<RequiredPasswordChange> {
     DomlyPalette.watch(context);
     return ValueListenableBuilder<bool>(
         valueListenable: BackendApiService.passwordChangeRequired,
-        builder: (context, needsChange, _) => needsChange
-            ? Scaffold(
-                body: Center(
-                    child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(24),
-                        child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 420),
-                            child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text('Смените временный пароль'.tr(),
-                                      style: TextStyle(fontSize: 24)),
-                                  const SizedBox(height: 16),
-                                  TextField(
-                                      controller: current,
-                                      obscureText: true,
-                                      decoration: InputDecoration(
-                                          labelText: 'Текущий пароль'.tr())),
-                                  TextField(
-                                      controller: next,
-                                      obscureText: true,
-                                      decoration: InputDecoration(
-                                          labelText:
-                                              'Новый пароль — от 12 символов'
-                                                  .tr()),
-                                      onSubmitted: (_) => save()),
-                                  if (error != null)
-                                    Text(error!,
-                                        style: TextStyle(
-                                            color: DomlyPalette.foreground(
-                                                Colors.red))),
-                                  const SizedBox(height: 20),
-                                  FilledButton(
-                                      onPressed: busy ? null : save,
-                                      child: Text(busy
-                                          ? 'Сохранение…'
-                                          : 'Сменить пароль и войти заново'))
-                                ])))))
-            : widget.child);
+        builder: (context, needsChange, _) {
+          TranslationScope.watch(context);
+          return needsChange
+              ? Scaffold(
+                  body: Center(
+                      child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(24),
+                          child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 420),
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('Смените временный пароль'.tr(),
+                                        style: TextStyle(fontSize: 24)),
+                                    const SizedBox(height: 16),
+                                    TextField(
+                                        controller: current,
+                                        obscureText: true,
+                                        decoration: InputDecoration(
+                                            labelText: 'Текущий пароль'.tr())),
+                                    TextField(
+                                        controller: next,
+                                        obscureText: true,
+                                        decoration: InputDecoration(
+                                            labelText:
+                                                'Новый пароль — от 12 символов'
+                                                    .tr()),
+                                        onSubmitted: (_) => save()),
+                                    if (error != null)
+                                      Text((error!).tr(),
+                                          style: TextStyle(
+                                              color: DomlyPalette.foreground(
+                                                  Colors.red))),
+                                    const SizedBox(height: 20),
+                                    FilledButton(
+                                        onPressed: busy ? null : save,
+                                        child: Text(busy
+                                            ? "Сохранение…".tr()
+                                            : "Сменить пароль и войти заново"
+                                                .tr()))
+                                  ])))))
+              : widget.child;
+        });
   }
 }

@@ -43,6 +43,7 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _data.cleanerVerificationStream(),
       builder: (context, snapshot) {
+        TranslationScope.watch(context);
         if (snapshot.hasError) {
           return const DomlyShell(
             bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 4),
@@ -322,6 +323,7 @@ class CleanerVerificationDocumentTile extends StatelessWidget {
   final VoidCallback onUpload;
   @override
   Widget build(BuildContext context) {
+    TranslationScope.watch(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: DomlyCard(

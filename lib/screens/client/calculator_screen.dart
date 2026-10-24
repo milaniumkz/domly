@@ -615,6 +615,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _data.customerProfileStream(),
       builder: (context, profileSnap) {
+        TranslationScope.watch(context);
         final profile = profileSnap.data ?? const <String, dynamic>{};
         _syncAreaFromProfile(profile);
         final hasProfileArea = _area > 0;
@@ -718,8 +719,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                     padding: const EdgeInsets.only(left: 25),
                     child: Text(
                       hasProfileArea
-                          ? '${_area.ceil()} м²'
-                          : 'Заполните площадь в профиле',
+                          ? "{p0} м²"
+                              .tr(params: {'p0': (_area.ceil()).toString()})
+                          : "Заполните площадь в профиле".tr(),
                       style: TextStyle(
                         color: DomlyPalette.foreground(Color(0xFF658170)),
                         fontSize: 12,
@@ -946,9 +948,11 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                 const SizedBox(height: 3),
                 Text(
                   isSeparate
-                      ? 'Оплачивается отдельно при оценке специалиста'
+                      ? "Оплачивается отдельно при оценке специалиста".tr()
                       : item.supportsQuantity
-                          ? '${_formatMoney(unitPrice)} за 1 шт.'
+                          ? "{p0} за 1 шт.".tr(params: {
+                              'p0': (_formatMoney(unitPrice)).toString()
+                            })
                           : _formatMoney(unitPrice),
                   style: TextStyle(
                     color: DomlyPalette.foreground(isSeparate
@@ -1289,9 +1293,11 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                 const SizedBox(height: 4),
                 Text(
                   isSeparate
-                      ? 'Оплачивается отдельно при оценке специалиста'
+                      ? "Оплачивается отдельно при оценке специалиста".tr()
                       : item.supportsQuantity
-                          ? '${_formatMoney(unitPrice)} за 1 шт.'
+                          ? "{p0} за 1 шт.".tr(params: {
+                              'p0': (_formatMoney(unitPrice)).toString()
+                            })
                           : _formatMoney(unitPrice),
                   style: TextStyle(
                     fontSize: 12,
@@ -1413,7 +1419,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          selectedPackage['name']?.toString() ?? 'Пакет',
+                          selectedPackage['name']?.toString() ?? "Пакет".tr(),
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
@@ -1425,7 +1431,12 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                             ((_quote['monthlyPrice'] as num?)?.toInt() ?? 0) >
                                 0)
                           Text(
-                            '${(_quote['monthlyPrice'] as num?)?.toInt() ?? 0} ₸',
+                            "{p0} ₸".tr(params: {
+                              'p0':
+                                  ((_quote['monthlyPrice'] as num?)?.toInt() ??
+                                          0)
+                                      .toString()
+                            }),
                             style: TextStyle(
                               fontSize: 12,
                               color: DomlyPalette.foreground(
@@ -1461,8 +1472,15 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   quantity > 1
-                      ? '• $label × $quantity — $total ₸'
-                      : '• $label — $total ₸',
+                      ? "• {p0} × {p1} — {p2} ₸".tr(params: {
+                          'p0': (label).toString(),
+                          'p1': (quantity).toString(),
+                          'p2': (total).toString()
+                        })
+                      : "• {p0} — {p1} ₸".tr(params: {
+                          'p0': (label).toString(),
+                          'p1': (total).toString()
+                        }),
                   style: TextStyle(
                       fontSize: 13,
                       color: DomlyPalette.foreground(DomlyColors.foreground)),
@@ -1990,7 +2008,10 @@ class _FigmaAreaCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      hasArea ? '${area!.ceil()} м²' : 'Заполните в профиле',
+                      hasArea
+                          ? "{p0} м²"
+                              .tr(params: {'p0': (area!.ceil()).toString()})
+                          : "Заполните в профиле".tr(),
                       softWrap: false,
                       overflow: TextOverflow.fade,
                       style: TextStyle(
@@ -2116,7 +2137,8 @@ class _FigmaAddonCard extends StatelessWidget {
           const SizedBox(height: 4),
           if (discount > 0 && !loading) ...[
             Center(
-                child: Text('${total + discount} ₸',
+                child: Text(
+                    "{p0} ₸".tr(params: {'p0': (total + discount).toString()}),
                     style: TextStyle(
                         decoration: TextDecoration.lineThrough,
                         color: DomlyPalette.foreground(Colors.grey),
@@ -2142,7 +2164,7 @@ class _FigmaAddonCard extends StatelessWidget {
                       ),
                     )
                   : Text(
-                      '$total ₸',
+                      "{p0} ₸".tr(params: {'p0': (total).toString()}),
                       key: ValueKey(total),
                       style: TextStyle(
                         color: DomlyPalette.foreground(Color(0xFF2B4338)),

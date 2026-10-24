@@ -602,99 +602,84 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
     return showDialog<Map<String, String>>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
+      builder: (context) {
+        TranslationScope.watch(context);
+        return StatefulBuilder(builder: (context, setDialogState) {
           return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            title: Text(
-              'Проверка квадратуры'.tr(),
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: DomlyPalette.foreground(DomlyColors.foreground),
-              ),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Выберите удобную дату и время для проверки вашей квадратуры отделом контроля качества.'
-                      .tr(),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24)),
+              title: Text('Проверка квадратуры'.tr(),
                   style: TextStyle(
-                    fontSize: 14,
-                    height: 1.4,
-                    color: DomlyPalette.foreground(DomlyColors.foreground),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final now = DateTime.now();
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDate,
-                      firstDate: DateTime(now.year, now.month, now.day)
-                          .add(const Duration(days: 1)),
-                      lastDate: now.add(const Duration(days: 45)),
-                      locale: Localizations.localeOf(context),
-                    );
-                    if (picked != null) {
-                      setDialogState(() => selectedDate = picked);
-                    }
-                  },
-                  icon: const Icon(Icons.calendar_today_outlined),
-                  label: Text(_formatAreaCheckDate(selectedDate)),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedTime,
-                  decoration: InputDecoration(
-                    labelText: 'Время'.tr(),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  items: [
-                    for (final slot in timeSlots)
-                      DropdownMenuItem(value: slot, child: Text(slot)),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => selectedTime = value);
-                    }
-                  },
-                ),
-              ],
-            ),
-            actions: [
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  DomlyPrimaryButton(
-                    label: 'Пройти проверку в приложении',
-                    onPressed: () => Navigator.of(context).pop({
-                      'mode': 'in_app',
-                    }),
-                  ),
-                  const SizedBox(height: 10),
-                  DomlySecondaryButton(
-                    label: 'Назначить проверку',
-                    onPressed: () => Navigator.of(context).pop({
-                      'mode': 'visit',
-                      'date': _formatAreaCheckDate(selectedDate),
-                      'time': selectedTime,
-                    }),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: DomlyPalette.foreground(DomlyColors.foreground))),
+              content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        'Выберите удобную дату и время для проверки вашей квадратуры отделом контроля качества.'
+                            .tr(),
+                        style: TextStyle(
+                            fontSize: 14,
+                            height: 1.4,
+                            color: DomlyPalette.foreground(
+                                DomlyColors.foreground))),
+                    const SizedBox(height: 18),
+                    OutlinedButton.icon(
+                        onPressed: () async {
+                          final now = DateTime.now();
+                          final picked = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime(now.year, now.month, now.day)
+                                  .add(const Duration(days: 1)),
+                              lastDate: now.add(const Duration(days: 45)),
+                              locale: Localizations.localeOf(context));
+                          if (picked != null) {
+                            setDialogState(() => selectedDate = picked);
+                          }
+                        },
+                        icon: const Icon(Icons.calendar_today_outlined),
+                        label: Text(_formatAreaCheckDate(selectedDate))),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                        initialValue: selectedTime,
+                        decoration: InputDecoration(
+                            labelText: 'Время'.tr(),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16))),
+                        items: [
+                          for (final slot in timeSlots)
+                            DropdownMenuItem(value: slot, child: Text(slot))
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() => selectedTime = value);
+                          }
+                        })
+                  ]),
+              actions: [
+                Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      DomlyPrimaryButton(
+                          label: 'Пройти проверку в приложении',
+                          onPressed: () =>
+                              Navigator.of(context).pop({'mode': 'in_app'})),
+                      const SizedBox(height: 10),
+                      DomlySecondaryButton(
+                          label: 'Назначить проверку',
+                          onPressed: () => Navigator.of(context).pop({
+                                'mode': 'visit',
+                                'date': _formatAreaCheckDate(selectedDate),
+                                'time': selectedTime
+                              }))
+                    ])
+              ]);
+        });
+      },
     );
   }
 
@@ -1035,6 +1020,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
       stream: _profileStream,
       initialData: const <String, dynamic>{},
       builder: (context, profileSnap) {
+        TranslationScope.watch(context);
         if (profileSnap.hasError) {
           return const DomlyShell(
             child: SafeArea(
@@ -1055,6 +1041,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
           stream: _packagesStream,
           initialData: _fallbackPackages,
           builder: (context, snap) {
+            TranslationScope.watch(context);
             _latestProfile = profileSnap.data ?? const <String, dynamic>{};
             _seedAreaFromProfile(_latestProfile);
             final packages = _mergePackages(
@@ -1118,6 +1105,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
                                   ),
                                 Builder(
                                   builder: (context) {
+                                    TranslationScope.watch(context);
                                     final apartments =
                                         _profileApartments(_latestProfile);
                                     if (apartments.length <= 1) {
@@ -1799,8 +1787,9 @@ class _PackageOptionRow extends StatelessWidget {
                               const SizedBox(height: 4),
                               Text(
                                 price > 0
-                                    ? '$price ₸'
-                                    : 'Стоимость после выбора площади',
+                                    ? "{p0} ₸"
+                                        .tr(params: {'p0': (price).toString()})
+                                    : "Стоимость после выбора площади".tr(),
                                 style: TextStyle(
                                   color: DomlyPalette.foreground(
                                       Color(0xFF2B4338)),
@@ -2135,7 +2124,7 @@ class _ApartmentPickerCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                summary.isNotEmpty ? summary : 'Квартира',
+                                summary.isNotEmpty ? summary : "Квартира".tr(),
                                 style: TextStyle(
                                   color: DomlyPalette.foreground(
                                       Color(0xFF2B4338)),
@@ -2254,7 +2243,9 @@ class _SelectedPackageFooter extends StatelessWidget {
                 ),
               ),
               Text(
-                price > 0 ? '$price ₸' : '—',
+                price > 0
+                    ? "{p0} ₸".tr(params: {'p0': (price).toString()})
+                    : '—',
                 style: TextStyle(
                   color: DomlyPalette.foreground(Color(0xFF2B4338)),
                   fontSize: 18,

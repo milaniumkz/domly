@@ -26,6 +26,7 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: data.cleanerProfileStream(),
       builder: (context, profileSnap) {
+        TranslationScope.watch(context);
         final profile = profileSnap.data ?? <String, dynamic>{};
         final today = (profile['todayEarnings'] ?? 0) as num;
         final week =
@@ -69,6 +70,7 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: data.cleanerOrdersStream(),
           builder: (context, ordersSnap) {
+            TranslationScope.watch(context);
             final orders = ordersSnap.data ?? const <Map<String, dynamic>>[];
             final completedOrders = orders
                 .where(
@@ -80,6 +82,7 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
             return StreamBuilder<List<Map<String, dynamic>>>(
               stream: data.cleanerPayoutsStream(),
               builder: (context, payoutsSnap) {
+                TranslationScope.watch(context);
                 final payouts =
                     payoutsSnap.data ?? const <Map<String, dynamic>>[];
                 final filteredOrders = completedOrders
@@ -239,7 +242,11 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            '${displayWalletBalance.toInt()} ₸',
+                                            "{p0} ₸".tr(params: {
+                                              'p0':
+                                                  (displayWalletBalance.toInt())
+                                                      .toString()
+                                            }),
                                             style: TextStyle(
                                               fontSize: 20,
                                               fontWeight: FontWeight.w700,
@@ -404,7 +411,11 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                                   ),
                                                   const SizedBox(width: 10),
                                                   Text(
-                                                    '${totalBonusAwarded.toInt()} ₸',
+                                                    "{p0} ₸".tr(params: {
+                                                      'p0': (totalBonusAwarded
+                                                              .toInt())
+                                                          .toString()
+                                                    }),
                                                     style: TextStyle(
                                                       fontSize: 12,
                                                       fontWeight:
@@ -505,7 +516,8 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                               final selected =
                                                   _period == period;
                                               return ChoiceChip(
-                                                label: Text(period.label),
+                                                label:
+                                                    Text((period.label).tr()),
                                                 selected: selected,
                                                 onSelected: (_) => setState(
                                                   () => _period = period,
@@ -591,7 +603,7 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                                 const SizedBox(width: 8),
                                                 Expanded(
                                                   child: Text(
-                                                    level,
+                                                    (level).tr(),
                                                     style: TextStyle(
                                                       fontSize: 14,
                                                       fontWeight:
@@ -633,7 +645,8 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
                                             Text(
                                               nextLevel.isNotEmpty
                                                   ? progressText
-                                                  : 'Максимальный уровень достигнут.',
+                                                  : "Максимальный уровень достигнут."
+                                                      .tr(),
                                               style: TextStyle(
                                                 color: DomlyPalette.foreground(
                                                     Colors.white),
@@ -752,7 +765,7 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
             ),
           ),
           Text(
-            '₸',
+            "₸".tr(),
             style: TextStyle(
                 fontSize: 12,
                 color: DomlyPalette.foreground(DomlyColors.muted)),
@@ -921,7 +934,10 @@ class _CleanerEarningsScreenState extends State<CleanerEarningsScreen> {
           ),
           const SizedBox(width: 10),
           Text(
-            '${isWithdrawal ? '-' : '+'}${item.amount.toInt()} ₸',
+            "{p0}{p1} ₸".tr(params: {
+              'p0': (isWithdrawal ? '-' : '+').toString(),
+              'p1': (item.amount.toInt()).toString()
+            }),
             style: TextStyle(
                 fontWeight: FontWeight.w700,
                 color: DomlyPalette.foreground(color)),

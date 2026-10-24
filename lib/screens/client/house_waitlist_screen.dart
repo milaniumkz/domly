@@ -69,6 +69,7 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
     return FutureBuilder<Map<String, dynamic>?>(
       future: _statsFuture,
       builder: (context, statsSnap) {
+        TranslationScope.watch(context);
         if (statsSnap.hasError) {
           return const DomlyShell(
             child: SafeArea(
@@ -190,7 +191,8 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 activationText.isEmpty
-                                    ? 'Мы скоро стартуем в вашем доме. Пока набираем необходимое количество квартир.'
+                                    ? "Мы скоро стартуем в вашем доме. Пока набираем необходимое количество квартир."
+                                        .tr()
                                     : activationText,
                                 style: TextStyle(
                                   fontSize: 12,
@@ -254,8 +256,9 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                             const SizedBox(height: 12),
                             Text(
                               remaining > 0
-                                  ? 'Нужно еще $remaining соседей'
-                                  : 'Дом готов к запуску',
+                                  ? "Нужно еще {p0} соседей".tr(
+                                      params: {'p0': (remaining).toString()})
+                                  : "Дом готов к запуску".tr(),
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -315,6 +318,7 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                       FutureBuilder<Map<String, dynamic>>(
                         future: _referralFuture,
                         builder: (context, referralSnap) {
+                          TranslationScope.watch(context);
                           final referral =
                               referralSnap.data ?? const <String, dynamic>{};
                           final invited =

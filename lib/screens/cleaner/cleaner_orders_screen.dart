@@ -80,6 +80,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
       stream: _profileStream,
       initialData: const <String, dynamic>{},
       builder: (context, profileSnap) {
+        TranslationScope.watch(context);
         final profile = profileSnap.data ?? const <String, dynamic>{};
         final hasServiceAreas =
             profileSnap.hasError ? true : cleanerHasServiceAreas(profile);
@@ -87,6 +88,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
           stream: _scheduleSlotsStream,
           initialData: const <Map<String, dynamic>>[],
           builder: (context, snap) {
+            TranslationScope.watch(context);
             if (snap.hasError) {
               return const DomlyShell(
                 bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 2),
@@ -113,6 +115,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
               stream: _offersStream,
               initialData: const <Map<String, dynamic>>[],
               builder: (context, offerSnap) {
+                TranslationScope.watch(context);
                 final offers = offerSnap.hasError
                     ? const <Map<String, dynamic>>[]
                     : offerSnap.data ?? <Map<String, dynamic>>[];
@@ -128,6 +131,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                   stream: _ordersStream,
                   initialData: const <Map<String, dynamic>>[],
                   builder: (context, doneSnap) {
+                    TranslationScope.watch(context);
                     if (doneSnap.hasError) {
                       return const DomlyShell(
                         bottomNavigationBar: DomlyCleanerBottomNav(
@@ -166,6 +170,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                       stream: _chatSummariesStream,
                       initialData: const <Map<String, dynamic>>[],
                       builder: (context, chatSnap) {
+                        TranslationScope.watch(context);
                         final chatSummaries = chatSnap.hasError
                             ? const <Map<String, dynamic>>[]
                             : chatSnap.data ?? const <Map<String, dynamic>>[];
@@ -399,10 +404,11 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
       itemCount: list.length,
-      itemBuilder: (context, i) => Padding(
-        padding: const EdgeInsets.only(bottom: 4.0),
-        child: _card(list[i]),
-      ),
+      itemBuilder: (context, i) {
+        TranslationScope.watch(context);
+        return Padding(
+            padding: const EdgeInsets.only(bottom: 4.0), child: _card(list[i]));
+      },
     );
   }
 
@@ -431,7 +437,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  _text(status),
+                  (_text(status)).tr(),
                   style:
                       TextStyle(color: DomlyPalette.foreground(Colors.white)),
                 ),
@@ -587,6 +593,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
       stream: _notificationsStream,
       initialData: 0,
       builder: (context, notificationsSnap) {
+        TranslationScope.watch(context);
         final unreadCount = notificationsSnap.data ?? 0;
         return domlyTopBadgeIconButton(
           icon: Icons.notifications_none,
@@ -713,7 +720,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            (offer['address'] ?? 'Адрес уточняется').toString(),
+            (offer['address'] ?? "Адрес уточняется".tr()).toString(),
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
@@ -795,7 +802,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  status == 'assigned' ? 'Запланировано' : _text(status),
+                  status == 'assigned' ? "Запланировано".tr() : _text(status),
                   style:
                       TextStyle(color: DomlyPalette.foreground(Colors.white)),
                 ),
@@ -968,6 +975,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            TranslationScope.watch(context);
             final selected = quantities.entries
                 .where((entry) => entry.value > 0)
                 .map(
@@ -985,6 +993,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
               minChildSize: 0.55,
               maxChildSize: 0.95,
               builder: (context, scrollController) {
+                TranslationScope.watch(context);
                 return Container(
                   decoration: BoxDecoration(
                     color: DomlyPalette.surface(Colors.white),
@@ -1045,7 +1054,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                       Text(
                                         (group['label'] ??
                                                 group['key'] ??
-                                                'Допы')
+                                                "Допы".tr())
                                             .toString(),
                                         style: TextStyle(
                                           color: DomlyPalette.foreground(
@@ -1075,7 +1084,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                                                       CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
-                                                      labels[key] ?? key,
+                                                      (labels[key] ?? key).tr(),
                                                       style: TextStyle(
                                                         color: DomlyPalette
                                                             .foreground(
@@ -1829,13 +1838,17 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
       tween: Tween<double>(begin: secondsLeft.toDouble(), end: 0),
       duration: Duration(seconds: secondsLeft),
       builder: (context, value, _) {
+        TranslationScope.watch(context);
         final wholeSeconds = value.ceil().clamp(0, 7200);
         final minutes = wholeSeconds ~/ 60;
         final seconds = wholeSeconds % 60;
         return Text(
           wholeSeconds > 0
-              ? 'Осталось ${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}'
-              : 'Время ответа истекло',
+              ? "Осталось {p0}:{p1}".tr(params: {
+                  'p0': (minutes.toString().padLeft(2, '0')).toString(),
+                  'p1': (seconds.toString().padLeft(2, '0')).toString()
+                })
+              : "Время ответа истекло".tr(),
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,

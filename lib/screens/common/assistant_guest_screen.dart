@@ -102,7 +102,7 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
           child: _error != null
               ? Center(
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text(_error!),
+                  Text((_error!).tr()),
                   TextButton(
                       onPressed: _initialize, child: Text('Повторить'.tr()))
                 ]))
@@ -111,6 +111,7 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
                   : StreamBuilder<List<Map<String, dynamic>>>(
                       stream: _messages,
                       builder: (context, snapshot) {
+                        TranslationScope.watch(context);
                         if (snapshot.hasError) {
                           return Center(
                               child: Text(
@@ -132,6 +133,7 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
                             padding: const EdgeInsets.all(16),
                             itemCount: messages.length,
                             itemBuilder: (context, index) {
+                              TranslationScope.watch(context);
                               final message =
                                       messages[messages.length - 1 - index],
                                   mine = message['sender_kind'] == 'guest';

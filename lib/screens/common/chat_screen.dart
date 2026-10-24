@@ -71,6 +71,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _summaryStream,
       builder: (context, summarySnap) {
+        TranslationScope.watch(context);
         final unreadCount = widget.readOnly
             ? 0
             : (summarySnap.data?['unreadCount'] as num?)?.toInt() ?? 0;
@@ -243,6 +244,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _messagesStream,
       builder: (context, snapshot) {
+        TranslationScope.watch(context);
         if (snapshot.hasError && _pendingMessages.isEmpty) {
           return Center(
             child: Padding(
@@ -279,6 +281,7 @@ class _ChatScreenState extends State<ChatScreen> {
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
           itemCount: messages.length,
           itemBuilder: (context, index) {
+            TranslationScope.watch(context);
             final m = messages[messages.length - 1 - index];
             final isMine = m['senderId'] == widget.senderId;
             final isSystem = (m['type'] ?? 'text') == 'system';

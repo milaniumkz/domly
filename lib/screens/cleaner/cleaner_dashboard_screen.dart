@@ -42,6 +42,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _profileStream,
       builder: (context, profileSnap) {
+        TranslationScope.watch(context);
         if (profileSnap.hasError) {
           return const DomlyShell(
             bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 0),
@@ -83,6 +84,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: _ordersStream,
           builder: (context, ordersSnap) {
+            TranslationScope.watch(context);
             if (ordersSnap.hasError) {
               return const DomlyShell(
                 bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 0),
@@ -103,6 +105,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
             return StreamBuilder<List<Map<String, dynamic>>>(
               stream: _payoutsStream,
               builder: (context, payoutsSnap) {
+                TranslationScope.watch(context);
                 if (payoutsSnap.hasError) {
                   return const DomlyShell(
                     bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 0),
@@ -123,6 +126,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                 return StreamBuilder<List<Map<String, dynamic>>>(
                   stream: _scheduleSlotsStream,
                   builder: (context, shiftsSnap) {
+                    TranslationScope.watch(context);
                     if (shiftsSnap.hasError) {
                       return const DomlyShell(
                         bottomNavigationBar: DomlyCleanerBottomNav(
@@ -351,7 +355,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                                                       .isNotEmpty) ...[
                                                     const SizedBox(height: 4),
                                                     Text(
-                                                      statusProgressText,
+                                                      (statusProgressText).tr(),
                                                       style: TextStyle(
                                                         fontSize: 12,
                                                         color: DomlyPalette
@@ -440,7 +444,12 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                                                               height: 4,
                                                             ),
                                                             Text(
-                                                              '${profile['todayEarnings'] ?? 0} ₸',
+                                                              "{p0} ₸".tr(
+                                                                  params: {
+                                                                    'p0': (profile['todayEarnings'] ??
+                                                                            0)
+                                                                        .toString()
+                                                                  }),
                                                               style: TextStyle(
                                                                 fontSize: 18,
                                                                 fontWeight:
@@ -891,7 +900,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            (job['customerName'] ?? job['client'] ?? 'Клиент').toString(),
+            (job['customerName'] ?? job['client'] ?? "Клиент".tr()).toString(),
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -1126,10 +1135,12 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _videosStream,
       builder: (context, videosSnap) {
+        TranslationScope.watch(context);
         final videos = videosSnap.data ?? const <Map<String, dynamic>>[];
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: _videoViewsStream,
           builder: (context, viewsSnap) {
+            TranslationScope.watch(context);
             final viewedIds = (viewsSnap.data ?? const <Map<String, dynamic>>[])
                 .where((view) => (view['completed'] ?? false) == true)
                 .map((view) => (view['videoId'] ?? '').toString())
@@ -1154,6 +1165,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
       stream: _notificationsStream,
       initialData: 0,
       builder: (context, notificationsSnap) {
+        TranslationScope.watch(context);
         final unreadCount = notificationsSnap.data ?? 0;
         return domlyTopBadgeIconButton(
           icon: Icons.notifications_none,

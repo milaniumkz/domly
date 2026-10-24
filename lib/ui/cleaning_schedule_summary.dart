@@ -1,3 +1,4 @@
+import 'package:domly/localization/translation_controller.dart';
 import 'package:flutter/material.dart';
 import '../theme/domly_palette.dart';
 
@@ -13,18 +14,18 @@ class CleaningScheduleSummary extends StatelessWidget {
   final double fontSize;
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(dateText,
-              softWrap: true,
-              style: TextStyle(
-                  color: DomlyPalette.foreground(const Color(0xFF2B4338)),
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.w700,
-                  height: 1.35)),
-          const SizedBox(height: 8),
-          status,
-        ],
-      );
+  Widget build(BuildContext context) {
+    TranslationScope.watch(context);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(dateText,
+          softWrap: true,
+          style: TextStyle(
+              color: DomlyPalette.foreground(const Color(0xFF2B4338)),
+              fontSize: fontSize,
+              fontWeight: FontWeight.w700,
+              height: 1.35)),
+      const SizedBox(height: 8),
+      status
+    ]);
+  }
 }

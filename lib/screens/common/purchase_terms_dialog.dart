@@ -18,8 +18,10 @@ Future<bool> showPurchaseTermsDialog(
     context: context,
     barrierDismissible: false,
     builder: (context) {
+      TranslationScope.watch(context);
       return StatefulBuilder(
         builder: (context, setState) {
+          TranslationScope.watch(context);
           final canProceed = acceptedConditions && acceptedOffer;
           return AlertDialog(
             shape: RoundedRectangleBorder(
@@ -40,8 +42,10 @@ Future<bool> showPurchaseTermsDialog(
                 children: [
                   Text(
                     packageName == null || packageName.isEmpty
-                        ? 'Перед отправкой заявки нужно согласиться с условиями и офертой.'
-                        : 'Перед отправкой заявки по пакету "$packageName" нужно согласиться с условиями и офертой.',
+                        ? "Перед отправкой заявки нужно согласиться с условиями и офертой."
+                            .tr()
+                        : "Перед отправкой заявки по пакету \"{p0}\" нужно согласиться с условиями и офертой."
+                            .tr(params: {'p0': (packageName).toString()}),
                     style: const TextStyle(fontSize: 12),
                   ),
                   const SizedBox(height: 16),

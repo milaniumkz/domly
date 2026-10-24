@@ -84,6 +84,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
               child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: _data.reviewsStream(),
                 builder: (context, snapshot) {
+                  TranslationScope.watch(context);
                   final reviews =
                       snapshot.data ?? const <Map<String, dynamic>>[];
                   final hasExistingReview = reviews.any(
@@ -136,6 +137,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
               child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: _data.reviewsStream(),
                 builder: (context, snapshot) {
+                  TranslationScope.watch(context);
                   final reviews =
                       snapshot.data ?? const <Map<String, dynamic>>[];
                   final existingReview = reviews
@@ -219,7 +221,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  traitsTitle,
+                                  (traitsTitle).tr(),
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,
@@ -237,7 +239,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                     );
                                     return FilterChip(
                                       label: Text(
-                                        trait,
+                                        (trait).tr(),
                                         style: const TextStyle(fontSize: 13),
                                       ),
                                       selected: selected,
@@ -368,6 +370,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 child: StreamBuilder<List<Map<String, dynamic>>>(
                   stream: _data.reviewsStream(),
                   builder: (context, snapshot) {
+                    TranslationScope.watch(context);
                     final reviews =
                         snapshot.data ?? const <Map<String, dynamic>>[];
                     final hasExistingReview = reviews.any(
@@ -587,7 +590,7 @@ class _ExistingReviewCard extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           Text(
-            summary,
+            summary.tr(),
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -611,7 +614,7 @@ class _ExistingReviewCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
-                        trait,
+                        (trait).tr(),
                         style: TextStyle(
                           fontSize: 12,
                           color:

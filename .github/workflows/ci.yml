@@ -114,6 +114,11 @@ jobs:
         /Users/dmitriyshtrakhov/flutter-sdk/flutter/bin/flutter --version --machine | python3 -c 'import json,sys; v=json.load(sys.stdin); assert v["frameworkVersion"] == "3.44.1" and v["dartSdkVersion"] == "3.12.1"'
     - run: flutter pub get ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && '--enforce-lockfile'
         || '' }}
+    - name: Verify generated UI text catalogue
+      run: |
+        (cd tool/ui_texts && dart pub get --enforce-lockfile)
+        dart --packages=tool/ui_texts/.dart_tool/package_config.json tool/ui_texts/generate.dart
+        git diff --exit-code -- lib/localization/default_translation_sources.dart backend/sql/ui_text_catalog.sql tool/ui_texts/catalog.json
     - run: flutter analyze --no-fatal-infos --no-fatal-warnings
     - run: flutter test
     - run: "./scripts/build_web_domly.sh"

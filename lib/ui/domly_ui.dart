@@ -263,6 +263,7 @@ class DomlyShell extends StatelessWidget {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: LayoutBuilder(
         builder: (context, constraints) {
+          TranslationScope.watch(context);
           final width =
               constraints.maxWidth > 430 ? 430.0 : constraints.maxWidth;
           return Container(
@@ -400,6 +401,7 @@ class DomlyClientBottomNav extends StatelessWidget {
       stream: FirestoreDataService.instance.userUnreadActivityCountStream(),
       initialData: 0,
       builder: (context, snapshot) {
+        TranslationScope.watch(context);
         return _DomlyBottomNavBar(
           currentIndex: currentIndex,
           items: [
@@ -464,6 +466,7 @@ class DomlyCleanerBottomNav extends StatelessWidget {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: data.userChatSummariesStream(),
       builder: (context, snapshot) {
+        TranslationScope.watch(context);
         final unread =
             (snapshot.data ?? const <Map<String, dynamic>>[]).fold<int>(
           0,
@@ -473,6 +476,7 @@ class DomlyCleanerBottomNav extends StatelessWidget {
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: data.cleanerScheduleSlotsStream(),
           builder: (context, slotSnapshot) {
+            TranslationScope.watch(context);
             final calendarAlerts =
                 (slotSnapshot.data ?? const <Map<String, dynamic>>[])
                     .where((slot) {
@@ -583,7 +587,11 @@ class _DomlyBottomNavBar extends StatelessWidget {
           child: SizedBox(
             width: double.infinity,
             child: Container(
-              height: math.max(66, 20 + MediaQuery.textScalerOf(context).scale(19) + MediaQuery.textScalerOf(context).scale(10) * 2.4),
+              height: math.max(
+                  66,
+                  20 +
+                      MediaQuery.textScalerOf(context).scale(19) +
+                      MediaQuery.textScalerOf(context).scale(10) * 2.4),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
               decoration: BoxDecoration(
                 color:
@@ -1281,6 +1289,7 @@ Widget domlyTopIconButton({
   Color background = const Color(0x33FFFFFF),
 }) {
   return Builder(builder: (context) {
+    TranslationScope.watch(context);
     if (icon == Icons.arrow_back &&
         !DomlyShell._shouldShowShellBackButton(context))
       return const SizedBox.shrink();

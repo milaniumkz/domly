@@ -225,7 +225,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 if (_errorText != null) ...[
                   const SizedBox(height: 16),
                   Text(
-                    _errorText!,
+                    (_errorText!).tr(),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 13,
@@ -271,7 +271,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         ),
         const SizedBox(height: 10),
         Text(
-          titleText,
+          (titleText).tr(),
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,

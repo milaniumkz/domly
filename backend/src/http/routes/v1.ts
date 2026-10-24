@@ -1160,7 +1160,7 @@ export function buildV1Router(deps: {
   }));
 
   router.get('/translations', asyncHandler(async (_req, res) => {
-    ok(res, (await deps.db.query(`SELECT key, ru, kk, namespace, updated_at FROM translations ORDER BY namespace, key`)).rows);
+    ok(res, (await deps.db.query(`SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key`)).rows);
   }));
 
   router.get('/content-pages', asyncHandler(async (req, res) => {
@@ -1248,7 +1248,7 @@ export function buildV1Router(deps: {
       `SELECT key, value, updated_at FROM app_settings ORDER BY key`,
     )).rows;
     const settings = settingsRows.reduce((acc: Record<string, unknown>, row) => ({ ...acc, [row.key]: row.value }), {});
-    const translations = (await deps.db.query(`SELECT key, ru, kk, namespace, updated_at FROM translations ORDER BY namespace, key`)).rows;
+    const translations = (await deps.db.query(`SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key`)).rows;
     const packages = (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows;
     const addonGroups = (await deps.db.query(`SELECT * FROM addon_groups WHERE active=TRUE ORDER BY sort_order`)).rows;
     const addons = (await deps.db.query(
@@ -3799,7 +3799,7 @@ export function buildV1Router(deps: {
     const search = req.query.search ? `%${String(req.query.search)}%` : null;
     const { limit, offset } = pageParams(req.query);
     ok(res, (await deps.db.query(
-      `SELECT key, ru, kk, namespace, updated_at,
+      `SELECT key, ru, kk, source, locations, namespace, updated_at,
               (kk IS NULL OR btrim(kk)='') AS missing_kk
        FROM translations
        WHERE ($1::text IS NULL OR namespace=$1)
@@ -3808,7 +3808,7 @@ export function buildV1Router(deps: {
          OR ($2='kk' AND (kk IS NULL OR btrim(kk)=''))
          OR ($2='any' AND (ru IS NULL OR btrim(ru)='' OR kk IS NULL OR btrim(kk)=''))
        )
-       AND ($3::text IS NULL OR key ILIKE $3 OR ru ILIKE $3 OR kk ILIKE $3)
+       AND ($3::text IS NULL OR key ILIKE $3 OR ru ILIKE $3 OR kk ILIKE $3 OR source ILIKE $3)
        ORDER BY namespace, key
        LIMIT $4 OFFSET $5`,
       [namespace, missing, search, limit, offset],
@@ -3829,12 +3829,25 @@ export function buildV1Router(deps: {
     ok(res, rows);
   }));
 
+  function validateTextParameters(source: string, value: unknown) {
+    if (value == null || value === '') return;
+    const parameters = (s: string) => [...new Set(s.match(/\{[A-Za-z][A-Za-z0-9_]*\}/g) ?? [])].sort().join('|');
+    if (typeof value !== 'string' || parameters(source) !== parameters(value)) {
+      throw new ApiError(400, 'invalid_translation_parameters', 'Сохраните все параметры исходного текста в фигурных скобках.');
+    }
+  }
   router.post('/admin/translations', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    const existing = first((await deps.db.query('SELECT source FROM translations WHERE key=$1', [req.body.key])).rows);
+    const source = existing?.source ?? req.body.source ?? req.body.ru;
+    if (typeof source !== 'string' || !source.trim() || typeof req.body.ru !== 'string' || !req.body.ru.trim())
+      throw new ApiError(400, 'invalid_request', 'Заполните исходный и русский текст.');
+    validateTextParameters(source, req.body.ru);
+    validateTextParameters(source, req.body.kk);
     const row = first((await deps.db.query(
-      `INSERT INTO translations (key, ru, kk, namespace, updated_at) VALUES ($1,$2,$3,$4,NOW())
-       ON CONFLICT (key) DO UPDATE SET ru=$2, kk=$3, namespace=$4, updated_at=NOW()
+      `INSERT INTO translations (key, ru, kk, namespace, source, updated_at) VALUES ($1,$2,$3,$4,$5,NOW())
+       ON CONFLICT (key) DO UPDATE SET ru=$2, kk=$3, namespace=$4, source=COALESCE(translations.source,$5), updated_at=NOW()
        RETURNING *`,
-      [req.body.key, req.body.ru, req.body.kk ?? null, req.body.namespace ?? 'app'],
+      [req.body.key, req.body.ru, req.body.kk ?? null, req.body.namespace ?? 'app', source],
     )).rows);
     ok(res, row);
   }));
@@ -3842,6 +3855,13 @@ export function buildV1Router(deps: {
   router.post('/admin/translations/bulk', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const items = Array.isArray(req.body.items) ? req.body.items : [];
     if (items.length === 0) throw new ApiError(400, 'invalid_request', 'Передайте список переводов.');
+    const sources = new Map((await deps.db.query('SELECT key, source FROM translations WHERE key=ANY($1::text[])', [items.map((item: any) => item.key)])).rows.map((row: any) => [row.key, row.source]));
+    for (const item of items) {
+      const source = sources.get(item.key) ?? item.source ?? item.ru;
+      if (typeof source !== 'string') throw new ApiError(400, 'invalid_request', 'Заполните исходный текст.');
+      validateTextParameters(source, item.ru);
+      validateTextParameters(source, item.kk);
+    }
     const rows = [];
     for (const item of items) {
       if (!item.key || !item.ru) throw new ApiError(400, 'invalid_request', 'У каждого перевода должны быть key и ru.');

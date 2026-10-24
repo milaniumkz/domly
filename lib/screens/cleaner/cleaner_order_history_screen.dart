@@ -110,7 +110,7 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
           padding: const EdgeInsets.symmetric(vertical: 10),
           alignment: Alignment.center,
           child: Text(
-            labels[period]!,
+            (labels[period]!).tr(),
             style: TextStyle(
               color: DomlyPalette.foreground(
                   selected ? Colors.white : DomlyColors.muted),
@@ -127,6 +127,7 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _data.cleanerOrdersStream(),
       builder: (context, snap) {
+        TranslationScope.watch(context);
         if (snap.hasError) {
           return const Center(
             child: Padding(
@@ -311,7 +312,7 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _statusLabel(status),
+                      (_statusLabel(status)).tr(),
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,

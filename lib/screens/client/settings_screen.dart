@@ -58,6 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _data.customerSettingsStream(),
       builder: (context, snap) {
+        TranslationScope.watch(context);
         if (snap.hasError) {
           return DomlyShell(
             bottomNavigationBar: DomlyClientBottomNav(currentIndex: 4),
@@ -273,6 +274,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) {
+        TranslationScope.watch(context);
         return SafeArea(
           child: Container(
             margin: EdgeInsets.all(12),
@@ -671,7 +673,7 @@ class _AboutAppCard extends StatelessWidget {
           ),
           SizedBox(height: 3),
           Text(
-            'Domly 1.0.0',
+            "Domly 1.0.0".tr(),
             style: TextStyle(
               color: DomlyPalette.foreground(_SettingsScreenState._foreground),
               fontSize: 14,

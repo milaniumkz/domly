@@ -9441,6 +9441,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                             '${_dictionaryLocale.toUpperCase()}: ${currentTranslation.isEmpty ? '—' : currentTranslation}',
                             style: const TextStyle(color: Color(0xFF6B7280)),
                           ),
+                          if ((data['locations'] as List?)?.isNotEmpty == true)
+                            Text('Где используется: ${((data['locations'] as List).map((path) => path.toString().contains('/client/') ? 'Заказчик' : path.toString().contains('/cleaner/') ? 'Pro' : 'Общие экраны').toSet().toList()..sort()).join(', ')}',
+                              style: const TextStyle(color: Color(0xFF6B7280))),
                           const SizedBox(height: 12),
                           Row(
                             children: [
@@ -14431,6 +14434,12 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 );
                 return;
               }
+              if (!TranslationController.validParameters(normalizedSource, ruValue) ||
+                  (kkController.text.trim().isNotEmpty && !TranslationController.validParameters(normalizedSource, kkController.text))) {
+                showDomlySnackBar(context, title: 'Сохраните параметры текста',
+                  subtitle: 'Параметры в фигурных скобках должны совпадать с исходным текстом.', type: DomlySnackBarType.error);
+                return;
+              }
               final key = docId ??
                   TranslationController.translationKey(normalizedSource);
               final locales = <String, dynamic>{
@@ -14438,11 +14447,13 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 if (kkController.text.trim().isNotEmpty)
                   'kk': kkController.text.trim(),
               };
-              await _data.saveAdminTranslation(
-                key: key,
-                source: normalizedSource,
-                locales: locales,
-              );
+              try {
+                await _data.saveAdminTranslation(key: key, source: normalizedSource, locales: locales);
+              } catch (error) {
+                if (context.mounted) showDomlySnackBar(context, title: 'Не удалось сохранить текст',
+                  subtitle: error.toString(), type: DomlySnackBarType.error);
+                return;
+              }
               if (!mounted) {
                 return;
               }

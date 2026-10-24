@@ -43,6 +43,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
               child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: _payments,
                 builder: (context, paymentsSnap) {
+                  TranslationScope.watch(context);
                   if (paymentsSnap.hasError) {
                     return const _PaymentHistoryError();
                   }

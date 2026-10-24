@@ -40,14 +40,16 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
   @override
   void initState() {
     super.initState();
-    _content = AppConfigService.instance.infoContentStreamByKey(widget.contentKey);
+    _content =
+        AppConfigService.instance.infoContentStreamByKey(widget.contentKey);
   }
 
   @override
   void didUpdateWidget(covariant LegalDocumentScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.contentKey != widget.contentKey) {
-      _content = AppConfigService.instance.infoContentStreamByKey(widget.contentKey);
+      _content =
+          AppConfigService.instance.infoContentStreamByKey(widget.contentKey);
     }
   }
 
@@ -72,6 +74,7 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
                 child: StreamBuilder<Map<String, dynamic>?>(
                   stream: _content,
                   builder: (context, snapshot) {
+                    TranslationScope.watch(context);
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
                     }
@@ -79,12 +82,14 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
                       return Center(
                         child: Padding(
                           padding: const EdgeInsets.all(24),
-                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
                             Text('Не удалось загрузить документ'.tr()),
                             const SizedBox(height: 12),
                             FilledButton(
                               onPressed: () => setState(() {
-                                _content = AppConfigService.instance.infoContentStreamByKey(widget.contentKey);
+                                _content = AppConfigService.instance
+                                    .infoContentStreamByKey(widget.contentKey);
                               }),
                               child: Text('Попробовать снова'.tr()),
                             ),
@@ -96,83 +101,84 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
                     final title = _read(data, 'title', widget.fallback.title);
                     final shortInfo =
                         _read(data, 'shortInfo', widget.fallback.shortInfo);
-                    final fullInfo = _read(data, 'fullInfo', widget.fallback.fullInfo);
+                    final fullInfo =
+                        _read(data, 'fullInfo', widget.fallback.fullInfo);
                     return Scrollbar(
                       controller: _scrollController,
                       thumbVisibility: true,
                       child: SingleChildScrollView(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(24, 72, 24, 24),
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: DomlyPalette.surface(Colors.white),
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
-                              blurRadius: 24,
-                              offset: const Offset(0, 12),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title.tr(),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .headlineSmall
-                                  ?.copyWith(
-                                    color: DomlyPalette.foreground(
-                                        AppTheme.darkText),
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                            ),
-                            if (shortInfo.isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              Text(
-                                shortInfo,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      color: DomlyPalette.foreground(
-                                          AppTheme.mutedText),
-                                      height: 1.45,
-                                    ),
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(24, 72, 24, 24),
+                        child: Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: DomlyPalette.surface(Colors.white),
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.08),
+                                blurRadius: 24,
+                                offset: const Offset(0, 12),
                               ),
                             ],
-                            const SizedBox(height: 22),
-                            for (final section
-                                in legalDocumentSections(fullInfo)) ...[
-                              if (section.heading != null) ...[
-                                SelectableText(section.heading!,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                            color: DomlyPalette.foreground(
-                                                AppTheme.darkText),
-                                            fontWeight: FontWeight.w800,
-                                            height: 1.4)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title.tr(),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(
+                                      color: DomlyPalette.foreground(
+                                          AppTheme.darkText),
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                              if (shortInfo.isNotEmpty) ...[
                                 const SizedBox(height: 10),
+                                Text(
+                                  shortInfo,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: DomlyPalette.foreground(
+                                            AppTheme.mutedText),
+                                        height: 1.45,
+                                      ),
+                                ),
                               ],
-                              if (section.body.isNotEmpty)
-                                SelectableText(section.body,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.copyWith(
-                                            color: DomlyPalette.foreground(
-                                                AppTheme.darkText),
-                                            height: 1.6)),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 22),
+                              for (final section
+                                  in legalDocumentSections(fullInfo)) ...[
+                                if (section.heading != null) ...[
+                                  SelectableText(section.heading!,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                              color: DomlyPalette.foreground(
+                                                  AppTheme.darkText),
+                                              fontWeight: FontWeight.w800,
+                                              height: 1.4)),
+                                  const SizedBox(height: 10),
+                                ],
+                                if (section.body.isNotEmpty)
+                                  SelectableText(section.body,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                              color: DomlyPalette.foreground(
+                                                  AppTheme.darkText),
+                                              height: 1.6)),
+                                const SizedBox(height: 24),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
                       ),
                     );
                   },

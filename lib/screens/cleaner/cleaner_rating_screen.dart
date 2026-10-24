@@ -23,6 +23,7 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _data.cleanerProfileStream(),
       builder: (context, profileSnap) {
+        TranslationScope.watch(context);
         if (profileSnap.hasError) {
           return const DomlyShell(
             bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 4),
@@ -66,6 +67,7 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
                   child: StreamBuilder<List<Map<String, dynamic>>>(
                     stream: _data.reviewsForCleanerStream(),
                     builder: (context, reviewsSnap) {
+                      TranslationScope.watch(context);
                       if (reviewsSnap.hasError) {
                         return const Center(
                           child: Padding(
@@ -470,7 +472,7 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
               children: traits
                   .map(
                     (t) => Chip(
-                      label: Text(t, style: const TextStyle(fontSize: 11)),
+                      label: Text(t.tr(), style: const TextStyle(fontSize: 11)),
                       padding: EdgeInsets.zero,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       backgroundColor: DomlyPalette.surface(

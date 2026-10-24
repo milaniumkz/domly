@@ -29,9 +29,11 @@ class CleanerProfileScreen extends StatelessWidget {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: config.workerBonusConfigStream(),
       builder: (context, configSnap) {
+        TranslationScope.watch(context);
         return StreamBuilder<Map<String, dynamic>?>(
           stream: data.cleanerProfileStream(),
           builder: (context, snap) {
+            TranslationScope.watch(context);
             if (snap.hasError) {
               return const DomlyShell(
                 bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 4),
@@ -151,7 +153,8 @@ class CleanerProfileScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 10),
                                 Text(
-                                  (profile['name'] ?? 'Исполнитель').toString(),
+                                  (profile['name'] ?? "Исполнитель".tr())
+                                      .toString(),
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 15,
@@ -186,7 +189,7 @@ class CleanerProfileScreen extends StatelessWidget {
                                 if (progressText.isNotEmpty) ...[
                                   const SizedBox(height: 8),
                                   Text(
-                                    progressText,
+                                    (progressText).tr(),
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: 12,
@@ -435,7 +438,7 @@ class CleanerProfileScreen extends StatelessWidget {
                                           ),
                                           const SizedBox(height: 8),
                                           Text(
-                                            progressText,
+                                            (progressText).tr(),
                                             style: TextStyle(
                                               fontSize: 13,
                                               color: DomlyPalette.foreground(
@@ -724,6 +727,7 @@ class CleanerProfileScreen extends StatelessWidget {
       context: context,
       showDragHandle: true,
       builder: (context) {
+        TranslationScope.watch(context);
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -741,7 +745,9 @@ class CleanerProfileScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  subtitle.isEmpty ? 'Данные будут добавлены позже.' : subtitle,
+                  subtitle.isEmpty
+                      ? "Данные будут добавлены позже.".tr()
+                      : subtitle,
                   style: TextStyle(
                     fontSize: 13,
                     height: 1.45,
@@ -1066,7 +1072,7 @@ class CleanerProfileScreen extends StatelessWidget {
                         if (errorText != null) ...[
                           const SizedBox(height: 12),
                           Text(
-                            errorText!,
+                            (errorText!).tr(),
                             style: TextStyle(
                               color:
                                   DomlyPalette.foreground(DomlyColors.danger),
@@ -1228,9 +1234,11 @@ class CleanerProfileScreen extends StatelessWidget {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) {
+        TranslationScope.watch(context);
         var saving = false;
         return StatefulBuilder(
           builder: (context, setModalState) {
+            TranslationScope.watch(context);
             return Padding(
               padding: EdgeInsets.only(
                 left: 24,

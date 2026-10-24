@@ -9,7 +9,11 @@ import '../../utils/user_error_message.dart';
 import 'kaspi_invoice_request_dialog.dart';
 
 class OrderPaymentRetry extends StatefulWidget {
-  const OrderPaymentRetry({super.key, required this.order, required this.data, this.loadBonusOptions});
+  const OrderPaymentRetry(
+      {super.key,
+      required this.order,
+      required this.data,
+      this.loadBonusOptions});
   final Map<String, dynamic> order;
   final FirestoreDataService data;
   final Future<Map<String, int>> Function()? loadBonusOptions;
@@ -25,10 +29,17 @@ class _OrderPaymentRetryState extends State<OrderPaymentRetry> {
     if (!_retryingPayments.add(id)) return;
     try {
       final amount = (order['payableAmount'] as num? ?? 0).toInt();
-      final options = widget.loadBonusOptions != null ? await widget.loadBonusOptions!() : {
-        'balance': ((await widget.data.customerProfileStream().first)?['bonusPoints'] as num? ?? 0).toInt(),
-        'limit': addonBonusSpendLimit(amount, await AppConfigService.instance.promotionsStream().first),
-      };
+      final options = widget.loadBonusOptions != null
+          ? await widget.loadBonusOptions!()
+          : {
+              'balance': ((await widget.data
+                          .customerProfileStream()
+                          .first)?['bonusPoints'] as num? ??
+                      0)
+                  .toInt(),
+              'limit': addonBonusSpendLimit(amount,
+                  await AppConfigService.instance.promotionsStream().first),
+            };
       if (!mounted) return;
       final method = await showPaymentMethodOptionsDialog(context,
           bonusBalance: options['balance'] ?? 0,
@@ -37,7 +48,11 @@ class _OrderPaymentRetryState extends State<OrderPaymentRetry> {
           alreadyPaidBonus: (order['bonusSpent'] as num? ?? 0).toInt());
       if (!mounted || method == null) return;
       final bonus = method.method == DomlyPaymentMethod.bonus || method.useBonus
-          ? (options['balance'] ?? 0).clamp(0, options['limit'] ?? 0).clamp(0, amount).toInt() : 0;
+          ? (options['balance'] ?? 0)
+              .clamp(0, options['limit'] ?? 0)
+              .clamp(0, amount)
+              .toInt()
+          : 0;
       String? phone;
       if (method.method == DomlyPaymentMethod.kaspi) {
         phone = await showKaspiInvoiceRequestDialog(context);
@@ -48,11 +63,15 @@ class _OrderPaymentRetryState extends State<OrderPaymentRetry> {
               orderId: id,
               provider:
                   method.method == DomlyPaymentMethod.online ? 'bcc' : 'kaspi',
-              invoicePhone: phone, bonusToSpend: bonus),
+              invoicePhone: phone,
+              bonusToSpend: bonus),
           message: 'Создаём новый платёж...');
       if (!mounted) return;
       if ((result['payableAmount'] as num? ?? 0) == 0) {
-        showDomlySnackBar(context, title: 'Оплата подтверждена', subtitle: 'Оплачено бонусами', type: DomlySnackBarType.success);
+        showDomlySnackBar(context,
+            title: 'Оплата подтверждена',
+            subtitle: 'Оплачено бонусами',
+            type: DomlySnackBarType.success);
       } else if (method.method == DomlyPaymentMethod.online) {
         final payment = result['payment'] as Map;
         final session = await widget.data
@@ -80,8 +99,10 @@ class _OrderPaymentRetryState extends State<OrderPaymentRetry> {
 
   @override
   Widget build(BuildContext context) {
+    TranslationScope.watch(context);
     final status = widget.order['latestPaymentStatus'];
-    if (![null, 'draft', 'cancelled', 'rejected', 'failed', 'pending'].contains(status) ||
+    if (![null, 'draft', 'cancelled', 'rejected', 'failed', 'pending']
+            .contains(status) ||
         widget.order['orderStatus'] != 'pending_payment')
       return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

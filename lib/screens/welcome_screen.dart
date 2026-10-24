@@ -110,7 +110,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 FadeTransition(
                   opacity: _fadeAnimation,
                   child: Text(
-                    'DOMLY',
+                    "DOMLY".tr(),
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -124,6 +124,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     child: AnimatedBuilder(
                       animation: _controller,
                       builder: (context, child) {
+                        TranslationScope.watch(context);
                         final scale = 0.82 + (_scaleAnimation.value * 0.18);
                         return Transform.translate(
                           offset: Offset(0, _floatAnimation.value - 8),
