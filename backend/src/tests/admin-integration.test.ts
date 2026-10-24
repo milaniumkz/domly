@@ -488,6 +488,34 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM app_users WHERE id=$1',[other]);
       }
     });
+    await t.test('admin user page counts do not multiply all orders by all payments',async()=>{
+      const marker='listing-work-'+randomUUID();
+      const users=[randomUUID(),randomUUID(),randomUUID()];
+      const query=db.query.bind(db); let captured:any;
+      try {
+        for(const id of users) {
+          await query("INSERT INTO app_users(id,phone,role,full_name) VALUES($1,$1,'customer',$2)",[id,marker]);
+          await query("INSERT INTO service_orders(customer_id,scheduled_date,start_time,end_time,status) SELECT $1,'2035-01-01','08:00','10:00','cancelled' FROM generate_series(1,40)",[id]);
+          await query("INSERT INTO payments(customer_id,provider,status,amount) SELECT $1,'kaspi','paid',100 FROM generate_series(1,40)",[id]);
+        }
+        db.query=async(text:string,values?:unknown[])=>{
+          if(text.includes('AS payments_count')) captured={text,values};
+          return query(text,values);
+        };
+        const page=await request('/admin/users?search='+marker+'&limit=1');
+        assert.equal(page.status,200);assert.equal(page.json.data.length,1);
+        assert.equal(page.json.data[0].orders_count,40);assert.equal(page.json.data[0].payments_count,40);
+        assert.ok(captured);
+        const plan=(await query('EXPLAIN (ANALYZE,FORMAT JSON) '+captured.text,captured.values)).rows[0]['QUERY PLAN'][0].Plan;
+        const maxRows=(node:any):number=>Math.max(Number(node['Actual Rows'])*Number(node['Actual Loops']),...(node.Plans??[]).map(maxRows),0);
+        assert.ok(maxRows(plan)<500,'one user page must not materialize thousands of order/payment combinations');
+      } finally {
+        db.query=query;
+        await query('DELETE FROM payments WHERE customer_id=ANY($1::uuid[])',[users]);
+        await query('DELETE FROM service_orders WHERE customer_id=ANY($1::uuid[])',[users]);
+        await query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[users]);
+      }
+    });
     await t.test('payment tabs include older matching payments beyond the first page',async()=>{
       const marker='payment-page-'+randomUUID();
       const ids=Array.from({length:64},()=>randomUUID());
