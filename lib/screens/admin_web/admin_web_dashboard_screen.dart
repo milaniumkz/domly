@@ -1,3 +1,4 @@
+import '../../utils/admin_date_time.dart';
 import '../../utils/payment_approval_data.dart';
 import 'dart:math' as math;
 
@@ -3758,23 +3759,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
   }
 
-  String _formatDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return domlyDateTimeText(value.toDate().toLocal());
-    }
-    return '—';
-  }
+  String _formatDateTime(dynamic value) => formatAdminDateTime(value);
 
-  String _formatAdminDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return domlyDateTimeText(value.toDate().toLocal());
-    }
-    final parsed = DateTime.tryParse((value ?? '').toString());
-    if (parsed != null) {
-      return domlyDateTimeText(parsed.toLocal());
-    }
-    return '—';
-  }
+  String _formatAdminDateTime(dynamic value) => formatAdminDateTime(value);
 
   String _firstAdminDateTime(Map<String, dynamic> data, List<String> keys) {
     for (final key in keys) {
