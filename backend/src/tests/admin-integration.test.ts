@@ -494,7 +494,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       const query=db.query.bind(db); let captured:any;
       try {
         for(const id of users) {
-          await query("INSERT INTO app_users(id,phone,role,full_name) VALUES($1,$1,'customer',$2)",[id,marker]);
+          await query("INSERT INTO app_users(id,phone,role,full_name) VALUES($1,$2,'customer',$3)",[id,id,marker]);
           await query("INSERT INTO service_orders(customer_id,scheduled_date,start_time,end_time,status) SELECT $1,'2035-01-01','08:00','10:00','cancelled' FROM generate_series(1,40)",[id]);
           await query("INSERT INTO payments(customer_id,provider,status,amount) SELECT $1,'kaspi','paid',100 FROM generate_series(1,40)",[id]);
         }
