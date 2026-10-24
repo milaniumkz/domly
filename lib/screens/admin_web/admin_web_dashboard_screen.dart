@@ -13094,7 +13094,6 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     int.tryParse(weeklyCooldownController.text.trim()) ?? 7,
                 'cleanerFullCashoutCooldownDays':
                     int.tryParse(fullCooldownController.text.trim()) ?? 30,
-                'updatedAt': FieldValue.serverTimestamp(),
               });
               if (!mounted) return;
               navigator.pop();

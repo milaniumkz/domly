@@ -13490,28 +13490,8 @@ class FirestoreDataService {
       return;
     }
     await BackendApiService.instance.postMap(
-      '/admin/content-pages',
-      body: {
-        'slug': 'privacy',
-        'titleRu': data['privacyTitle'] ?? 'Политика конфиденциальности',
-        'titleKk': data['privacyTitleKk'],
-        'bodyRu': data['privacy'] ?? data['privacyRu'] ?? '',
-        'bodyKk': data['privacyKk'],
-        'kind': 'privacy',
-        'active': true,
-      },
-    );
-    await BackendApiService.instance.postMap(
-      '/admin/content-pages',
-      body: {
-        'slug': 'offer',
-        'titleRu': data['offerTitle'] ?? 'Публичная оферта',
-        'titleKk': data['offerTitleKk'],
-        'bodyRu': data['offer'] ?? data['offerRu'] ?? '',
-        'bodyKk': data['offerKk'],
-        'kind': 'offer',
-        'active': true,
-      },
+      '/admin/settings',
+      body: {'settings': data},
     );
   }
 
