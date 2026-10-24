@@ -510,6 +510,14 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal(waiting.items[0].id,ids[60]);
         const all=(await request('/admin/payment-history?search='+marker+'&limit=100')).json.data;
         assert.equal(all.items.length,64);
+        const oldest=(await request('/admin/payment-history?search='+marker+'&sort=asc&limit=1')).json.data;
+        assert.equal(oldest.items[0].id,ids[63]);
+        const future=encodeURIComponent(new Date(Date.now()+86400000).toISOString());
+        const empty=(await request('/admin/payment-history?search='+marker+'&dateFrom='+future)).json.data;
+        assert.equal(empty.total,0); assert.deepEqual(empty.items,[]);
+        for (const query of ['limit=0','limit=1.5','limit=2147483648','sort=invalid','dateFrom=invalid']) {
+          assert.equal((await request('/admin/payment-history?'+query)).status,400);
+        }
         assert.equal((await request('/admin/payment-history?tab=invalid')).status,400);
         assert.equal((await request('/admin/payment-history','GET',undefined,true)).status,403);
       } finally {
