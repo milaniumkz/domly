@@ -65,7 +65,7 @@ test('durable delivery retries push errors returned by the provider',async()=>{
 
 test('invalid device tokens are disabled rather than retried forever',async()=>{
  const {sendLocalizedPush}=await import('../localization');let disabled:string[]=[];
- const db={query:async(sql:string,args:any[])=>{if(sql.startsWith('UPDATE device_tokens')){disabled=args[0];return {rows:[]}}return {rows:[{token:'expired-token',language:'ru'}]}} as any;
+ const db={query:async(sql:string,args:any[])=>{if(sql.startsWith('UPDATE device_tokens')){disabled=args[0];return {rows:[]}}return {rows:[{token:'expired-token',language:'ru'}]}}} as any;
  await sendLocalizedPush(db,{send:async()=>({sent:0,failed:1,retryableFailed:0,invalidTokens:['expired-token']})},{userId:'test',titleRu:'Тест',bodyRu:'Тест'},{},{requireDelivery:true});
  assert.deepEqual(disabled,['expired-token']);
 });
