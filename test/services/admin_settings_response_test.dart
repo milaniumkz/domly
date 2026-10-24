@@ -25,7 +25,7 @@ void main() {
   test('a rejected settings update is not treated as saved', () async {
     final store = SessionStore(surface: SessionSurface.admin);
     await store.saveBackendSession(const BackendSession(accessToken: 'admin-test', refreshToken: 'refresh', userId: 'admin', role: 'superadmin'));
-    final api = BackendApiService.forTesting(sessionStore: store, client: MockClient((_) async => http.Response(jsonEncode({'ok':false,'error':{'code':'forbidden','message':'Недостаточно прав'}}),403)));
+    final api = BackendApiService.forTesting(sessionStore: store, client: MockClient((_) async => http.Response(jsonEncode({'ok':false,'error':{'code':'forbidden','message':'Недостаточно прав'}}),403, headers: {'content-type': 'application/json; charset=utf-8'})));
     await expectLater(api.postList('/admin/settings', body: {'settings': {}}), throwsA(isA<BackendApiException>().having((e)=>e.statusCode,'status',403)));
   });
 }
