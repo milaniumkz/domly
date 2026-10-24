@@ -5,6 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('TranslationController', () {
+    test('editable Russian and Kazakh templates keep live amounts', () async {
+      final controller = TranslationController.forTesting();
+      controller.debugSetTranslations({'К оплате: {p1} ₸': {'ru':'Сумма счёта: {p1} ₸','kk':'Шот сомасы: {p1} ₸'}});
+      expect(controller.translate('К оплате: 4000 ₸'), 'Сумма счёта: 4000 ₸');
+      await controller.setLocale('kk');
+      expect(controller.translate('К оплате: 4000 ₸'), 'Шот сомасы: 4000 ₸');
+      controller.dispose();
+    });
+
     test('normalizes source and generates stable keys', () {
       final keyA = TranslationController.translationKey('Заказать   уборку');
       final keyB = TranslationController.translationKey('Заказать уборку');

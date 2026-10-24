@@ -32,6 +32,7 @@ class TranslationController extends ChangeNotifier {
   Timer? _pollingTimer;
   Map<String, _TranslationEntry> _entries = const <String, _TranslationEntry>{};
   String _localeCode = 'ru';
+  final Map<String, List<_TranslationTemplate>> _editableTemplates = {};
   bool _isReady = false;
 
   bool get isReady => _isReady;
@@ -61,7 +62,8 @@ class TranslationController extends ChangeNotifier {
           final key = (row['key'] ?? '').toString().trim().isNotEmpty
               ? row['key'].toString()
               : translationKey(entry.source);
-          nextEntries[key] = entry;
+          final original = nextEntries[key]?.source ?? entry.source;
+          nextEntries[key] = _TranslationEntry(source: original, locales: entry.locales);
         }
         final changed = nextEntries.length != _entries.length ||
             nextEntries.entries.any((item) {
@@ -71,6 +73,7 @@ class TranslationController extends ChangeNotifier {
                   !mapEquals(old.locales, item.value.locales);
             });
         _entries = nextEntries;
+        if (changed) _editableTemplates.clear();
         _isReady = true;
         if (changed) notifyListeners();
       } catch (_) {
@@ -107,6 +110,7 @@ class TranslationController extends ChangeNotifier {
         _TranslationEntry(source: normalized, locales: locales),
       );
     });
+    _editableTemplates.clear();
     _active = this;
     _isReady = true;
     notifyListeners();
@@ -121,6 +125,7 @@ class TranslationController extends ChangeNotifier {
     final entry = _entries[key];
     final translated = entry?.locales[_localeCode] ??
         kBuiltinTranslations[normalized]?[_localeCode] ??
+        _translateEditableTemplate(normalized) ??
         (_localeCode == 'kk'
             ? kKazakhTranslations[normalized] ?? _translateTemplate(normalized)
             : null) ??
@@ -204,6 +209,23 @@ class TranslationController extends ChangeNotifier {
       result = result.replaceAll('{$key}', value);
     });
     return result;
+  }
+
+  String? _translateEditableTemplate(String source) {
+    final templates = _editableTemplates.putIfAbsent(_localeCode, () => _entries.values
+        .where((entry) => RegExp(r'\{p\d+\}').hasMatch(entry.source) && entry.locales[_localeCode] != null)
+        .map((entry) => _TranslationTemplate(entry.source, entry.locales[_localeCode]!))
+        .toList()..sort((a, b) => b.literalLength.compareTo(a.literalLength)));
+    for (final template in templates) {
+      final match = template.pattern.firstMatch(source);
+      if (match == null) continue;
+      var result = template.translation;
+      for (var i = 0; i < template.parameters.length; i++) {
+        result = result.replaceAll(template.parameters[i], match.group(i + 1)!);
+      }
+      return result;
+    }
+    return null;
   }
 
   static String? _translateTemplate(String source) {

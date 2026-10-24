@@ -6,7 +6,7 @@ import '../../localization/translation_controller.dart';
 import '../../services/app_config_service.dart';
 import '../../theme/app_theme.dart';
 
-class LegalDocumentScreen extends StatelessWidget {
+class LegalDocumentScreen extends StatefulWidget {
   const LegalDocumentScreen({
     super.key,
     required this.contentKey,
@@ -30,6 +30,34 @@ class LegalDocumentScreen extends StatelessWidget {
       );
 
   @override
+  State<LegalDocumentScreen> createState() => _LegalDocumentScreenState();
+}
+
+class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
+  final _scrollController = ScrollController();
+  late Stream<Map<String, dynamic>?> _content;
+
+  @override
+  void initState() {
+    super.initState();
+    _content = AppConfigService.instance.infoContentStreamByKey(widget.contentKey);
+  }
+
+  @override
+  void didUpdateWidget(covariant LegalDocumentScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.contentKey != widget.contentKey) {
+      _content = AppConfigService.instance.infoContentStreamByKey(widget.contentKey);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     DomlyPalette.watch(context);
 
@@ -42,15 +70,38 @@ class LegalDocumentScreen extends StatelessWidget {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 820),
                 child: StreamBuilder<Map<String, dynamic>?>(
-                  stream: AppConfigService.instance
-                      .infoContentStreamByKey(contentKey),
+                  stream: _content,
                   builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError && !snapshot.hasData) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text('Не удалось загрузить документ'.tr()),
+                            const SizedBox(height: 12),
+                            FilledButton(
+                              onPressed: () => setState(() {
+                                _content = AppConfigService.instance.infoContentStreamByKey(widget.contentKey);
+                              }),
+                              child: Text('Попробовать снова'.tr()),
+                            ),
+                          ]),
+                        ),
+                      );
+                    }
                     final data = snapshot.data;
-                    final title = _read(data, 'title', fallback.title);
+                    final title = _read(data, 'title', widget.fallback.title);
                     final shortInfo =
-                        _read(data, 'shortInfo', fallback.shortInfo);
-                    final fullInfo = _read(data, 'fullInfo', fallback.fullInfo);
-                    return SingleChildScrollView(
+                        _read(data, 'shortInfo', widget.fallback.shortInfo);
+                    final fullInfo = _read(data, 'fullInfo', widget.fallback.fullInfo);
+                    return Scrollbar(
+                      controller: _scrollController,
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                      controller: _scrollController,
                       padding: const EdgeInsets.fromLTRB(24, 72, 24, 24),
                       child: Container(
                         padding: const EdgeInsets.all(24),
@@ -121,6 +172,7 @@ class LegalDocumentScreen extends StatelessWidget {
                             ],
                           ],
                         ),
+                      ),
                       ),
                     );
                   },

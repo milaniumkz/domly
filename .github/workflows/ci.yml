@@ -42,7 +42,7 @@ jobs:
         test -n "$DOMLY_INTEGRATION_DATABASE_URL"
         # Scheduler tests inspect all approved cleaners; test files share one DB.
         # Keep files isolated in time; explicit concurrency regressions still run.
-        node --test --test-concurrency=1 dist/tests/admin-integration.test.js dist/tests/catalog-migration.test.js dist/tests/mobile-integration.test.js dist/tests/technical-integration.test.js dist/tests/customer-progress.test.js dist/tests/slot-counts.test.js dist/tests/bonus-atomicity.test.js dist/tests/idempotency-recovery.test.js
+        node --test --test-concurrency=1 dist/tests/admin-integration.test.js dist/tests/catalog-migration.test.js dist/tests/mobile-integration.test.js dist/tests/technical-integration.test.js dist/tests/customer-progress.test.js dist/tests/slot-counts.test.js dist/tests/bonus-atomicity.test.js dist/tests/idempotency-recovery.test.js dist/tests/bonus-recovery.test.js dist/tests/notification-delivery-latency.test.js dist/tests/order-lost-response.test.js
   backend-unit:
     runs-on: ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && (github.ref == 'refs/heads/main'
       || github.ref == 'refs/heads/codex/full-ci-pilot') && fromJSON('["milanium-mac-arm64",
@@ -77,13 +77,13 @@ jobs:
       run: |
         python3 - <<'PYCODE'
         from pathlib import Path
-        expected={'backend-core.test.ts','bcc.test.ts','cleaner-status.test.ts','scheduler.test.ts','admin-integration.test.ts','catalog-migration.test.ts','mobile-integration.test.ts','technical-integration.test.ts','customer-progress.test.ts','slot-counts.test.ts','auth-key.test.ts','password-crypto.test.ts','bonus-atomicity.test.ts','idempotency-recovery.test.ts'}
+        expected={'backend-core.test.ts','bcc.test.ts','cleaner-status.test.ts','scheduler.test.ts','admin-integration.test.ts','catalog-migration.test.ts','mobile-integration.test.ts','technical-integration.test.ts','customer-progress.test.ts','slot-counts.test.ts','auth-key.test.ts','password-crypto.test.ts','bonus-atomicity.test.ts','idempotency-recovery.test.ts','bonus-recovery.test.ts','residential-complex.test.ts','notification-delivery-latency.test.ts','order-lost-response.test.ts'}
         assert {p.name for p in Path('src/tests').glob('*.test.ts')} == expected, 'Classify any new backend test in the unit or DB gate before CI can pass'
         PYCODE
     - run: npm run build
     - name: Pure unit tests, no DB test skipped to claim success
       run: node --test dist/tests/backend-core.test.js dist/tests/bcc.test.js dist/tests/cleaner-status.test.js
-        dist/tests/scheduler.test.js dist/tests/auth-key.test.js dist/tests/password-crypto.test.js
+        dist/tests/scheduler.test.js dist/tests/auth-key.test.js dist/tests/password-crypto.test.js dist/tests/residential-complex.test.js
     - uses: actions/upload-artifact@v4
       with:
         name: domly-backend-tests

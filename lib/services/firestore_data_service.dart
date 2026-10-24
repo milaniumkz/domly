@@ -1,3 +1,6 @@
+import '../utils/legal_document_sections.dart';
+import 'admin_text_catalog.dart';
+import '../localization/kazakh_translations.dart';
 import '../utils/addon_request_data.dart';
 import 'notification_count_stream.dart';
 import '../utils/calendar_availability.dart';
@@ -2051,7 +2054,7 @@ class FirestoreDataService {
       return _debugSnapshotStream(_debugAdminInfoContent);
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/admin/contentPages'),
+      () async => (await BackendApiService.instance.getList('/admin/contentPages', query: {'limit': '200'})).map(adminContentPage).toList(),
     );
   }
 
@@ -2198,7 +2201,12 @@ class FirestoreDataService {
       return _debugSnapshotStream(_debugAdminTranslations);
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/admin/translations'),
+      () => loadAdminTextCatalog(
+        (offset, limit) => BackendApiService.instance.getList(
+          '/admin/translations', query: {'offset': '$offset', 'limit': '$limit'},
+        ),
+        {...kDefaultTranslationSources, ...kKazakhTranslations.keys, ...kBuiltinTranslations.keys},
+      ),
     );
   }
 
@@ -6710,16 +6718,7 @@ class FirestoreDataService {
     }
     await BackendApiService.instance.postMap(
       '/admin/content-pages',
-      body: {
-        'slug': infoId,
-        'titleRu':
-            (infoData['title'] ?? infoData['titleRu'] ?? infoId).toString(),
-        'titleKk': infoData['titleKk'],
-        'bodyRu': (infoData['body'] ?? infoData['bodyRu'] ?? '').toString(),
-        'bodyKk': infoData['bodyKk'],
-        'kind': (infoData['kind'] ?? 'info').toString(),
-        'active': infoData['isActive'] != false && infoData['active'] != false,
-      },
+      body: contentPagePayload({...infoData, 'id': infoId}),
     );
   }
 
@@ -6749,6 +6748,8 @@ class FirestoreDataService {
         .map(TranslationController.normalizeSource)
         .where((source) => source.isNotEmpty)
         .toSet();
+    sourceSet.addAll(kKazakhTranslations.keys);
+    sourceSet.addAll(kBuiltinTranslations.keys);
     sourceSet.addAll(await _dynamicTranslationSources());
     final sources = sourceSet.toList()..sort();
     if (_isDebugAdmin) {
@@ -6805,7 +6806,7 @@ class FirestoreDataService {
       return {
         'key': TranslationController.translationKey(source),
         'ru': locales['ru'] ?? source,
-        'kk': locales['kk'],
+        'kk': locales['kk'] ?? kKazakhTranslations[source],
         'namespace': 'app',
       };
     }).toList();
@@ -6813,6 +6814,7 @@ class FirestoreDataService {
       await BackendApiService.instance.postMap(
         '/admin/translations/bulk',
         body: {
+          'preserveExisting': true,
           'items': items.sublist(
             i,
             i + 250 > items.length ? items.length : i + 250,

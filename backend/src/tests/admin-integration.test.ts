@@ -38,6 +38,30 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('information document retains its full body and independent bilingual summaries', async () => {
+      const slug='legal-regression-'+randomUUID();
+      const body='1. Первый пункт\n'+ 'Полный текст. '.repeat(1000)+'\n\n20. Последний пункт\nКонец документа';
+      try {
+        const payload={slug,titleRu:'Документ',titleKk:'Құжат',bodyRu:body,bodyKk:'Толық мәтін',kind:'info',presentation:{shortInfo:'Кратко',shortInfoKk:'Қысқаша'}};
+        assert.equal((await request('/admin/content-pages','POST',payload)).status,201);
+        const published=(await request('/content-pages/'+slug)).json.data;
+        assert.equal(published.body_ru,body);assert.equal(published.body_kk,payload.bodyKk);
+        assert.deepEqual(published.presentation,payload.presentation);
+      } finally {await db.query('DELETE FROM content_pages WHERE slug=$1',[slug]);}
+    });
+    await t.test('text editing survives source synchronization and is protected from customers', async () => {
+      const key = 'text-regression-'+randomUUID();
+      try {
+        const edited = {key,ru:'Изменённое описание',kk:'Өзгертілген сипаттама',namespace:'app'};
+        assert.equal((await request('/admin/translations','POST',edited,true)).status,403);
+        assert.equal((await request('/admin/translations','POST',edited)).status,200);
+        assert.equal((await request('/admin/translations/bulk','POST',{preserveExisting:true,items:[{key,ru:'Исходный текст',kk:'Бастапқы мәтін'}]})).status,200);
+        const rows=(await request('/admin/translations?search='+encodeURIComponent(key))).json.data;
+        assert.equal(rows.length,1);assert.equal(rows[0].ru,edited.ru);assert.equal(rows[0].kk,edited.kk);
+        const published=(await request('/translations')).json.data.find((r:any)=>r.key===key);
+        assert.equal(published.ru,edited.ru);assert.equal(published.kk,edited.kk);
+      } finally {await db.query('DELETE FROM translations WHERE key=$1',[key]);}
+    });
     await t.test('addon rejection protects other customers and preserves paid addons', async () => {
       const owner=randomUUID(),orderId=randomUUID(),addonId=randomUUID();
       try {

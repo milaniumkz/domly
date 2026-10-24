@@ -72,6 +72,15 @@ void main() {
             find.byType(SingleChildScrollView), const Offset(0, -1600));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+        final scroll = tester.widget<SingleChildScrollView>(find.byType(SingleChildScrollView));
+        scroll.controller!.jumpTo(scroll.controller!.position.maxScrollExtent);
+        await tester.pumpAndSettle();
+        final lastParagraph = find.byWidgetPredicate((widget) => widget is SelectableText && (widget.data ?? '').contains('Email:'));
+        expect(lastParagraph, findsOneWidget);
+        expect(tester.getBottomRight(lastParagraph).dy, lessThanOrEqualTo(852));
+        final offset = scroll.controller!.offset;
+        await tester.pump(const Duration(seconds: 31));
+        expect(scroll.controller!.offset, offset, reason: 'background updates must not reset document reading');
       });
     }
   }

@@ -8,7 +8,15 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback]
+        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer]
+      report_public_key_b64:
+        description: Public RSA key for the encrypted reconciliation report
+        required: false
+        type: string
+      expected_plan:
+        description: SHA-256 plan from the preceding bonus audit
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -37,7 +45,33 @@ jobs:
           DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
           ACTION: ${{ inputs.action }}
           GH_TOKEN: ${{ github.token }}
+          REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
+          EXPECTED_PLAN: ${{ inputs.expected_plan }}
         run: |
+          if [ "$ACTION" = "publish-offer" ]; then
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/publish_offer.cjs docs/legal/public-offer-20261024.json "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "set -eu; umask 077; mkdir -p '$DEPLOY_PATH/backups/legal'; cd '$DEPLOY_PATH/current'; { printf 'const offerPayload = '; cat '$DEPLOY_PATH/shared/public-offer-20261024.json'; printf ';\\n'; cat '$DEPLOY_PATH/shared/publish_offer.cjs'; } | docker compose -p domly-backend exec -T -e OFFER_OPERATION_ID='${{ github.run_id }}' api node > '$DEPLOY_PATH/backups/legal/${{ github.run_id }}.json'"
+            exit 0
+          fi
+          if [ "$ACTION" = "bonus-audit" ] || [ "$ACTION" = "bonus-refund" ]; then
+            [[ "$REPORT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/=]+$ ]]
+            test "${#REPORT_PUBLIC_KEY}" -le 12000
+            [[ -z "$EXPECTED_PLAN" || "$EXPECTED_PLAN" =~ ^[a-f0-9]{64}$ ]]
+            RECOVERY_MODE=audit
+            if [ "$ACTION" = "bonus-refund" ]; then
+              [[ "$EXPECTED_PLAN" =~ ^[a-f0-9]{64}$ ]]
+              RECOVERY_MODE=apply
+            fi
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/reconcile_cancelled_bonuses.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/reconcile_cancelled_bonuses.cjs"
+            set +e
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "set -eu; umask 077; mkdir -p '$DEPLOY_PATH/backups/bonus-recovery'; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e RECOVERY_MODE='$RECOVERY_MODE' -e RECOVERY_EXPECTED_PLAN='$EXPECTED_PLAN' -e RECOVERY_OPERATION_ID='${{ github.run_id }}' -e RECOVERY_REPORT_PUBLIC_KEY_B64='$REPORT_PUBLIC_KEY' api node < '$DEPLOY_PATH/shared/reconcile_cancelled_bonuses.cjs' > '$DEPLOY_PATH/backups/bonus-recovery/${{ github.run_id }}.enc.json'"
+            RESULT=$?
+            set -e
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/backups/bonus-recovery/${{ github.run_id }}.enc.json" bonus-recovery.enc.json
+            exit "$RESULT"
+          fi
           if [ "$ACTION" = "redeploy" ]; then
             gh workflow run deploy.yml --ref main
             exit 0
@@ -49,3 +83,12 @@ jobs:
           fi
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
             "APP_DIR='$DEPLOY_PATH' bash '$DEPLOY_PATH/scripts/server/ops.sh' '$ACTION'"
+
+      - name: Preserve encrypted bonus reconciliation evidence
+        if: always() && (inputs.action == 'bonus-audit' || inputs.action == 'bonus-refund')
+        uses: actions/upload-artifact@v4
+        with:
+          name: bonus-recovery-${{ github.run_id }}
+          path: bonus-recovery.enc.json
+          if-no-files-found: error
+          retention-days: 90

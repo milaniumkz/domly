@@ -32,5 +32,30 @@ Map<String, dynamic> legalPageToInfoContent(Map<String, dynamic> page) => {
       'titleKk': page['title_kk'],
       'fullInfo': page['body_ru'] ?? '',
       'fullInfoKk': page['body_kk'],
+      'shortInfo': (page['presentation'] as Map?)?['shortInfo'] ?? '',
+      'shortInfoKk': (page['presentation'] as Map?)?['shortInfoKk'],
       'isActive': true,
     };
+
+String canonicalContentSlug(String key) => switch (key) {
+  'legal_offer' || 'offer' => 'public-offer',
+  'legal_privacy' || 'privacy' => 'privacy-policy',
+  _ => key,
+};
+
+Map<String, dynamic> adminContentPage(Map<String, dynamic> page) {
+  final content = legalPageToInfoContent(page);
+  return {...page, ...content, 'id': content['key'], 'slug': page['slug'],
+    'type': const ['package','addon','banner','promotion','info'].contains(page['kind']) ? page['kind'] : 'info', 'isActive': page['active'] != false};
+}
+
+Map<String, dynamic> contentPagePayload(Map<String, dynamic> data) => {
+  'slug': canonicalContentSlug((data['key'] ?? data['slug'] ?? data['id'] ?? '').toString()),
+  'titleRu': data['title'] ?? data['titleRu'] ?? data['title_ru'] ?? '',
+  'titleKk': data['titleKk'] ?? data['title_kk'],
+  'bodyRu': data['fullInfo'] ?? data['body'] ?? data['bodyRu'] ?? data['body_ru'] ?? '',
+  'bodyKk': data['fullInfoKk'] ?? data['bodyKk'] ?? data['body_kk'],
+  'kind': data['kind'] ?? data['type'] ?? 'info',
+  'presentation': {...?(data['presentation'] as Map?), 'shortInfo': data['shortInfo'] ?? '', 'shortInfoKk': data['shortInfoKk']},
+  'active': data['isActive'] != false && data['active'] != false,
+};

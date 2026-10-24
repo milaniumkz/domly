@@ -200,22 +200,29 @@ export class NotificationService {
     return { notification: row, created: Boolean(row) };
   }
 
-  async deliver(row: { id: string; user_id: string | null; role: string | null }, input: NotificationInput) {
+  async deliver(row: { id: string; user_id: string | null; role: string | null }, input: NotificationInput, options: {throwOnError?: boolean} = {}) {
     try {
+      if (input.userId && input.targetType === 'order_offer') {
+        const active = (await this.db.query(`SELECT 1 FROM order_offers f JOIN service_orders o ON o.id=f.order_id
+          WHERE f.order_id=$1 AND f.cleaner_id=$2 AND f.status='offered' AND f.expires_at>NOW()
+          AND o.status IN ('pending_assignment','waiting_cleaner') AND o.cleaner_id IS NULL LIMIT 1`,
+          [input.targetId,input.userId])).rows.length;
+        if (!active) return; // An offer can expire or be cancelled while delivery is queued.
+      }
       if (row?.user_id) {
-        await publishToUser(row.user_id, { type: 'notification', notification: row });
+        await publishToUser(row.user_id, { type: 'notification', notification: row },options.throwOnError);
       } else if (row?.role) {
         const users = (await this.db.query<{ id: string }>(
           `SELECT id FROM app_users WHERE role=$1 AND status <> 'blocked'`,
           [row.role],
         )).rows;
-        await publishToUsers(users.map(user => user.id), { type: 'notification', notification: row });
+        await publishToUsers(users.map(user => user.id), { type: 'notification', notification: row },options.throwOnError);
       }
       const isCleanerOrderOffer = Boolean(input.userId && input.targetType === 'order_offer');
       if (!isCleanerOrderOffer) {
         await sendLocalizedPush(this.db,this.fcm,input,{
           targetType: input.targetType ?? '',targetId: input.targetId ?? '',notificationId: row?.id ?? '',
-        });
+        },{requireDelivery:options.throwOnError});
       }
       if (input.userId && input.targetType === 'order_offer') {
         const delay = await this.cleanerAlarmDelayMs();
@@ -225,20 +232,23 @@ export class NotificationService {
           titleRu: input.titleRu,
           bodyRu: input.bodyRu,
           notificationId: row?.id ?? '',
-        }, { delay, attempts: 3, removeOnComplete: true });
+        }, { delay, attempts: 3, removeOnComplete: true, jobId: `notification-${row.id}` });
       }
     } catch (error) {
       console.warn('[notifications] Delivery failed; notification remains stored', error instanceof Error ? error.name : 'unknown');
+      if (options.throwOnError) throw error;
     }
   }
 
   async create(input: NotificationInput) {
-    const saved = await this.persist(input);
-    if (saved.created && saved.notification) {
-      const row = saved.notification;
-      await this.db.afterCommit(() => this.deliver(row, input));
-    }
-    return saved.notification;
+    return this.db.atomic(async () => {
+      const saved = await this.persist(input);
+      if (saved.created && saved.notification) {
+        await this.db.query(`INSERT INTO notification_deliveries(notification_id,payload) VALUES($1,$2::jsonb)
+          ON CONFLICT(notification_id) DO NOTHING`, [saved.notification.id,JSON.stringify(input)]);
+      }
+      return saved.notification;
+    });
   }
 
   async createAdminEvent(input: {
@@ -421,28 +431,39 @@ export class PaymentService {
 
   async refundOrderPayments(orderId: string, reasonRu: string, transaction?: Queryable) {
     const work = async (tx: Queryable) => {
-    const payments = (await tx.query<{
-      id: string;
-      customer_id: string;
-      status: string;
-      amount: string;
-      bonus_amount: string;
-      provider: string;
-    }>(
-      `SELECT id, customer_id, status, amount, bonus_amount, provider
-       FROM payments
-       WHERE order_id=$1 AND status IN ('pending','invoice_requested','paid') ORDER BY id FOR UPDATE`,
-      [orderId],
-    )).rows;
-    for (const payment of payments) {
-      if (Number(payment.bonus_amount) > 0) {
-        await this.bonus.refund(payment.customer_id, Number(payment.bonus_amount), reasonRu, orderId, payment.id, tx);
+    const owner = (await tx.query<{customer_id: string}>(
+      'SELECT customer_id FROM service_orders WHERE id=$1', [orderId])).rows[0];
+    if (!owner) return [];
+    await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE', [owner.customer_id]);
+    const order = (await tx.query<{bonus_spent: string}>(
+      'SELECT bonus_spent FROM service_orders WHERE id=$1 FOR UPDATE', [orderId])).rows[0];
+    const allPayments = (await tx.query<{
+      id: string; customer_id: string; status: string; amount: string; bonus_amount: string; provider: string;
+    }>('SELECT id,customer_id,status,amount,bonus_amount,provider FROM payments WHERE order_id=$1 ORDER BY id FOR UPDATE', [orderId])).rows;
+    const ledger = (await tx.query<{type: string; amount: string; payment_id: string | null}>(
+      "SELECT type,amount,payment_id FROM bonus_transactions WHERE order_id=$1 AND user_id=$2 AND type IN ('spend','refund')",
+      [orderId, owner.customer_id])).rows;
+    const spends = ledger.filter(row => row.type === 'spend');
+    const refunded = ledger.filter(row => row.type === 'refund');
+    // The ledger is authoritative. Older orders without debit rows retain the
+    // existing field-based fallback, but previous refunds are always deducted.
+    const debit = spends.length ? spends.reduce((sum, row) => sum - Number(row.amount), 0)
+      : Math.max(Number(order.bonus_spent), allPayments.reduce((sum, row) => sum + Number(row.bonus_amount), 0));
+    let remaining = Math.max(0, debit - refunded.reduce((sum, row) => sum + Number(row.amount), 0));
+    for (const payment of allPayments) {
+      const prior = refunded.filter(row => row.payment_id === payment.id).reduce((sum, row) => sum + Number(row.amount), 0);
+      const amount = Math.min(remaining, Math.max(0, Number(payment.bonus_amount) - prior));
+      if (amount > 0) {
+        await this.bonus.refund(owner.customer_id, amount, reasonRu, orderId, payment.id, tx);
+        remaining -= amount;
       }
+    }
+    if (remaining > 0) await this.bonus.refund(owner.customer_id, remaining, reasonRu, orderId, undefined, tx);
+    const payments = allPayments.filter(payment => ['pending','invoice_requested','paid'].includes(payment.status));
+    for (const payment of payments) {
       const nextStatus = payment.status === 'paid' && Number(payment.amount) > 0 ? 'refunded' : 'cancelled';
       await tx.query(
-        `UPDATE payments
-         SET status=$2, payload=payload || $3::jsonb, updated_at=NOW()
-         WHERE id=$1`,
+        `UPDATE payments SET status=$2, payload=payload || $3::jsonb, updated_at=NOW() WHERE id=$1`,
         [payment.id, nextStatus, { refundReason: reasonRu, refundRequestedAt: new Date().toISOString() }],
       );
     }
