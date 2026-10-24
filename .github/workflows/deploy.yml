@@ -47,6 +47,22 @@ jobs:
               awk "/domly\\.kz|^[[:space:]]*(root|reverse_proxy|file_server|handle|handle_path|import|redir)/" /etc/caddy/Caddyfile
             fi
           '
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -eu
+          db_container="$(docker ps -q --filter label=com.docker.compose.project=domly-backend --filter label=com.docker.compose.service=postgres)"
+          test -n "$db_container"
+          docker exec -i "$db_container" sh -c 'exec psql -U "${POSTGRES_USER:-domly}" -d "${POSTGRES_DB:-domly}" -v ON_ERROR_STOP=1 -At' <<'SQL'
+          BEGIN READ ONLY;
+          SET LOCAL statement_timeout = '10s';
+          SELECT json_build_object(
+            'recovery_safe_column', EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='api_idempotency' AND column_name='recovery_safe'),
+            'pre_atomic_claims_completed_during_recovery_release', count(*) FILTER(WHERE created_at < '2026-10-23T20:42:00Z'::timestamptz),
+            'claims_over_five_minutes_old_completed_during_recovery_release', count(*) FILTER(WHERE created_at < '2026-10-24T04:07:28Z'::timestamptz)
+          ) FROM api_idempotency
+          WHERE scope='order_create' AND status_code=201 AND completed_at >= '2026-10-24T04:12:28Z'::timestamptz;
+          COMMIT;
+          SQL
+          REMOTE
   import-catalog:
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'import-catalog' && github.ref == 'refs/heads/main'
     runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || fromJSON('["milanium-linux-arm64", "repo-domly"]') }}
