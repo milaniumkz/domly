@@ -1,3 +1,4 @@
+import {adminPaymentHistory} from '../../modules/adminPaymentHistory';
 import { customerMonthlyProgress } from '../../modules/customerProgress';
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
 import {idempotent,idempotentTransaction} from '../../common/idempotency';
@@ -4253,6 +4254,10 @@ export function buildV1Router(deps: {
     ok(res, row);
   }));
 
+  router.get('/admin/payment-history', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    ok(res, await adminPaymentHistory(deps.db, req.query));
+  }));
+
   router.get('/admin/:section', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const allowed: Record<string, { table: string; base?: string; search?: string[] }> = {
       orders: { table: 'service_orders' },
@@ -4466,15 +4471,15 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
     values.push(limit, offset);
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     return {
-      sql: `SELECT u.id, u.numeric_id, u.full_name, u.phone, u.email, u.status, u.rating, u.bonus_balance, u.created_at,
-                   COUNT(DISTINCT o.id)::int AS orders_count,
-                   COUNT(DISTINCT pay.id)::int AS payments_count
-            FROM app_users u
-            LEFT JOIN service_orders o ON o.customer_id=u.id
-            LEFT JOIN payments pay ON pay.customer_id=u.id
-            ${where}
-            GROUP BY u.id
-            ORDER BY u.created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      sql: `WITH page AS MATERIALIZED (
+              SELECT u.id, u.created_at FROM app_users u ${where}
+              ORDER BY u.created_at DESC,u.id DESC LIMIT $${values.length - 1} OFFSET $${values.length}
+            )
+            SELECT u.id, u.numeric_id, u.full_name, u.phone, u.email, u.status, u.rating, u.bonus_balance, u.created_at,
+                   (SELECT COUNT(*)::int FROM service_orders o WHERE o.customer_id=u.id) AS orders_count,
+                   (SELECT COUNT(*)::int FROM payments pay WHERE pay.customer_id=u.id) AS payments_count
+            FROM page JOIN app_users u ON u.id=page.id
+            ORDER BY u.created_at DESC,u.id DESC`,
       values,
     };
   }

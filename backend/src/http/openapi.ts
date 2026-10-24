@@ -460,6 +460,7 @@ export const openApiSpec = {
     '/notifications/unread-count': { get: secured('Количество непрочитанных уведомлений') },
     '/notifications/{id}/read': { post: { ...secured('Отметить уведомление прочитанным'), parameters: [path('id')] } },
     '/notifications/read-all': { post: secured('Отметить все уведомления прочитанными') },
+    '/admin/payment-history': { get: { ...secured('Платежи: фильтрация всей истории, счётчики вкладок и первые limit записей; data: {items,total,counts}'), parameters: [query('tab','waiting'),query('limit','50'),query('search',''),query('dateFrom','2026-01-01'),query('dateTo','2026-12-31'),query('sort','desc')] } },
     '/admin/notifications': {
       get: secured('Админ: список уведомлений админки с персональным read/unread для текущего админа'),
       post: { ...secured('Админ: отправить уведомление пользователю или роли'), requestBody: jsonBody({ role: 'admin', titleRu: 'Платёж', bodyRu: 'Новая заявка на оплату', targetType: 'payments', targetId: 'uuid' }) },

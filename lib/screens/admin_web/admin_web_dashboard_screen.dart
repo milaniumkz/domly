@@ -1,4 +1,4 @@
-import '../../utils/payment_filter.dart';
+import '../../utils/admin_date_time.dart';
 import '../../utils/payment_approval_data.dart';
 import 'dart:math' as math;
 
@@ -2707,30 +2707,37 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   }
 
   String _paymentTab = 'all';
+  int _paymentHistoryLimit = 50;
+  String? _paymentHistoryFilterKey;
+  String? _paymentHistoryStreamKey;
+  Stream<Map<String, dynamic>>? _paymentHistoryStream;
 
   Widget _payments() {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.adminPaymentsStream(),
+    final filterKey = '$_paymentTab|$_searchQuery|$_filterStartDate|$_filterEndDate|$_dateSortOrder';
+    if (_paymentHistoryFilterKey != filterKey) {
+      _paymentHistoryFilterKey = filterKey;
+      _paymentHistoryLimit = 50;
+    }
+    final streamKey = '$filterKey|$_paymentHistoryLimit';
+    if (_paymentHistoryStreamKey != streamKey) {
+      _paymentHistoryStreamKey = streamKey;
+      _paymentHistoryStream = _data.adminPaymentHistoryStream({
+        'tab': _paymentTab,
+        'limit': '$_paymentHistoryLimit',
+        'search': _searchQuery.trim(),
+        'dateFrom': _filterStartDate?.toUtc().toIso8601String(),
+        'dateTo': _filterEndDate?.toUtc().toIso8601String(),
+        'sort': _dateSortOrder == 'Сначала старые' ? 'asc' : 'desc',
+      });
+    }
+    return StreamBuilder<Map<String, dynamic>>(
+      key: ValueKey(filterKey),
+      stream: _paymentHistoryStream,
       builder: (context, snapshot) {
-        final query = _searchQuery.trim().toLowerCase();
-        final filteredPayments =
-            (snapshot.data ?? const <Map<String, dynamic>>[]).where((data) {
-          if (!_matchesRecordDateRange(data)) {
-            return false;
-          }
-          if (query.isEmpty) {
-            return true;
-          }
-          return '${data['id']} ${data['orderId']} ${data['status']} ${data['amount']}'
-                  ' ${data['customerName']} ${data['customerPhone']} ${data['packageName']} ${_formatAddonLabels(data)}'
-              .toLowerCase()
-              .contains(query);
-        });
-        final allPayments = _sortRecordsByDate(filteredPayments);
-        final docs = allPayments
-            .where((row) =>
-                paymentMatchesTab(row['status'].toString(), _paymentTab))
-            .toList();
+        final page = snapshot.data ?? const <String, dynamic>{};
+        final docs = (page['items'] as List? ?? []).cast<Map<String, dynamic>>();
+        final counts = page['counts'] as Map? ?? const {};
+        final total = (page['total'] as num?)?.toInt() ?? 0;
         final invoiceRequests =
             docs.where(_isAdminPaymentActionRequired).toList();
         final otherPayments =
@@ -2748,13 +2755,17 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 }.entries)
                   ChoiceChip(
                       label: Text(
-                          '${tab.value} (${allPayments.where((row) => paymentMatchesTab(row['status'].toString(), tab.key)).length})'),
+                          '${tab.value.tr()} (${counts[tab.key] ?? 0})'),
                       selected: _paymentTab == tab.key,
                       onSelected: (_) => setState(() => _paymentTab = tab.key)),
               ])),
           Expanded(
               child: _sectionScaffold(
-            child: docs.isEmpty
+            child: !snapshot.hasData && snapshot.connectionState == ConnectionState.waiting
+                ? const Center(child: CircularProgressIndicator())
+                : snapshot.hasError && !snapshot.hasData
+                ? _emptyState('Не удалось загрузить платежи', 'Обновите экран и попробуйте снова.')
+                : docs.isEmpty
                 ? _emptyState(
                     'Платежи не найдены',
                     'Проверьте строку поиска или период в данных.',
@@ -2782,7 +2793,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                             Expanded(
                               child: _metricTile(
                                 'Всего платежей',
-                                '${docs.length}',
+                                '$total',
                                 Icons.receipt_long_outlined,
                               ),
                             ),
@@ -2821,6 +2832,13 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                         )
                       else
                         ...otherPayments.map(_paymentHistoryCard),
+                      if (docs.length < total)
+                        TextButton(
+                          onPressed: snapshot.connectionState == ConnectionState.waiting ? null : () {
+                            setState(() => _paymentHistoryLimit += 50);
+                          },
+                          child: Text('Показать ещё'.tr()),
+                        ),
                     ],
                   ),
           )),
@@ -3741,23 +3759,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
   }
 
-  String _formatDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return domlyDateTimeText(value.toDate().toLocal());
-    }
-    return '—';
-  }
+  String _formatDateTime(dynamic value) => formatAdminDateTime(value);
 
-  String _formatAdminDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return domlyDateTimeText(value.toDate().toLocal());
-    }
-    final parsed = DateTime.tryParse((value ?? '').toString());
-    if (parsed != null) {
-      return domlyDateTimeText(parsed.toLocal());
-    }
-    return '—';
-  }
+  String _formatAdminDateTime(dynamic value) => formatAdminDateTime(value);
 
   String _firstAdminDateTime(Map<String, dynamic> data, List<String> keys) {
     for (final key in keys) {

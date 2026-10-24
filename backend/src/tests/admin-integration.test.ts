@@ -488,6 +488,71 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM app_users WHERE id=$1',[other]);
       }
     });
+    await t.test('admin user page counts do not multiply all orders by all payments',async()=>{
+      const marker='listing-work-'+randomUUID();
+      const users=[randomUUID(),randomUUID(),randomUUID()];
+      const query=db.query.bind(db); let captured:any;
+      try {
+        for(const id of users) {
+          await query("INSERT INTO app_users(id,phone,role,full_name) VALUES($1,$2,'customer',$3)",[id,id,marker]);
+          await query("INSERT INTO service_orders(customer_id,scheduled_date,start_time,end_time,status) SELECT $1,'2035-01-01','08:00','10:00','cancelled' FROM generate_series(1,40)",[id]);
+          await query("INSERT INTO payments(customer_id,provider,status,amount) SELECT $1,'kaspi','paid',100 FROM generate_series(1,40)",[id]);
+        }
+        db.query=async(text:string,values?:unknown[])=>{
+          if(text.includes('AS payments_count')) captured={text,values};
+          return query(text,values);
+        };
+        const page=await request('/admin/users?search='+marker+'&limit=1');
+        assert.equal(page.status,200);assert.equal(page.json.data.length,1);
+        assert.equal(page.json.data[0].orders_count,40);assert.equal(page.json.data[0].payments_count,40);
+        assert.ok(captured);
+        const plan=(await query('EXPLAIN (ANALYZE,FORMAT JSON) '+captured.text,captured.values)).rows[0]['QUERY PLAN'][0].Plan;
+        const maxRows=(node:any):number=>Math.max(Number(node['Actual Rows'])*Number(node['Actual Loops']),...(node.Plans??[]).map(maxRows),0);
+        assert.ok(maxRows(plan)<500,'one user page must not materialize thousands of order/payment combinations');
+      } finally {
+        db.query=query;
+        await query('DELETE FROM payments WHERE customer_id=ANY($1::uuid[])',[users]);
+        await query('DELETE FROM service_orders WHERE customer_id=ANY($1::uuid[])',[users]);
+        await query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[users]);
+      }
+    });
+    await t.test('payment tabs include older matching payments beyond the first page',async()=>{
+      const marker='payment-page-'+randomUUID();
+      const ids=Array.from({length:64},()=>randomUUID());
+      await db.query('UPDATE app_users SET full_name=$2 WHERE id=$1',[customer,marker]);
+      try {
+        for(let i=0;i<ids.length;i++) await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,created_at) VALUES($1,$2,'kaspi',$3,100,NOW()-($4::int*INTERVAL '1 minute'))",[ids[i],customer,i<60?'paid': ['pending','cancelled','rejected','refunded'][i-60],i]);
+        const old=(await request('/admin/payments?search='+marker)).json.data;
+        assert.equal(old.length,50);
+        assert.ok(old.every((r:any)=>r.status==='paid'),'old first-page filtering hides pending payments');
+        const first=await request('/admin/payment-history?search='+marker);
+        assert.equal(first.status,200);
+        assert.equal(first.json.data.items.length,50);
+        assert.deepEqual(first.json.data.counts,{all:64,waiting:1,paid:60,cancelled:2,errors:1});
+        for (const [tab,count] of Object.entries({waiting:1,paid:60,cancelled:2,errors:1})) {
+          const page=(await request('/admin/payment-history?search='+marker+'&tab='+tab+'&limit=100')).json.data;
+          assert.equal(page.items.length,count);
+          assert.equal(page.total,count);
+        }
+        const waiting=(await request('/admin/payment-history?search='+marker+'&tab=waiting')).json.data;
+        assert.equal(waiting.items[0].id,ids[60]);
+        const all=(await request('/admin/payment-history?search='+marker+'&limit=100')).json.data;
+        assert.equal(all.items.length,64);
+        const oldest=(await request('/admin/payment-history?search='+marker+'&sort=asc&limit=1')).json.data;
+        assert.equal(oldest.items[0].id,ids[63]);
+        const future=encodeURIComponent(new Date(Date.now()+86400000).toISOString());
+        const empty=(await request('/admin/payment-history?search='+marker+'&dateFrom='+future)).json.data;
+        assert.equal(empty.total,0); assert.deepEqual(empty.items,[]);
+        for (const query of ['limit=0','limit=1.5','limit=2147483648','sort=invalid','dateFrom=invalid']) {
+          assert.equal((await request('/admin/payment-history?'+query)).status,400);
+        }
+        assert.equal((await request('/admin/payment-history?tab=invalid')).status,400);
+        assert.equal((await request('/admin/payment-history','GET',undefined,true)).status,403);
+      } finally {
+        await db.query('DELETE FROM payments WHERE id=ANY($1::uuid[])',[ids]);
+        await db.query("UPDATE app_users SET full_name='Тестовая анкета' WHERE id=$1",[customer]);
+      }
+    });
     await t.test('notification history loads a bounded prefix without losing older records',async()=>{
       const ids=Array.from({length:65},()=>randomUUID());
       try {
