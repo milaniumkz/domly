@@ -1,3 +1,4 @@
+import {PublicTextCatalog} from '../modules/publicTextCatalog';
 import {canonicalMediaUrl,httpsMediaUrl,mapMediaValues,verifyMediaLink} from '../modules/mediaLinks';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -994,4 +995,27 @@ test('role notification uses one recipient batch without dropping recipients or 
     assert.equal(calls.length,1,'one stored role event must not require one Redis round trip per recipient');
     assert.deepEqual(calls[0].ids,users.map(u=>u.id));assert.equal(calls[0].event.notification.id,row.id);
   } finally {realtime.publishToUser=originalOne;if(originalMany)realtime.publishToUsers=originalMany;else delete realtime.publishToUsers;}
+});
+
+
+test('public text catalogue coalesces concurrent readers, expires and invalidates edits', async () => {
+  let calls=0,now=0;
+  const cache=new PublicTextCatalog(async()=>{calls++;return [{ru:'value '+calls}];},()=>now);
+  const responses=await Promise.all(Array.from({length:1000},()=>cache.get()));
+  assert.equal(calls,1);assert.ok(responses.every(r=>r.body===responses[0].body));
+  now=5001;const next=await cache.get();assert.equal(calls,2);assert.notEqual(next.etag,responses[0].etag);
+  cache.invalidate();await cache.get();assert.equal(calls,3);
+});
+
+test('public text catalogue retries errors and cannot cache an outdated in-flight edit', async () => {
+  let calls=0,release!: (rows: unknown[])=>void;
+  const cache=new PublicTextCatalog(async()=>{
+    calls++;if(calls===1)throw Error('offline');
+    if(calls===2)return new Promise<unknown[]>(resolve=>release=resolve);
+    return [{ru:'new'}];
+  });
+  await assert.rejects(cache.get(),/offline/);
+  const old=cache.get();cache.invalidate();
+  const current=await cache.get();release([{ru:'old'}]);await old;
+  assert.equal((await cache.get()).body,current.body);assert.equal(calls,3);
 });

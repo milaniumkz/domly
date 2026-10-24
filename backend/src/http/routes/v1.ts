@@ -1,3 +1,4 @@
+import {PublicTextCatalog} from '../../modules/publicTextCatalog';
 import {freezePackage} from '../../modules/packageFreeze';
 import {adminPaymentHistory} from '../../modules/adminPaymentHistory';
 import { customerMonthlyProgress } from '../../modules/customerProgress';
@@ -1159,8 +1160,11 @@ export function buildV1Router(deps: {
     }, 201);
   }));
 
+  const publicTexts = new PublicTextCatalog(async () => (await deps.db.query(
+    'SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key')).rows);
   router.get('/translations', asyncHandler(async (_req, res) => {
-    ok(res, (await deps.db.query(`SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key`)).rows);
+    const catalog = await publicTexts.get();
+    res.set('ETag', catalog.etag).set('Cache-Control', 'no-cache').type('application/json').send(catalog.body);
   }));
 
   router.get('/content-pages', asyncHandler(async (req, res) => {
@@ -3849,6 +3853,7 @@ export function buildV1Router(deps: {
        RETURNING *`,
       [req.body.key, req.body.ru, req.body.kk ?? null, req.body.namespace ?? 'app', source],
     )).rows);
+    publicTexts.invalidate();
     ok(res, row);
   }));
 
@@ -3875,6 +3880,7 @@ export function buildV1Router(deps: {
         [item.key, item.ru, item.kk ?? null, item.namespace ?? 'app', req.body.preserveExisting === true],
       )).rows));
     }
+    publicTexts.invalidate();
     ok(res, { updated: rows.length, rows });
   }));
 
@@ -3901,6 +3907,7 @@ export function buildV1Router(deps: {
       if (result.rows[0]?.inserted) inserted += 1;
       else updated += 1;
     }
+    publicTexts.invalidate();
     ok(res, { inserted, updated, total: defaultTranslations.length, overwrite });
   }));
 
