@@ -54,6 +54,18 @@ test('technical center: real PostgreSQL, access boundaries, evidence and operati
    for(let i=0;i<30;i++){if((await db.query("SELECT COUNT(*)::int AS n FROM tech_events WHERE user_id=$1 AND result='failure'",[userA])).rows[0].n===2)break;await new Promise(r=>setTimeout(r,20));}
    const rows=(await db.query('SELECT * FROM tech_events WHERE user_id=$1 ORDER BY started_at',[userA])).rows;assert.equal(rows.length,3);for(const r of rows)assert.equal(r.signature,eventSignature(r));const p=(await db.query("SELECT p.* FROM tech_problems p JOIN tech_events e ON e.problem_id=p.id WHERE e.user_id=$1 LIMIT 1",[userA])).rows[0];assert.equal(Number(p.occurrences),2);eventA=rows[0].id;eventB=(await db.query('SELECT id FROM tech_events WHERE user_id=$1',[userB])).rows[0].id;
   });
+  await t.test('request completion and its verifiable signature persist in one write',async()=>{
+   const original=db.query.bind(db);const completions:any[]=[];let writes=0;
+   db.query=(async(sql:string,values?:unknown[])=>{const result=await original(sql,values);if(/^UPDATE tech_events SET (result|signature)=/.test(sql)){writes++;if(result.rows[0])completions.push(result.rows[0]);}return result;}) as typeof db.query;
+   try{
+    const response=await request('/api/v1/test-success','GET',undefined,owner,{Authorization:'Bearer '+signAccessToken({id:userB,role:'admin',phone:'fixture'})});
+    assert.equal(response.status,200);
+    for(let i=0;i<100&&!completions.length;i++)await new Promise(resolve=>setTimeout(resolve,10));
+    assert.equal(completions.length,1);
+    assert.equal(completions[0].signature,eventSignature(completions[0]),'A completed event must never be stored without its signature');
+    assert.equal(writes,1,'Completion must not require a second autocommit for its signature');
+   }finally{db.query=original;}
+  });
   await t.test('one live identity read per request still rejects subsequent revocation and never reuses a different token',async()=>{
    const original=db.query.bind(db);let reads=0;
    db.query=(async(sql:string,values?:unknown[])=>{if(/^SELECT (id,full_name,role|deleted_at|role,status).*FROM app_users WHERE id=/s.test(sql))reads++;return original(sql,values);}) as typeof db.query;
