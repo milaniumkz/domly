@@ -13489,7 +13489,7 @@ class FirestoreDataService {
       _notifyDebugStateChanged();
       return;
     }
-    await BackendApiService.instance.postMap(
+    await BackendApiService.instance.postList(
       '/admin/settings',
       body: {'settings': data},
     );
