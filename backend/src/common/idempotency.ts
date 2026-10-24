@@ -3,12 +3,25 @@ import {Request,RequestHandler} from 'express';
 import {Database} from '../infrastructure/db/Database';
 import {ApiError} from './api';
 
-const operations = new WeakMap<Request, {user: string; scope: string; key: string; committed: boolean}>();
+const operations = new WeakMap<Request, {user: string; scope: string; key: string; committed: boolean; replay?: {status: number; body: any}}>();
 
 /** Commit the mutation and its replay response together, before any HTTP reply. */
 export async function idempotentTransaction<T>(db: Database, req: Request, work: () => Promise<T>, status: number): Promise<T> {
   const operation = operations.get(req);
   const result = await db.atomic(async () => {
+    if (operation) {
+      // The claim may outlive its handler. Lock it before any mutation so a
+      // retry can recover an abandoned claim without racing a live handler.
+      const saved = (await db.query(`SELECT response,status_code FROM api_idempotency
+        WHERE user_id=$1 AND scope=$2 AND key=$3 FOR UPDATE`,
+        [operation.user,operation.scope,operation.key])).rows[0];
+      if (!saved) throw new Error('Idempotency claim is missing');
+      if (saved.response != null) {
+        operation.replay = {status: saved.status_code, body: saved.response};
+        if (saved.status_code >= 400) throw new ApiError(saved.status_code, saved.response.code ?? 'operation_failed', saved.response.message ?? 'Операция не выполнена.');
+        return saved.response.data as T;
+      }
+    }
     const data = await work();
     if (operation) {
       const saved = await db.query(`UPDATE api_idempotency SET response=$4::jsonb,status_code=$5,completed_at=NOW()
@@ -23,7 +36,8 @@ export async function idempotentTransaction<T>(db: Database, req: Request, work:
 }
 
 /** Persist the result before replying; concurrent retries do not repeat a purchase. */
-export function idempotent(db: Database, scope: string): RequestHandler {
+// recoverPending is only safe for handlers using idempotentTransaction.
+export function idempotent(db: Database, scope: string, options: {recoverPending?: boolean} = {}): RequestHandler {
   return (req,res,next) => { void (async()=>{
     const raw=req.header('Idempotency-Key') ?? req.body?.idempotencyKey;
     if(raw===undefined) {next();return;}
@@ -32,17 +46,19 @@ export function idempotent(db: Database, scope: string): RequestHandler {
     const fingerprint=createHash('sha256').update(JSON.stringify(req.body)).digest('hex');
     const claimed=(await db.query(`INSERT INTO api_idempotency(user_id,scope,key,fingerprint) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING key`,[user,scope,key,fingerprint])).rows.length>0;
     if(!claimed){
+      let recover = false;
       for(let attempt=0;attempt<100;attempt++){
         const saved=(await db.query('SELECT fingerprint,response,status_code FROM api_idempotency WHERE user_id=$1 AND scope=$2 AND key=$3',[user,scope,key])).rows[0];
         if(saved?.fingerprint!==fingerprint)throw new ApiError(409,'idempotency_conflict','Этот запрос уже использован для другой операции.');
         if(saved?.response!==null && saved?.response!==undefined){res.status(saved.status_code).json(saved.response);return;}
+        if(options.recoverPending){recover=true;break;}
         await new Promise(resolve=>setTimeout(resolve,100));
       }
-      throw new ApiError(409,'operation_pending','Запрос уже обрабатывается. Обновите статус оплаты.');
+      if(!recover)throw new ApiError(409,'operation_pending','Запрос уже обрабатывается. Обновите статус оплаты.');
     }
-    const operation={user,scope,key,committed:false};operations.set(req,operation);
+    const operation:{user:string;scope:string;key:string;committed:boolean;replay?:{status:number;body:any}}={user,scope,key,committed:false};operations.set(req,operation);
     const json=res.json.bind(res);
-    res.json=((body:unknown)=>{if(operation.committed)return json(body);const status=res.statusCode;void db.query(`UPDATE api_idempotency SET response=$4::jsonb,status_code=$5,completed_at=NOW() WHERE user_id=$1 AND scope=$2 AND key=$3`,[user,scope,key,JSON.stringify(body),status])
+    res.json=((body:unknown)=>{if(operation.replay){res.status(operation.replay.status);return json(operation.replay.body);}if(operation.committed)return json(body);const status=res.statusCode;void db.query(`UPDATE api_idempotency SET response=$4::jsonb,status_code=$5,completed_at=NOW() WHERE user_id=$1 AND scope=$2 AND key=$3 AND status_code IS NULL`,[user,scope,key,JSON.stringify(body),status])
       .then(()=>json(body)).catch(()=>{res.json=json;next(new ApiError(503,'operation_pending','Проверяем результат операции. Обновите статус оплаты.'));});return res;}) as typeof res.json;
     next();
   })().catch(next);};

@@ -5,7 +5,7 @@ import {httpsMediaUrl} from '../modules/mediaLinks';
 import {Readable} from 'node:stream';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import express from 'express';
 import {AddressInfo} from 'node:net';
 import {Database} from '../infrastructure/db/Database';
@@ -812,10 +812,17 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
         assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].available_cleanings,1);
       } finally {await db.query(`DROP TRIGGER IF EXISTS ${fail} ON ${table}`);await db.query(`DROP FUNCTION IF EXISTS ${fail}()`);}
     }
+    // Simulate process failure after claiming the key but before starting the
+    // atomic order transaction. Concurrent retries must recover it exactly once.
+    await db.query("INSERT INTO api_idempotency(user_id,scope,key,fingerprint) VALUES($1,'order_create',$2,$3)",
+      [customer,orderBody.idempotencyKey,createHash('sha256').update(JSON.stringify(orderBody)).digest('hex')]);
     const orders=await Promise.all([1,2,3].map(()=>fetch(base+'/orders',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(orderBody)})));
     assert.ok(orders.every(r=>r.status===201));
     const booked=await Promise.all(orders.map(r=>r.json() as Promise<any>));assert.equal(new Set(booked.map(r=>r.data.order.id)).size,1);
     assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].available_cleanings,0);
+    const conflict=await fetch(base+'/orders',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({...orderBody,startTime:'09:00'})});
+    assert.equal(conflict.status,409,'A recovered key still cannot be reused for different order details');
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM service_orders WHERE customer_id=$1',[customer])).rows[0].n,1);
     const orderId=booked[0].data.order.id;
     await db.query("UPDATE service_orders SET addon_amount=2000,total_amount=2000,payable_amount=2000,status='pending_payment' WHERE id=$1",[orderId]);
     await db.query('UPDATE app_users SET bonus_balance=10000 WHERE id=$1',[customer]);
