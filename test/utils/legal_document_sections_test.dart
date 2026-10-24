@@ -2,6 +2,17 @@ import 'package:domly/utils/legal_document_sections.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('editing the complete legal document preserves its canonical key and Kazakh text', () {
+    final page = adminContentPage({'slug':'public-offer','title_ru':'Оферта','title_kk':'Оферта KK','body_ru':'1. Первый\nТекст\n\n9. Последний\nКонец','body_kk':'Толық мәтін','presentation':{'shortInfo':'Кратко','shortInfoKk':'Қысқаша'},'kind':'offer','active':true});
+    expect(page['id'],'legal_offer');
+    final payload = contentPagePayload({...page,'fullInfo':'1. Новый\nТекст\n\n9. Последний\nКонец'});
+    expect(payload['slug'],'public-offer');
+    expect(payload['bodyRu'],'1. Новый\nТекст\n\n9. Последний\nКонец');
+    expect(payload['bodyKk'],'Толық мәтін');
+    expect((payload['presentation'] as Map)['shortInfo'],'Кратко');
+    expect((payload['presentation'] as Map)['shortInfoKk'],'Қысқаша');
+  });
+
   test('Russian and Kazakh legal paragraphs retain separate numbered headings',
       () {
     for (final text in [

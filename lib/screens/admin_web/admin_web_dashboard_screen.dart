@@ -955,8 +955,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         ),
         _AdminSection(
           key: 'dictionaries',
-          title: 'Словари',
-          subtitle: 'Редактирование переводов приложения по локалям.',
+          title: 'Тексты и переводы',
+          subtitle: 'Тексты интерфейса, описания и подсказки на русском и казахском.',
           icon: Icons.translate_outlined,
           builder: _translationDictionaries,
         ),
@@ -9454,6 +9454,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                 ),
                               ),
                               IconButton(
+                                tooltip: 'Редактировать текст'.tr(),
                                 onPressed: !_canManagePolicies
                                     ? null
                                     : () => _openTranslationEditor(
@@ -13122,6 +13123,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final fullInfoController = TextEditingController(
       text: (existing?['fullInfo'] ?? '').toString(),
     );
+    final titleKkController = TextEditingController(text: (existing?['titleKk'] ?? '').toString());
+    final shortKkController = TextEditingController(text: (existing?['shortInfoKk'] ?? '').toString());
+    final fullKkController = TextEditingController(text: (existing?['fullInfoKk'] ?? '').toString());
     final priceController = TextEditingController(
       text: existing?['price'] != null ? '${existing?['price']}' : '',
     );
@@ -13165,6 +13169,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     maxLines: 8,
                     decoration: InputDecoration(labelText: 'Полная информация'),
                   ),
+                  TextField(controller: titleKkController, decoration: const InputDecoration(labelText: 'Заголовок (Қазақша)')),
+                  TextField(controller: shortKkController, decoration: const InputDecoration(labelText: 'Короткая информация (Қазақша)')),
+                  TextField(controller: fullKkController, minLines: 4, maxLines: 8, decoration: const InputDecoration(labelText: 'Полная информация (Қазақша)')),
                   TextField(
                     controller: priceController,
                     keyboardType: TextInputType.number,
@@ -13231,9 +13238,13 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 return;
               }
               await _data.saveAdminInfoContent({
+                ...?existing,
                 'id': key,
                 'key': key,
                 'title': titleController.text.trim(),
+                'titleKk': titleKkController.text.trim(),
+                'shortInfoKk': shortKkController.text.trim(),
+                'fullInfoKk': fullKkController.text.trim(),
                 'shortInfo': shortInfoController.text.trim(),
                 'fullInfo': fullInfoController.text.trim(),
                 'price': int.tryParse(priceController.text.trim()),

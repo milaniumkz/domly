@@ -178,6 +178,13 @@ class AppConfigService {
         return bridgeDoc.data();
       }
     }
+    if (key == 'legal_offer' || key == 'legal_privacy') {
+      final slug = key == 'legal_offer' ? 'public-offer' : 'privacy-policy';
+      final page = await BackendApiService.instance.getMap(
+        '/content-pages/$slug', authenticated: false,
+      );
+      return legalPageToInfoContent(page);
+    }
     final items = await _backendInfoContent();
     for (final item in items) {
       if ((item['key'] ?? item['id']).toString() == key) {

@@ -1,3 +1,4 @@
+import {residentialComplexHouses} from './residentialComplexHouses';
 import admin from 'firebase-admin';
 import crypto from 'crypto';
 import { Client as MinioClient } from 'minio';
@@ -253,9 +254,35 @@ export class AddressSearchService {
     const limit = input.limit ?? 10;
     const query = [input.query, input.city].filter(Boolean).join(', ');
     const osm = await this.searchOsm({ ...input, query, radiusKm, limit }).catch(() => []);
+    const expanded = await Promise.all(osm.map(row => this.expandResidentialComplex(row).catch(() => [])));
+    const houses = expanded.flat();
+    if (houses.length) return houses;
     if (osm.length >= Math.min(3, limit)) return osm.slice(0, limit);
     const yandex = await this.searchYandex({ ...input, query, radiusKm, limit }).catch(() => []);
     return [...osm, ...yandex].slice(0, limit);
+  }
+
+  private readonly complexCache = new Map<string, {expires: number; rows: AddressSuggestion[]}>();
+  private async expandResidentialComplex(complex: AddressSuggestion): Promise<AddressSuggestion[]> {
+    const raw = complex.raw as any;
+    if (complex.house || !complex.residentialComplex || raw?.type !== 'residential'
+        || raw?.osm_type !== 'way' || !/^\d+$/.test(String(raw?.osm_id))) return [];
+    const bounds = (raw.boundingbox ?? []).map(Number);
+    if (bounds.length !== 4 || bounds.some((n: number) => !Number.isFinite(n))) return [];
+    const [south,north,west,east] = bounds;
+    if (south >= north || west >= east || north-south > .02 || east-west > .04
+        || south < -90 || north > 90 || west < -180 || east > 180) return [];
+    const key = `${raw.osm_id}:${complex.city}`;
+    const cached = this.complexCache.get(key);
+    if (cached && cached.expires > Date.now()) return cached.rows;
+    const response = await fetch(`https://api.openstreetmap.org/api/0.6/map.json?bbox=${west},${south},${east},${north}`, {
+      headers: {'User-Agent':'DOMLY backend address search'}, signal:AbortSignal.timeout(7000),
+    });
+    if (!response.ok) return [];
+    const rows = residentialComplexHouses(complex, await response.json());
+    if (this.complexCache.size >= 100) this.complexCache.delete(this.complexCache.keys().next().value!);
+    if (rows.length) this.complexCache.set(key,{expires:Date.now()+30*60*1000,rows});
+    return rows;
   }
 
   async reverse(lat: number, lng: number): Promise<AddressSuggestion | null> {

@@ -1166,7 +1166,7 @@ export function buildV1Router(deps: {
   router.get('/content-pages', asyncHandler(async (req, res) => {
     const kind = req.query.kind ? String(req.query.kind) : null;
     ok(res, (await deps.db.query(
-      `SELECT slug, title_ru, title_kk, body_ru, body_kk, kind, updated_at
+      `SELECT slug, title_ru, title_kk, body_ru, body_kk, kind, presentation, updated_at
        FROM content_pages
        WHERE active=TRUE AND ($1::text IS NULL OR kind=$1)
        ORDER BY kind, slug`,
@@ -1176,7 +1176,7 @@ export function buildV1Router(deps: {
 
   router.get('/content-pages/:slug', asyncHandler(async (req, res) => {
     const page = first((await deps.db.query(
-      `SELECT slug, title_ru, title_kk, body_ru, body_kk, kind, updated_at
+      `SELECT slug, title_ru, title_kk, body_ru, body_kk, kind, presentation, updated_at
        FROM content_pages
        WHERE slug=$1 AND active=TRUE`,
       [req.params.slug],
@@ -1259,7 +1259,7 @@ export function buildV1Router(deps: {
     const banners = (await deps.db.query(`SELECT banners.*, COALESCE(banners.image_url,(SELECT public_url FROM files WHERE id=banners.image_file_id)) AS image_url FROM banners WHERE active=TRUE ORDER BY placement, sort_order, created_at DESC`)).rows;
     const promotions = (await deps.db.query(`SELECT * FROM promotions WHERE active=TRUE ORDER BY created_at DESC`)).rows;
     const contentPages = (await deps.db.query(
-      `SELECT slug, title_ru, title_kk, body_ru, body_kk, kind, updated_at
+      `SELECT slug, title_ru, title_kk, body_ru, body_kk, kind, presentation, updated_at
        FROM content_pages WHERE active=TRUE ORDER BY kind, slug`,
     )).rows;
     const updatedAt = [
@@ -1717,9 +1717,6 @@ export function buildV1Router(deps: {
     await tx.query(`UPDATE order_addons SET payment_status='cancelled' WHERE order_id=$1`, [order.id]);
     await tx.query(`UPDATE order_offers SET status='expired' WHERE order_id=$1 AND status='offered'`, [order.id]);
     const refundedPayments = await deps.payments.refundOrderPayments(order.id, 'Возврат за отменённый заказ', tx);
-    if (refundedPayments.length === 0 && Number(order.bonus_spent) > 0) {
-      await deps.bonuses.refund(order.customer_id, Number(order.bonus_spent), 'Возврат бонусов за отменённый заказ', order.id, undefined, tx);
-    }
     await deps.notifications.create({
       userId: order.customer_id,
       titleRu: 'Заказ отменён',
@@ -3850,9 +3847,12 @@ export function buildV1Router(deps: {
       if (!item.key || !item.ru) throw new ApiError(400, 'invalid_request', 'У каждого перевода должны быть key и ru.');
       rows.push(first((await deps.db.query(
         `INSERT INTO translations (key, ru, kk, namespace, updated_at) VALUES ($1,$2,$3,$4,NOW())
-         ON CONFLICT (key) DO UPDATE SET ru=$2, kk=$3, namespace=$4, updated_at=NOW()
+         ON CONFLICT (key) DO UPDATE SET
+           ru=CASE WHEN $5::boolean THEN translations.ru ELSE EXCLUDED.ru END,
+           kk=CASE WHEN $5::boolean AND NULLIF(btrim(translations.kk),'') IS NOT NULL THEN translations.kk ELSE EXCLUDED.kk END,
+           namespace=EXCLUDED.namespace, updated_at=NOW()
          RETURNING *`,
-        [item.key, item.ru, item.kk ?? null, item.namespace ?? 'app'],
+        [item.key, item.ru, item.kk ?? null, item.namespace ?? 'app', req.body.preserveExisting === true],
       )).rows));
     }
     ok(res, { updated: rows.length, rows });
@@ -4174,8 +4174,8 @@ export function buildV1Router(deps: {
 
   router.post('/admin/content-pages', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const row = first((await deps.db.query(
-      `INSERT INTO content_pages (slug, title_ru, title_kk, body_ru, body_kk, kind, active)
-       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'info'),COALESCE($7,TRUE))
+      `INSERT INTO content_pages (slug, title_ru, title_kk, body_ru, body_kk, kind, active, presentation)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'info'),COALESCE($7,TRUE),COALESCE($8,'{}'::jsonb))
        ON CONFLICT (slug) DO UPDATE SET
          title_ru=EXCLUDED.title_ru,
          title_kk=EXCLUDED.title_kk,
@@ -4183,6 +4183,7 @@ export function buildV1Router(deps: {
          body_kk=EXCLUDED.body_kk,
          kind=EXCLUDED.kind,
          active=EXCLUDED.active,
+         presentation=content_pages.presentation || EXCLUDED.presentation,
          updated_at=NOW()
        RETURNING *`,
       [
@@ -4193,6 +4194,7 @@ export function buildV1Router(deps: {
         req.body.bodyKk ?? null,
         req.body.kind ?? 'info',
         req.body.active ?? true,
+        req.body.presentation ?? {},
       ],
     )).rows);
     ok(res, row, 201);

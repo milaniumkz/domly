@@ -49,6 +49,7 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
   int bonusBalance = 0,
   int maxBonusToSpend = 0,
   int paymentAmount = 0,
+  int alreadyPaidBonus = 0,
 }) async {
   bool onlineAvailable = false;
   bool onlineTest = false;
@@ -141,7 +142,7 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-          content: Column(
+          content: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -153,6 +154,17 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
                   color: DomlyPalette.foreground(DomlyColors.foreground),
                 ),
               ),
+              if (paymentAmount > 0 || alreadyPaidBonus > 0) ...[
+                const SizedBox(height: 12),
+                if (alreadyPaidBonus > 0)
+                  Text('Уже оплачено бонусами: {amount} ₸'.tr(params: {'amount': '$alreadyPaidBonus'})),
+                if (useBonus && availableBonus > 0)
+                  Text('Дополнительно бонусами: {amount} ₸'.tr(params: {'amount': '$availableBonus'})),
+                const SizedBox(height: 6),
+                Text('Сумма нового счёта: {amount} ₸'.tr(params: {
+                  'amount': '${(paymentAmount - (useBonus ? availableBonus : 0)).clamp(0, paymentAmount)}',
+                }), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              ],
               if (availableBonus > 0) ...[
                 const SizedBox(height: 12),
                 InkWell(
@@ -233,7 +245,7 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
                 method: DomlyPaymentMethod.kaspi,
               ),
             ],
-          ),
+          )),
         );
       });
     },

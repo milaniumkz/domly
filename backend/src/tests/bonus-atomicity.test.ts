@@ -101,3 +101,21 @@ test('atomic scope rolls back nested services and delivers only after commit',{s
   assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[id])).rows[0].bonus_balance),42);
  } finally {await db.query('DELETE FROM bonus_transactions WHERE user_id=$1',[id]);await db.query('DELETE FROM app_users WHERE id=$1',[id]);await db.close();await observer.close();}
 });
+
+for (const alreadyReturned of [0, 30]) test(`cancelled Kaspi invoice bonus refund respects prior return ${alreadyReturned}`,{skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async()=>{
+ const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!),user=randomUUID(),order=randomUUID(),old=randomUUID(),retry=randomUUID();
+ try {
+  await db.query("INSERT INTO app_users(id,phone,role,bonus_balance) VALUES($1,$2,'customer',100)",[user,'cancelled-invoice-'+user]);
+  await db.query("INSERT INTO service_orders(id,customer_id,status,bonus_spent,payable_amount) VALUES($1,$2,'pending_payment',80,20)",[order,user]);
+  await db.query("INSERT INTO payments(id,customer_id,order_id,provider,status,amount,bonus_amount) VALUES($1,$2,$3,'kaspi','cancelled',20,80),($4,$2,$3,'kaspi','pending',20,0)",[old,user,order,retry]);
+  const bonus=new BonusService(db);await bonus.spend(user,80,'Original spend',order,old);
+  if (alreadyReturned) await bonus.refund(user,alreadyReturned,'previous partial refund',order,old);
+  const {PaymentService}=await import('../modules/domainServices');const service=new PaymentService(db,bonus);
+  await Promise.all(Array.from({length:4},()=>service.refundOrderPayments(order,'Cancel order')));
+  assert.equal(Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[user])).rows[0].bonus_balance),100);
+  const ledger=(await db.query("SELECT amount FROM bonus_transactions WHERE order_id=$1 AND type='refund'",[order])).rows;
+  assert.equal(ledger.length,alreadyReturned ? 2 : 1);assert.equal(ledger.reduce((sum: number,row: any)=>sum+Number(row.amount),0),80);
+ } finally {
+  await db.query('DELETE FROM bonus_transactions WHERE user_id=$1',[user]);await db.query('DELETE FROM payments WHERE customer_id=$1',[user]);await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('DELETE FROM app_users WHERE id=$1',[user]);await db.close();
+ }
+});

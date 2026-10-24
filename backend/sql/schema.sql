@@ -1524,3 +1524,6 @@ CREATE TABLE IF NOT EXISTS notification_deliveries (
 );
 CREATE INDEX IF NOT EXISTS notification_deliveries_pending
   ON notification_deliveries(available_at,created_at) WHERE delivered_at IS NULL;
+
+-- Preserve editable summaries independently of the full legal/information text.
+ALTER TABLE content_pages ADD COLUMN IF NOT EXISTS presentation JSONB NOT NULL DEFAULT '{}'::jsonb;

@@ -33,7 +33,8 @@ class _OrderPaymentRetryState extends State<OrderPaymentRetry> {
       final method = await showPaymentMethodOptionsDialog(context,
           bonusBalance: options['balance'] ?? 0,
           maxBonusToSpend: options['limit'] ?? 0,
-          paymentAmount: amount);
+          paymentAmount: amount,
+          alreadyPaidBonus: (order['bonusSpent'] as num? ?? 0).toInt());
       if (!mounted || method == null) return;
       final bonus = method.method == DomlyPaymentMethod.bonus || method.useBonus
           ? (options['balance'] ?? 0).clamp(0, options['limit'] ?? 0).clamp(0, amount).toInt() : 0;
