@@ -8,7 +8,7 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund]
+        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -48,6 +48,12 @@ jobs:
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
         run: |
+          if [ "$ACTION" = "publish-offer" ]; then
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/publish_offer.cjs docs/legal/public-offer-20261024.json "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "set -eu; umask 077; mkdir -p '$DEPLOY_PATH/backups/legal'; cd '$DEPLOY_PATH/current'; { printf 'const offerPayload = '; cat '$DEPLOY_PATH/shared/public-offer-20261024.json'; printf ';\\n'; cat '$DEPLOY_PATH/shared/publish_offer.cjs'; } | docker compose -p domly-backend exec -T -e OFFER_OPERATION_ID='${{ github.run_id }}' api node > '$DEPLOY_PATH/backups/legal/${{ github.run_id }}.json'"
+            exit 0
+          fi
           if [ "$ACTION" = "bonus-audit" ] || [ "$ACTION" = "bonus-refund" ]; then
             [[ "$REPORT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/=]+$ ]]
             test "${#REPORT_PUBLIC_KEY}" -le 12000
