@@ -456,6 +456,7 @@ export const openApiSpec = {
       get: secured('Уведомления пользователя'),
       post: { ...secured('Создать уведомление пользователю/роли'), requestBody: jsonBody({ userId: 'uuid', titleRu: 'Уведомление', bodyRu: 'Текст' }) },
     },
+    '/notifications/page': { get: { ...secured('История уведомлений: первые limit записей, непрочитанные сначала; ответ data: {items, total}'), parameters: [{name: 'limit', in: 'query', required: false, schema: {type: 'integer', minimum: 1, maximum: 2147483647, default: 50}}] } },
     '/notifications/unread-count': { get: secured('Количество непрочитанных уведомлений') },
     '/notifications/{id}/read': { post: { ...secured('Отметить уведомление прочитанным'), parameters: [path('id')] } },
     '/notifications/read-all': { post: secured('Отметить все уведомления прочитанными') },

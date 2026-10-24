@@ -488,6 +488,23 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM app_users WHERE id=$1',[other]);
       }
     });
+    await t.test('notification history loads a bounded prefix without losing older records',async()=>{
+      const ids=Array.from({length:65},()=>randomUUID());
+      try {
+        for (const id of ids) await db.query("INSERT INTO notifications(id,user_id,role,title_ru,body_ru) VALUES($1,$2,'customer','Page test','Test')",[id,customer]);
+        const first=await request('/notifications/page','GET',undefined,true);
+        assert.equal(first.status,200);
+        assert.equal(first.json.data.items.length,50);
+        const total=first.json.data.total;
+        assert.ok(total>=65);
+        const all=(await request('/notifications/page?limit='+total,'GET',undefined,true)).json.data;
+        assert.equal(all.items.length,total);
+        assert.equal(new Set(all.items.map((r:any)=>r.id)).size,total);
+        assert.ok(ids.every(id=>all.items.some((r:any)=>r.id===id)));
+        assert.deepEqual(first.json.data.items.map((r:any)=>r.id),all.items.slice(0,50).map((r:any)=>r.id));
+        for(const limit of ['0','-1','abc','1.5','2147483648']) assert.equal((await request('/notifications/page?limit='+limit,'GET',undefined,true)).status,400);
+      } finally { await db.query('DELETE FROM notifications WHERE id=ANY($1::uuid[])',[ids]); }
+    });
     await t.test('personal notifications never leak through role membership',async()=>{
       const other=randomUUID();
       const ids=[randomUUID(),randomUUID(),randomUUID()];
@@ -500,6 +517,10 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.ok(rows.some((row:any)=>row.id===ids[0]));
         assert.ok(rows.some((row:any)=>row.id===ids[2]));
         assert.ok(!rows.some((row:any)=>row.id===ids[1]));
+        const page=(await request('/notifications/page','GET',undefined,true)).json.data;
+        assert.ok(!page.items.some((row:any)=>row.id===ids[1]));
+        assert.ok(page.items.some((row:any)=>row.id===ids[0]));
+        assert.ok(page.items.some((row:any)=>row.id===ids[2]));
         assert.equal((await request('/notifications/'+ids[1]+'/read','POST',{},true)).status,404);
         const before=(await request('/notifications/unread-count','GET',undefined,true)).json.data.count;
         await request('/notifications/'+ids[0]+'/read','POST',{},true);

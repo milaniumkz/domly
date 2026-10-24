@@ -11,9 +11,10 @@ import '../../ui/domly_ui.dart';
 enum NotificationSurface { client, cleaner }
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key, required this.surface});
+  const NotificationsScreen({super.key, required this.surface, this.historySource});
 
   final NotificationSurface surface;
+  final Stream<NotificationHistoryPage> Function(int limit)? historySource;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -21,16 +22,18 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final _data = FirestoreDataService.instance;
-  late final _notifications = _data.userNotificationsStream();
+  int _visibleLimit = 50;
+  Stream<NotificationHistoryPage> _history(int limit) => widget.historySource?.call(limit) ?? _data.userNotificationsPageStream(limit: limit);
+  late Stream<NotificationHistoryPage> _notifications = _history(_visibleLimit);
 
   @override
   Widget build(BuildContext context) {
     DomlyPalette.watch(context);
 
-    return StreamBuilder<List<Map<String, dynamic>>>(
+    return StreamBuilder<NotificationHistoryPage>(
       stream: _notifications,
       builder: (context, snapshot) {
-        final notifications = snapshot.data ?? const <Map<String, dynamic>>[];
+        final notifications = snapshot.data?.items ?? const <Map<String, dynamic>>[];
         final sortedNotifications = [...notifications]..sort((a, b) {
             final aRead = a['read'] == true;
             final bRead = b['read'] == true;
@@ -86,7 +89,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   : 'Всего уведомлений: {count}'.tr(
                                       params: {
                                         'count':
-                                            notifications.length.toString(),
+                                            (snapshot.data?.total ?? 0).toString(),
                                       },
                                     ),
                               style: TextStyle(
@@ -127,10 +130,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               : ListView.separated(
                                   padding: const EdgeInsets.fromLTRB(
                                       20, 16, 20, 112),
-                                  itemCount: sortedNotifications.length,
+                                  itemCount: sortedNotifications.length + ((snapshot.data?.total ?? 0) > notifications.length ? 1 : 0),
                                   separatorBuilder: (_, __) =>
                                       const SizedBox(height: 12),
                                   itemBuilder: (context, index) {
+                                    if (index == sortedNotifications.length) {
+                                      return TextButton(
+                                        onPressed: snapshot.connectionState == ConnectionState.waiting ? null : () {
+                                          setState(() {
+                                            _visibleLimit += 50;
+                                            _notifications = _history(_visibleLimit);
+                                          });
+                                        },
+                                        child: Text('Показать ещё'.tr()),
+                                      );
+                                    }
                                     final item = sortedNotifications[index];
                                     final previous = index == 0
                                         ? null

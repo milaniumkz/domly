@@ -37,6 +37,12 @@ String _newIdempotencyKey() {
   return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
 }
 
+class NotificationHistoryPage {
+  const NotificationHistoryPage({required this.items, required this.total});
+  final List<Map<String, dynamic>> items;
+  final int total;
+}
+
 class FirestoreDataService {
   FirestoreDataService._();
 
@@ -3244,6 +3250,28 @@ class FirestoreDataService {
         return _defaultCustomerSettings();
       }
     });
+  }
+
+  Stream<NotificationHistoryPage> userNotificationsPageStream({int limit = 50}) {
+    if (_useDebugFixtures || _isTemporaryCustomerSession || _isTemporaryCleanerSession) {
+      return userNotificationsStream().map((items) {
+        final sorted = [...items]..sort((a, b) {
+          if ((a['read'] == true) != (b['read'] == true)) return a['read'] == true ? 1 : -1;
+          return _timestampMillis(b['createdAt']).compareTo(_timestampMillis(a['createdAt']));
+        });
+        return NotificationHistoryPage(items: sorted.take(limit).toList(), total: items.length);
+      });
+    }
+    final recipientId = _uidOrNull;
+    const empty = NotificationHistoryPage(items: [], total: 0);
+    if (recipientId == null) return Stream.value(empty);
+    return _backendPollingStream(() async {
+      final page = await BackendApiService.instance.getMap('/notifications/page', query: {'limit': '$limit'});
+      if (_uidOrNull != recipientId) return <String, dynamic>{'items': <Map<String, dynamic>>[], 'total': 0};
+      final items = (page['items'] as List? ?? []).map((item) => _mapBackendNotification(Map<String, dynamic>.from(item as Map)))
+          .where((item) => item['userId'] == null || item['userId'].toString() == recipientId).toList();
+      return <String, dynamic>{'items': items, 'total': (page['total'] as num?)?.toInt() ?? items.length};
+    }, interval: const Duration(seconds: 2)).map((page) => NotificationHistoryPage(items: page['items'] as List<Map<String, dynamic>>, total: page['total'] as int));
   }
 
   Stream<List<Map<String, dynamic>>> userNotificationsStream() {
