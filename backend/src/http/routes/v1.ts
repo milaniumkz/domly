@@ -1,3 +1,4 @@
+import {freezePackage} from '../../modules/packageFreeze';
 import {adminPaymentHistory} from '../../modules/adminPaymentHistory';
 import { customerMonthlyProgress } from '../../modules/customerProgress';
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
@@ -808,26 +809,11 @@ export function buildV1Router(deps: {
     )).rows);
   }));
 
-  router.patch('/packages/my/:id', auth(['customer']), asyncHandler(async (req, res) => {
-    const row = first((await deps.db.query(
-      `UPDATE customer_packages SET
-       status=COALESCE($3,status),
-       freeze_until=COALESCE($4,freeze_until),
-       scheduled_cleanings=COALESCE($5,scheduled_cleanings),
-       available_cleanings=COALESCE($6,available_cleanings),
-       updated_at=NOW()
-       WHERE id=$1 AND customer_id=$2 RETURNING *`,
-      [
-        req.params.id,
-        req.user!.id,
-        req.body.status ?? null,
-        req.body.freezeUntil ?? null,
-        req.body.scheduledVisits ?? null,
-        req.body.remainingCleanings ?? null,
-      ],
-    )).rows);
-    if (!row) throw new ApiError(404, 'not_found', 'Пакет не найден.');
-    ok(res, row);
+  router.patch('/packages/my/:id', auth(['customer']), asyncHandler(async (req,res) => {
+    if (!req.body.freezeUntil || Object.keys(req.body).some(key => key !== 'freezeUntil')) {
+      throw new ApiError(400,'invalid_request','Остаток уборок и статус пакета рассчитываются сервером.');
+    }
+    ok(res, await freezePackage(deps.db,req.user!.id,String(req.params.id),{until:req.body.freezeUntil}));
   }));
 
   router.post('/order-requests', auth(['customer']), asyncHandler(async (req, res) => {
@@ -1410,11 +1396,11 @@ export function buildV1Router(deps: {
     const result = await idempotentTransaction(deps.db, req, async () => {
     validateBookingStart(req.body.date, req.body.startTime);
     const customerPackage = first<{ id: string; package_id: string; address_id: string; available_cleanings: number; total_cleanings: number; status: string; purchase_config: any; freeze_until?: string }>((await deps.db.query(
-      `SELECT * FROM customer_packages WHERE id=$1 AND customer_id=$2`,
+      `SELECT *,freeze_until::text AS freeze_until FROM customer_packages WHERE id=$1 AND customer_id=$2 FOR UPDATE`,
       [req.body.customerPackageId, req.user!.id],
     )).rows);
     if (!customerPackage || customerPackage.status !== 'active') throw new ApiError(402, 'payment_required', 'Сначала подтвердите оплату пакета.');
-    if (customerPackage.freeze_until && String(req.body.date) <= String(customerPackage.freeze_until).slice(0,10)) throw new ApiError(409,'package_frozen','Пакет заморожен на выбранную дату.');
+    if (customerPackage.freeze_until && String(req.body.date) < String(customerPackage.freeze_until).slice(0,10)) throw new ApiError(409,'package_frozen','Пакет заморожен на выбранную дату.');
     if (customerPackage.available_cleanings <= 0) throw new ApiError(400, 'no_cleanings_left', 'В пакете не осталось доступных уборок.');
     const prepaid = (customerPackage.purchase_config?.addons ?? []) as any[];
     const prepaidIds = new Set(prepaid.map(item=>item.id));
@@ -1944,6 +1930,10 @@ export function buildV1Router(deps: {
       const date = req.body.date ?? req.body.scheduledDate ?? (current.scheduled_date instanceof Date ? current.scheduled_date.toISOString().slice(0,10) : String(current.scheduled_date).slice(0,10));
       const startTime = req.body.time ?? req.body.startTime ?? current.start_time;
       validateBookingStart(date,startTime);
+      if (current.customer_package_id) {
+        const pkg = (await tx.query('SELECT freeze_until::text AS freeze_until FROM customer_packages WHERE id=$1 FOR UPDATE',[current.customer_package_id])).rows[0];
+        if (pkg?.freeze_until && String(date).slice(0,10)<pkg.freeze_until) throw new ApiError(409,'package_frozen','Пакет заморожен на выбранную дату.');
+      }
       const duration = Number(current.estimated_duration_minutes) > 0 ? Number(current.estimated_duration_minutes) : await estimateCleaningDurationMinutes(tx,current.address_id,[]);
       const endTime = addMinutes(String(startTime),duration);
       if (current.cleaner_id) {

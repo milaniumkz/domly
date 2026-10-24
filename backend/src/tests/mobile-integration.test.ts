@@ -42,8 +42,31 @@ test('mobile backend persistence, permissions, pricing and account lifecycle', {
         assert.equal(state.expires_in,37);assert.equal(state.frozen_for,7);assert.equal(state.available_cleanings,3);
         assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:7},inviter)).status,404);
         assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:-1})).status,400);
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:true})).status,400);
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:7})).status,200);
+        assert.equal((await db.query('SELECT period_end-CURRENT_DATE AS days FROM customer_packages WHERE id=$1',[frozen])).rows[0].days,37);
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:10})).status,200);
+        assert.equal((await db.query('SELECT period_end-CURRENT_DATE AS days FROM customer_packages WHERE id=$1',[frozen])).rows[0].days,40);
       } finally {
         await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND key=$2',[customer,'freeze-'+frozen]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[frozen]);
+      }
+    });
+    await t.test('freeze refuses booked dates without changing expiry or booking',async()=>{
+      const frozen=randomUUID(), booking=randomUUID();
+      await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,status,period_end) VALUES($1,$2,$3,4,3,'active',CURRENT_DATE+30)",[frozen,customer,pkg]);
+      await db.query("INSERT INTO service_orders(id,customer_id,customer_package_id,package_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,$3,$4,CURRENT_DATE+3,'10:00','12:00','pending_assignment')",[booking,customer,frozen,pkg]);
+      try {
+        const result=await request(`/packages/my/${frozen}/freeze`,'POST',{days:7});
+        assert.equal(result.status,409);
+        const state=(await db.query('SELECT period_end-CURRENT_DATE AS days,freeze_until FROM customer_packages WHERE id=$1',[frozen])).rows[0];
+        assert.equal(state.days,30);assert.equal(state.freeze_until,null);
+        assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[booking])).rows[0].status,'pending_assignment');
+        // The first available day is excluded from the freeze interval.
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:3})).status,200);
+        assert.equal((await db.query('SELECT period_end-CURRENT_DATE AS days FROM customer_packages WHERE id=$1',[frozen])).rows[0].days,33);
+      } finally {
+        await db.query('DELETE FROM service_orders WHERE id=$1',[booking]);
         await db.query('DELETE FROM customer_packages WHERE id=$1',[frozen]);
       }
     });

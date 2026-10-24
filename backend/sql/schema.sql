@@ -694,6 +694,8 @@ CREATE TABLE IF NOT EXISTS customer_packages (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE customer_packages ADD COLUMN IF NOT EXISTS freeze_until DATE;
+
 CREATE SEQUENCE IF NOT EXISTS bcc_order_reference_seq START WITH 1000000;
 
 CREATE TABLE IF NOT EXISTS service_orders (

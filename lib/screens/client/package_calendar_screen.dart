@@ -1,3 +1,4 @@
+import '../common/package_freeze_dialog.dart';
 import '../../theme/domly_palette.dart';
 import 'dart:async';
 
@@ -43,6 +44,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
   bool _loadingDates = false;
   String? _loadingSlotsDateKey;
   bool _submitting = false;
+  bool _freezing = false;
   int? _scheduledVisitsOverride;
   int? _pendingSelectionsOverride;
   StreamSubscription<List<Map<String, dynamic>>>? _slotsSubscription;
@@ -451,6 +453,24 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         orderStatus == 'in_progress';
   }
 
+  Future<void> _freezePackage(Map<String, dynamic> subscription) async {
+    if (_freezing) return;
+    setState(() => _freezing = true);
+    try {
+      final saved = await showDialog<bool>(context: context, barrierDismissible: false,
+        builder: (_) => PackageFreezeDialog(onSubmit: (days) async {
+          await _data.freezeSubscription(days: days, subscriptionId: subscription['id'].toString());
+        }));
+      if (saved == true && mounted) {
+        setState(() { _selectedTimes.clear(); _slotsCache.clear(); });
+        await _loadAvailableDates();
+        if (mounted) showDomlySnackBar(context, title: 'Пакет заморожен');
+      }
+    } finally {
+      if (mounted) setState(() => _freezing = false);
+    }
+  }
+
   Future<void> _loadAvailableDates() async {
     setState(() => _loadingDates = true);
     try {
@@ -570,6 +590,9 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         final calendarSubscription =
             subscription ?? activePackageSubscriptions.first;
         final area = (calendarSubscription['area'] ?? '—').toString();
+        final freezeUntil = _dateValue(calendarSubscription['freezeUntil']);
+        final frozen = freezeUntil != null && DateUtils.dateOnly(freezeUntil).isAfter(DateUtils.dateOnly(DateTime.now()));
+        final validUntil = _dateValue(calendarSubscription['validUntil']);
 
         if (_scheduledVisitsOverride != null &&
             actualScheduledVisits >= _scheduledVisitsOverride! &&
@@ -714,6 +737,17 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 112),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
+                      DomlySecondaryButton(
+                        label: frozen
+                            ? 'Заморожен до {date}'.tr(params: {'date': domlyDateText(freezeUntil!)})
+                            : 'Заморозить пакет',
+                        onPressed: _freezing || frozen ? null : () => _freezePackage(calendarSubscription),
+                      ),
+                      if (validUntil != null) Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text('Действует до {date}'.tr(params: {'date': domlyDateText(validUntil)})),
+                      ),
+                      const SizedBox(height: 12),
                       DomlyCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2236,30 +2270,19 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     }
 
     final groupedSelections = <String, List<Map<String, dynamic>>>{};
-    var packageIndex = 0;
-    var remainingInPackage = _availableSelectionsForSubscription(
-      packagesForScheduling.first,
-    );
+    final remainingByPackage = <String, int>{
+      for (final item in packagesForScheduling) item['id'].toString(): _availableSelectionsForSubscription(item),
+    };
     for (final selection in selections) {
-      while (remainingInPackage <= 0 &&
-          packageIndex < packagesForScheduling.length - 1) {
-        packageIndex += 1;
-        remainingInPackage = _availableSelectionsForSubscription(
-          packagesForScheduling[packageIndex],
-        );
-      }
-      if (remainingInPackage <= 0) {
+      final date = DateTime.tryParse(selection['date'].toString());
+      for (final item in packagesForScheduling) {
+        final id = item['id'].toString();
+        final until = _dateValue(item['freezeUntil']);
+        if ((remainingByPackage[id] ?? 0) <= 0 || date == null || (until != null && date.isBefore(DateUtils.dateOnly(until)))) continue;
+        groupedSelections.putIfAbsent(id, () => <Map<String, dynamic>>[]).add(selection);
+        remainingByPackage[id] = remainingByPackage[id]! - 1;
         break;
       }
-      final subscriptionId =
-          (packagesForScheduling[packageIndex]['id'] ?? '').toString();
-      if (subscriptionId.isEmpty) {
-        continue;
-      }
-      groupedSelections
-          .putIfAbsent(subscriptionId, () => <Map<String, dynamic>>[])
-          .add(selection);
-      remainingInPackage -= 1;
     }
 
     final distributedCount = groupedSelections.values.fold<int>(

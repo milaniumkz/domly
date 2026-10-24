@@ -1,3 +1,5 @@
+import {freezePackage} from '../../modules/packageFreeze';
+import {idempotent,idempotentTransaction} from '../../common/idempotency';
 import { updateOrderAddons } from '../../modules/orderAddons';
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
@@ -47,15 +49,12 @@ export function mobileRouter(db: Database) {
     ok(res, await updateOrderAddons(db,String(req.params.id),req.user!.id,req.body.addonsDetailed));
   }));
 
-  router.post('/packages/my/:id/freeze', auth(['customer']), asyncHandler(async (req,res) => {
-    const setting = first<any>((await db.query("SELECT value FROM app_settings WHERE key='maxPackageFreezeDays'")).rows);
-    const days = Number(req.body.days);
-    if (!Number.isInteger(days) || days < 1 || days > Number(setting?.value ?? 30)) throw new ApiError(400,'invalid_freeze','Проверьте срок заморозки.');
-    const pkg = first((await db.query(`UPDATE customer_packages SET freeze_until=CURRENT_DATE+$3::integer,updated_at=NOW()
-      WHERE id=$1 AND customer_id=$2 AND status='active' RETURNING *`,[req.params.id,req.user!.id,days])).rows);
-    if (!pkg) throw new ApiError(404,'package_not_found','Активный пакет не найден.');
-    ok(res,pkg);
-  }));
+  router.post('/packages/my/:id/freeze', auth(['customer']),
+    (req,res,next) => idempotent(db,'package_freeze:'+req.params.id,{recoverPending:true})(req,res,next),
+    asyncHandler(async (req,res) => {
+      ok(res, await idempotentTransaction(db,req,
+        () => freezePackage(db,req.user!.id,String(req.params.id),{days:req.body.days}),200));
+    }));
 
   router.get('/referrals', auth(['customer']), asyncHandler(async (req, res) => {
     const user = first<any>((await db.query('SELECT numeric_id, bonus_balance FROM app_users WHERE id=$1', [req.user!.id])).rows);
