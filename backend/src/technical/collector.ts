@@ -45,8 +45,9 @@ export function collectRequests(db:Database){return async(req:Request,res:Respon
   return r?{values:bodyFields(r.state),subject:r.state[owner]??null}:null;
  };
  if(table&&target.id&&identity&&['POST','PATCH','DELETE'].includes(req.method))try{const state=await readState(target.id,identity);before=state?.values??null;subjectUserId=state?.subject??null;}catch{collectorFailure();}
- try{await db.query(`INSERT INTO tech_events(id,request_id,user_id,user_name,user_role,client_session_id,operation_id,action,entity_type,entity_id,platform,app_version,device,ip,fields,before_values)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,[eventId,requestId,identity?.id??null,identity?.full_name??null,identity?.role??null,clientSession,op,safeText(req.method+' '+req.path.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi,':id'),240),target.type,target.id,header('x-domly-platform'),header('x-domly-version'),header('user-agent',160),req.ip??req.socket.remoteAddress??null,{...bodyFields(req.body),identityEvidence,...clientCorrelation},null]);health.lastSuccessAt=new Date().toISOString();}catch{collectorFailure();}
+ let initialEvent:any=null;
+ try{initialEvent=(await db.query(`INSERT INTO tech_events(id,request_id,user_id,user_name,user_role,client_session_id,operation_id,action,entity_type,entity_id,platform,app_version,device,ip,fields,before_values)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,[eventId,requestId,identity?.id??null,identity?.full_name??null,identity?.role??null,clientSession,op,safeText(req.method+' '+req.path.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi,':id'),240),target.type,target.id,header('x-domly-platform'),header('x-domly-version'),header('user-agent',160),req.ip??req.socket.remoteAddress??null,{...bodyFields(req.body),identityEvidence,...clientCorrelation},null])).rows[0];health.lastSuccessAt=new Date().toISOString();}catch{collectorFailure();}
  let responseError:any=null,resultId:any=null,responseUser:any=null;
  const json=res.json.bind(res);res.json=((value:any)=>{
   if(value?.ok===false)responseError={code:safeText(value.code,100),message:safeText(value.message)};
@@ -68,12 +69,23 @@ export function collectRequests(db:Database){return async(req:Request,res:Respon
    const denied=[401,403].includes(res.statusCode);
    if(denied){before=null;subjectUserId=null;}
    if(!denied&&table&&entityId&&['POST','PATCH','DELETE'].includes(req.method))try{const state=await readState(entityId,user);after=state?.values??null;subjectUserId=subjectUserId??state?.subject??null;}catch{collectorFailure();}
-   const row=(await db.query(`UPDATE tech_events SET result=$2,finished_at=NOW(),duration_ms=$3,http_status=$4,error_code=$5,user_message=$6,failure_reason=$7,
-    before_values=$15,user_name=COALESCE(user_name,$14),fields=$13,auth_session_id=$12,user_id=COALESCE($8,user_id),user_role=COALESCE($9,user_role),entity_id=COALESCE(entity_id,$10),after_values=$11 WHERE id=$1 RETURNING *`,
-    [eventId,result,Math.min(2147483647,Date.now()-started),interrupted?null:res.statusCode,responseError?.code??req.technicalError?.code??null,responseError?.message??null,
-    interrupted?'Соединение закрыто до ответа. Дальнейшее состояние операции необходимо проверить.':req.technicalError?req.technicalError.kind+' ('+req.technicalError.code+')':responseError?.code??null,user?.id??null,user?.role??null,entityId,after,user?.sessionId??null,{...bodyFields(req.body),identityEvidence,...clientCorrelation,...(subjectUserId?{subjectUserId}:{})},user?.full_name??null,before])).rows[0];
+   if(!initialEvent)return;
+   // Sign exactly the final persisted values before the write. Completion and
+   // signature must not require two commits or expose an unsigned final event.
+   const completed={...initialEvent,result,finished_at:new Date(),duration_ms:Math.min(2147483647,Date.now()-started),
+    http_status:interrupted?null:res.statusCode,error_code:responseError?.code??req.technicalError?.code??null,
+    user_message:responseError?.message??null,
+    failure_reason:interrupted?'Соединение закрыто до ответа. Дальнейшее состояние операции необходимо проверить.':req.technicalError?req.technicalError.kind+' ('+req.technicalError.code+')':responseError?.code??null,
+    user_id:user?.id??initialEvent.user_id,user_role:user?.role??initialEvent.user_role,
+    entity_id:initialEvent.entity_id??entityId,after_values:after,auth_session_id:user?.sessionId??null,
+    fields:{...bodyFields(req.body),identityEvidence,...clientCorrelation,...(subjectUserId?{subjectUserId}:{})},
+    user_name:initialEvent.user_name??user?.full_name??null,before_values:before};
+   const row=(await db.query(`UPDATE tech_events SET result=$2,finished_at=$16,duration_ms=$3,http_status=$4,error_code=$5,user_message=$6,failure_reason=$7,
+    before_values=$15,user_name=$14,fields=$13,auth_session_id=$12,user_id=$8,user_role=$9,entity_id=$10,after_values=$11,signature=$17 WHERE id=$1 RETURNING *`,
+    [eventId,completed.result,completed.duration_ms,completed.http_status,completed.error_code,completed.user_message,
+     completed.failure_reason,completed.user_id,completed.user_role,completed.entity_id,completed.after_values,completed.auth_session_id,
+     completed.fields,completed.user_name,completed.before_values,completed.finished_at,eventSignature(completed)])).rows[0];
    if(!row)return;
-   await db.query('UPDATE tech_events SET signature=$2 WHERE id=$1',[eventId,eventSignature(row)]);
    if(result==='failure'&&res.statusCode>=500)await problem(db,{fingerprint:row.action+':'+row.error_code+':'+row.failure_reason,code:row.error_code??'server_error',title:'Ошибка серверной операции: '+row.action,severity:'critical',eventId,
     recommendation:'Откройте точное сообщение и хронологию. Проверьте связанный сервис, входные поля и установленную версию. Причину подтверждайте фактами.'});
    health.lastSuccessAt=new Date().toISOString();
