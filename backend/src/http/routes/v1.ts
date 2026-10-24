@@ -1,3 +1,4 @@
+import {adminPaymentHistory} from '../../modules/adminPaymentHistory';
 import { customerMonthlyProgress } from '../../modules/customerProgress';
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
 import {idempotent,idempotentTransaction} from '../../common/idempotency';
@@ -4251,6 +4252,10 @@ export function buildV1Router(deps: {
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Запись не найдена.');
     ok(res, row);
+  }));
+
+  router.get('/admin/payment-history', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    ok(res, await adminPaymentHistory(deps.db, req.query));
   }));
 
   router.get('/admin/:section', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {

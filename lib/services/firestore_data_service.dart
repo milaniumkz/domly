@@ -2003,6 +2003,14 @@ class FirestoreDataService {
     );
   }
 
+  Stream<Map<String, dynamic>> adminPaymentHistoryStream(Map<String, String?> query) {
+    return _backendPollingStream(() async {
+      final page = await BackendApiService.instance.getMap('/admin/payment-history', query: query);
+      return {...page, 'items': (page['items'] as List? ?? [])
+          .map((item) => _mapBackendPayment(Map<String, dynamic>.from(item as Map))).toList()};
+    });
+  }
+
   Stream<List<Map<String, dynamic>>> adminPaymentsStream() {
     return _backendPollingStream(
       () async => (await BackendApiService.instance.getList('/admin/payments'))
