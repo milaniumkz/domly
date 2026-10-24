@@ -851,7 +851,7 @@ class _StatusChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        label,
+        (label).tr(),
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,

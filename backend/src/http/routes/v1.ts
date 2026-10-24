@@ -1164,7 +1164,9 @@ export function buildV1Router(deps: {
     'SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key')).rows);
   router.get('/translations', asyncHandler(async (_req, res) => {
     const catalog = await publicTexts.get();
-    res.set('ETag', catalog.etag).set('Cache-Control', 'no-cache').type('application/json').send(catalog.body);
+    res.set('ETag', catalog.etag).set('Cache-Control', 'no-cache').vary('Accept-Encoding').set('Content-Type', 'application/json; charset=utf-8');
+    if (_req.acceptsEncodings('gzip')) res.set('Content-Encoding', 'gzip').send(catalog.gzip);
+    else res.send(catalog.body);
   }));
 
   router.get('/content-pages', asyncHandler(async (req, res) => {

@@ -96,7 +96,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              message,
+              (message).tr(),
               style: TextStyle(
                 fontSize: 13,
                 color: DomlyPalette.foreground(DomlyColors.foreground),

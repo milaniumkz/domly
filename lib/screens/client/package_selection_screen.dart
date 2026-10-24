@@ -145,7 +145,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              message,
+              (message).tr(),
               style: TextStyle(
                 fontSize: 13,
                 color: DomlyPalette.foreground(DomlyColors.foreground),
@@ -1800,7 +1800,7 @@ class _PackageOptionRow extends StatelessWidget {
                               ),
                               const Spacer(),
                               Text(
-                                caption,
+                                (caption).tr(),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(

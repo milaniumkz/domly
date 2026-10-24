@@ -61,6 +61,13 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal(rows.length,1);assert.equal(rows[0].ru,edited.ru);assert.equal(rows[0].kk,edited.kk);
         const published=(await request('/translations')).json.data.find((r:any)=>r.key===key);
         assert.equal(published.ru,edited.ru);assert.equal(published.kk,edited.kk);
+        for (const encoding of ['gzip','identity']) {
+          const response=await fetch(base+'/translations',{headers:{'Accept-Encoding':encoding}});
+          assert.match(response.headers.get('content-type') ?? '', /charset=utf-8/);
+          assert.equal(response.headers.get('content-encoding'),encoding==='gzip'?'gzip':null);
+          const body=await response.json() as any;
+          assert.equal(body.data.find((r:any)=>r.key===key).kk,edited.kk);
+        }
       } finally {await db.query('DELETE FROM translations WHERE key=$1',[key]);}
     });
     await t.test('generated catalogue deployment preserves administrator wording', async () => {

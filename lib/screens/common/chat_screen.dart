@@ -107,7 +107,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _chatSubtitle(summarySnap.data),
+                        (_chatSubtitle(summarySnap.data)).tr(),
                         style: TextStyle(
                           fontSize: 12,
                           color: DomlyPalette.foreground(Color(0xCCFFFFFF)),

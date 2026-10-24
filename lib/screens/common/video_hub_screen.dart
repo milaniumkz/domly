@@ -159,7 +159,7 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        widget.title,
+                                        (widget.title).tr(),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
@@ -172,7 +172,7 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        widget.subtitle,
+                                        (widget.subtitle).tr(),
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(

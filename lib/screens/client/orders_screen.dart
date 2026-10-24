@@ -1589,7 +1589,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   (line) => Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      line,
+                      (line).tr(),
                       style: TextStyle(
                         color: DomlyPalette.foreground(Color(0xFF658170)),
                         fontSize: 12,
@@ -3521,7 +3521,7 @@ class _OrdersScreenState extends State<OrdersScreen>
             Padding(
               padding: const EdgeInsets.only(top: 3),
               child: Text(
-                line,
+                (line).tr(),
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.3,
@@ -4075,7 +4075,7 @@ class _OrdersStatusPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
-        text,
+        (text).tr(),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(

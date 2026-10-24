@@ -816,7 +816,7 @@ class _AreaErrorBox extends StatelessWidget {
                 DomlyColors.danger.withValues(alpha: 0.25))),
       ),
       child: Text(
-        message,
+        (message).tr(),
         style: TextStyle(
           color: DomlyPalette.foreground(DomlyColors.danger),
           fontSize: 13,

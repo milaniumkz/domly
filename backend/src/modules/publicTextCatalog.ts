@@ -1,9 +1,10 @@
+import {gzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 
 /** Public wording only. Never use this shared cache for personalized responses. */
 export class PublicTextCatalog {
-  private cached?: {body: string; etag: string; expires: number};
-  private pending?: Promise<{body: string; etag: string; expires: number}>;
+  private cached?: {body: string; gzip: Buffer; etag: string; expires: number};
+  private pending?: Promise<{body: string; gzip: Buffer; etag: string; expires: number}>;
   private generation = 0;
   constructor(private readonly load: () => Promise<unknown[]>, private readonly now = Date.now) {}
 
@@ -19,7 +20,7 @@ export class PublicTextCatalog {
     const generation = this.generation;
     const pending = this.load().then(rows => {
       const body = JSON.stringify({ok: true, data: rows});
-      const value = {body, etag: '"'+createHash('sha256').update(body).digest('hex')+'"', expires: this.now()+5000};
+      const value = {body, gzip: gzipSync(body), etag: 'W/"'+createHash('sha256').update(body).digest('hex')+'"', expires: this.now()+5000};
       if (generation === this.generation) this.cached = value;
       return value;
     });

@@ -1,3 +1,4 @@
+import {gunzipSync} from 'node:zlib';
 import {PublicTextCatalog} from '../modules/publicTextCatalog';
 import {canonicalMediaUrl,httpsMediaUrl,mapMediaValues,verifyMediaLink} from '../modules/mediaLinks';
 import test from 'node:test';
@@ -1002,6 +1003,7 @@ test('public text catalogue coalesces concurrent readers, expires and invalidate
   let calls=0,now=0;
   const cache=new PublicTextCatalog(async()=>{calls++;return [{ru:'value '+calls}];},()=>now);
   const responses=await Promise.all(Array.from({length:1000},()=>cache.get()));
+  assert.equal(gunzipSync(responses[0].gzip).toString(),responses[0].body);
   assert.equal(calls,1);assert.ok(responses.every(r=>r.body===responses[0].body));
   now=5001;const next=await cache.get();assert.equal(calls,2);assert.notEqual(next.etag,responses[0].etag);
   cache.invalidate();await cache.get();assert.equal(calls,3);

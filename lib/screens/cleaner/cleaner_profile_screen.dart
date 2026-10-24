@@ -378,7 +378,7 @@ class CleanerProfileScreen extends StatelessWidget {
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
-                                                workStartDate,
+                                                (workStartDate).tr(),
                                                 style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w600,
@@ -1319,7 +1319,7 @@ class CleanerProfileScreen extends StatelessWidget {
                           if (zoneOptions.isNotEmpty)
                             for (final option in zoneOptions)
                               ChoiceChip(
-                                label: Text(option['title'] ?? ''),
+                                label: Text((option['title'] ?? '').tr()),
                                 selected: selectedServiceAreaIds
                                     .contains(option['id']),
                                 onSelected: (selected) {

@@ -103,7 +103,7 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.title,
+              (widget.title).tr(),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
@@ -321,9 +321,7 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                                                       null) ...[
                                                     const SizedBox(height: 4),
                                                     Text(
-                                                      _formatDistance(
-                                                        item.distanceMeters!,
-                                                      ),
+                                                      (_formatDistance(item.distanceMeters!)).tr(),
                                                       style: TextStyle(
                                                         fontSize: 11,
                                                         color: DomlyPalette

@@ -81,7 +81,7 @@ class TranslationController extends ChangeNotifier {
               .getList('/translations', authenticated: false));
       if (_disposed) return;
       final changed = _mergeRows(rows);
-      await _preferences?.setString(_catalogCacheKey, jsonEncode(rows));
+      if (changed) await _preferences?.setString(_catalogCacheKey, jsonEncode(rows));
       if (!_disposed && changed) notifyListeners();
     } catch (_) {
       // Keep the last working catalogue when the server is unavailable.
