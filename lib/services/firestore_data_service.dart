@@ -561,8 +561,9 @@ class FirestoreDataService {
       'scheduledVisits': used,
       'months': _num(item['months']).toInt(),
       'billingPeriodMonths': _num(item['months']).toInt(),
-      'validFrom': item['started_at'] ?? item['created_at'],
-      'validUntil': item['expires_at'],
+      'validFrom': item['period_start'] ?? item['started_at'] ?? item['created_at'],
+      'validUntil': item['period_end'] ?? item['expires_at'],
+      'freezeUntil': item['freeze_until'],
       'createdAt': item['created_at'],
       'updatedAt': item['updated_at'],
     };
@@ -9268,15 +9269,15 @@ class FirestoreDataService {
     );
   }
 
-  Future<void> freezeSubscription({required int days}) async {
+  Future<Map<String, dynamic>> freezeSubscription({required int days, String? subscriptionId}) async {
     if (days <= 0) throw FlutterError('Укажите срок заморозки.');
     final packages = await BackendApiService.instance.getList('/packages/my');
     final active =
-        packages.where((item) => item['status'] == 'active').toList();
+        packages.where((item) => item['status'] == 'active' && (subscriptionId == null || item['id'] == subscriptionId)).toList();
     if (active.isEmpty) throw FlutterError('Активный пакет не найден.');
-    await BackendApiService.instance.postMap(
+    return BackendApiService.instance.postMap(
         '/packages/my/${active.first['id']}/freeze',
-        body: {'days': days});
+        body: {'days': days, 'idempotencyKey': _newIdempotencyKey()});
   }
 
   Future<void> saveReferralCode({required String code}) async {
@@ -10384,6 +10385,7 @@ class FirestoreDataService {
       cursor = minDate;
     }
     final validFrom = _asDay(subscription['validFrom']) ?? minDate;
+    final freezeUntil = _asDay(subscription['freezeUntil']);
     final validUntil = _effectiveSubscriptionValidUntil(subscription);
     final bookedOrders = await BackendApiService.instance.getList('/orders');
     final bookedDateKeys = bookedOrders
@@ -10399,7 +10401,7 @@ class FirestoreDataService {
     while (!cursor.isAfter(monthEnd)) {
       final dateKey = _isoDate(cursor);
       final day = DateTime(cursor.year, cursor.month, cursor.day);
-      if (!day.isBefore(validFrom) &&
+      if ((freezeUntil == null || !day.isBefore(freezeUntil)) && !day.isBefore(validFrom) &&
           !day.isAfter(validUntil) &&
           !bookedDateKeys.contains(dateKey)) {
         candidates.add(dateKey);
@@ -10417,6 +10419,10 @@ class FirestoreDataService {
   }) async {
     final dateKey = _isoDate(date);
     final subscription = await _loadOwnedSubscription(subscriptionId);
+    final freezeUntil = _asDay(subscription['freezeUntil']);
+    if (freezeUntil != null && DateTime(date.year,date.month,date.day).isBefore(freezeUntil)) {
+      return {'ok': true, 'date': dateKey, 'slots': <Map<String,dynamic>>[], 'backend': true};
+    }
     final slots = await _loadBackendAvailableSlots(
       dateKey: dateKey,
       addressId: (subscription['addressId'] ?? '').toString(),

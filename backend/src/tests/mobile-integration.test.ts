@@ -32,6 +32,44 @@ test('mobile backend persistence, permissions, pricing and account lifecycle', {
     await db.query("INSERT INTO connected_houses (id,city,street_ru,house,active) VALUES ($1,'Астана','Тестовая','1',FALSE)", [house]);
     await db.query("INSERT INTO catalog_packages (id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES ($1,'Тест',2,3,100,10)", [pkg]);
     await db.query("INSERT INTO catalog_addons (id,title_ru,price) VALUES ($1,'Тестовый доп',25)", [addon]);
+    await t.test('freeze extends package expiry once under concurrent repeated requests',async()=>{
+      const frozen=randomUUID();
+      await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,status,period_end) VALUES($1,$2,$3,4,3,'active',CURRENT_DATE+30)",[frozen,customer,pkg]);
+      try {
+        const replies=await Promise.all(Array.from({length:5},()=>request(`/packages/my/${frozen}/freeze`,'POST',{days:7,idempotencyKey:'freeze-'+frozen})));
+        assert.ok(replies.every(r=>r.status===200),'all retries must return the same successful freeze');
+        const state=(await db.query('SELECT period_end-CURRENT_DATE AS expires_in,freeze_until-CURRENT_DATE AS frozen_for,available_cleanings FROM customer_packages WHERE id=$1',[frozen])).rows[0];
+        assert.equal(state.expires_in,37);assert.equal(state.frozen_for,7);assert.equal(state.available_cleanings,3);
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:7},inviter)).status,404);
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:-1})).status,400);
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:true})).status,400);
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:7})).status,200);
+        assert.equal((await db.query('SELECT period_end-CURRENT_DATE AS days FROM customer_packages WHERE id=$1',[frozen])).rows[0].days,37);
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:10})).status,200);
+        assert.equal((await db.query('SELECT period_end-CURRENT_DATE AS days FROM customer_packages WHERE id=$1',[frozen])).rows[0].days,40);
+      } finally {
+        await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND key=$2',[customer,'freeze-'+frozen]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[frozen]);
+      }
+    });
+    await t.test('freeze refuses booked dates without changing expiry or booking',async()=>{
+      const frozen=randomUUID(), booking=randomUUID();
+      await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,status,period_end) VALUES($1,$2,$3,4,3,'active',CURRENT_DATE+30)",[frozen,customer,pkg]);
+      await db.query("INSERT INTO service_orders(id,customer_id,customer_package_id,package_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,$3,$4,CURRENT_DATE+3,'10:00','12:00','pending_assignment')",[booking,customer,frozen,pkg]);
+      try {
+        const result=await request(`/packages/my/${frozen}/freeze`,'POST',{days:7});
+        assert.equal(result.status,409);
+        const state=(await db.query('SELECT period_end-CURRENT_DATE AS days,freeze_until FROM customer_packages WHERE id=$1',[frozen])).rows[0];
+        assert.equal(state.days,30);assert.equal(state.freeze_until,null);
+        assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[booking])).rows[0].status,'pending_assignment');
+        // The first available day is excluded from the freeze interval.
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:3})).status,200);
+        assert.equal((await db.query('SELECT period_end-CURRENT_DATE AS days FROM customer_packages WHERE id=$1',[frozen])).rows[0].days,33);
+      } finally {
+        await db.query('DELETE FROM service_orders WHERE id=$1',[booking]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[frozen]);
+      }
+    });
     await t.test('waitlist persists and deduplicates joins', async () => {
       for (let i=0;i<2;i++) assert.equal((await request(`/geo/houses/${house}/waitlist`,'POST',{})).status,200);
       const rows = await request(`/geo/houses/${house}/waitlist`);
