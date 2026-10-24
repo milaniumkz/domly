@@ -812,9 +812,15 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
         assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0].available_cleanings,1);
       } finally {await db.query(`DROP TRIGGER IF EXISTS ${fail} ON ${table}`);await db.query(`DROP FUNCTION IF EXISTS ${fail}()`);}
     }
+    const legacyBody={...orderBody,idempotencyKey:randomUUID()};
+    await db.query("INSERT INTO api_idempotency(user_id,scope,key,fingerprint) VALUES($1,'order_create',$2,$3)",
+      [customer,legacyBody.idempotencyKey,createHash('sha256').update(JSON.stringify(legacyBody)).digest('hex')]);
+    const legacy=await fetch(base+'/orders',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(legacyBody)});
+    assert.equal(legacy.status,409,'An unversioned legacy claim cannot safely prove that no order was created');
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM service_orders WHERE customer_id=$1',[customer])).rows[0].n,0);
     // Simulate process failure after claiming the key but before starting the
     // atomic order transaction. Concurrent retries must recover it exactly once.
-    await db.query("INSERT INTO api_idempotency(user_id,scope,key,fingerprint) VALUES($1,'order_create',$2,$3)",
+    await db.query("INSERT INTO api_idempotency(user_id,scope,key,fingerprint,recovery_safe) VALUES($1,'order_create',$2,$3,TRUE)",
       [customer,orderBody.idempotencyKey,createHash('sha256').update(JSON.stringify(orderBody)).digest('hex')]);
     const orders=await Promise.all([1,2,3].map(()=>fetch(base+'/orders',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(orderBody)})));
     assert.ok(orders.every(r=>r.status===201));

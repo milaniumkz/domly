@@ -1503,4 +1503,7 @@ CREATE TABLE IF NOT EXISTS api_idempotency (
   PRIMARY KEY(user_id,scope,key)
 );
 
+-- Only claims created by a handler that commits result and mutation together may be recovered.
+ALTER TABLE api_idempotency ADD COLUMN IF NOT EXISTS recovery_safe BOOLEAN NOT NULL DEFAULT FALSE;
+
 ALTER TABLE checklist_reports ADD COLUMN IF NOT EXISTS requirements_initialized BOOLEAN NOT NULL DEFAULT FALSE;
