@@ -200,22 +200,29 @@ export class NotificationService {
     return { notification: row, created: Boolean(row) };
   }
 
-  async deliver(row: { id: string; user_id: string | null; role: string | null }, input: NotificationInput) {
+  async deliver(row: { id: string; user_id: string | null; role: string | null }, input: NotificationInput, options: {throwOnError?: boolean} = {}) {
     try {
+      if (input.userId && input.targetType === 'order_offer') {
+        const active = (await this.db.query(`SELECT 1 FROM order_offers f JOIN service_orders o ON o.id=f.order_id
+          WHERE f.order_id=$1 AND f.cleaner_id=$2 AND f.status='offered' AND f.expires_at>NOW()
+          AND o.status IN ('pending_assignment','waiting_cleaner') AND o.cleaner_id IS NULL LIMIT 1`,
+          [input.targetId,input.userId])).rows.length;
+        if (!active) return; // An offer can expire or be cancelled while delivery is queued.
+      }
       if (row?.user_id) {
-        await publishToUser(row.user_id, { type: 'notification', notification: row });
+        await publishToUser(row.user_id, { type: 'notification', notification: row },options.throwOnError);
       } else if (row?.role) {
         const users = (await this.db.query<{ id: string }>(
           `SELECT id FROM app_users WHERE role=$1 AND status <> 'blocked'`,
           [row.role],
         )).rows;
-        await publishToUsers(users.map(user => user.id), { type: 'notification', notification: row });
+        await publishToUsers(users.map(user => user.id), { type: 'notification', notification: row },options.throwOnError);
       }
       const isCleanerOrderOffer = Boolean(input.userId && input.targetType === 'order_offer');
       if (!isCleanerOrderOffer) {
         await sendLocalizedPush(this.db,this.fcm,input,{
           targetType: input.targetType ?? '',targetId: input.targetId ?? '',notificationId: row?.id ?? '',
-        });
+        },{requireDelivery:options.throwOnError});
       }
       if (input.userId && input.targetType === 'order_offer') {
         const delay = await this.cleanerAlarmDelayMs();
@@ -225,20 +232,23 @@ export class NotificationService {
           titleRu: input.titleRu,
           bodyRu: input.bodyRu,
           notificationId: row?.id ?? '',
-        }, { delay, attempts: 3, removeOnComplete: true });
+        }, { delay, attempts: 3, removeOnComplete: true, jobId: `notification-${row.id}` });
       }
     } catch (error) {
       console.warn('[notifications] Delivery failed; notification remains stored', error instanceof Error ? error.name : 'unknown');
+      if (options.throwOnError) throw error;
     }
   }
 
   async create(input: NotificationInput) {
-    const saved = await this.persist(input);
-    if (saved.created && saved.notification) {
-      const row = saved.notification;
-      await this.db.afterCommit(() => this.deliver(row, input));
-    }
-    return saved.notification;
+    return this.db.atomic(async () => {
+      const saved = await this.persist(input);
+      if (saved.created && saved.notification) {
+        await this.db.query(`INSERT INTO notification_deliveries(notification_id,payload) VALUES($1,$2::jsonb)
+          ON CONFLICT(notification_id) DO NOTHING`, [saved.notification.id,JSON.stringify(input)]);
+      }
+      return saved.notification;
+    });
   }
 
   async createAdminEvent(input: {

@@ -75,26 +75,27 @@ export function configureRealtimeBus(redisUrl: string): void {
   });
 }
 
-export async function publishToUser(userId: string, event: unknown): Promise<void> {
+export async function publishToUser(userId: string, event: unknown, requireBroker = false): Promise<void> {
   if (!publisher) {
     emitToUser(userId, event);
     return;
   }
   try {
     await publisher.publish(realtimeChannel, JSON.stringify({ userId, payload: event }));
-  } catch {
+  } catch (error) {
+    if (requireBroker) throw error;
     emitToUser(userId, event);
   }
 }
 
 /** Recipients are resolved from live account state by the caller, not a cached role. */
-export async function publishToUsers(userIds: string[], event: unknown): Promise<void> {
+export async function publishToUsers(userIds: string[], event: unknown, requireBroker = false): Promise<void> {
   const recipients = [...new Set(userIds)];
   if (!publisher) { emitToUsers(recipients, event); return; }
   for (let offset = 0; offset < recipients.length; offset += 250) {
     const batch = recipients.slice(offset, offset + 250);
     try { await publisher.publish(realtimeChannel, JSON.stringify({userIds: batch, payload: event})); }
-    catch { emitToUsers(batch, event); }
+    catch (error) { if (requireBroker) throw error; emitToUsers(batch, event); }
   }
 }
 

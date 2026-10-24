@@ -1,3 +1,4 @@
+import {processNotificationDeliveries} from '../modules/notificationDelivery';
 import {translateKazakh,sendLocalizedPush} from '../localization';
 import {technicalTick} from '../technical/runtime';
 import {StorageService} from '../modules/integrations';
@@ -8,7 +9,7 @@ import IORedis from 'ioredis';
 import { env, validateEnvForRuntime } from '../common/env';
 import { Database } from '../infrastructure/db/Database';
 import { FcmService } from '../modules/integrations';
-import { SchedulingService } from '../modules/domainServices';
+import { NotificationService, SchedulingService } from '../modules/domainServices';
 import { closeRealtimeBus, configureRealtimeBus, publishToUser } from '../realtime/sse';
 
 validateEnvForRuntime();
@@ -74,6 +75,11 @@ workers.push(new Worker('notifications', async (job) => {
 
 workers.push(new Worker('cleaner-alarms', async (job) => {
   const { cleanerId, orderId, titleRu, bodyRu, notificationId } = job.data;
+  const active=(await db.query(`SELECT 1 FROM order_offers f JOIN service_orders o ON o.id=f.order_id
+    WHERE f.order_id=$1 AND f.cleaner_id=$2 AND f.status='offered' AND f.expires_at>NOW()
+    AND o.status IN ('pending_assignment','waiting_cleaner') AND o.cleaner_id IS NULL LIMIT 1`,[orderId,cleanerId])).rows.length;
+  if(!active)return;
+
   await sendLocalizedPush(db,fcm,{userId:cleanerId,titleRu:titleRu ?? 'Новый заказ',bodyRu:bodyRu ?? 'Вам поступил новый заказ. Откройте приложение.'},{
     targetType:'order_offer',targetId:orderId,notificationId:notificationId??'',alarm:'true',
   });
@@ -195,12 +201,26 @@ void maintenanceQueue.add('cleanup-expired-auth', {}, {
   removeOnComplete: true,
 });
 
+// Delivery must never hold an HTTP response after its transaction has committed.
+const deliveryAlarms=new Queue('cleaner-alarms',{connection});
+const notificationService=new NotificationService(db,fcm,{cleanerAlarms:deliveryAlarms});
+let deliveryRun:Promise<unknown>|undefined;
+const deliveryTimer=setInterval(()=>{
+  if(deliveryRun)return;
+  deliveryRun=processNotificationDeliveries(db,(row,input)=>notificationService.deliver(row,input,{throwOnError:true}))
+    .catch(error=>console.warn('[notifications] Outbox processing failed',error instanceof Error?error.name:'unknown'))
+    .finally(()=>{deliveryRun=undefined});
+},250);
+
 const technicalStorage=new StorageService();
 const technicalTimer=setInterval(()=>void technicalTick(db,technicalStorage,{maintenance:maintenanceQueue,moon:moonQueue}),10000);
 void technicalTick(db,technicalStorage,{maintenance:maintenanceQueue,moon:moonQueue});
 for(const worker of workers)observeWorker(db,worker);
 async function shutdown(signal: string) {
   clearInterval(technicalTimer);
+  clearInterval(deliveryTimer);
+  await deliveryRun;
+  await deliveryAlarms.close();
   await Promise.all(workers.map((worker) => worker.close().catch(() => undefined)));
   await Promise.all([
     maintenanceQueue.close().catch(() => undefined),

@@ -1509,3 +1509,18 @@ CREATE TABLE IF NOT EXISTS api_idempotency (
 ALTER TABLE api_idempotency ADD COLUMN IF NOT EXISTS recovery_safe BOOLEAN NOT NULL DEFAULT FALSE;
 
 ALTER TABLE checklist_reports ADD COLUMN IF NOT EXISTS requirements_initialized BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Durable delivery for newly created notifications. Existing history is not re-sent.
+CREATE TABLE IF NOT EXISTS notification_deliveries (
+  notification_id UUID PRIMARY KEY REFERENCES notifications(id) ON DELETE CASCADE,
+  payload JSONB NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  lease_until TIMESTAMPTZ,
+  lease_token UUID,
+  delivered_at TIMESTAMPTZ,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS notification_deliveries_pending
+  ON notification_deliveries(available_at,created_at) WHERE delivered_at IS NULL;

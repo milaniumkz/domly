@@ -64,7 +64,10 @@ export class FcmService {
     if (!this.initialized || tokens.length === 0) return { sent: 0, failed: 0, skipped: true };
     try {
       const result = await admin.messaging().sendEachForMulticast({ tokens, notification: { title, body }, data });
-      return { sent: result.successCount, failed: result.failureCount, skipped: false };
+      const invalidTokens = result.responses.flatMap((response,index) =>
+        ['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(response.error?.code ?? '') ? [tokens[index]] : []);
+      return { sent: result.successCount, failed: result.failureCount, skipped: false, invalidTokens,
+        retryableFailed: result.failureCount-invalidTokens.length };
     } catch (error) {
       console.warn('[fcm] push failed', error instanceof Error ? error.message : String(error));
       return { sent: 0, failed: tokens.length, skipped: false, error: 'fcm_send_failed' };
