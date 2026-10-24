@@ -32,6 +32,21 @@ test('mobile backend persistence, permissions, pricing and account lifecycle', {
     await db.query("INSERT INTO connected_houses (id,city,street_ru,house,active) VALUES ($1,'Астана','Тестовая','1',FALSE)", [house]);
     await db.query("INSERT INTO catalog_packages (id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES ($1,'Тест',2,3,100,10)", [pkg]);
     await db.query("INSERT INTO catalog_addons (id,title_ru,price) VALUES ($1,'Тестовый доп',25)", [addon]);
+    await t.test('freeze extends package expiry once under concurrent repeated requests',async()=>{
+      const frozen=randomUUID();
+      await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,status,period_end) VALUES($1,$2,$3,4,3,'active',CURRENT_DATE+30)",[frozen,customer,pkg]);
+      try {
+        const replies=await Promise.all(Array.from({length:5},()=>request(`/packages/my/${frozen}/freeze`,'POST',{days:7,idempotencyKey:'freeze-'+frozen})));
+        assert.ok(replies.every(r=>r.status===200),'all retries must return the same successful freeze');
+        const state=(await db.query('SELECT period_end-CURRENT_DATE AS expires_in,freeze_until-CURRENT_DATE AS frozen_for,available_cleanings FROM customer_packages WHERE id=$1',[frozen])).rows[0];
+        assert.equal(state.expires_in,37);assert.equal(state.frozen_for,7);assert.equal(state.available_cleanings,3);
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:7},inviter)).status,404);
+        assert.equal((await request(`/packages/my/${frozen}/freeze`,'POST',{days:-1})).status,400);
+      } finally {
+        await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND key=$2',[customer,'freeze-'+frozen]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[frozen]);
+      }
+    });
     await t.test('waitlist persists and deduplicates joins', async () => {
       for (let i=0;i<2;i++) assert.equal((await request(`/geo/houses/${house}/waitlist`,'POST',{})).status,200);
       const rows = await request(`/geo/houses/${house}/waitlist`);
