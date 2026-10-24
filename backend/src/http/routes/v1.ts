@@ -1405,7 +1405,7 @@ export function buildV1Router(deps: {
     ok(res, { customerPackage, ...payment });
   }));
 
-  router.post('/orders', auth(['customer']), idempotent(deps.db, 'order_create'), asyncHandler(async (req, res) => {
+  router.post('/orders', auth(['customer']), idempotent(deps.db, 'order_create', {recoverPending: true}), asyncHandler(async (req, res) => {
     const result = await idempotentTransaction(deps.db, req, async () => {
     validateBookingStart(req.body.date, req.body.startTime);
     const customerPackage = first<{ id: string; package_id: string; address_id: string; available_cleanings: number; total_cleanings: number; status: string; purchase_config: any; freeze_until?: string }>((await deps.db.query(
