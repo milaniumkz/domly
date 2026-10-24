@@ -102,6 +102,19 @@ class BackendApiService {
     return Map<String, dynamic>.from(data as Map);
   }
 
+  Future<List<Map<String, dynamic>>> postList(
+    String path, {
+    Map<String, dynamic>? body,
+    bool authenticated = true,
+  }) async {
+    final data = await _request(
+      'POST', path, body: body, authenticated: authenticated,
+    );
+    return (data as List)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+  }
+
   Future<Map<String, dynamic>> patchMap(
     String path, {
     Map<String, dynamic>? body,
