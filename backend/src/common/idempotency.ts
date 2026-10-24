@@ -12,10 +12,11 @@ export async function idempotentTransaction<T>(db: Database, req: Request, work:
     if (operation) {
       // The claim may outlive its handler. Lock it before any mutation so a
       // retry can recover an abandoned claim without racing a live handler.
-      const saved = (await db.query(`SELECT response,status_code FROM api_idempotency
+      const saved = (await db.query(`SELECT response,status_code,recovery_safe FROM api_idempotency
         WHERE user_id=$1 AND scope=$2 AND key=$3 FOR UPDATE`,
         [operation.user,operation.scope,operation.key])).rows[0];
       if (!saved) throw new Error('Idempotency claim is missing');
+      if (saved.response == null && saved.recovery_safe !== true) throw new ApiError(409,'operation_pending','Результат прежнего запроса требует проверки. Обновите список заказов.');
       if (saved.response != null) {
         operation.replay = {status: saved.status_code, body: saved.response};
         if (saved.status_code >= 400) throw new ApiError(saved.status_code, saved.response.code ?? 'operation_failed', saved.response.message ?? 'Операция не выполнена.');
@@ -44,14 +45,14 @@ export function idempotent(db: Database, scope: string, options: {recoverPending
     if(typeof raw!=='string'||!raw.trim()||raw.length>128)throw new ApiError(400,'invalid_idempotency_key','Некорректный ключ повторного запроса.');
     const key=raw.trim(), user=req.user!.id;
     const fingerprint=createHash('sha256').update(JSON.stringify(req.body)).digest('hex');
-    const claimed=(await db.query(`INSERT INTO api_idempotency(user_id,scope,key,fingerprint) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING key`,[user,scope,key,fingerprint])).rows.length>0;
+    const claimed=(await db.query(`INSERT INTO api_idempotency(user_id,scope,key,fingerprint,recovery_safe) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING key`,[user,scope,key,fingerprint,options.recoverPending===true])).rows.length>0;
     if(!claimed){
       let recover = false;
       for(let attempt=0;attempt<100;attempt++){
-        const saved=(await db.query('SELECT fingerprint,response,status_code FROM api_idempotency WHERE user_id=$1 AND scope=$2 AND key=$3',[user,scope,key])).rows[0];
+        const saved=(await db.query('SELECT fingerprint,response,status_code,recovery_safe FROM api_idempotency WHERE user_id=$1 AND scope=$2 AND key=$3',[user,scope,key])).rows[0];
         if(saved?.fingerprint!==fingerprint)throw new ApiError(409,'idempotency_conflict','Этот запрос уже использован для другой операции.');
         if(saved?.response!==null && saved?.response!==undefined){res.status(saved.status_code).json(saved.response);return;}
-        if(options.recoverPending){recover=true;break;}
+        if(options.recoverPending){if(saved.recovery_safe!==true)throw new ApiError(409,'operation_pending','Результат прежнего запроса требует проверки. Обновите список заказов.');recover=true;break;}
         await new Promise(resolve=>setTimeout(resolve,100));
       }
       if(!recover)throw new ApiError(409,'operation_pending','Запрос уже обрабатывается. Обновите статус оплаты.');
