@@ -611,6 +611,9 @@ CREATE TABLE IF NOT EXISTS translations (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE translations ADD COLUMN IF NOT EXISTS source TEXT;
+ALTER TABLE translations ADD COLUMN IF NOT EXISTS locations JSONB NOT NULL DEFAULT '[]'::jsonb;
+
 CREATE TABLE IF NOT EXISTS content_pages (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   slug TEXT NOT NULL UNIQUE,

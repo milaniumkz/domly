@@ -16,17 +16,23 @@ class TranslationController extends ChangeNotifier {
     Object? firestore,
     SharedPreferences? preferences,
     this.fallbackLocale = 'ru',
+    this.loadRows,
   }) : _preferences = preferences;
 
   TranslationController.forTesting({this.fallbackLocale = 'ru'})
-      : _preferences = null;
+      : _preferences = null,
+        loadRows = null;
 
   static const List<String> supportedLocales = <String>['ru', 'kk'];
   static const String _preferencesKey = 'domly_locale';
+  static const String _catalogCacheKey = 'domly_text_catalog_v1';
+  bool _disposed = false;
+  bool _loading = false;
 
   static TranslationController? _active;
 
   final SharedPreferences? _preferences;
+  final Future<List<Map<String, dynamic>>> Function()? loadRows;
   final String fallbackLocale;
 
   Timer? _pollingTimer;
@@ -47,44 +53,72 @@ class TranslationController extends ChangeNotifier {
         WidgetsBinding.instance.platformDispatcher.locale.languageCode;
     _localeCode = _normalizeLocale(savedLocale ?? platformLocale);
     _entries = _defaultEntries();
+    try {
+      final cached =
+          jsonDecode(_preferences?.getString(_catalogCacheKey) ?? '[]');
+      if (cached is List)
+        _mergeRows(cached
+            .whereType<Map>()
+            .map((r) => Map<String, dynamic>.from(r))
+            .toList());
+    } catch (_) {/* A corrupt cache must never block startup. */}
     _isReady = true;
     notifyListeners();
 
-    Future<void> reload() async {
-      try {
-        final rows = await BackendApiService.instance.getList(
-          '/translations',
-          authenticated: false,
-        );
-        final nextEntries = _defaultEntries();
-        for (final row in rows) {
-          final entry = _TranslationEntry.fromBackend(row);
-          final key = (row['key'] ?? '').toString().trim().isNotEmpty
-              ? row['key'].toString()
-              : translationKey(entry.source);
-          final original = nextEntries[key]?.source ?? entry.source;
-          nextEntries[key] = _TranslationEntry(source: original, locales: entry.locales);
-        }
-        final changed = nextEntries.length != _entries.length ||
-            nextEntries.entries.any((item) {
-              final old = _entries[item.key];
-              return old == null ||
-                  old.source != item.value.source ||
-                  !mapEquals(old.locales, item.value.locales);
-            });
-        _entries = nextEntries;
-        if (changed) _editableTemplates.clear();
-        _isReady = true;
-        if (changed) notifyListeners();
-      } catch (_) {
-        _isReady = true;
-      }
-    }
-
-    await reload();
+    await refresh();
+    if (_disposed) return;
     _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      unawaited(reload());
+      unawaited(refresh());
     });
+  }
+
+  Future<void> refresh() async {
+    if (_disposed || _loading) return;
+    _loading = true;
+    try {
+      final rows = await (loadRows?.call() ??
+          BackendApiService.instance
+              .getList('/translations', authenticated: false));
+      if (_disposed) return;
+      final changed = _mergeRows(rows);
+      if (changed) await _preferences?.setString(_catalogCacheKey, jsonEncode(rows));
+      if (!_disposed && changed) notifyListeners();
+    } catch (_) {
+      // Keep the last working catalogue when the server is unavailable.
+    } finally {
+      _loading = false;
+    }
+  }
+
+  bool _mergeRows(List<Map<String, dynamic>> rows) {
+    final next = _defaultEntries();
+    for (final row in rows) {
+      final entry = _TranslationEntry.fromBackend(row);
+      final key = (row['key'] ?? translationKey(entry.source)).toString();
+      final source = next[key]?.source ?? entry.source;
+      if (source.isEmpty) continue;
+      final valid = <String, String>{
+        for (final item in entry.locales.entries)
+          if (validParameters(source, item.value)) item.key: item.value,
+      };
+      next[key] = _TranslationEntry(
+          source: source, locales: {...?next[key]?.locales, ...valid});
+    }
+    final changed = next.length != _entries.length ||
+        next.entries.any((e) =>
+            _entries[e.key]?.source != e.value.source ||
+            !mapEquals(_entries[e.key]?.locales, e.value.locales));
+    _entries = next;
+    if (changed) _editableTemplates.clear();
+    return changed;
+  }
+
+  static bool validParameters(String source, String value) {
+    Set<String> parameters(String s) => RegExp(r'\{[A-Za-z][A-Za-z0-9_]*\}')
+        .allMatches(s)
+        .map((m) => m.group(0)!)
+        .toSet();
+    return setEquals(parameters(source), parameters(value));
   }
 
   Future<void> setLocale(String locale) async {
@@ -212,10 +246,16 @@ class TranslationController extends ChangeNotifier {
   }
 
   String? _translateEditableTemplate(String source) {
-    final templates = _editableTemplates.putIfAbsent(_localeCode, () => _entries.values
-        .where((entry) => RegExp(r'\{p\d+\}').hasMatch(entry.source) && entry.locales[_localeCode] != null)
-        .map((entry) => _TranslationTemplate(entry.source, entry.locales[_localeCode]!))
-        .toList()..sort((a, b) => b.literalLength.compareTo(a.literalLength)));
+    final templates = _editableTemplates.putIfAbsent(
+        _localeCode,
+        () => _entries.values
+            .where((entry) =>
+                RegExp(r'\{p\d+\}').hasMatch(entry.source) &&
+                entry.locales[_localeCode] != null)
+            .map((entry) =>
+                _TranslationTemplate(entry.source, entry.locales[_localeCode]!))
+            .toList()
+          ..sort((a, b) => b.literalLength.compareTo(a.literalLength)));
     for (final template in templates) {
       final match = template.pattern.firstMatch(source);
       if (match == null) continue;
@@ -288,6 +328,7 @@ class TranslationController extends ChangeNotifier {
     if (_active == this) {
       _active = null;
     }
+    _disposed = true;
     _pollingTimer?.cancel();
     super.dispose();
   }
@@ -361,4 +402,16 @@ class _TranslationTemplate {
   final List<String> parameters;
   final int literalLength;
   final RegExp pattern;
+}
+
+/// Rebuilds subscribed widgets on text changes without replacing their state.
+class TranslationScope extends InheritedNotifier<TranslationController> {
+  const TranslationScope(
+      {super.key,
+      required TranslationController controller,
+      required super.child})
+      : super(notifier: controller);
+  static void watch(BuildContext context) {
+    context.dependOnInheritedWidgetOfExactType<TranslationScope>();
+  }
 }

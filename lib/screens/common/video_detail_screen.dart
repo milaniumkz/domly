@@ -49,6 +49,7 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: data.videoStream(widget.videoId),
       builder: (context, snap) {
+        TranslationScope.watch(context);
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
           return const DomlyShell(
             child: SafeArea(

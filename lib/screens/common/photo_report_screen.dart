@@ -64,6 +64,7 @@ class _PhotoReportScreenState extends State<PhotoReportScreen> {
       return StreamBuilder<List<Map<String, dynamic>>>(
         stream: _data.cleanerScheduleSlotsStream(),
         builder: (context, snapshot) {
+          TranslationScope.watch(context);
           if (snapshot.connectionState == ConnectionState.waiting &&
               !snapshot.hasData) {
             return const DomlyShell(
@@ -224,6 +225,7 @@ class _PhotoReportScreenState extends State<PhotoReportScreen> {
                                 childAspectRatio: 1,
                               ),
                               itemBuilder: (context, index) {
+                                TranslationScope.watch(context);
                                 return Stack(
                                   children: [
                                     ClipRRect(

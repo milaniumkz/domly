@@ -1,3 +1,4 @@
+import 'package:domly/localization/translation_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -31,6 +32,7 @@ class _OnlinePaymentViewState extends State<OnlinePaymentView> {
 
   @override
   Widget build(BuildContext context) {
+    TranslationScope.watch(context);
     return WebViewWidget(controller: _controller);
   }
 }

@@ -45,6 +45,7 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: videoStream,
       builder: (context, videosSnap) {
+        TranslationScope.watch(context);
         if (videosSnap.connectionState == ConnectionState.waiting &&
             !videosSnap.hasData) {
           return DomlyShell(
@@ -64,6 +65,7 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: _data.userVideoViewsStream(),
           builder: (context, viewsSnap) {
+            TranslationScope.watch(context);
             if (viewsSnap.connectionState == ConnectionState.waiting &&
                 !viewsSnap.hasData) {
               return DomlyShell(
@@ -129,8 +131,15 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(12),
                                     onTap: () {
-                                      if (Navigator.canPop(context)) { Navigator.pop(context); }
-                                      else { Navigator.pushReplacementNamed(context, isCleaner ? '/cleaner/dashboard' : '/client/home'); }
+                                      if (Navigator.canPop(context)) {
+                                        Navigator.pop(context);
+                                      } else {
+                                        Navigator.pushReplacementNamed(
+                                            context,
+                                            isCleaner
+                                                ? '/cleaner/dashboard'
+                                                : '/client/home');
+                                      }
                                     },
                                     child: SizedBox(
                                       width: 36,
@@ -150,7 +159,7 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        widget.title,
+                                        (widget.title).tr(),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
@@ -163,7 +172,7 @@ class _VideoHubScreenState extends State<VideoHubScreen> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        widget.subtitle,
+                                        (widget.subtitle).tr(),
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
@@ -422,7 +431,7 @@ class _VideoTrainingCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      (video['title'] ?? 'Видео').toString(),
+                      (video['title'] ?? "Видео".tr()).toString(),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -435,7 +444,7 @@ class _VideoTrainingCard extends StatelessWidget {
                     ),
                     const Spacer(),
                     Text(
-                      '${duration.isEmpty ? '5 мин' : duration} · $popularity',
+                      '${duration.isEmpty ? '5 мин'.tr() : duration} · $popularity',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

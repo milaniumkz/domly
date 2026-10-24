@@ -34,6 +34,7 @@ class ProfileScreen extends StatelessWidget {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: data.customerProfileStream(),
       builder: (context, profileSnap) {
+        TranslationScope.watch(context);
         if (profileSnap.hasError) {
           return const DomlyShell(
             bottomNavigationBar: DomlyClientBottomNav(currentIndex: 2),
@@ -55,6 +56,7 @@ class ProfileScreen extends StatelessWidget {
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: data.customerSubscriptionsStream(),
           builder: (context, subscriptionsSnap) {
+            TranslationScope.watch(context);
             if (subscriptionsSnap.hasError && !subscriptionsSnap.hasData) {
               return const DomlyShell(
                 bottomNavigationBar: DomlyClientBottomNav(currentIndex: 2),
@@ -229,7 +231,17 @@ class ProfileScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 19),
                             ProfileSummaryCard(
-                              onTap: () => Navigator.pushNamed(context, activeSubscription == null ? '/client/packages' : '/client/package-calendar', arguments: activeSubscription == null ? null : {'subscriptionId': activeSubscription['id']}),
+                              onTap: () => Navigator.pushNamed(
+                                  context,
+                                  activeSubscription == null
+                                      ? '/client/packages'
+                                      : '/client/package-calendar',
+                                  arguments: activeSubscription == null
+                                      ? null
+                                      : {
+                                          'subscriptionId':
+                                              activeSubscription['id']
+                                        }),
                               height: 120,
                               padding: const EdgeInsets.fromLTRB(
                                 27,
@@ -252,10 +264,9 @@ class ProfileScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 5),
                                   Text(
-                                    _subscriptionPriceText(
-                                      activeSubscription,
-                                      profile,
-                                    ),
+                                    (_subscriptionPriceText(
+                                            activeSubscription, profile))
+                                        .tr(),
                                     style: TextStyle(
                                       color:
                                           DomlyPalette.foreground(_foreground),
@@ -287,7 +298,10 @@ class ProfileScreen extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: ProfileSummaryCard(
-                                    onTap: () => _showInfo(context, 'Ваш прогресс', 'Уровень зависит от суммы оплаченных услуг за текущий месяц. Приглашённые клиенты не влияют на этот прогресс.'),
+                                    onTap: () => _showInfo(
+                                        context,
+                                        'Ваш прогресс',
+                                        'Уровень зависит от суммы оплаченных услуг за текущий месяц. Приглашённые клиенты не влияют на этот прогресс.'),
                                     height: 180,
                                     padding: const EdgeInsets.fromLTRB(
                                       27,
@@ -326,8 +340,12 @@ class ProfileScreen extends StatelessWidget {
                                         const SizedBox(height: 5),
                                         Text(
                                           (tierDiscountPercent > 0
-                                              ? 'Ваша скидка: {p0}%'.tr(params: {'p0': '$tierDiscountPercent'})
-                                              : 'Скидка пока не активирована'.tr()),
+                                              ? 'Ваша скидка: {p0}%'
+                                                  .tr(params: {
+                                                  'p0': '$tierDiscountPercent'
+                                                })
+                                              : 'Скидка пока не активирована'
+                                                  .tr()),
                                           style: TextStyle(
                                             color: DomlyPalette.foreground(
                                                 _orange),
@@ -363,8 +381,18 @@ class ProfileScreen extends StatelessWidget {
                                         const SizedBox(height: 19),
                                         Text(
                                           (nextTierThreshold > 0
-                                              ? 'Потрачено в этом месяце: {p0} / {p1} ₸'.tr(params: {'p0': '${monthlySpent.toInt()}', 'p1': '${nextTierThreshold.toInt()}'})
-                                              : 'Потрачено в этом месяце: {p0} ₸'.tr(params: {'p0': '${monthlySpent.toInt()}'})),
+                                              ? 'Потрачено в этом месяце: {p0} / {p1} ₸'
+                                                  .tr(params: {
+                                                  'p0':
+                                                      '${monthlySpent.toInt()}',
+                                                  'p1':
+                                                      '${nextTierThreshold.toInt()}'
+                                                })
+                                              : 'Потрачено в этом месяце: {p0} ₸'
+                                                  .tr(params: {
+                                                  'p0':
+                                                      '${monthlySpent.toInt()}'
+                                                })),
                                           style: TextStyle(
                                             color:
                                                 DomlyPalette.foreground(_muted),
@@ -692,6 +720,7 @@ class ProfileScreen extends StatelessWidget {
       context: context,
       showDragHandle: true,
       builder: (context) {
+        TranslationScope.watch(context);
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -731,36 +760,34 @@ class ProfileScreen extends StatelessWidget {
     final phone = (profile['phone'] ?? '').toString().trim();
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(
-          'Телефон'.tr(),
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: DomlyPalette.foreground(DomlyColors.foreground),
-          ),
-        ),
-        content: Text(
-          phone.isEmpty
-              ? 'Телефон пока не добавлен. Обновить его можно через повторный вход по номеру.'
-              : 'Номер подтверждён: $phone',
-          style: TextStyle(
-            fontSize: 13,
-            height: 1.45,
-            color: DomlyPalette.foreground(DomlyColors.foreground),
-          ),
-        ),
-        actions: [
-          SizedBox(
-            width: 132,
-            child: DomlyPrimaryButton(
-              label: 'Понятно',
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-        ],
-      ),
+      builder: (context) {
+        TranslationScope.watch(context);
+        return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: Text('Телефон'.tr(),
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: DomlyPalette.foreground(DomlyColors.foreground))),
+            content: Text(
+                phone.isEmpty
+                    ? "Телефон пока не добавлен. Обновить его можно через повторный вход по номеру."
+                        .tr()
+                    : "Номер подтверждён: {p0}"
+                        .tr(params: {'p0': (phone).toString()}),
+                style: TextStyle(
+                    fontSize: 13,
+                    height: 1.45,
+                    color: DomlyPalette.foreground(DomlyColors.foreground))),
+            actions: [
+              SizedBox(
+                  width: 132,
+                  child: DomlyPrimaryButton(
+                      label: 'Понятно',
+                      onPressed: () => Navigator.pop(context)))
+            ]);
+      },
     );
   }
 
@@ -778,8 +805,10 @@ class ProfileScreen extends StatelessWidget {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) {
+        TranslationScope.watch(context);
         return StatefulBuilder(
           builder: (context, setModalState) {
+            TranslationScope.watch(context);
             return Padding(
               padding: EdgeInsets.only(
                 left: 24,
@@ -986,9 +1015,10 @@ class ProfileScreen extends StatelessWidget {
         final itemText = _normalizeAddressQuery(
           '${item.title} ${item.subtitle} ${item.residentialComplex} ${item.addressLine}',
         );
-        if (options.length == 1 && (itemText.contains(normalized) ||
-            normalized.contains(itemText) ||
-            _addressLooksSimilar(value, itemText))) {
+        if (options.length == 1 &&
+            (itemText.contains(normalized) ||
+                normalized.contains(itemText) ||
+                _addressLooksSimilar(value, itemText))) {
           return item;
         }
       }
@@ -1075,8 +1105,10 @@ class ProfileScreen extends StatelessWidget {
       enableDrag: !requireCompletion,
       showDragHandle: true,
       builder: (context) {
+        TranslationScope.watch(context);
         return StatefulBuilder(
           builder: (context, setModalState) {
+            TranslationScope.watch(context);
             unawaited(detectCityFromLocation(setModalState));
             return PopScope(
                 canPop: !requireCompletion || savedSuccessfully,
@@ -1200,6 +1232,7 @@ class ProfileScreen extends StatelessWidget {
                                 color: DomlyPalette.border(DomlyColors.border),
                               ),
                               itemBuilder: (context, index) {
+                                TranslationScope.watch(context);
                                 final item = filteredAddressOptions[index];
                                 return ListTile(
                                   dense: true,
@@ -1627,8 +1660,10 @@ class ProfileScreen extends StatelessWidget {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) {
+        TranslationScope.watch(context);
         return StatefulBuilder(
           builder: (context, setModalState) {
+            TranslationScope.watch(context);
             Future<void> detectCityFromLocation() async {
               if (cityController.text.trim().isNotEmpty ||
                   detectingCity ||
@@ -1864,6 +1899,7 @@ class ProfileScreen extends StatelessWidget {
                           itemCount: citySuggestions.length,
                           separatorBuilder: (_, __) => const SizedBox(width: 8),
                           itemBuilder: (context, index) {
+                            TranslationScope.watch(context);
                             final city = citySuggestions[index];
                             return ActionChip(
                               label: Text(city),
@@ -1907,6 +1943,7 @@ class ProfileScreen extends StatelessWidget {
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 8),
                           itemBuilder: (context, index) {
+                            TranslationScope.watch(context);
                             final item = suggestions[index];
                             return ListTile(
                               dense: true,
@@ -2188,20 +2225,21 @@ class ProfileSummaryCard extends StatelessWidget {
     DomlyPalette.watch(context);
 
     return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: Container(
-      constraints: BoxConstraints(minHeight: height),
-      padding: padding,
-      decoration: BoxDecoration(
-        color: DomlyPalette.surface(Colors.white),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: DomlyPalette.border(ProfileScreen._border)),
-      ),
-      child: child,
-    )));
+        color: Colors.transparent,
+        child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              constraints: BoxConstraints(minHeight: height),
+              padding: padding,
+              decoration: BoxDecoration(
+                color: DomlyPalette.surface(Colors.white),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                    color: DomlyPalette.border(ProfileScreen._border)),
+              ),
+              child: child,
+            )));
   }
 }
 

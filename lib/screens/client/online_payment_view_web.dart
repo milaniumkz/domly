@@ -1,3 +1,4 @@
+import 'package:domly/localization/translation_controller.dart';
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 
 import 'dart:html' as html;
@@ -40,7 +41,10 @@ class _OnlinePaymentViewState extends State<OnlinePaymentView> {
       return;
     }
     final form = html.FormElement()
-      ..method = RegExp(r'<form[^>]*method="get"', caseSensitive: false).hasMatch(widget.html) ? 'GET' : 'POST'
+      ..method = RegExp(r'<form[^>]*method="get"', caseSensitive: false)
+              .hasMatch(widget.html)
+          ? 'GET'
+          : 'POST'
       ..action = action
       ..target = '_self'
       ..style.display = 'none';
@@ -60,6 +64,7 @@ class _OnlinePaymentViewState extends State<OnlinePaymentView> {
 
   @override
   Widget build(BuildContext context) {
+    TranslationScope.watch(context);
     return const Center(
       child: CircularProgressIndicator(),
     );

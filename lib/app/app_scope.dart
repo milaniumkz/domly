@@ -10,12 +10,14 @@ class AppScope extends InheritedNotifier<Listenable> {
     required this.config,
     required this.authController,
     required this.translationController,
-    required super.child,
+    required Widget child,
   }) : super(
+            child: TranslationScope(
+                controller: translationController, child: child),
             notifier: Listenable.merge([
-          authController,
-          translationController,
-        ]));
+              authController,
+              translationController,
+            ]));
 
   final AppConfig config;
   final AuthController authController;

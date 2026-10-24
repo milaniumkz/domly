@@ -26,6 +26,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _config.workerBonusConfigStream(),
       builder: (context, configSnap) {
+        TranslationScope.watch(context);
         if (configSnap.hasError) {
           return const DomlyShell(
             bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 4),
@@ -55,6 +56,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
         return StreamBuilder<Map<String, dynamic>?>(
           stream: _data.cleanerProfileStream(),
           builder: (context, snap) {
+            TranslationScope.watch(context);
             if (snap.hasError) {
               return const DomlyShell(
                 bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 4),
@@ -154,8 +156,11 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           domlyTopIconButton(
             icon: Icons.arrow_back,
             onPressed: () {
-              if (Navigator.canPop(context)) { Navigator.pop(context); }
-              else { Navigator.pushReplacementNamed(context, '/cleaner/profile'); }
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              } else {
+                Navigator.pushReplacementNamed(context, '/cleaner/profile');
+              }
             },
           ),
           const SizedBox(width: 12),
@@ -347,7 +352,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           ),
           const SizedBox(height: 14),
           Text(
-            '$unlocked ₸',
+            "{p0} ₸".tr(params: {'p0': (unlocked).toString()}),
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w700,
@@ -401,7 +406,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
                   ),
                 ),
                 Text(
-                  '$totalBonusAwarded ₸',
+                  "{p0} ₸".tr(params: {'p0': (totalBonusAwarded).toString()}),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -506,7 +511,10 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            '$nextStatus • $nextCareerBonus ₸',
+            "{p0} • {p1} ₸".tr(params: {
+              'p0': (nextStatus).toString(),
+              'p1': (nextCareerBonus).toString()
+            }),
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
@@ -712,7 +720,7 @@ class _CleanerBonusScreenState extends State<CleanerBonusScreen> {
         ),
         const SizedBox(width: 12),
         Text(
-          '+$amount ₸',
+          "+{p0} ₸".tr(params: {'p0': (amount).toString()}),
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,

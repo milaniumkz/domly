@@ -11,7 +11,8 @@ import '../../ui/domly_ui.dart';
 enum NotificationSurface { client, cleaner }
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key, required this.surface, this.historySource});
+  const NotificationsScreen(
+      {super.key, required this.surface, this.historySource});
 
   final NotificationSurface surface;
   final Stream<NotificationHistoryPage> Function(int limit)? historySource;
@@ -23,7 +24,9 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final _data = FirestoreDataService.instance;
   int _visibleLimit = 50;
-  Stream<NotificationHistoryPage> _history(int limit) => widget.historySource?.call(limit) ?? _data.userNotificationsPageStream(limit: limit);
+  Stream<NotificationHistoryPage> _history(int limit) =>
+      widget.historySource?.call(limit) ??
+      _data.userNotificationsPageStream(limit: limit);
   late Stream<NotificationHistoryPage> _notifications = _history(_visibleLimit);
 
   @override
@@ -33,7 +36,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return StreamBuilder<NotificationHistoryPage>(
       stream: _notifications,
       builder: (context, snapshot) {
-        final notifications = snapshot.data?.items ?? const <Map<String, dynamic>>[];
+        TranslationScope.watch(context);
+        final notifications =
+            snapshot.data?.items ?? const <Map<String, dynamic>>[];
         final sortedNotifications = [...notifications]..sort((a, b) {
             final aRead = a['read'] == true;
             final bRead = b['read'] == true;
@@ -63,8 +68,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       domlyTopIconButton(
                         icon: Icons.arrow_back,
                         onPressed: () {
-                          if (Navigator.canPop(context)) { Navigator.pop(context); }
-                          else { Navigator.pushReplacementNamed(context, widget.surface == NotificationSurface.client ? '/client/home' : '/cleaner/dashboard'); }
+                          if (Navigator.canPop(context)) {
+                            Navigator.pop(context);
+                          } else {
+                            Navigator.pushReplacementNamed(
+                                context,
+                                widget.surface == NotificationSurface.client
+                                    ? '/client/home'
+                                    : '/cleaner/dashboard');
+                          }
                         },
                       ),
                       const SizedBox(width: 12),
@@ -88,8 +100,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                       .tr()
                                   : 'Всего уведомлений: {count}'.tr(
                                       params: {
-                                        'count':
-                                            (snapshot.data?.total ?? 0).toString(),
+                                        'count': (snapshot.data?.total ?? 0)
+                                            .toString(),
                                       },
                                     ),
                               style: TextStyle(
@@ -130,18 +142,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               : ListView.separated(
                                   padding: const EdgeInsets.fromLTRB(
                                       20, 16, 20, 112),
-                                  itemCount: sortedNotifications.length + ((snapshot.data?.total ?? 0) > notifications.length ? 1 : 0),
+                                  itemCount: sortedNotifications.length +
+                                      ((snapshot.data?.total ?? 0) >
+                                              notifications.length
+                                          ? 1
+                                          : 0),
                                   separatorBuilder: (_, __) =>
                                       const SizedBox(height: 12),
                                   itemBuilder: (context, index) {
+                                    TranslationScope.watch(context);
                                     if (index == sortedNotifications.length) {
                                       return TextButton(
-                                        onPressed: snapshot.connectionState == ConnectionState.waiting ? null : () {
-                                          setState(() {
-                                            _visibleLimit += 50;
-                                            _notifications = _history(_visibleLimit);
-                                          });
-                                        },
+                                        onPressed: snapshot.connectionState ==
+                                                ConnectionState.waiting
+                                            ? null
+                                            : () {
+                                                setState(() {
+                                                  _visibleLimit += 50;
+                                                  _notifications =
+                                                      _history(_visibleLimit);
+                                                });
+                                              },
                                         child: Text('Показать ещё'.tr()),
                                       );
                                     }
@@ -453,15 +474,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     await showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) {
+          TranslationScope.watch(context);
+          return AlertDialog(
               title: Text(item.trValue(['title'], fallback: 'Уведомление')),
               content: Text(item.trValue(['body'])),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: Text('Закрыть'.tr()))
-              ],
-            ));
+              ]);
+        });
   }
 
   bool _isBonusNotification(

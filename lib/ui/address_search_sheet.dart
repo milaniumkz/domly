@@ -21,14 +21,16 @@ Future<AddressSuggestion?> showAddressSearchSheet(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (context) => _AddressSearchSheet(
-      initialQuery: initialQuery,
-      title: title,
-      seedSuggestions: seedSuggestions,
-      restrictToSeedSuggestions: restrictToSeedSuggestions,
-      allowManualEntry: allowManualEntry,
-      saveButtonLabel: saveButtonLabel,
-    ),
+    builder: (context) {
+      TranslationScope.watch(context);
+      return _AddressSearchSheet(
+          initialQuery: initialQuery,
+          title: title,
+          seedSuggestions: seedSuggestions,
+          restrictToSeedSuggestions: restrictToSeedSuggestions,
+          allowManualEntry: allowManualEntry,
+          saveButtonLabel: saveButtonLabel);
+    },
   );
 }
 
@@ -101,7 +103,7 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.title,
+              (widget.title).tr(),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
@@ -136,7 +138,7 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    _locationStatus,
+                    (_locationStatus).tr(),
                     style: TextStyle(
                       fontSize: 12,
                       color: DomlyPalette.foreground(DomlyColors.muted),
@@ -209,6 +211,7 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                                 separatorBuilder: (_, __) =>
                                     const SizedBox(height: 10),
                                 itemBuilder: (context, index) {
+                                  TranslationScope.watch(context);
                                   final item = _suggestions[index];
                                   return Material(
                                     color: DomlyPalette.surface(
@@ -318,9 +321,7 @@ class _AddressSearchSheetState extends State<_AddressSearchSheet> {
                                                       null) ...[
                                                     const SizedBox(height: 4),
                                                     Text(
-                                                      _formatDistance(
-                                                        item.distanceMeters!,
-                                                      ),
+                                                      (_formatDistance(item.distanceMeters!)).tr(),
                                                       style: TextStyle(
                                                         fontSize: 11,
                                                         color: DomlyPalette

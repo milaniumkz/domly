@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/ui_preferences.dart';
+import '../localization/translation_controller.dart';
 
 /// Adapts explicit screen colors as well as Material widgets to the selected
 /// palette. Brand colors and image pixels remain intact.
@@ -7,6 +8,7 @@ class DomlyPalette {
   static bool get isDark => UiPreferences.instance.darkMode;
   static void watch(BuildContext context) {
     Theme.of(context);
+    TranslationScope.watch(context);
   }
 
   static Color background(Color? light) {

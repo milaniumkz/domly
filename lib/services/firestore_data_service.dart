@@ -37,7 +37,8 @@ import '../utils/package_catalog_utils.dart';
 
 String _newIdempotencyKey() {
   final random = math.Random.secure();
-  return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+  return List.generate(
+      16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
 }
 
 class NotificationHistoryPage {
@@ -432,7 +433,13 @@ class FirestoreDataService {
     final fullName = (user['full_name'] ?? user['fullName'] ?? '').toString();
     return {
       'id': user['id'],
-      for (final key in ['tier', 'monthly_spent', 'next_tier_threshold', 'tier_progress', 'tier_discount_percent'])
+      for (final key in [
+        'tier',
+        'monthly_spent',
+        'next_tier_threshold',
+        'tier_progress',
+        'tier_discount_percent'
+      ])
         key: user[key],
       'referralCode': user['referralCode'],
       'referredByCode': user['referredByCode'],
@@ -564,7 +571,8 @@ class FirestoreDataService {
       'scheduledVisits': used,
       'months': _num(item['months']).toInt(),
       'billingPeriodMonths': _num(item['months']).toInt(),
-      'validFrom': item['period_start'] ?? item['started_at'] ?? item['created_at'],
+      'validFrom':
+          item['period_start'] ?? item['started_at'] ?? item['created_at'],
       'validUntil': item['period_end'] ?? item['expires_at'],
       'freezeUntil': item['freeze_until'],
       'createdAt': item['created_at'],
@@ -2007,11 +2015,18 @@ class FirestoreDataService {
     );
   }
 
-  Stream<Map<String, dynamic>> adminPaymentHistoryStream(Map<String, String?> query) {
+  Stream<Map<String, dynamic>> adminPaymentHistoryStream(
+      Map<String, String?> query) {
     return _backendPollingStream(() async {
-      final page = await BackendApiService.instance.getMap('/admin/payment-history', query: query);
-      return {...page, 'items': (page['items'] as List? ?? [])
-          .map((item) => _mapBackendPayment(Map<String, dynamic>.from(item as Map))).toList()};
+      final page = await BackendApiService.instance
+          .getMap('/admin/payment-history', query: query);
+      return {
+        ...page,
+        'items': (page['items'] as List? ?? [])
+            .map((item) =>
+                _mapBackendPayment(Map<String, dynamic>.from(item as Map)))
+            .toList()
+      };
     });
   }
 
@@ -2054,7 +2069,10 @@ class FirestoreDataService {
       return _debugSnapshotStream(_debugAdminInfoContent);
     }
     return _backendPollingStream(
-      () async => (await BackendApiService.instance.getList('/admin/contentPages', query: {'limit': '200'})).map(adminContentPage).toList(),
+      () async => (await BackendApiService.instance
+              .getList('/admin/contentPages', query: {'limit': '200'}))
+          .map(adminContentPage)
+          .toList(),
     );
   }
 
@@ -2203,9 +2221,14 @@ class FirestoreDataService {
     return _backendPollingStream(
       () => loadAdminTextCatalog(
         (offset, limit) => BackendApiService.instance.getList(
-          '/admin/translations', query: {'offset': '$offset', 'limit': '$limit'},
+          '/admin/translations',
+          query: {'offset': '$offset', 'limit': '$limit'},
         ),
-        {...kDefaultTranslationSources, ...kKazakhTranslations.keys, ...kBuiltinTranslations.keys},
+        {
+          ...kDefaultTranslationSources,
+          ...kKazakhTranslations.keys,
+          ...kBuiltinTranslations.keys
+        },
       ),
     );
   }
@@ -2577,8 +2600,10 @@ class FirestoreDataService {
   Stream<int> userUnreadNotificationCountStream() {
     final recipientId = _uidOrNull;
     return _useDebugFixtures ||
-            _isTemporaryCustomerSession || _isTemporaryCleanerSession
-        ? userNotificationsStream().map((items) => items.where((item) => item['read'] != true).length)
+            _isTemporaryCustomerSession ||
+            _isTemporaryCleanerSession
+        ? userNotificationsStream()
+            .map((items) => items.where((item) => item['read'] != true).length)
         : recipientId == null
             ? Stream<int>.value(0)
             : notificationCountStream(BackendApiService.instance,
@@ -3269,26 +3294,45 @@ class FirestoreDataService {
     });
   }
 
-  Stream<NotificationHistoryPage> userNotificationsPageStream({int limit = 50}) {
-    if (_useDebugFixtures || _isTemporaryCustomerSession || _isTemporaryCleanerSession) {
+  Stream<NotificationHistoryPage> userNotificationsPageStream(
+      {int limit = 50}) {
+    if (_useDebugFixtures ||
+        _isTemporaryCustomerSession ||
+        _isTemporaryCleanerSession) {
       return userNotificationsStream().map((items) {
         final sorted = [...items]..sort((a, b) {
-          if ((a['read'] == true) != (b['read'] == true)) return a['read'] == true ? 1 : -1;
-          return _timestampMillis(b['createdAt']).compareTo(_timestampMillis(a['createdAt']));
-        });
-        return NotificationHistoryPage(items: sorted.take(limit).toList(), total: items.length);
+            if ((a['read'] == true) != (b['read'] == true))
+              return a['read'] == true ? 1 : -1;
+            return _timestampMillis(b['createdAt'])
+                .compareTo(_timestampMillis(a['createdAt']));
+          });
+        return NotificationHistoryPage(
+            items: sorted.take(limit).toList(), total: items.length);
       });
     }
     final recipientId = _uidOrNull;
     const empty = NotificationHistoryPage(items: [], total: 0);
     if (recipientId == null) return Stream.value(empty);
     return _backendPollingStream(() async {
-      final page = await BackendApiService.instance.getMap('/notifications/page', query: {'limit': '$limit'});
-      if (_uidOrNull != recipientId) return <String, dynamic>{'items': <Map<String, dynamic>>[], 'total': 0};
-      final items = (page['items'] as List? ?? []).map((item) => _mapBackendNotification(Map<String, dynamic>.from(item as Map)))
-          .where((item) => item['userId'] == null || item['userId'].toString() == recipientId).toList();
-      return <String, dynamic>{'items': items, 'total': (page['total'] as num?)?.toInt() ?? items.length};
-    }, interval: const Duration(seconds: 2)).map((page) => NotificationHistoryPage(items: page['items'] as List<Map<String, dynamic>>, total: page['total'] as int));
+      final page = await BackendApiService.instance
+          .getMap('/notifications/page', query: {'limit': '$limit'});
+      if (_uidOrNull != recipientId)
+        return <String, dynamic>{'items': <Map<String, dynamic>>[], 'total': 0};
+      final items = (page['items'] as List? ?? [])
+          .map((item) =>
+              _mapBackendNotification(Map<String, dynamic>.from(item as Map)))
+          .where((item) =>
+              item['userId'] == null ||
+              item['userId'].toString() == recipientId)
+          .toList();
+      return <String, dynamic>{
+        'items': items,
+        'total': (page['total'] as num?)?.toInt() ?? items.length
+      };
+    }, interval: const Duration(seconds: 2))
+        .map((page) => NotificationHistoryPage(
+            items: page['items'] as List<Map<String, dynamic>>,
+            total: page['total'] as int));
   }
 
   Stream<List<Map<String, dynamic>>> userNotificationsStream() {
@@ -6933,6 +6977,7 @@ class FirestoreDataService {
       '/admin/translations',
       body: {
         'key': key,
+        'source': source,
         'ru': (locales['ru'] ?? source).toString(),
         'kk': locales['kk']?.toString(),
         'namespace': 'app',
@@ -9271,11 +9316,15 @@ class FirestoreDataService {
     );
   }
 
-  Future<Map<String, dynamic>> freezeSubscription({required int days, String? subscriptionId}) async {
+  Future<Map<String, dynamic>> freezeSubscription(
+      {required int days, String? subscriptionId}) async {
     if (days <= 0) throw FlutterError('Укажите срок заморозки.');
     final packages = await BackendApiService.instance.getList('/packages/my');
-    final active =
-        packages.where((item) => item['status'] == 'active' && (subscriptionId == null || item['id'] == subscriptionId)).toList();
+    final active = packages
+        .where((item) =>
+            item['status'] == 'active' &&
+            (subscriptionId == null || item['id'] == subscriptionId))
+        .toList();
     if (active.isEmpty) throw FlutterError('Активный пакет не найден.');
     return BackendApiService.instance.postMap(
         '/packages/my/${active.first['id']}/freeze',
@@ -10403,15 +10452,18 @@ class FirestoreDataService {
     while (!cursor.isAfter(monthEnd)) {
       final dateKey = _isoDate(cursor);
       final day = DateTime(cursor.year, cursor.month, cursor.day);
-      if ((freezeUntil == null || !day.isBefore(freezeUntil)) && !day.isBefore(validFrom) &&
+      if ((freezeUntil == null || !day.isBefore(freezeUntil)) &&
+          !day.isBefore(validFrom) &&
           !day.isAfter(validUntil) &&
           !bookedDateKeys.contains(dateKey)) {
         candidates.add(dateKey);
       }
       cursor = cursor.add(const Duration(days: 1));
     }
-    final dates = await loadAvailableCalendarDays(candidates, loadSlots: (dateKey) =>
-      _loadBackendAvailableSlots(dateKey: dateKey, addressId: (subscription['addressId'] ?? '').toString()));
+    final dates = await loadAvailableCalendarDays(candidates,
+        loadSlots: (dateKey) => _loadBackendAvailableSlots(
+            dateKey: dateKey,
+            addressId: (subscription['addressId'] ?? '').toString()));
     return {'ok': true, 'dates': dates, 'backend': true};
   }
 
@@ -10422,8 +10474,14 @@ class FirestoreDataService {
     final dateKey = _isoDate(date);
     final subscription = await _loadOwnedSubscription(subscriptionId);
     final freezeUntil = _asDay(subscription['freezeUntil']);
-    if (freezeUntil != null && DateTime(date.year,date.month,date.day).isBefore(freezeUntil)) {
-      return {'ok': true, 'date': dateKey, 'slots': <Map<String,dynamic>>[], 'backend': true};
+    if (freezeUntil != null &&
+        DateTime(date.year, date.month, date.day).isBefore(freezeUntil)) {
+      return {
+        'ok': true,
+        'date': dateKey,
+        'slots': <Map<String, dynamic>>[],
+        'backend': true
+      };
     }
     final slots = await _loadBackendAvailableSlots(
       dateKey: dateKey,

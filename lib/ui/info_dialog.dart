@@ -33,31 +33,27 @@ class InfoDialog extends StatelessWidget {
   }) {
     return showDialog(
       context: context,
-      builder: (context) => InfoDialog(
-        title: config.trValue(
-          const ['title', 'name'],
-          fallback: 'Информация',
-        ),
-        description: config.trValue(
-          const ['shortInfo', 'description'],
-        ),
-        fullInfo: config.trValue(
-          const ['fullInfo', 'longDescription'],
-        ),
-        price: (config['price'] as num?)?.toInt(),
-        bonusAmount: (config['bonusAmount'] as num?)?.toInt(),
-        imageUrl: _imageUrlFrom(config),
-        features: config['features'] is List
-            ? (config['features'] as List)
-                .map((e) => e.toString().tr())
-                .toList()
-            : null,
-        exclusions: config['exclusions'] is List
-            ? (config['exclusions'] as List)
-                .map((e) => e.toString().tr())
-                .toList()
-            : null,
-      ),
+      builder: (context) {
+        TranslationScope.watch(context);
+        return InfoDialog(
+            title:
+                config.trValue(const ['title', 'name'], fallback: 'Информация'),
+            description: config.trValue(const ['shortInfo', 'description']),
+            fullInfo: config.trValue(const ['fullInfo', 'longDescription']),
+            price: (config['price'] as num?)?.toInt(),
+            bonusAmount: (config['bonusAmount'] as num?)?.toInt(),
+            imageUrl: _imageUrlFrom(config),
+            features: config['features'] is List
+                ? (config['features'] as List)
+                    .map((e) => e.toString().tr())
+                    .toList()
+                : null,
+            exclusions: config['exclusions'] is List
+                ? (config['exclusions'] as List)
+                    .map((e) => e.toString().tr())
+                    .toList()
+                : null);
+      },
     );
   }
 
@@ -160,7 +156,8 @@ class InfoDialog extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
-                                  '$price ₸',
+                                  "{p0} ₸"
+                                      .tr(params: {'p0': (price).toString()}),
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w700,
@@ -399,11 +396,11 @@ class InfoBottomSheet extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => InfoBottomSheet(
-        title: title,
-        description: description,
-        fullInfo: fullInfo,
-      ),
+      builder: (context) {
+        TranslationScope.watch(context);
+        return InfoBottomSheet(
+            title: title, description: description, fullInfo: fullInfo);
+      },
     );
   }
 

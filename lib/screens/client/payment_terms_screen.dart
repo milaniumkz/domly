@@ -121,7 +121,7 @@ class _Header extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'DOMLY',
+          "DOMLY".tr(),
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 color: DomlyPalette.foreground(AppTheme.primaryGreen),
                 fontWeight: FontWeight.w800,
@@ -140,7 +140,10 @@ class _Header extends StatelessWidget {
           'Информация для пользователей и платежного провайдера.'.tr(),
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(color: DomlyPalette.foreground(AppTheme.mutedText)),
+          )
+              .textTheme
+              .bodyMedium
+              ?.copyWith(color: DomlyPalette.foreground(AppTheme.mutedText)),
         ),
       ],
     );

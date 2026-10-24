@@ -145,10 +145,13 @@ class DomlyFirstRunTutorial {
         // that are absent should not add a fixed pause to every step.
         for (var frame = 0; frame < 125 && navigator.mounted; frame++) {
           final target = DomlyTutorialTargets.resolveNavigationTarget(
-              step.targetKey, step.routeName)?.currentContext;
+                  step.targetKey, step.routeName)
+              ?.currentContext;
           if (target != null && target.mounted) break;
           final home = DomlyTutorialTargets.clientHomeTop.currentContext;
-          if (step.routeName == '/client/home' && home != null && home.mounted &&
+          if (step.routeName == '/client/home' &&
+              home != null &&
+              home.mounted &&
               ModalRoute.of(home)?.isCurrent == true) break;
           await Future<void>.delayed(const Duration(milliseconds: 16));
           await WidgetsBinding.instance.endOfFrame;
@@ -185,13 +188,15 @@ class DomlyFirstRunTutorial {
         context: navigator.context,
         barrierDismissible: false,
         barrierColor: Colors.transparent,
-        builder: (context) => _DomlyCoachTutorial(
-          title: title,
-          subtitle: subtitle,
-          step: step,
-          index: index,
-          total: steps.length,
-        ),
+        builder: (context) {
+          TranslationScope.watch(context);
+          return _DomlyCoachTutorial(
+              title: title,
+              subtitle: subtitle,
+              step: step,
+              index: index,
+              total: steps.length);
+        },
       );
       if (action == _TutorialAction.back) {
         index--;

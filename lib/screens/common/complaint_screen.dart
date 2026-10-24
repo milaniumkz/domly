@@ -70,6 +70,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                   child: StreamBuilder<List<Map<String, dynamic>>>(
                     stream: _data.complaintsStream(),
                     builder: (context, snapshot) {
+                      TranslationScope.watch(context);
                       final complaints =
                           snapshot.data ?? const <Map<String, dynamic>>[];
                       final hasExistingComplaint = complaints.any(
@@ -125,6 +126,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                   child: StreamBuilder<List<Map<String, dynamic>>>(
                     stream: _data.complaintsStream(),
                     builder: (context, snapshot) {
+                      TranslationScope.watch(context);
                       final complaints =
                           snapshot.data ?? const <Map<String, dynamic>>[];
                       final currentComplaint = complaints
@@ -350,6 +352,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                     child: StreamBuilder<List<Map<String, dynamic>>>(
                       stream: _data.complaintsStream(),
                       builder: (context, snapshot) {
+                        TranslationScope.watch(context);
                         final complaints =
                             snapshot.data ?? const <Map<String, dynamic>>[];
                         final hasExistingComplaint = complaints.any(
@@ -608,7 +611,7 @@ class _ComplaintStatusCard extends StatelessWidget {
           if (statusDescription.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
-              statusDescription,
+              (statusDescription).tr(),
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -848,7 +851,7 @@ class _StatusChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        label,
+        (label).tr(),
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,

@@ -457,12 +457,18 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     if (_freezing) return;
     setState(() => _freezing = true);
     try {
-      final saved = await showDialog<bool>(context: context, barrierDismissible: false,
-        builder: (_) => PackageFreezeDialog(onSubmit: (days) async {
-          await _data.freezeSubscription(days: days, subscriptionId: subscription['id'].toString());
-        }));
+      final saved = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => PackageFreezeDialog(onSubmit: (days) async {
+                await _data.freezeSubscription(
+                    days: days, subscriptionId: subscription['id'].toString());
+              }));
       if (saved == true && mounted) {
-        setState(() { _selectedTimes.clear(); _slotsCache.clear(); });
+        setState(() {
+          _selectedTimes.clear();
+          _slotsCache.clear();
+        });
         await _loadAvailableDates();
         if (mounted) showDomlySnackBar(context, title: 'Пакет заморожен');
       }
@@ -514,6 +520,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _data.customerSubscriptionsStream(),
       builder: (context, snapshot) {
+        TranslationScope.watch(context);
         final subscriptions = snapshot.data ?? <Map<String, dynamic>>[];
         final subscription =
             subscriptions.cast<Map<String, dynamic>?>().firstWhere(
@@ -591,7 +598,9 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
             subscription ?? activePackageSubscriptions.first;
         final area = (calendarSubscription['area'] ?? '—').toString();
         final freezeUntil = _dateValue(calendarSubscription['freezeUntil']);
-        final frozen = freezeUntil != null && DateUtils.dateOnly(freezeUntil).isAfter(DateUtils.dateOnly(DateTime.now()));
+        final frozen = freezeUntil != null &&
+            DateUtils.dateOnly(freezeUntil)
+                .isAfter(DateUtils.dateOnly(DateTime.now()));
         final validUntil = _dateValue(calendarSubscription['validUntil']);
 
         if (_scheduledVisitsOverride != null &&
@@ -688,10 +697,11 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 (effectiveRequiredSelections == 0
-                                    ? 'Все уборки уже выбраны'
-                                    : _selectedTimes.isEmpty
-                                        ? 'Можно подтверждать даты по одной или сразу несколько. Осталось выбрать: $effectiveRequiredSelections'
-                                        : 'Выбрано ${_selectedTimes.length}. После сохранения останется: $remainingAfterSelection').tr(),
+                                        ? 'Все уборки уже выбраны'
+                                        : _selectedTimes.isEmpty
+                                            ? 'Можно подтверждать даты по одной или сразу несколько. Осталось выбрать: $effectiveRequiredSelections'
+                                            : 'Выбрано ${_selectedTimes.length}. После сохранения останется: $remainingAfterSelection')
+                                    .tr(),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: DomlyPalette.foreground(
@@ -739,14 +749,19 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                     delegate: SliverChildListDelegate([
                       DomlySecondaryButton(
                         label: frozen
-                            ? 'Заморожен до {date}'.tr(params: {'date': domlyDateText(freezeUntil!)})
+                            ? 'Заморожен до {date}'.tr(
+                                params: {'date': domlyDateText(freezeUntil!)})
                             : 'Заморозить пакет',
-                        onPressed: _freezing || frozen ? null : () => _freezePackage(calendarSubscription),
+                        onPressed: _freezing || frozen
+                            ? null
+                            : () => _freezePackage(calendarSubscription),
                       ),
-                      if (validUntil != null) Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text('Действует до {date}'.tr(params: {'date': domlyDateText(validUntil)})),
-                      ),
+                      if (validUntil != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text('Действует до {date}'
+                              .tr(params: {'date': domlyDateText(validUntil)})),
+                        ),
                       const SizedBox(height: 12),
                       DomlyCard(
                         child: Column(
@@ -784,7 +799,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                           bottom: 10,
                                         ),
                                         child: Text(
-                                          _monthYearLabel(_visibleMonth),
+                                          (_monthYearLabel(_visibleMonth)).tr(),
                                           style: TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w600,
@@ -797,7 +812,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                         absorbing: _loadingSlotsDateKey != null,
                                         child: Localizations.override(
                                           context: context,
-                                          locale: Localizations.localeOf(context),
+                                          locale:
+                                              Localizations.localeOf(context),
                                           child: CalendarDatePicker(
                                             key: ValueKey(
                                               '${_visibleMonth.year}-${_visibleMonth.month}',
@@ -1401,8 +1417,10 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       useSafeArea: true,
       backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) {
+        TranslationScope.watch(context);
         return StatefulBuilder(
           builder: (context, setModalState) {
+            TranslationScope.watch(context);
             List<Map<String, dynamic>> buildPaidSelection() {
               return paidAddons
                   .map((item) {
@@ -1658,7 +1676,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                           children: [
                                             Expanded(
                                               child: Text(
-                                                group.label,
+                                                (group.label).tr(),
                                                 style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.w700,
@@ -1778,7 +1796,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                               .start,
                                                       children: [
                                                         Text(
-                                                          item.label,
+                                                          (item.label).tr(),
                                                           style:
                                                               const TextStyle(
                                                             fontSize: 14,
@@ -1798,12 +1816,17 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                           children: [
                                                             Text(
                                                               item.price > 0
-                                                                  ? item.supportsQuantity
-                                                                      ? '${_formatMoney(item.price)} за 1 шт.'
+                                                                  ? item
+                                                                          .supportsQuantity
+                                                                      ? "{p0} за 1 шт.".tr(
+                                                                          params: {
+                                                                              'p0': (_formatMoney(item.price)).toString()
+                                                                            })
                                                                       : _formatMoney(
                                                                           item.price,
                                                                         )
-                                                                  : 'Цена уточняется',
+                                                                  : "Цена уточняется"
+                                                                      .tr(),
                                                               style: TextStyle(
                                                                 fontSize: 13,
                                                                 color: DomlyPalette
@@ -1915,8 +1938,10 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   selectedCount == 0
-                                      ? 'Допы не выбраны'
-                                      : 'Выбрано: $selectedCount',
+                                      ? "Допы не выбраны".tr()
+                                      : "Выбрано: {p0}".tr(params: {
+                                          'p0': (selectedCount).toString()
+                                        }),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: DomlyPalette.foreground(
@@ -2271,15 +2296,21 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
 
     final groupedSelections = <String, List<Map<String, dynamic>>>{};
     final remainingByPackage = <String, int>{
-      for (final item in packagesForScheduling) item['id'].toString(): _availableSelectionsForSubscription(item),
+      for (final item in packagesForScheduling)
+        item['id'].toString(): _availableSelectionsForSubscription(item),
     };
     for (final selection in selections) {
       final date = DateTime.tryParse(selection['date'].toString());
       for (final item in packagesForScheduling) {
         final id = item['id'].toString();
         final until = _dateValue(item['freezeUntil']);
-        if ((remainingByPackage[id] ?? 0) <= 0 || date == null || (until != null && date.isBefore(DateUtils.dateOnly(until)))) continue;
-        groupedSelections.putIfAbsent(id, () => <Map<String, dynamic>>[]).add(selection);
+        if ((remainingByPackage[id] ?? 0) <= 0 ||
+            date == null ||
+            (until != null && date.isBefore(DateUtils.dateOnly(until))))
+          continue;
+        groupedSelections
+            .putIfAbsent(id, () => <Map<String, dynamic>>[])
+            .add(selection);
         remainingByPackage[id] = remainingByPackage[id]! - 1;
         break;
       }
@@ -2475,6 +2506,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         String? pendingTime = initiallySelected;
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            TranslationScope.watch(context);
             return SafeArea(
               top: false,
               child: Container(

@@ -29,8 +29,11 @@ class ClusterMapScreen extends StatelessWidget {
                     icon: Icons.arrow_back,
                     onPressed: () {
                       final navigator = Navigator.of(context);
-                      if (navigator.canPop()) { navigator.pop(); }
-                      else { navigator.pushReplacementNamed('/client/home'); }
+                      if (navigator.canPop()) {
+                        navigator.pop();
+                      } else {
+                        navigator.pushReplacementNamed('/client/home');
+                      }
                     },
                   ),
                   const SizedBox(width: 12),
@@ -90,6 +93,7 @@ class ClusterMapScreen extends StatelessWidget {
               child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: _data.serviceZonesStream(),
                 builder: (context, zonesSnapshot) {
+                  TranslationScope.watch(context);
                   if (zonesSnapshot.hasError) {
                     return const Padding(
                       padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
@@ -122,6 +126,7 @@ class ClusterMapScreen extends StatelessWidget {
                   return StreamBuilder<List<Map<String, dynamic>>>(
                     stream: _data.housesStream(),
                     builder: (context, housesSnapshot) {
+                      TranslationScope.watch(context);
                       if (housesSnapshot.hasError) {
                         return const Padding(
                           padding: EdgeInsets.fromLTRB(24, 0, 24, 24),

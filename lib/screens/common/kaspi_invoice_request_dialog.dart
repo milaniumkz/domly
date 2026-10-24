@@ -70,6 +70,7 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
     barrierDismissible: true,
     builder: (dialogContext) {
       return StatefulBuilder(builder: (context, setState) {
+        TranslationScope.watch(context);
         Widget option({
           required IconData icon,
           required String title,
@@ -142,7 +143,8 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-          content: SingleChildScrollView(child: Column(
+          content: SingleChildScrollView(
+              child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -157,13 +159,19 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
               if (paymentAmount > 0 || alreadyPaidBonus > 0) ...[
                 const SizedBox(height: 12),
                 if (alreadyPaidBonus > 0)
-                  Text('Уже оплачено бонусами: {amount} ₸'.tr(params: {'amount': '$alreadyPaidBonus'})),
+                  Text('Уже оплачено бонусами: {amount} ₸'
+                      .tr(params: {'amount': '$alreadyPaidBonus'})),
                 if (useBonus && availableBonus > 0)
-                  Text('Дополнительно бонусами: {amount} ₸'.tr(params: {'amount': '$availableBonus'})),
+                  Text('Дополнительно бонусами: {amount} ₸'
+                      .tr(params: {'amount': '$availableBonus'})),
                 const SizedBox(height: 6),
-                Text('Сумма нового счёта: {amount} ₸'.tr(params: {
-                  'amount': '${(paymentAmount - (useBonus ? availableBonus : 0)).clamp(0, paymentAmount)}',
-                }), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                Text(
+                    'Сумма нового счёта: {amount} ₸'.tr(params: {
+                      'amount':
+                          '${(paymentAmount - (useBonus ? availableBonus : 0)).clamp(0, paymentAmount)}',
+                    }),
+                    style: const TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.w800)),
               ],
               if (availableBonus > 0) ...[
                 const SizedBox(height: 12),
@@ -271,6 +279,7 @@ Future<KaspiInvoiceRequestResult?> showKaspiInvoiceRequestOptionsDialog(
     builder: (dialogContext) {
       return StatefulBuilder(
         builder: (context, setState) {
+          TranslationScope.watch(context);
           String normalizePhone(String value) {
             final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
             if (digits.length == 11 && digits.startsWith('8')) {
@@ -349,7 +358,7 @@ Future<KaspiInvoiceRequestResult?> showKaspiInvoiceRequestOptionsDialog(
                       decoration: InputDecoration(
                         labelText: 'Номер телефона'.tr(),
                         hintText: '+7 777 000 00 00'.tr(),
-                        errorText: errorText,
+                        errorText: errorText?.tr(),
                       ),
                     ),
                     if (availableBonus > 0) ...[
@@ -388,6 +397,7 @@ Future<KaspiInvoiceRequestResult?> showKaspiInvoiceRequestOptionsDialog(
                     const SizedBox(height: 18),
                     LayoutBuilder(
                       builder: (context, constraints) {
+                        TranslationScope.watch(context);
                         final stackVertically = constraints.maxWidth < 320;
                         final secondaryButton = SizedBox(
                           width: stackVertically ? double.infinity : 132,

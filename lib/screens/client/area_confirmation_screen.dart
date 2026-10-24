@@ -130,35 +130,28 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
   void _showImageSourcePicker() {
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
+      builder: (context) {
+        TranslationScope.watch(context);
+        return SafeArea(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
               leading: const Icon(Icons.photo_library),
-              title: Text(
-                'Выбрать из галереи'.tr(),
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-              ),
+              title: Text('Выбрать из галереи'.tr(),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
               onTap: () {
                 Navigator.pop(context);
                 _pickImage(ImageSource.gallery);
-              },
-            ),
-            ListTile(
+              }),
+          ListTile(
               leading: const Icon(Icons.camera_alt),
-              title: Text(
-                'Сделать снимок'.tr(),
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-              ),
+              title: Text('Сделать снимок'.tr(),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
               onTap: () {
                 Navigator.pop(context);
                 _pickImage(ImageSource.camera);
-              },
-            ),
-          ],
-        ),
-      ),
+              })
+        ]));
+      },
     );
   }
 
@@ -283,6 +276,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
           child: StreamBuilder<Map<String, dynamic>?>(
             stream: _configStream,
             builder: (context, configSnap) {
+              TranslationScope.watch(context);
               final areaConfig = configSnap.data ?? const <String, dynamic>{};
               final uploadEnabled = _config.getBool(
                 areaConfig,
@@ -296,6 +290,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
               return StreamBuilder<Map<String, dynamic>?>(
                 stream: _profileStream,
                 builder: (context, snapshot) {
+                  TranslationScope.watch(context);
                   if (!snapshot.hasData &&
                       snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -747,6 +742,7 @@ class _TechPlanCard extends StatelessWidget {
                     : FutureBuilder<Uint8List>(
                         future: image!.readAsBytes(),
                         builder: (context, snapshot) {
+                          TranslationScope.watch(context);
                           if (!snapshot.hasData) {
                             return Center(
                               child: CircularProgressIndicator(
@@ -820,7 +816,7 @@ class _AreaErrorBox extends StatelessWidget {
                 DomlyColors.danger.withValues(alpha: 0.25))),
       ),
       child: Text(
-        message,
+        (message).tr(),
         style: TextStyle(
           color: DomlyPalette.foreground(DomlyColors.danger),
           fontSize: 13,

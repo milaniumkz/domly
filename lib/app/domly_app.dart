@@ -1445,7 +1445,7 @@ class _DomlyAppState extends State<DomlyApp> {
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(message, textAlign: TextAlign.center),
+          child: Text((message).tr(), textAlign: TextAlign.center),
         ),
       ),
     );
@@ -1490,7 +1490,7 @@ class _DomlyAppState extends State<DomlyApp> {
                 color: Colors.black45,
               ),
               const SizedBox(height: 16),
-              Text(message, textAlign: TextAlign.center),
+              Text((message).tr(), textAlign: TextAlign.center),
               if (config.adminSurface) ...[
                 const SizedBox(height: 24),
                 FilledButton.icon(
@@ -1756,7 +1756,7 @@ class _RouteFallbackScreenState extends State<_RouteFallbackScreen> {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  widget.message,
+                  (widget.message).tr(),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Color(0xFF2B4338),

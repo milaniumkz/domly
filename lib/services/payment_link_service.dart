@@ -105,8 +105,10 @@ class _PaymentBlockingLoader extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   message.isEmpty
-                      ? 'Идёт обработка данных. Пожалуйста, не закрывайте экран.'
-                      : '$message Не закрывайте экран.',
+                      ? "Идёт обработка данных. Пожалуйста, не закрывайте экран."
+                          .tr()
+                      : "{p0} Не закрывайте экран."
+                          .tr(params: {'p0': (message).toString()}),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 13,

@@ -12,6 +12,7 @@ class QuarterlyVisitsDialog extends StatelessWidget {
   final int selectedVisits;
   @override
   Widget build(BuildContext context) {
+    TranslationScope.watch(context);
     final colors = Theme.of(context).colorScheme;
     return AlertDialog(
       backgroundColor: colors.surface,

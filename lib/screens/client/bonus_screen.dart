@@ -87,6 +87,7 @@ class _BonusScreenState extends State<BonusScreen> {
     final code = await showDialog<String>(
       context: context,
       builder: (context) {
+        TranslationScope.watch(context);
         return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(22),
@@ -103,7 +104,7 @@ class _BonusScreenState extends State<BonusScreen> {
             controller: controller,
             textCapitalization: TextCapitalization.characters,
             decoration: InputDecoration(
-              hintText: 'DOMLY-XXXX',
+              hintText: "DOMLY-XXXX".tr(),
               filled: true,
               fillColor: DomlyPalette.background(_background),
               border: OutlineInputBorder(
@@ -216,6 +217,7 @@ class _BonusScreenState extends State<BonusScreen> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _data.customerProfileStream(),
       builder: (context, profileSnap) {
+        TranslationScope.watch(context);
         if (profileSnap.hasError) {
           return const DomlyShell(
             bottomNavigationBar: DomlyClientBottomNav(currentIndex: 2),
@@ -337,6 +339,7 @@ class _BonusScreenState extends State<BonusScreen> {
                         StreamBuilder<List<Map<String, dynamic>>>(
                           stream: _data.customerBonusTransactionsStream(),
                           builder: (context, bonusSnap) {
+                            TranslationScope.watch(context);
                             final items = bonusSnap.data ?? const [];
                             return _BonusTransactionsCard(items: items);
                           },
@@ -441,7 +444,7 @@ class _BonusBalanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 3),
           Text(
-            '$balance ₸',
+            "{p0} ₸".tr(params: {'p0': (balance).toString()}),
             style: TextStyle(
               color: DomlyPalette.foreground(_BonusScreenState._foreground),
               fontSize: 20,
@@ -778,8 +781,9 @@ class _BonusTransactionRow extends StatelessWidget {
               children: [
                 Text(
                   (title.isEmpty
-                      ? (positive ? 'Начисление' : 'Списание')
-                      : title).tr(),
+                          ? (positive ? 'Начисление' : 'Списание')
+                          : title)
+                      .tr(),
                   softWrap: true,
                   style: TextStyle(
                     color:
@@ -803,7 +807,10 @@ class _BonusTransactionRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            '${positive ? '+' : ''}$amount ₸',
+            "{p0}{p1} ₸".tr(params: {
+              'p0': (positive ? '+' : '').toString(),
+              'p1': (amount).toString()
+            }),
             style: TextStyle(
               color: DomlyPalette.foreground(positive
                   ? _BonusScreenState._green

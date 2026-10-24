@@ -62,22 +62,24 @@ class ChatComposerField extends StatelessWidget {
   final String hint;
 
   @override
-  Widget build(BuildContext context) => CallbackShortcuts(
+  Widget build(BuildContext context) {
+    TranslationScope.watch(context);
+    return CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.enter): onSend,
-          const SingleActivator(LogicalKeyboardKey.numpadEnter): onSend,
+          const SingleActivator(LogicalKeyboardKey.numpadEnter): onSend
         },
         child: TextField(
-          controller: controller,
-          focusNode: focusNode,
-          autofocus: true,
-          minLines: 1,
-          maxLines: 4,
-          maxLength: 10000,
-          textInputAction: TextInputAction.send,
-          onEditingComplete: () {},
-          onSubmitted: (_) => onSend(),
-          decoration: InputDecoration(hintText: hint, counterText: ''),
-        ),
-      );
+            controller: controller,
+            focusNode: focusNode,
+            autofocus: true,
+            minLines: 1,
+            maxLines: 4,
+            maxLength: 10000,
+            textInputAction: TextInputAction.send,
+            onEditingComplete: () {},
+            onSubmitted: (_) => onSend(),
+            decoration:
+                InputDecoration(hintText: (hint).tr(), counterText: '')));
+  }
 }

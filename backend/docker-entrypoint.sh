@@ -11,6 +11,7 @@ if [ -n "${DATABASE_URL:-}" ]; then
 SELECT pg_advisory_lock(76197001);
 \i /app/sql/schema.sql
 \i /app/sql/kazakh_translations.sql
+\i /app/sql/ui_text_catalog.sql
 SELECT pg_advisory_unlock(76197001);
 SQL
 fi

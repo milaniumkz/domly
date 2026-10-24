@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import {defaultRequiredTasks} from '../modules/checklists';
 import sharp from 'sharp';
 import {env} from '../common/env';
@@ -60,6 +61,41 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal(rows.length,1);assert.equal(rows[0].ru,edited.ru);assert.equal(rows[0].kk,edited.kk);
         const published=(await request('/translations')).json.data.find((r:any)=>r.key===key);
         assert.equal(published.ru,edited.ru);assert.equal(published.kk,edited.kk);
+        for (const encoding of ['gzip','identity']) {
+          const response=await fetch(base+'/translations',{headers:{'Accept-Encoding':encoding}});
+          assert.match(response.headers.get('content-type') ?? '', /charset=utf-8/);
+          assert.equal(response.headers.get('content-encoding'),encoding==='gzip'?'gzip':null);
+          const body=await response.json() as any;
+          assert.equal(body.data.find((r:any)=>r.key===key).kk,edited.kk);
+        }
+      } finally {await db.query('DELETE FROM translations WHERE key=$1',[key]);}
+    });
+    await t.test('generated catalogue deployment preserves administrator wording', async () => {
+      const sql=readFileSync('sql/ui_text_catalog.sql','utf8');
+      const rollback=new Error('rollback catalogue fixture');
+      await assert.rejects(db.transaction(async tx => {
+        await tx.query(sql);
+        const row=(await tx.query("SELECT key,source FROM translations WHERE source='Заказать уборку'")).rows[0];
+        assert.ok(row);
+        await tx.query('UPDATE translations SET ru=$2,kk=$3 WHERE key=$1',[row.key,'Мой текст администратора','Әкімші мәтіні']);
+        await tx.query(sql);
+        const saved=(await tx.query('SELECT ru,kk,source,locations FROM translations WHERE key=$1',[row.key])).rows[0];
+        assert.equal(saved.ru,'Мой текст администратора');assert.equal(saved.kk,'Әкімші мәтіні');
+        assert.equal(saved.source,'Заказать уборку');assert.ok(saved.locations.length>0);
+        throw rollback;
+      }),error=>error===rollback);
+    });
+    await t.test('editable templates preserve source and reject missing or invented amounts', async () => {
+      const key='text-template-'+randomUUID();
+      const source='К оплате: {amount} ₸';
+      try {
+        const payload={key,source,ru:'Сумма: {amount} ₸',kk:'Сома: {amount} ₸'};
+        assert.equal((await request('/admin/translations','POST',payload)).status,200);
+        for (const ru of ['Оплатить','{total} ₸','{amount} {extra}']) {
+          assert.equal((await request('/admin/translations','POST',{...payload,source:'Оплатить',ru})).status,400);
+        }
+        const row=(await request('/translations')).json.data.find((r:any)=>r.key===key);
+        assert.equal(row.source,source);assert.equal(row.ru,payload.ru);
       } finally {await db.query('DELETE FROM translations WHERE key=$1',[key]);}
     });
     await t.test('addon rejection protects other customers and preserves paid addons', async () => {

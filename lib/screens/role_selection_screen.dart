@@ -192,7 +192,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              description,
+              description.tr(),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,

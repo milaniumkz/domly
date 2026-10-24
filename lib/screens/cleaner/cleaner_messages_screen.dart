@@ -18,6 +18,7 @@ class CleanerMessagesScreen extends StatelessWidget {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: data.userChatSummariesStream(),
       builder: (context, snapshot) {
+        TranslationScope.watch(context);
         if (snapshot.hasError) {
           return const DomlyShell(
             bottomNavigationBar: DomlyCleanerBottomNav(currentIndex: 3),
@@ -110,6 +111,7 @@ class CleanerMessagesScreen extends StatelessWidget {
                           padding: const EdgeInsets.fromLTRB(20, 16, 20, 112),
                           itemCount: summaries.length,
                           itemBuilder: (context, index) {
+                            TranslationScope.watch(context);
                             final item = summaries[index];
                             final unread =
                                 (item['unreadCount'] as num?)?.toInt() ?? 0;
@@ -182,7 +184,8 @@ class CleanerMessagesScreen extends StatelessWidget {
                                               const SizedBox(height: 4),
                                               Text(
                                                 (item['lastMessage'] ??
-                                                        'Сообщений пока нет')
+                                                        "Сообщений пока нет"
+                                                            .tr())
                                                     .toString(),
                                                 maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,

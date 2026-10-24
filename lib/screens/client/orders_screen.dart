@@ -447,6 +447,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       stream: _data.customerScheduleSlotsStream(),
       initialData: const <Map<String, dynamic>>[],
       builder: (context, slotsSnap) {
+        TranslationScope.watch(context);
         final slots = slotsSnap.data ?? <Map<String, dynamic>>[];
         final active = slots.where((slot) {
           final slotId = (slot['id'] ?? slot['slotId'] ?? '').toString();
@@ -465,6 +466,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           stream: _data.customerOrdersStream(),
           initialData: const <Map<String, dynamic>>[],
           builder: (context, ordersSnap) {
+            TranslationScope.watch(context);
             final allOrders = ordersSnap.data ?? <Map<String, dynamic>>[];
             final scheduledOrderIds = slots
                 .map(
@@ -522,6 +524,7 @@ class _OrdersScreenState extends State<OrdersScreen>
               stream: _data.customerAddonRequestsStream(),
               initialData: const <Map<String, dynamic>>[],
               builder: (context, addonSnap) {
+                TranslationScope.watch(context);
                 final addonRequests = (addonSnap.data ?? const [])
                     .where(
                       (item) =>
@@ -542,6 +545,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                         child: AnimatedBuilder(
                           animation: _tabController,
                           builder: (context, _) {
+                            TranslationScope.watch(context);
                             final showActive = _tabController.index == 0;
                             return SingleChildScrollView(
                               padding: const EdgeInsets.fromLTRB(
@@ -818,7 +822,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           ],
           const SizedBox(height: 10),
           Text(
-            '${amount.toString()} ₸',
+            "{p0} ₸".tr(params: {'p0': (amount.toString()).toString()}),
             style: TextStyle(
               color: DomlyPalette.foreground(DomlyColors.foreground),
               fontSize: 20,
@@ -1172,7 +1176,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                         ),
                       ),
                       Text(
-                        address.isEmpty ? 'Адрес будет уточнен' : address,
+                        address.isEmpty ? "Адрес будет уточнен".tr() : address,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1187,7 +1191,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ),
                 if (price > 0) ...[
                   Text(
-                    '$price ₸',
+                    "{p0} ₸".tr(params: {'p0': (price).toString()}),
                     style: TextStyle(
                       color: DomlyPalette.foreground(Color(0xFFCF7548)),
                       fontSize: 20,
@@ -1217,12 +1221,13 @@ class _OrdersScreenState extends State<OrdersScreen>
                       danger: true,
                       onTap: () => _cancelSlot(slot),
                     ),
-                  if (canEdit) _SlotActionChip(
-                    label: _isActiveCleaningStatus(status)
-                        ? 'Добавить допы'
-                        : 'Редактировать заказ',
-                    onTap: () => _editScheduledCleaning(slot),
-                  ),
+                  if (canEdit)
+                    _SlotActionChip(
+                      label: _isActiveCleaningStatus(status)
+                          ? 'Добавить допы'
+                          : 'Редактировать заказ',
+                      onTap: () => _editScheduledCleaning(slot),
+                    ),
                 ],
               ),
             ],
@@ -1258,6 +1263,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       backgroundColor: DomlyPalette.surface(Colors.transparent),
       isScrollControlled: true,
       builder: (context) {
+        TranslationScope.watch(context);
         return SafeArea(
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -1285,7 +1291,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _cancellationRuleText(slot),
+                      (_cancellationRuleText(slot)).tr(),
                       style: TextStyle(
                         color: DomlyPalette.foreground(Color(0xFF658170)),
                         fontSize: 12,
@@ -1569,7 +1575,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            _pendingOrderTitle(order),
+            (_pendingOrderTitle(order)).tr(),
             style: TextStyle(
               color: DomlyPalette.foreground(Color(0xFF2B4338)),
               fontSize: 14,
@@ -1583,7 +1589,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   (line) => Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      line,
+                      (line).tr(),
                       style: TextStyle(
                         color: DomlyPalette.foreground(Color(0xFF658170)),
                         fontSize: 12,
@@ -1599,7 +1605,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           if (kaspiPhone.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              'Kaspi: $kaspiPhone',
+              "Kaspi: {p0}".tr(params: {'p0': (kaspiPhone).toString()}),
               style: TextStyle(
                 color: DomlyPalette.foreground(Color(0xFFCF7548)),
                 fontSize: 12,
@@ -1701,7 +1707,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                       ],
                     ),
                     child: Text(
-                      'KASPI.KZ',
+                      "KASPI.KZ".tr(),
                       style: TextStyle(
                         color: DomlyPalette.foreground(Color(0xFFDF0808)),
                         fontSize: 12,
@@ -1822,7 +1828,7 @@ class _OrdersScreenState extends State<OrdersScreen>
               Padding(
                 padding: const EdgeInsets.only(top: 16),
                 child: Text(
-                  '$price ₸',
+                  "{p0} ₸".tr(params: {'p0': (price).toString()}),
                   textAlign: TextAlign.right,
                   style: TextStyle(
                     color: DomlyPalette.foreground(Color(0xFF2B4338)),
@@ -1847,6 +1853,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       context: context,
       backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) {
+        TranslationScope.watch(context);
         return SafeArea(
           child: Container(
             margin: const EdgeInsets.all(12),
@@ -1923,6 +1930,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       isScrollControlled: true,
       backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) {
+        TranslationScope.watch(context);
         return SafeArea(
           child: Container(
             constraints: BoxConstraints(
@@ -1937,12 +1945,14 @@ class _OrdersScreenState extends State<OrdersScreen>
               stream:
                   AppConfigService.instance.cleanerChecklistTemplatesStream(),
               builder: (context, templatesSnapshot) {
+                TranslationScope.watch(context);
                 final templates = templatesSnapshot.data ??
                     AppConfigService.defaultCleanerChecklistTemplates;
                 return StreamBuilder<Map<String, dynamic>?>(
                   stream: FirestoreDataService.instance
                       .cleanerChecklistForOrderIdsStream(orderIds),
                   builder: (context, checklistSnapshot) {
+                    TranslationScope.watch(context);
                     final checklist = checklistSnapshot.data;
                     return _buildClientChecklistSheet(
                       order: order,
@@ -2683,8 +2693,10 @@ class _OrdersScreenState extends State<OrdersScreen>
       isScrollControlled: true,
       backgroundColor: DomlyPalette.surface(Colors.transparent),
       builder: (context) {
+        TranslationScope.watch(context);
         return StatefulBuilder(
           builder: (context, setModalState) {
+            TranslationScope.watch(context);
             List<Map<String, dynamic>> editableDatesForMonth(
               List<Map<String, dynamic>> serverDates,
             ) {
@@ -2875,8 +2887,10 @@ class _OrdersScreenState extends State<OrdersScreen>
                       const SizedBox(height: 18),
                       Text(
                         selectedDate == null
-                            ? 'Выберите новую дату'
-                            : 'Дата: ${domlyDateText(selectedDate!)}',
+                            ? "Выберите новую дату".tr()
+                            : "Дата: {p0}".tr(params: {
+                                'p0': (domlyDateText(selectedDate!)).toString()
+                              }),
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
@@ -3507,7 +3521,7 @@ class _OrdersScreenState extends State<OrdersScreen>
             Padding(
               padding: const EdgeInsets.only(top: 3),
               child: Text(
-                line,
+                (line).tr(),
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.3,
@@ -3571,7 +3585,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   children: [
                     Expanded(
                       child: Text(
-                        group.label,
+                        (group.label).tr(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -3678,7 +3692,7 @@ class _OrdersScreenState extends State<OrdersScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.label,
+                  (item.label).tr(),
                   style: TextStyle(
                     fontSize: 14,
                     color: DomlyPalette.foreground(DomlyColors.foreground),
@@ -3697,7 +3711,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ] else if (item.note != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    item.note!,
+                    (item.note!).tr(),
                     style: TextStyle(
                       fontSize: 12,
                       color: DomlyPalette.foreground(DomlyColors.muted),
@@ -4061,7 +4075,7 @@ class _OrdersStatusPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
-        text,
+        (text).tr(),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
