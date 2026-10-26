@@ -784,6 +784,22 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       const addon=await request('/admin/catalog/addons','POST',{titleRu:name,groupId:catalogIds.group,price:2000,durationMinutes:30});
       assert.equal(addon.status,201);catalogIds.addon=addon.json.data.id;
       assert.equal((await request('/admin/catalog/addons/'+catalogIds.addon,'PATCH',{price:2500})).status,200);
+      const collapsed='Удаление жира.  В стоимость входит:  Очистка стенок.  Очистка дверцы.  Размер техники: до 70 литров.';
+      const formatted='Удаление жира.\n\nВ стоимость входит:\n• Очистка стенок.\n• Очистка дверцы.\n\nРазмер техники: до 70 литров.';
+      const saved=await request('/admin/catalog/addons/'+catalogIds.addon,'PATCH',{descriptionRu:collapsed,hintRu:collapsed});
+      assert.equal(saved.status,200);assert.equal(saved.json.data.description_ru,formatted);
+      // Simulate an untouched legacy record: all old client read paths must format it.
+      await db.query('UPDATE catalog_addons SET description_ru=$2,hint_ru=$2 WHERE id=$1',[catalogIds.addon,collapsed]);
+      for(const endpoint of ['/catalog/addons','/app/bootstrap','/app/config']) {
+        const response=await request(endpoint);
+        assert.equal(response.status,200);
+        const rows=endpoint==='/catalog/addons'?response.json.data:response.json.data.catalog.addons;
+        const item=rows.find((x:any)=>x.id===catalogIds.addon);
+        assert.equal(item.description_ru,formatted);assert.equal(item.hint_ru,formatted);
+        assert.equal(Number(item.price),2500);
+      }
+      const multiline='Описание\n\n• Первый пункт\n• Второй пункт';
+      assert.equal((await request('/admin/catalog/addons/'+catalogIds.addon,'PATCH',{descriptionRu:multiline})).json.data.description_ru,multiline);
       const zone=await request('/admin/service-zones','POST',{nameRu:name,city:housePrefix,polygon:[{lat:51.1,lng:71.4},{lat:51.2,lng:71.4},{lat:51.1,lng:71.5}]});
       assert.equal(zone.status,201);catalogIds.zone=zone.json.data.id;
       assert.equal((await request('/admin/service-zones/'+catalogIds.zone,'PATCH',{polygon:[{lat:51.1,lng:71.4}]})).status,200);
