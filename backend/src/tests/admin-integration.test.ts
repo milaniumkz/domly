@@ -781,8 +781,8 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       assert.equal((await request('/admin/packages/'+catalogIds.pkg+'/active','PATCH',{active:false})).status,200);
       const group=await request('/admin/catalog/addon-groups','POST',{titleRu:name});
       assert.equal(group.status,201);catalogIds.group=group.json.data.id;
-      const addon=await request('/admin/catalog/addons','POST',{titleRu:name,groupId:catalogIds.group,price:2000,durationMinutes:30});
-      assert.equal(addon.status,201);catalogIds.addon=addon.json.data.id;
+      const addon=await request('/admin/catalog/addons','POST',{titleRu:name,groupId:catalogIds.group,price:2000,durationMinutes:30,fullDescriptionRu:'Первоначальные условия'});
+      assert.equal(addon.status,201);catalogIds.addon=addon.json.data.id;assert.equal(addon.json.data.full_description_ru,'Первоначальные условия');
       assert.equal((await request('/admin/catalog/addons/'+catalogIds.addon,'PATCH',{price:2500})).status,200);
       const collapsed='Удаление жира.  В стоимость входит:  Очистка стенок.  Очистка дверцы.  Размер техники: до 70 литров.';
       const formatted='Удаление жира.\n\nВ стоимость входит:\n• Очистка стенок.\n• Очистка дверцы.\n\nРазмер техники: до 70 литров.';
@@ -800,6 +800,16 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       }
       const multiline='Описание\n\n• Первый пункт\n• Второй пункт';
       assert.equal((await request('/admin/catalog/addons/'+catalogIds.addon,'PATCH',{descriptionRu:multiline})).json.data.description_ru,multiline);
+      const detailed='Условия\n• Духовка должна остыть';
+      const separate=await request('/admin/catalog/addons/'+catalogIds.addon,'PATCH',{fullDescriptionRu:detailed,fullDescriptionKk:'Шарттар'});
+      assert.equal(separate.status,200);assert.equal(separate.json.data.full_description_ru,detailed);
+      assert.equal(separate.json.data.description_ru,multiline);
+      const reopened=(await request('/admin/addons?limit=200')).json.data.find((x:any)=>x.id===catalogIds.addon);
+      assert.equal(reopened.full_description_ru,detailed);assert.equal(reopened.description_ru,multiline);
+      const oldClient=await request('/admin/catalog/addons/'+catalogIds.addon,'PATCH',{price:2500});
+      assert.equal(oldClient.json.data.full_description_ru,detailed);
+      const cleared=await request('/admin/catalog/addons/'+catalogIds.addon,'PATCH',{fullDescriptionRu:''});
+      assert.equal(cleared.json.data.full_description_ru,'');assert.equal(cleared.json.data.description_ru,multiline);
       const zone=await request('/admin/service-zones','POST',{nameRu:name,city:housePrefix,polygon:[{lat:51.1,lng:71.4},{lat:51.2,lng:71.4},{lat:51.1,lng:71.5}]});
       assert.equal(zone.status,201);catalogIds.zone=zone.json.data.id;
       assert.equal((await request('/admin/service-zones/'+catalogIds.zone,'PATCH',{polygon:[{lat:51.1,lng:71.4}]})).status,200);

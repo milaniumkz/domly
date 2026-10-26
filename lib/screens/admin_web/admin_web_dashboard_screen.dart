@@ -14159,6 +14159,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   (item) => (item['key'] ?? '').toString() != key,
                 ),
                 {
+                  if (existing != null) ...existing,
                   'key': key,
                   'label': labelController.text.trim(),
                   'note': noteText,
