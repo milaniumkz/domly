@@ -1,3 +1,4 @@
+import { formatAddonRecord, formatServiceDescription } from '../../modules/serviceDescription';
 import {PublicTextCatalog} from '../../modules/publicTextCatalog';
 import {freezePackage} from '../../modules/packageFreeze';
 import {adminPaymentHistory} from '../../modules/adminPaymentHistory';
@@ -983,7 +984,7 @@ export function buildV1Router(deps: {
       `SELECT a.*, g.title_ru AS group_title_ru, g.title_kk AS group_title_kk
        FROM catalog_addons a LEFT JOIN addon_groups g ON g.id=a.group_id
        WHERE a.active=TRUE ORDER BY g.sort_order, a.sort_order, a.title_ru`,
-    )).rows);
+    )).rows.map(formatAddonRecord));
   }));
 
   router.get('/catalog/banners', asyncHandler(async (req, res) => {
@@ -1231,7 +1232,7 @@ export function buildV1Router(deps: {
     const translations = (await deps.db.query(`SELECT key, ru, kk, namespace FROM translations`)).rows;
     const packages = (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows;
     const addonGroups = (await deps.db.query(`SELECT * FROM addon_groups WHERE active=TRUE ORDER BY sort_order`)).rows;
-    const addons = (await deps.db.query(`SELECT * FROM catalog_addons WHERE active=TRUE ORDER BY sort_order, title_ru`)).rows;
+    const addons = (await deps.db.query(`SELECT * FROM catalog_addons WHERE active=TRUE ORDER BY sort_order, title_ru`)).rows.map(formatAddonRecord);
     const banners = (await deps.db.query(`SELECT banners.*, COALESCE(banners.image_url,(SELECT public_url FROM files WHERE id=banners.image_file_id)) AS image_url FROM banners WHERE active=TRUE ORDER BY placement, sort_order`)).rows;
     const promotions = (await deps.db.query(`SELECT * FROM promotions WHERE active=TRUE ORDER BY created_at DESC`)).rows;
     const contentPages = (await deps.db.query(
@@ -1261,7 +1262,7 @@ export function buildV1Router(deps: {
       `SELECT a.*, g.title_ru AS group_title_ru, g.title_kk AS group_title_kk
        FROM catalog_addons a LEFT JOIN addon_groups g ON g.id=a.group_id
        WHERE a.active=TRUE ORDER BY g.sort_order, a.sort_order, a.title_ru`,
-    )).rows;
+    )).rows.map(formatAddonRecord);
     const banners = (await deps.db.query(`SELECT banners.*, COALESCE(banners.image_url,(SELECT public_url FROM files WHERE id=banners.image_file_id)) AS image_url FROM banners WHERE active=TRUE ORDER BY placement, sort_order, created_at DESC`)).rows;
     const promotions = (await deps.db.query(`SELECT * FROM promotions WHERE active=TRUE ORDER BY created_at DESC`)).rows;
     const contentPages = (await deps.db.query(
@@ -3998,7 +3999,7 @@ export function buildV1Router(deps: {
          RETURNING *
        )
        SELECT * FROM updated UNION ALL SELECT * FROM inserted`,
-      [req.body.groupId ?? null, req.body.titleRu, req.body.titleKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.hintRu ?? null, req.body.hintKk ?? null, req.body.pricingType ?? 'fixed', req.body.price ?? 0, req.body.durationMinutes ?? 0, req.body.paidSeparately ?? false, req.body.active ?? true, req.body.sortOrder ?? 0],
+      [req.body.groupId ?? null, req.body.titleRu, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? 'fixed', req.body.price ?? 0, req.body.durationMinutes ?? 0, req.body.paidSeparately ?? false, req.body.active ?? true, req.body.sortOrder ?? 0],
     )).rows);
     ok(res, row, 201);
   }));
@@ -4012,7 +4013,7 @@ export function buildV1Router(deps: {
        pricing_type=COALESCE($9,pricing_type), price=COALESCE($10,price), duration_minutes=COALESCE($11,duration_minutes),
        paid_separately=COALESCE($12,paid_separately), active=COALESCE($13,active), sort_order=COALESCE($14,sort_order), updated_at=NOW()
        WHERE id=$1 RETURNING *`,
-      [req.params.id, req.body.groupId ?? null, req.body.titleRu ?? null, req.body.titleKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.hintRu ?? null, req.body.hintKk ?? null, req.body.pricingType ?? null, req.body.price ?? null, req.body.durationMinutes ?? null, req.body.paidSeparately ?? null, req.body.active ?? null, req.body.sortOrder ?? null],
+      [req.params.id, req.body.groupId ?? null, req.body.titleRu ?? null, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? null, req.body.price ?? null, req.body.durationMinutes ?? null, req.body.paidSeparately ?? null, req.body.active ?? null, req.body.sortOrder ?? null],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Доп. услуга не найдена.');
     ok(res, row);
