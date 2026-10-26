@@ -13,3 +13,9 @@ Map<String, dynamic> adminAddonTextPayload(Map<String, dynamic> item) => {
     'fullDescriptionRu': item['fullInfo'] ?? item['longDescription'],
   if (item.containsKey('fullInfoKk')) 'fullDescriptionKk': item['fullInfoKk'],
 };
+
+String adminAddonIdentity(Map<String, dynamic> item) =>
+    (item['id'] ?? item['key'] ?? '').toString();
+
+bool adminCatalogActive(Map<String, dynamic> item) =>
+    (item['isActive'] ?? item['active']) != false;

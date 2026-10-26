@@ -2781,15 +2781,19 @@ export function buildV1Router(deps: {
   }));
 
   router.delete('/admin/cleaners/:id', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
-    const cleaner = first((await deps.db.query(
-      `UPDATE app_users SET status='blocked', updated_at=NOW() WHERE id=$1 AND role='cleaner' RETURNING id, numeric_id, phone, full_name, status`,
-      [req.params.id],
-    )).rows);
-    if (!cleaner) throw new ApiError(404, 'not_found', 'Уборщица не найдена.');
-    await deps.db.query(
-      `UPDATE cleaner_profiles SET registration_status='blocked', verification_status='blocked', updated_at=NOW() WHERE user_id=$1`,
-      [req.params.id],
-    );
+    const cleaner = await deps.db.transaction(async tx => {
+      const existing = first((await tx.query(`SELECT id FROM app_users WHERE id=$1 AND role='cleaner' FOR UPDATE`, [req.params.id])).rows);
+      if (!existing) throw new ApiError(404, 'not_found', 'Уборщица не найдена.');
+      const busy = first((await tx.query(`SELECT id FROM service_orders WHERE cleaner_id=$1 AND status NOT IN ('completed','cancelled') LIMIT 1`, [req.params.id])).rows);
+      if (busy) throw new ApiError(409, 'cleaner_has_active_orders', 'У клинера есть незавершённые заказы. Сначала переназначьте или завершите их.');
+      const row = first((await tx.query(
+        `UPDATE app_users SET status='blocked', deleted_at=COALESCE(deleted_at,NOW()), updated_at=NOW()
+         WHERE id=$1 RETURNING id, numeric_id, phone, full_name, status`, [req.params.id],
+      )).rows);
+      await tx.query(`UPDATE cleaner_profiles SET registration_status='blocked', verification_status='blocked', updated_at=NOW() WHERE user_id=$1`, [req.params.id]);
+      await tx.query(`UPDATE refresh_sessions SET revoked_at=NOW() WHERE user_id=$1 AND revoked_at IS NULL`, [req.params.id]);
+      return row;
+    });
     await recordAudit('cleaner.deactivated', 'cleaner', String(req.params.id), { reason: req.body?.reason ?? null }, req.user?.id);
     ok(res, { cleaner });
   }));
@@ -3983,7 +3987,7 @@ export function buildV1Router(deps: {
   router.post('/admin/catalog/addons', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const row = first((await deps.db.query(
       `WITH existing AS (
-         SELECT id FROM catalog_addons WHERE (($1::uuid IS NULL AND group_id IS NULL) OR group_id=$1::uuid) AND title_ru=$2 LIMIT 1
+         SELECT id FROM catalog_addons WHERE (($1::uuid IS NULL AND group_id IS NULL) OR group_id=$1::uuid) AND title_ru=$2 AND deleted_at IS NULL LIMIT 1
        ), updated AS (
          UPDATE catalog_addons SET
            full_description_ru=COALESCE($14,full_description_ru), full_description_kk=COALESCE($15,full_description_kk),
@@ -4014,10 +4018,20 @@ export function buildV1Router(deps: {
        hint_ru=COALESCE($7,hint_ru), hint_kk=COALESCE($8,hint_kk),
        pricing_type=COALESCE($9,pricing_type), price=COALESCE($10,price), duration_minutes=COALESCE($11,duration_minutes),
        paid_separately=COALESCE($12,paid_separately), active=COALESCE($13,active), sort_order=COALESCE($14,sort_order), updated_at=NOW()
-       WHERE id=$1 RETURNING *`,
+       WHERE id=$1 AND deleted_at IS NULL RETURNING *`,
       [req.params.id, req.body.groupId ?? null, req.body.titleRu ?? null, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? null, req.body.price ?? null, req.body.durationMinutes ?? null, req.body.paidSeparately ?? null, req.body.active ?? null, req.body.sortOrder ?? null, req.body.fullDescriptionRu ?? null, req.body.fullDescriptionKk ?? null],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Доп. услуга не найдена.');
+    ok(res, row);
+  }));
+
+  router.delete('/admin/catalog/addons/:id', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    const row = first((await deps.db.query(
+      `UPDATE catalog_addons SET active=FALSE, deleted_at=COALESCE(deleted_at,NOW()), updated_at=NOW()
+       WHERE id=$1 RETURNING *`, [req.params.id],
+    )).rows);
+    if (!row) throw new ApiError(404, 'not_found', 'Доп. услуга не найдена.');
+    await recordAudit('addon.deleted', 'addon', String(req.params.id), {}, req.user?.id);
     ok(res, row);
   }));
 
@@ -4271,7 +4285,7 @@ export function buildV1Router(deps: {
     const updatedTables = new Set(['catalog_packages', 'catalog_addons', 'addon_groups', 'banners', 'promotions', 'content_pages']);
     const setClause = updatedTables.has(table) ? 'active=$2, updated_at=NOW()' : 'active=$2';
     const row = first((await deps.db.query(
-      `UPDATE ${table} SET ${setClause} WHERE id=$1 ${req.params.section === 'promotions' ? 'AND deleted_at IS NULL' : ''} RETURNING *`,
+      `UPDATE ${table} SET ${setClause} WHERE id=$1 ${['promotions','addons'].includes(String(req.params.section)) ? 'AND deleted_at IS NULL' : ''} RETURNING *`,
       [req.params.id, active],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Запись не найдена.');
@@ -4290,7 +4304,7 @@ export function buildV1Router(deps: {
       reviews: { table: 'reviews', search: ['comment'] },
       checklistReports: { table: 'checklist_reports' },
       photoReports: { table: 'photo_reports' },
-      cleaners: { table: 'app_users', base: `role='cleaner'`, search: ['full_name', 'phone', 'email'] },
+      cleaners: { table: 'app_users', base: `role='cleaner' AND deleted_at IS NULL`, search: ['full_name', 'phone', 'email'] },
       users: { table: 'app_users', base: `role='customer'`, search: ['full_name', 'phone', 'email'] },
       preorders: { table: 'preorders' },
       quality: { table: 'quality_check_requests' },
@@ -4302,7 +4316,7 @@ export function buildV1Router(deps: {
       houses: { table: 'connected_houses', search: ['city', 'street_ru', 'street_kk', 'house', 'residential_complex_ru', 'residential_complex_kk'] },
       checklistTemplates: { table: 'checklist_templates', search: ['title_ru', 'title_kk'] },
       packages: { table: 'catalog_packages', search: ['name_ru', 'name_kk', 'description_ru', 'description_kk'] },
-      addons: { table: 'catalog_addons', search: ['title_ru', 'title_kk', 'description_ru', 'description_kk', 'hint_ru', 'hint_kk'] },
+      addons: { table: 'catalog_addons', base: 'deleted_at IS NULL', search: ['title_ru', 'title_kk', 'description_ru', 'description_kk', 'hint_ru', 'hint_kk'] },
       addonGroups: { table: 'addon_groups', search: ['title_ru', 'title_kk'] },
       banners: { table: 'banners', search: ['title_ru', 'title_kk', 'description_ru', 'description_kk'] },
       promotions: { table: 'promotions', base: 'deleted_at IS NULL', search: ['title_ru', 'title_kk', 'description_ru', 'description_kk'] },
@@ -4509,7 +4523,7 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
   }
   if (section === 'cleaners') {
     addCommon('u', ['u.numeric_id::text', 'u.full_name', 'u.phone', 'u.email']);
-    filters.push(`u.role='cleaner'`);
+    filters.push(`u.role='cleaner' AND u.deleted_at IS NULL`);
     values.push(limit, offset);
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     return {

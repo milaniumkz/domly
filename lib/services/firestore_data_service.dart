@@ -13611,7 +13611,7 @@ class FirestoreDataService {
       'titleRu': title,
       'titleKk': group['titleKk'] ?? group['labelKk'] ?? group['nameKk'],
       'sortOrder': group['sortOrder'] ?? group['order'] ?? 0,
-      'active': group['active'] ?? group['isActive'] ?? true,
+      'active': adminCatalogActive(group),
     };
     final id = (group['id'] ?? group['key'] ?? '').toString();
     final saved = _looksLikeUuid(id)
@@ -13657,7 +13657,7 @@ class FirestoreDataService {
         'durationMinutes': item['durationMinutes'] ?? 0,
         'paidSeparately':
             item['paidSeparately'] ?? item['separatePayment'] ?? false,
-        'active': item['active'] ?? item['isActive'] ?? true,
+        'active': adminCatalogActive(item),
         'sortOrder': item['sortOrder'] ?? i,
       };
       final itemId = (item['id'] ?? item['key'] ?? '').toString();
@@ -13803,6 +13803,20 @@ class FirestoreDataService {
       return;
     }
     await _saveAddonGroupToBackend(groupData);
+  }
+
+  Future<void> deleteAdminAddonItem(String groupId,
+      Map<String, dynamic> groupData, String itemKey) async {
+    if (_isDebugAdmin) {
+      final items = ((groupData['items'] ?? const []) as List)
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .where((item) => (item['key'] ?? '').toString() != itemKey)
+          .toList();
+      await saveAdminAddonGroupItems(groupId, items);
+      return;
+    }
+    await BackendApiService.instance.delete('/admin/catalog/addons/$itemKey');
   }
 
   Future<void> saveAdminAddonGroupItems(
