@@ -1,3 +1,4 @@
+import '../../models/order_addon_item.dart';
 import '../../theme/domly_palette.dart';
 import '../common/order_payment_retry.dart';
 import 'dart:async';
@@ -18,37 +19,11 @@ import '../../utils/order_display.dart';
 import '../../utils/user_error_message.dart';
 import '../../localization/translation_controller.dart';
 
-class _OrderAddonItemDef {
-  const _OrderAddonItemDef({
-    required this.key,
-    required this.label,
-    this.supportsQuantity = false,
-    this.note,
-    this.shortInfo,
-    this.fullInfo,
-    this.features = const <String>[],
-    this.separatePayment = false,
-    this.durationMinutes = 15,
-  });
-
-  final String key;
-  final String label;
-  final bool supportsQuantity;
-  final String? note;
-  final String? shortInfo;
-  final String? fullInfo;
-  final List<String> features;
-  final bool separatePayment;
-  final int durationMinutes;
-
-  String? get infoText => shortInfo ?? note;
-}
-
 class _OrderAddonGroupDef {
   const _OrderAddonGroupDef({required this.label, required this.items});
 
   final String label;
-  final List<_OrderAddonItemDef> items;
+  final List<OrderAddonItem> items;
 }
 
 class OrdersScreen extends StatefulWidget {
@@ -64,17 +39,17 @@ class _OrdersScreenState extends State<OrdersScreen>
     _OrderAddonGroupDef(
       label: 'Окна и стекла',
       items: [
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'window_standard',
           label: 'Мытье окон стандарт',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'window_panorama',
           label: 'Панорама',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'window_mosquito',
           label: 'Мытье москитных сеток',
           supportsQuantity: true,
@@ -84,27 +59,27 @@ class _OrdersScreenState extends State<OrdersScreen>
     _OrderAddonGroupDef(
       label: 'Балкон',
       items: [
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'balcony_window_standard',
           label: 'Мытье окон стандарт',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'balcony_panorama',
           label: 'Панорама',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'balcony_balcony',
           label: 'Балкон',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'balcony_loggia',
           label: 'Лоджия',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'balcony_terrace',
           label: 'Терасса',
           supportsQuantity: true,
@@ -114,37 +89,37 @@ class _OrdersScreenState extends State<OrdersScreen>
     _OrderAddonGroupDef(
       label: 'Кухня',
       items: [
-        _OrderAddonItemDef(key: 'kitchen_oven', label: 'Чистка духовки внутри'),
-        _OrderAddonItemDef(
+        OrderAddonItem(key: 'kitchen_oven', label: 'Чистка духовки внутри'),
+        OrderAddonItem(
           key: 'kitchen_hood',
           label: 'Чистка вытяжки и фильтров',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'kitchen_fridge',
           label: 'Мытье холодильника внутри',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'kitchen_facades',
           label: 'Мытье фасадов кухонного гарнитура',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'kitchen_full_set',
           label: 'Полное мытье кухонного гарнитура',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'kitchen_stove',
           label: 'Чистка плит и варочных панелей',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'kitchen_microwave',
           label: 'Чистка микроволновки',
         ),
-        _OrderAddonItemDef(key: 'kitchen_apron', label: 'Мытье фартука'),
-        _OrderAddonItemDef(
+        OrderAddonItem(key: 'kitchen_apron', label: 'Мытье фартука'),
+        OrderAddonItem(
           key: 'kitchen_dishes_hand',
           label: 'Мытье посуды вручную',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'kitchen_dishwasher_loading',
           label: 'Загрузка посуды в посудомойку',
         ),
@@ -153,12 +128,12 @@ class _OrdersScreenState extends State<OrdersScreen>
     _OrderAddonGroupDef(
       label: 'Санузлы',
       items: [
-        _OrderAddonItemDef(key: 'bath_tile_walls', label: 'Стены кафель'),
-        _OrderAddonItemDef(
+        OrderAddonItem(key: 'bath_tile_walls', label: 'Стены кафель'),
+        OrderAddonItem(
           key: 'bath_glass_walls',
           label: 'Стеклянные стены душа и ванны',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'bath_washer_wipe',
           label: 'Протирка стиральной машины',
         ),
@@ -167,19 +142,19 @@ class _OrdersScreenState extends State<OrdersScreen>
     _OrderAddonGroupDef(
       label: 'Комфорт и текстиль',
       items: [
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'textile_bed_linen_ironing',
           label: 'Глажка постельного белья',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'textile_clothes_ironing',
           label: 'Глажка одежды',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'textile_curtains_ironing',
           label: 'Глажка штор',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'textile_bed_change',
           label: 'Замена постельного белья и заправка кроватей',
         ),
@@ -188,38 +163,38 @@ class _OrdersScreenState extends State<OrdersScreen>
     _OrderAddonGroupDef(
       label: 'Труднодоступные зоны',
       items: [
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'hard_chandelier_standard',
           label: 'Чистка люстр стандартная',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'hard_chandelier_complex',
           label: 'Чистка люстр сложная',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'hard_chandelier_super',
           label: 'Чистка люстр супер сложная',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'hard_lamps',
           label: 'Светильники и плафоны',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'hard_upper_shelves',
           label: 'Чистка верхних полок, антресолей и шкафов',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(key: 'hard_baseboards', label: 'Чистка плинтусов'),
-        _OrderAddonItemDef(
+        OrderAddonItem(key: 'hard_baseboards', label: 'Чистка плинтусов'),
+        OrderAddonItem(
           key: 'hard_doors',
           label: 'Мытье дверей',
           supportsQuantity: true,
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'hard_cobweb',
           label: 'Удаление паутины и пыли в труднодоступных местах',
         ),
@@ -228,21 +203,21 @@ class _OrdersScreenState extends State<OrdersScreen>
     _OrderAddonGroupDef(
       label: 'Мебель и поверхности',
       items: [
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'furniture_sofa',
           label: 'Химчистка диванов',
           supportsQuantity: true,
           separatePayment: true,
           note: 'Данная услуга оплачивается отдельно при оценке специалиста.',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'furniture_mattress',
           label: 'Химчистка матрасов',
           supportsQuantity: true,
           separatePayment: true,
           note: 'Данная услуга оплачивается отдельно при оценке специалиста.',
         ),
-        _OrderAddonItemDef(
+        OrderAddonItem(
           key: 'carpet_cleaning',
           label: 'Химчистка ковров и паласов',
           supportsQuantity: true,
@@ -313,56 +288,14 @@ class _OrdersScreenState extends State<OrdersScreen>
               .whereType<Map>()
               .map((rawItem) {
                 final item = Map<String, dynamic>.from(rawItem);
-                final key = (item['key'] ?? '').toString();
+                final mappedItem = OrderAddonItem.fromConfig(item);
+                final key = mappedItem.key;
                 final price = (item['price'] as num?)?.toInt() ?? 0;
                 if (key.isNotEmpty) {
                   _addonUnitPrices[key] = price;
-                  _addonSeparatePayment[key] =
-                      item['separatePayment'] == true ||
-                          item['separate'] == true;
+                  _addonSeparatePayment[key] = mappedItem.separatePayment;
                 }
-                return _OrderAddonItemDef(
-                  key: key,
-                  label: (item['label'] ?? key).toString(),
-                  supportsQuantity: item['supportsQuantity'] == true,
-                  note: (item['note'] ?? '').toString().trim().isEmpty
-                      ? null
-                      : (item['note'] ?? '').toString(),
-                  shortInfo: (item['shortInfo'] ??
-                              item['description'] ??
-                              item['note'] ??
-                              item['hint'] ??
-                              item['prompt'] ??
-                              item['note'] ??
-                              item['hint'] ??
-                              item['prompt'] ??
-                              '')
-                          .toString()
-                          .trim()
-                          .isEmpty
-                      ? null
-                      : (item['shortInfo'] ??
-                              item['description'] ??
-                              item['note'] ??
-                              item['hint'] ??
-                              item['prompt'])
-                          .toString(),
-                  fullInfo: (item['fullInfo'] ?? item['longDescription'] ?? '')
-                          .toString()
-                          .trim()
-                          .isEmpty
-                      ? null
-                      : (item['fullInfo'] ?? item['longDescription'])
-                          .toString(),
-                  features: item['features'] is List
-                      ? (item['features'] as List)
-                          .map((value) => value.toString())
-                          .where((value) => value.trim().isNotEmpty)
-                          .toList()
-                      : const <String>[],
-                  durationMinutes:
-                      (item['durationMinutes'] as num?)?.toInt() ?? 15,
-                );
+                return mappedItem;
               })
               .where((item) => item.key.isNotEmpty)
               .toList();
@@ -3563,7 +3496,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     Map<String, int> addonQuantities,
     bool expanded,
     VoidCallback onToggle,
-    void Function(_OrderAddonItemDef item, int quantity) onItemChanged,
+    void Function(OrderAddonItem item, int quantity) onItemChanged,
   ) {
     final selectedCount = _selectedCountForGroup(group, addonQuantities);
     return Container(
@@ -3650,7 +3583,7 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Widget _buildAddonEditorRow(
-    _OrderAddonItemDef item,
+    OrderAddonItem item,
     Map<String, int> addonQuantities,
     ValueChanged<int> onChanged,
   ) {
@@ -3770,7 +3703,7 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Future<void> _showAddonInfo(
-    _OrderAddonItemDef item, {
+    OrderAddonItem item, {
     required int unitPrice,
   }) async {
     final infoConfig = await AppConfigService.instance.getInfoContent(item.key);
