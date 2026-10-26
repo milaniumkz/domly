@@ -483,6 +483,7 @@ CREATE TABLE IF NOT EXISTS catalog_addons (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE catalog_addons ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE catalog_addons ADD COLUMN IF NOT EXISTS full_description_ru TEXT;
 ALTER TABLE catalog_addons ADD COLUMN IF NOT EXISTS full_description_kk TEXT;
 

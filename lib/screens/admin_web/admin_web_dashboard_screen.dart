@@ -1,3 +1,4 @@
+import '../../utils/admin_addon_text.dart';
 import '../../utils/admin_date_time.dart';
 import '../../utils/payment_approval_data.dart';
 import 'dart:math' as math;
@@ -14129,7 +14130,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             onPressed: () async {
               final navigator = Navigator.of(context);
               final messenger = ScaffoldMessenger.of(context);
-              final key = _adminSlug(
+              final key = existing != null
+                  ? adminAddonIdentity(existing)
+                  : _adminSlug(
                 keyController.text,
                 fallbackText: labelController.text,
                 prefix: 'addon',
@@ -14222,12 +14225,14 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       ),
     );
     if (confirmed != true) return;
-    final items = ((groupData['items'] ?? const []) as List)
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .where((item) => (item['key'] ?? '').toString() != itemKey)
-        .toList();
-    await _data.saveAdminAddonGroupItems(groupId, items);
+    try {
+      await _data.deleteAdminAddonItem(groupId, groupData, itemKey);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
   }
 
   String _adminSlug(

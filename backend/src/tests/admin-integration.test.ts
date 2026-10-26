@@ -817,6 +817,44 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       assert.equal(house.status,201);catalogIds.house=house.json.data.id;
       assert.equal((await request('/admin/connected-houses/'+catalogIds.house,'PATCH',{active:true})).status,200);
     });
+    await t.test('renaming, hiding and deleting addons keeps identity and historical records',async()=>{
+      const id=catalogIds.addon;
+      const renamed=await request('/admin/catalog/addons/'+id,'PATCH',{titleRu:housePrefix+' renamed',active:false});
+      assert.equal(renamed.status,200);assert.equal(renamed.json.data.id,id);
+      assert.equal((await db.query('SELECT COUNT(*)::int n FROM catalog_addons WHERE group_id=$1',[catalogIds.group])).rows[0].n,1);
+      for(const endpoint of ['/catalog/addons','/app/bootstrap','/app/config']) {
+        const data=(await request(endpoint)).json.data;
+        assert.ok(!(endpoint==='/catalog/addons'?data:data.catalog.addons).some((x:any)=>x.id===id));
+      }
+      assert.equal((await request('/admin/catalog/addons/'+id,'PATCH',{active:true})).status,200);
+      assert.equal((await request('/admin/catalog/addons/'+id,'DELETE',undefined,true)).status,403);
+      for(let n=0;n<2;n++)assert.equal((await request('/admin/catalog/addons/'+id,'DELETE')).status,200);
+      assert.ok(!(await request('/admin/addons?search='+encodeURIComponent(housePrefix))).json.data.some((x:any)=>x.id===id));
+      const stored=(await db.query('SELECT * FROM catalog_addons WHERE id=$1',[id])).rows[0];
+      assert.ok(stored.deleted_at);assert.equal(stored.active,false);
+      assert.equal((await request('/admin/addons/'+id+'/active','PATCH',{active:true})).status,404);
+      assert.equal((await request('/admin/catalog/addons/'+id,'PATCH',{active:true})).status,404);
+    });
+    await t.test('deleting an old cleaner hides only that profile and preserves order history',async()=>{
+      const oldCleaner=randomUUID(),otherCustomer=randomUUID(),order=randomUUID(),phone='delete-fixture-'+randomUUID();
+      try {
+        for(const [id,role] of [[oldCleaner,'cleaner'],[otherCustomer,'customer']])await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,$3,'approved')",[id,phone,role]);
+        await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[oldCleaner]);
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status) VALUES($1,$2,$3,'assigned')",[order,customer,oldCleaner]);
+        assert.equal((await request('/admin/cleaners/'+oldCleaner,'DELETE')).status,409);
+        assert.equal((await db.query('SELECT deleted_at FROM app_users WHERE id=$1',[oldCleaner])).rows[0].deleted_at,null);
+        await db.query("UPDATE service_orders SET status='completed' WHERE id=$1",[order]);
+        for(let n=0;n<2;n++)assert.equal((await request('/admin/cleaners/'+oldCleaner,'DELETE')).status,200);
+        assert.ok(!(await request('/admin/cleaners?search='+phone)).json.data.some((x:any)=>x.id===oldCleaner));
+        assert.equal((await db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[order])).rows[0].cleaner_id,oldCleaner);
+        const other=(await db.query('SELECT status,deleted_at FROM app_users WHERE id=$1',[otherCustomer])).rows[0];
+        assert.equal(other.status,'approved');assert.equal(other.deleted_at,null);
+      } finally {
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
+        await db.query('DELETE FROM cleaner_profiles WHERE user_id=$1',[oldCleaner]);
+        await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[oldCleaner,otherCustomer]]);
+      }
+    });
     await t.test('payment cards include customer, package, address and creation date',async()=>{
       const address=randomUUID(),purchase=randomUUID(),payment=randomUUID();
       try {

@@ -682,6 +682,7 @@ export const openApiSpec = {
       post: { ...secured('Админ: создать доп. услугу'), requestBody: jsonBody({ groupId: 'uuid', titleRu: 'Мытье окон', price: 3000, durationMinutes: 30 }) },
     },
     '/admin/catalog/addons/{id}': {
+      delete: { ...secured('Админ: убрать доп. услугу из каталога с сохранением истории'), parameters: [path('id')] },
       patch: { ...secured('Админ: обновить доп. услугу'), parameters: [path('id')], requestBody: jsonBody({ price: 3500, hintRu: 'Описание' }) },
     },
     '/admin/service-zones': {
