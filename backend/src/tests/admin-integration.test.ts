@@ -781,8 +781,8 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       assert.equal((await request('/admin/packages/'+catalogIds.pkg+'/active','PATCH',{active:false})).status,200);
       const group=await request('/admin/catalog/addon-groups','POST',{titleRu:name});
       assert.equal(group.status,201);catalogIds.group=group.json.data.id;
-      const addon=await request('/admin/catalog/addons','POST',{titleRu:name,groupId:catalogIds.group,price:2000,durationMinutes:30});
-      assert.equal(addon.status,201);catalogIds.addon=addon.json.data.id;
+      const addon=await request('/admin/catalog/addons','POST',{titleRu:name,groupId:catalogIds.group,price:2000,durationMinutes:30,fullDescriptionRu:'Первоначальные условия'});
+      assert.equal(addon.status,201);catalogIds.addon=addon.json.data.id;assert.equal(addon.json.data.full_description_ru,'Первоначальные условия');
       assert.equal((await request('/admin/catalog/addons/'+catalogIds.addon,'PATCH',{price:2500})).status,200);
       const collapsed='Удаление жира.  В стоимость входит:  Очистка стенок.  Очистка дверцы.  Размер техники: до 70 литров.';
       const formatted='Удаление жира.\n\nВ стоимость входит:\n• Очистка стенок.\n• Очистка дверцы.\n\nРазмер техники: до 70 литров.';
