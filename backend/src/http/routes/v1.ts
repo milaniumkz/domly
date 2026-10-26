@@ -3986,6 +3986,7 @@ export function buildV1Router(deps: {
          SELECT id FROM catalog_addons WHERE (($1::uuid IS NULL AND group_id IS NULL) OR group_id=$1::uuid) AND title_ru=$2 LIMIT 1
        ), updated AS (
          UPDATE catalog_addons SET
+           full_description_ru=COALESCE($14,full_description_ru), full_description_kk=COALESCE($15,full_description_kk),
            title_kk=$3, description_ru=$4, description_kk=$5, hint_ru=$6, hint_kk=$7,
            pricing_type=COALESCE($8, pricing_type), price=COALESCE($9, price),
            duration_minutes=COALESCE($10, duration_minutes), paid_separately=COALESCE($11, paid_separately),
@@ -3993,13 +3994,13 @@ export function buildV1Router(deps: {
          WHERE id=(SELECT id FROM existing) RETURNING *
        ), inserted AS (
          INSERT INTO catalog_addons
-         (group_id, title_ru, title_kk, description_ru, description_kk, hint_ru, hint_kk, pricing_type, price, duration_minutes, paid_separately, active, sort_order)
-         SELECT $1,$2,$3,$4,$5,$6,$7,COALESCE($8,'fixed'),COALESCE($9,0),COALESCE($10,0),COALESCE($11,FALSE),COALESCE($12,TRUE),COALESCE($13,0)
+         (group_id, title_ru, title_kk, description_ru, description_kk, hint_ru, hint_kk, pricing_type, price, duration_minutes, paid_separately, active, sort_order, full_description_ru, full_description_kk)
+         SELECT $1,$2,$3,$4,$5,$6,$7,COALESCE($8,'fixed'),COALESCE($9,0),COALESCE($10,0),COALESCE($11,FALSE),COALESCE($12,TRUE),COALESCE($13,0),$14,$15
          WHERE NOT EXISTS (SELECT 1 FROM existing)
          RETURNING *
        )
        SELECT * FROM updated UNION ALL SELECT * FROM inserted`,
-      [req.body.groupId ?? null, req.body.titleRu, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? 'fixed', req.body.price ?? 0, req.body.durationMinutes ?? 0, req.body.paidSeparately ?? false, req.body.active ?? true, req.body.sortOrder ?? 0],
+      [req.body.groupId ?? null, req.body.titleRu, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? 'fixed', req.body.price ?? 0, req.body.durationMinutes ?? 0, req.body.paidSeparately ?? false, req.body.active ?? true, req.body.sortOrder ?? 0, req.body.fullDescriptionRu ?? null, req.body.fullDescriptionKk ?? null],
     )).rows);
     ok(res, row, 201);
   }));
@@ -4007,13 +4008,14 @@ export function buildV1Router(deps: {
   router.patch('/admin/catalog/addons/:id', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const row = first((await deps.db.query(
       `UPDATE catalog_addons SET
+       full_description_ru=COALESCE($15,full_description_ru), full_description_kk=COALESCE($16,full_description_kk),
        group_id=COALESCE($2,group_id), title_ru=COALESCE($3,title_ru), title_kk=COALESCE($4,title_kk),
        description_ru=COALESCE($5,description_ru), description_kk=COALESCE($6,description_kk),
        hint_ru=COALESCE($7,hint_ru), hint_kk=COALESCE($8,hint_kk),
        pricing_type=COALESCE($9,pricing_type), price=COALESCE($10,price), duration_minutes=COALESCE($11,duration_minutes),
        paid_separately=COALESCE($12,paid_separately), active=COALESCE($13,active), sort_order=COALESCE($14,sort_order), updated_at=NOW()
        WHERE id=$1 RETURNING *`,
-      [req.params.id, req.body.groupId ?? null, req.body.titleRu ?? null, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? null, req.body.price ?? null, req.body.durationMinutes ?? null, req.body.paidSeparately ?? null, req.body.active ?? null, req.body.sortOrder ?? null],
+      [req.params.id, req.body.groupId ?? null, req.body.titleRu ?? null, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? null, req.body.price ?? null, req.body.durationMinutes ?? null, req.body.paidSeparately ?? null, req.body.active ?? null, req.body.sortOrder ?? null, req.body.fullDescriptionRu ?? null, req.body.fullDescriptionKk ?? null],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Доп. услуга не найдена.');
     ok(res, row);

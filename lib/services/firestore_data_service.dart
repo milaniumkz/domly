@@ -1,3 +1,4 @@
+import '../utils/admin_addon_text.dart';
 import '../utils/legal_document_sections.dart';
 import 'admin_text_catalog.dart';
 import '../localization/kazakh_translations.dart';
@@ -2189,8 +2190,7 @@ class FirestoreDataService {
                           'key': item['id'],
                           'label': item['title_ru'],
                           'labelKk': item['title_kk'],
-                          'description': item['description_ru'],
-                          'fullInfo': item['description_ru'],
+                          ...adminAddonTextFields(item),
                           'note': item['hint_ru'],
                           'price': _num(item['price']).round(),
                           'durationMinutes': item['duration_minutes'],
@@ -13645,9 +13645,7 @@ class FirestoreDataService {
         'groupId': backendGroupId,
         'titleRu': title,
         'titleKk': item['titleKk'] ?? item['labelKk'] ?? item['nameKk'],
-        'descriptionRu':
-            item['description'] ?? item['shortInfo'] ?? item['fullInfo'],
-        'descriptionKk': item['descriptionKk'],
+        ...adminAddonTextPayload(item),
         'hintRu': item['hint'] ?? item['note'],
         'hintKk': item['hintKk'],
         'pricingType': item['pricingType'] ?? 'fixed',

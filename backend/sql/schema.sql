@@ -483,6 +483,9 @@ CREATE TABLE IF NOT EXISTS catalog_addons (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE catalog_addons ADD COLUMN IF NOT EXISTS full_description_ru TEXT;
+ALTER TABLE catalog_addons ADD COLUMN IF NOT EXISTS full_description_kk TEXT;
+
 CREATE TABLE IF NOT EXISTS checklist_templates (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   package_id UUID REFERENCES catalog_packages(id),
