@@ -8,7 +8,7 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template]
+        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -48,6 +48,12 @@ jobs:
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
         run: |
+          if [ "$ACTION" = "kaspi-status-audit" ]; then
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/audit_kaspi_status.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/audit_kaspi_status.cjs"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "set -eu; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T api node < '$DEPLOY_PATH/shared/audit_kaspi_status.cjs'"
+            exit 0
+          fi
           if [ "$ACTION" = "whatsapp-welcome-template" ]; then
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/create_whatsapp_welcome.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/create_whatsapp_welcome.cjs"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \

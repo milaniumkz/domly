@@ -441,7 +441,7 @@ export const openApiSpec = {
     '/payments/moon-ai/kaspi-status': {
       post: {
         summary: 'Webhook Moon AI: статус выставленного счёта Kaspi',
-        description: 'Moon AI отправляет только status, amount, phone, dateTime; ID не нужен. Единственное совпадение телефона/суммы/времени обрабатывается автоматически, неоднозначное — вручную. Статусы invoice_sent, paid, rejected, cancelled. Защита: Authorization: Bearer <MOON_AI_WEBHOOK_TOKEN> или X-MoonAI-Token.',
+        description: 'Moon AI передаёт status, amount, phone, dateTime и paymentId из запроса счёта DOMLY. Для старых интеграций paymentId необязателен. ID проверяется вместе с телефоном, суммой и временем; неверный ID не допускает подбора другого счёта. Единственное совпадение телефона/суммы/времени обрабатывается автоматически, неоднозначное — вручную. Статусы invoice_sent, paid, rejected, cancelled. Защита: Authorization: Bearer <MOON_AI_WEBHOOK_TOKEN> или X-MoonAI-Token.',
         requestBody: jsonBody({
           status: 'paid',
           amount: 11500,
