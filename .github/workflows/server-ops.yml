@@ -8,7 +8,7 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer]
+        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -48,6 +48,12 @@ jobs:
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
         run: |
+          if [ "$ACTION" = "quarterly-rate-95" ]; then
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/set_quarterly_rate.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/set_quarterly_rate.cjs"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "set -eu; umask 077; mkdir -p '$DEPLOY_PATH/backups/catalog'; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e RATE_OPERATION_ID='${{ github.run_id }}' api node < '$DEPLOY_PATH/shared/set_quarterly_rate.cjs' > '$DEPLOY_PATH/backups/catalog/${{ github.run_id }}.json'"
+            exit 0
+          fi
           if [ "$ACTION" = "publish-offer" ]; then
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/publish_offer.cjs docs/legal/public-offer-20261024.json "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \

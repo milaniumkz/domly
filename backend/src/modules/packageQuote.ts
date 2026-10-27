@@ -10,15 +10,12 @@ export async function packageQuote(db: Queryable, input: Record<string, any>) {
   const area = Number(input.area);
   if (!Number.isFinite(area) || area <= 0 || area > 10000) throw new ApiError(400, 'area_required', 'Укажите площадь квартиры.');
   let visits = Number(pkg.cleaning_count);
-  let rate = Number(pkg.price_per_m2);
+  const rate = Number(pkg.price_per_m2);
   if (pkg.features?.isQuarterly) {
     visits = Number(input.cleaningsPerMonth ?? pkg.cleaning_count);
     if (![2,4,8].includes(visits)) throw new ApiError(400,'invalid_frequency','Выберите 2, 4 или 8 уборок в месяц.');
-    const monthly = first<any>((await db.query(
-      'SELECT price_per_m2 FROM catalog_packages WHERE active=TRUE AND months=1 AND cleaning_count=$1 ORDER BY updated_at DESC LIMIT 1', [visits],
-    )).rows);
-    if (!monthly) throw new ApiError(400,'invalid_package','Месячный тариф недоступен.');
-    rate = Number(monthly.price_per_m2);
+    // Quarterly has its own administrator-controlled per-visit area rate.
+    // Changing the number of visits must not substitute a monthly tariff.
   }
   const cleaningCount = visits * Number(pkg.months);
   const base = Math.round((Number(pkg.base_price) + rate * area) * cleaningCount);
