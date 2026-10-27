@@ -35,7 +35,7 @@ export async function importCatalog(db: Database, source: CatalogExport) {
       frequency:data.frequency,popular:data.popular === true,
       ...(quarterly ? {monthlyRates:rates,allowedMonthlyVisits:[2,4,8]} : {})};
     return {id:stableId('customer_packages',id),data,name:label(data),visits,months,
-      rate:quarterly ? amount(rates[visits]) : amount(data.price),features};
+      rate:amount(data.price),features};
   });
   const groups = source.addon_groups_config.map(({id,data}) => ({id:stableId('addon_groups_config',id),key:id,data,name:label(data)}));
   const addons = new Map<string,{id:string;groupId:string|null;data:Record<string,any>}>();
