@@ -30,6 +30,7 @@ const {Client}=require('pg');
    const data=await r.json();
    const shape=(x,depth=0)=>depth>8?'...':Array.isArray(x)?x.map(v=>shape(v,depth+1)):x&&typeof x==='object'?Object.fromEntries(Object.entries(x).map(([k,v])=>[k,/^(id|type|integration_type|method|name)$/.test(k)?v:shape(v,depth+1)])):typeof x;
    console.log(JSON.stringify({integrationShape:shape(data)}));
+   for(const integration of data.integrations||[])console.log(JSON.stringify({integrationId:integration.id,phoneMapping:integration.data?.json_params?.phone,callbackPath:new URL(integration.data.url).pathname}));
   }
 
  }
