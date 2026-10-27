@@ -6343,6 +6343,13 @@
     ]
   },
   {
+    "key": "t_5208e14c7535edf9",
+    "source": "Не удалось открыть ссылку. Попробуйте позже.",
+    "locations": [
+      "lib/screens/client/client_home_screen.dart"
+    ]
+  },
+  {
     "key": "t_e9664d044bbc782d",
     "source": "Не удалось открыть фотоотчет",
     "locations": [

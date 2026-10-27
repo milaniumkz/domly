@@ -4579,7 +4579,7 @@ class _PromoBannersSectionState extends State<_PromoBannersSection> {
                       TranslationScope.watch(context);
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: _PromoBannerCard(banner: banners[index]),
+                        child: PromoBannerCard(banner: banners[index]),
                       );
                     },
                   ),
@@ -4612,8 +4612,8 @@ class _PromoBannersSectionState extends State<_PromoBannersSection> {
   }
 }
 
-class _PromoBannerCard extends StatelessWidget {
-  const _PromoBannerCard({required this.banner});
+class PromoBannerCard extends StatelessWidget {
+  const PromoBannerCard({required this.banner});
 
   final Map<String, dynamic> banner;
 
@@ -4657,6 +4657,37 @@ class _PromoBannerCard extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context) async {
+    final externalUrl = (banner['externalUrl'] ?? '').toString().trim();
+    final target = externalUrl.isNotEmpty
+        ? externalUrl
+        : (banner['route'] ?? '').toString().trim();
+    if (target.isNotEmpty) {
+      if (externalUrl.isEmpty &&
+          target.startsWith('/') &&
+          !target.startsWith('//')) {
+        Navigator.pushNamed(context, target);
+        return;
+      }
+      final uri = Uri.tryParse(target);
+      var opened = false;
+      if (uri != null &&
+          (uri.scheme == 'https' || uri.scheme == 'http') &&
+          uri.host.isNotEmpty) {
+        try {
+          // Launch directly from the tap; a preflight can lose browser activation.
+          opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } catch (_) {
+          opened = false;
+        }
+      }
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Не удалось открыть ссылку. Попробуйте позже.'.tr()),
+        ));
+      }
+      return;
+    }
+
     final title = banner.trValue(['title'], fallback: 'Информация');
     final subtitle = banner.trValue(['subtitle']);
     final description = (banner['description'] ??
@@ -4681,22 +4712,6 @@ class _PromoBannerCard extends StatelessWidget {
       );
       return;
     }
-
-    final externalUrl = (banner['externalUrl'] ?? '').toString().trim();
-    final route = externalUrl.isNotEmpty
-        ? externalUrl
-        : (banner['route'] ?? '').toString().trim();
-    if (route.isEmpty) {
-      return;
-    }
-    if (route.startsWith('http://') || route.startsWith('https://')) {
-      final uri = Uri.tryParse(route);
-      if (uri != null && await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-      return;
-    }
-    Navigator.pushNamed(context, route);
   }
 
   @override
