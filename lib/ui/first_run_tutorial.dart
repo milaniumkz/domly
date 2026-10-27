@@ -148,7 +148,10 @@ class DomlyFirstRunTutorial {
                   step.targetKey, step.routeName)
               ?.currentContext;
           if (target != null && target.mounted) break;
-          final home = DomlyTutorialTargets.clientHomeTop.currentContext;
+          // The header mounts while account/catalog data is still loading.
+          // Only actionable home content means optional targets can be absent.
+          final home = DomlyTutorialTargets.clientOrderButton.currentContext ??
+              DomlyTutorialTargets.clientPackageActions.currentContext;
           if (step.routeName == '/client/home' &&
               home != null &&
               home.mounted &&

@@ -281,13 +281,14 @@ class _DelayedTutorialHomeState extends State<_DelayedTutorialHome> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      body: ready
-          ? Column(children: [
-              SizedBox(key: DomlyTutorialTargets.clientHomeTop, height: 60),
-              SizedBox(
-                  key: DomlyTutorialTargets.clientOrderButton,
-                  height: 50,
-                  width: 250)
-            ])
-          : const CircularProgressIndicator());
+          body: Column(children: [
+        SizedBox(key: DomlyTutorialTargets.clientHomeTop, height: 60),
+        if (ready)
+          SizedBox(
+              key: DomlyTutorialTargets.clientOrderButton,
+              height: 50,
+              width: 250)
+        else
+          const CircularProgressIndicator(),
+      ]));
 }
