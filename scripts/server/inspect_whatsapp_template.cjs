@@ -6,5 +6,7 @@
  if(!r.ok)throw Error('Template lookup HTTP '+r.status);
  const data=await r.json();const t=(data.templates||[]).find(x=>String(x.id)===e.MOON_AI_WABA_TEMPLATE_ID);
  if(!t)throw Error('Configured approved template missing');
+ const options=await fetch(url.split('?')[0],{method:'OPTIONS',headers:{Authorization:`Bearer ${e.MOON_AI_REST_API_KEY}`},signal:AbortSignal.timeout(30000)});
+ console.log('Template API options:',options.status,await options.text());
  console.log(JSON.stringify({id:t.id,name:t.name,status:t.status,body:t.body,components:t.components,text:t.text}));
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
