@@ -328,19 +328,43 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         const parsedUrl=new URL(url);const path=parsedUrl.pathname;
         if(path.endsWith('/threads')){assert.equal(parsedUrl.searchParams.get('messengers'),'whatsapp_business');assert.equal(init.headers['Content-Type'],undefined);}
         nativeCalls.push({path,body:init.body?JSON.parse(init.body):null});
-        const result=path.endsWith('/threads')?{results:[]}:path.endsWith('/whatsapp-templates')?{templates:[{id:215,status:'APPROVED'}]}:
+        const result=path.endsWith('/threads')?{results:[]}:path.endsWith('/whatsapp-templates')?{templates:[{id:216,name:'domly_welcome_alena_formal_20261027',status:'APPROVED'}]}:
           {thread_id:'native-waba-thread',delivery_status:'enqueued'};
         return new Response(JSON.stringify(result),{status:200});
       }) as typeof fetch;
       await processMoonOutbox(db,nativeSend);
       assert.equal(nativeCalls.length,4);
       assert.match(nativeCalls.at(-2).path,/channels\/7787\/whatsapp-chat\/initiate$/);
-      assert.equal(nativeCalls.at(-2).body.template_id,215);
+      assert.equal(nativeCalls.at(-2).body.template_id,216);
+      assert.deepEqual(nativeCalls.at(-2).body.variables,{});
       assert.equal(nativeCalls.at(-2).body.phone,(await db.query('SELECT phone FROM app_users WHERE id=$1',[idle])).rows[0].phone);
       assert.equal(nativeCalls.at(-1).body.status,'active');
       await processMoonOutbox(db,nativeSend);assert.equal(nativeCalls.length,4);
       assert.equal((await db.query("SELECT provider_thread_id FROM moon_ai_outbox WHERE id=$1",[rows[0].id])).rows[0].provider_thread_id,'native-waba-thread');
       assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM chat_messages m JOIN chats c ON c.id=m.chat_id WHERE c.customer_id=$1",[idle])).rows[0].n),0);
+    });
+    await t.test('signup free-form welcome preserves the exact approved wording',async()=>{
+      const calls:any[]=[];
+      const transport=(async(url:any,init:any)=>{
+        const path=new URL(url).pathname;calls.push({path,body:init.body?JSON.parse(init.body):null});
+        const result=path.endsWith('/threads')?{results:[{id:'welcome-thread',channel_type:'whatsapp_business',status:'active',metadata:{phone_number:'77000000000'},free_form_window_expires_at:new Date(Date.now()+3600000).toISOString()}]}:
+          path.endsWith('/messages')?{id:41}:{};
+        return new Response(JSON.stringify(result),{status:200});
+      }) as typeof fetch;
+      await sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Internal event',phone:'+77000000000'},transport);
+      assert.equal(calls.find(c=>c.path.endsWith('/messages')).body.data.text,'Здравствуйте! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?');
+    });
+    await t.test('signup never falls back to the old template while approval is pending',async()=>{
+      const calls:string[]=[];
+      const transport=(async(url:any,init:any)=>{
+        assert.equal(init.method,'GET','no message may be sent');
+        const path=new URL(url).pathname;calls.push(path);
+        return new Response(JSON.stringify(path.endsWith('/threads')?{results:[]}:
+          {templates:[{id:215,status:'APPROVED'},{id:216,name:'domly_welcome_alena_formal_20261027',status:'PENDING'}]}),{status:200});
+      }) as typeof fetch;
+      await assert.rejects(sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Internal event',phone:'+77000000000'},transport),
+        (e:any)=>e.failureCode==='whatsapp_template_not_approved' && e.retryable===true);
+      assert.equal(calls.length,2);
     });
     await t.test('bot conversations use only WABA and ignore grey WhatsApp threads',async()=>{
       for(const channel of ['whatsapp','whatsapp_business']) {

@@ -1,6 +1,9 @@
 import {env} from '../common/env';
 import {ApiError} from '../common/api';
 
+export const signupWelcomeText = 'Здравствуйте! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?';
+export const signupWelcomeTemplate = 'domly_welcome_alena_formal_20261027';
+
 export function moonMessengerReady(): boolean {
   return Boolean(env.moonAiEnabled && env.moonAiRestApiKey && /^\d+$/.test(env.moonAiOrganizationId) && /^\d+$/.test(env.moonAiAgentId));
 }
@@ -43,24 +46,27 @@ export async function sendMessengerFollowup(input:{id:string;kind:string;text:st
   const intro=input.kind==='area_verification'
     ? 'Перед уборкой нужно подтвердить площадь квартиры. Пришлите в этот WhatsApp-чат чёткий технический план с адресом и общей площадью квартиры. Либо откройте мобильное приложение Domly → Профиль → Подтвердить площадь → Фото технического плана, прикрепите чёткий снимок и нажмите «Подтвердить площадь». Если не хотите отправлять документ, напишите — согласуем дату и время проверки отделом качества до уборки.'
     : input.kind==='inactive_signup'
-    ? 'Вы зарегистрировались в Domly. Подскажем, как выбрать и оформить уборку.'
+    ? signupWelcomeText
     : 'Вы начали оформление уборки в Domly, но оплата пока не завершена. Можем помочь с оформлением или оплатой.';
   if(thread && Date.parse(thread.free_form_window_expires_at ?? '')>Date.now()+30000) {
     const result=await request(`/threads/${encodeURIComponent(thread.id)}/messages`,'POST',{
-      data:{text:`Здравствуйте! ${intro} Напишите нам, если нужна помощь.`},message_type:'text',from_type:'manager',
+      data:{text:input.kind==='inactive_signup'?signupWelcomeText:`Здравствуйте! ${intro} Напишите нам, если нужна помощь.`},message_type:'text',from_type:'manager',
     });
     if(!result?.id)throw new MoonMessengerError('whatsapp_response_unknown');
     // MooonAI pauses AI after a manager message; resume the previously active bot.
     await request(`/threads/${encodeURIComponent(thread.id)}/status`,'PATCH',{status:'active'});
     return {threadId:String(thread.id),delivery:'message',messageId:String(result.id),channel:thread.channel_type,reference};
   }
-  const templateId=Number(env.moonAiWabaTemplateId);
-  if(!Number.isInteger(templateId)||templateId<=0||!/^\d+$/.test(env.moonAiWabaChannelId))
+  const isSignup=input.kind==='inactive_signup';
+  let templateId=Number(env.moonAiWabaTemplateId);
+  if((!isSignup && (!Number.isInteger(templateId)||templateId<=0))||!/^\d+$/.test(env.moonAiWabaChannelId))
     throw new MoonMessengerError('whatsapp_template_not_configured',true);
   const templates=await request(`/channels/${env.moonAiWabaChannelId}/whatsapp-templates?status=APPROVED`);
-  const template=(templates?.templates ?? []).find((item:any)=>item.id===templateId && item.status==='APPROVED');
+  const template=(templates?.templates ?? []).find((item:any)=>
+    (isSignup?item.name===signupWelcomeTemplate:item.id===templateId) && item.status==='APPROVED');
   if(!template)throw new MoonMessengerError('whatsapp_template_not_approved',true);
-  const variables={'1':intro};
+  templateId=Number(template.id);
+  const variables=isSignup?{}:{'1':intro};
   if(thread) {
     const result=await request(`/threads/${encodeURIComponent(thread.id)}/whatsapp-template`,'POST',{template_id:templateId,variables});
     if(!result?.thread_id)throw new MoonMessengerError('whatsapp_response_unknown');
