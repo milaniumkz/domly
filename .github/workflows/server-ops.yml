@@ -8,7 +8,7 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit]
+        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -48,6 +48,12 @@ jobs:
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
         run: |
+          if [ "$ACTION" = "kaspi-callback-configure" ]; then
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/configure_kaspi_callback.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/configure_kaspi_callback.cjs"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "set -eu; umask 077; mkdir -p '$DEPLOY_PATH/backups/kaspi-config'; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend cp '$DEPLOY_PATH/shared/configure_kaspi_callback.cjs' api:/tmp/configure_kaspi_callback.cjs; result=0; docker compose -p domly-backend exec -T -e GITHUB_RUN_ID='${{ github.run_id }}' api node /tmp/configure_kaspi_callback.cjs || result=1; docker compose -p domly-backend cp api:/tmp/domly-kaspi-config-backup/${{ github.run_id }}.json '$DEPLOY_PATH/backups/kaspi-config/${{ github.run_id }}.json'; exit \$result"
+            exit 0
+          fi
           if [ "$ACTION" = "kaspi-status-audit" ]; then
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/audit_kaspi_status.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/audit_kaspi_status.cjs"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
