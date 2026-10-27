@@ -907,6 +907,7 @@ Email: milaniumkz@yandex.kz','1. Модель работы DOMLY принима�
 ('t_8a46c4a2f434445e','Не удалось открыть заказ','Тапсырысты ашу мүмкін болмады','Не удалось открыть заказ','["lib/screens/cleaner/cleaner_orders_screen.dart"]'::jsonb),
 ('t_73ba948969bb644d','Не удалось открыть звонок','Қоңырауды ашу мүмкін болмады','Не удалось открыть звонок','["lib/screens/cleaner/cleaner_orders_screen.dart"]'::jsonb),
 ('t_6dc6dfb9f7cd49da','Не удалось открыть оплату','Төлемді ашу мүмкін болмады','Не удалось открыть оплату','["lib/screens/client/online_payment_screen.dart"]'::jsonb),
+('t_5208e14c7535edf9','Не удалось открыть ссылку. Попробуйте позже.','Сілтемені ашу мүмкін болмады. Кейінірек қайталап көріңіз.','Не удалось открыть ссылку. Попробуйте позже.','["lib/screens/client/client_home_screen.dart"]'::jsonb),
 ('t_e9664d044bbc782d','Не удалось открыть фотоотчет','Фоторепортаж ашылмады','Не удалось открыть фотоотчет','["lib/screens/cleaner/cleaner_dashboard_screen.dart"]'::jsonb),
 ('t_dd971a714e520f9e','Не удалось открыть чат. Попробуйте снова.','Чатты ашу мүмкін болмады. Қайтадан байқап көріңіз.','Не удалось открыть чат. Попробуйте снова.','["lib/screens/common/chat_screen.dart"]'::jsonb),
 ('t_43aa3f2293bec180','Не удалось отменить заказ','Тапсырысты тоқтату мүмкін болмады','Не удалось отменить заказ','["lib/screens/cleaner/cleaner_orders_screen.dart","lib/screens/client/orders_screen.dart"]'::jsonb),
