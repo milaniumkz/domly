@@ -8,7 +8,11 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template]
+        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, whatsapp-welcome-test]
+      welcome_phone:
+        description: Explicitly authorized welcome test recipient
+        required: false
+        type: string
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -47,7 +51,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
+          WELCOME_PHONE: ${{ inputs.welcome_phone }}
         run: |
+          if [ "$ACTION" = "whatsapp-welcome-test" ]; then
+            [[ "$WELCOME_PHONE" =~ ^7[0-9]{10}$ ]] || exit 1
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/send_whatsapp_welcome.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/send_whatsapp_welcome.cjs"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "set -eu; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e WELCOME_PHONE='$WELCOME_PHONE' -e WELCOME_OPERATION_ID='${{ github.run_id }}' api node < '$DEPLOY_PATH/shared/send_whatsapp_welcome.cjs'"
+            exit 0
+          fi
           if [ "$ACTION" = "whatsapp-welcome-template" ]; then
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/create_whatsapp_welcome.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/create_whatsapp_welcome.cjs"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
