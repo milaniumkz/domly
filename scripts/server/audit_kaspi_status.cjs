@@ -19,5 +19,12 @@ const {Client}=require('pg');
  if(!r.ok)throw Error('Function metadata HTTP '+r.status);
  const body=await r.json();const list=Array.isArray(body)?body:(body.functions||body.items||body.data||[]);
  console.log(JSON.stringify({functionResponseKeys:Object.keys(body),functions:Array.isArray(list)?list.map(x=>({id:x.id,name:x.name,type:x.type})):[]}));
+ for(const id of [8759,8517]){
+  const response=await fetch(base+id,{headers:{Authorization:`Bearer ${e.MOON_AI_REST_API_KEY}`},signal:AbortSignal.timeout(30000)});
+  if(!response.ok)throw Error('Function detail HTTP '+response.status);
+  const f=await response.json();
+  console.log(JSON.stringify({functionId:id,keys:Object.keys(f),name:f.name,parameters:(f.parameters||[]).map(x=>({name:x.name,type:x.type,required:x.required})),reactionKeys:Object.keys(f.reaction||{})}));
+ }
+
 
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
