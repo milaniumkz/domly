@@ -1,8 +1,8 @@
 import {env} from '../common/env';
 import {ApiError} from '../common/api';
 
-export const signupWelcomeText = 'Привет! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?';
-export const signupWelcomeTemplate = 'domly_welcome_alena_20261027';
+export const signupWelcomeText = 'Здравствуйте! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?';
+export const signupWelcomeTemplate = 'domly_welcome_alena_formal_20261027';
 
 export function moonMessengerReady(): boolean {
   return Boolean(env.moonAiEnabled && env.moonAiRestApiKey && /^\d+$/.test(env.moonAiOrganizationId) && /^\d+$/.test(env.moonAiAgentId));

@@ -328,7 +328,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         const parsedUrl=new URL(url);const path=parsedUrl.pathname;
         if(path.endsWith('/threads')){assert.equal(parsedUrl.searchParams.get('messengers'),'whatsapp_business');assert.equal(init.headers['Content-Type'],undefined);}
         nativeCalls.push({path,body:init.body?JSON.parse(init.body):null});
-        const result=path.endsWith('/threads')?{results:[]}:path.endsWith('/whatsapp-templates')?{templates:[{id:216,name:'domly_welcome_alena_20261027',status:'APPROVED'}]}:
+        const result=path.endsWith('/threads')?{results:[]}:path.endsWith('/whatsapp-templates')?{templates:[{id:216,name:'domly_welcome_alena_formal_20261027',status:'APPROVED'}]}:
           {thread_id:'native-waba-thread',delivery_status:'enqueued'};
         return new Response(JSON.stringify(result),{status:200});
       }) as typeof fetch;
@@ -352,7 +352,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         return new Response(JSON.stringify(result),{status:200});
       }) as typeof fetch;
       await sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Internal event',phone:'+77000000000'},transport);
-      assert.equal(calls.find(c=>c.path.endsWith('/messages')).body.data.text,'Привет! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?');
+      assert.equal(calls.find(c=>c.path.endsWith('/messages')).body.data.text,'Здравствуйте! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?');
     });
     await t.test('bot conversations use only WABA and ignore grey WhatsApp threads',async()=>{
       for(const channel of ['whatsapp','whatsapp_business']) {

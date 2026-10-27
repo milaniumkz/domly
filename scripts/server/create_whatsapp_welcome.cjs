@@ -1,6 +1,6 @@
 // Create the owner's exact welcome template; never send a customer message.
-const name='domly_welcome_alena_20261027';
-const text='Привет! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?';
+const name='domly_welcome_alena_formal_20261027';
+const text='Здравствуйте! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?';
 (async()=>{
  const e=process.env;
  const url=`https://core.mooonai.com/api/v1/organizations/${e.MOON_AI_ORGANIZATION_ID}/agents/${e.MOON_AI_AGENT_ID}/channels/${e.MOON_AI_WABA_CHANNEL_ID}/whatsapp-templates`;
