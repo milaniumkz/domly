@@ -8,7 +8,7 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer]
+        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, user-reset-audit, user-reset-rehearse, user-reset-apply]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -48,6 +48,15 @@ jobs:
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
         run: |
+          if [[ "$ACTION" == user-reset-* ]]; then
+            RESET_MODE="${ACTION#user-reset-}"
+            [[ "$RESET_MODE" =~ ^(audit|rehearse|apply)$ ]]
+            [[ -z "$EXPECTED_PLAN" || "$EXPECTED_PLAN" =~ ^[a-f0-9]{64}$ ]]
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/reset_test_users.cjs scripts/server/reset_test_users.sh "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "bash '$DEPLOY_PATH/shared/reset_test_users.sh' '$DEPLOY_PATH' '$RESET_MODE' '${{ github.run_id }}' '$EXPECTED_PLAN'"
+            exit 0
+          fi
           if [ "$ACTION" = "publish-offer" ]; then
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/publish_offer.cjs docs/legal/public-offer-20261024.json "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
