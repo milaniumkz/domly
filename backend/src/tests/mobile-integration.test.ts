@@ -511,8 +511,10 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         const id=randomUUID();await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,invoice_phone,invoice_requested_at) VALUES($1,$2,'kaspi','invoice_requested',99106,'+77000000000',NOW()-INTERVAL '2 minutes')",[id,user]);
         const callback=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':'fixture-hook-key'},body:JSON.stringify({phone:'+77000000000',amount:99106,status:'invoice_sent',dateTime:new Date(Date.now()-60000).toISOString()})});
         assert.equal(callback.status,200);assert.equal((await callback.json() as any).data.resolution,'matched');
+        const legacyNull=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':'fixture-hook-key'},body:JSON.stringify({phone:'+77000000000',amount:99106,status:'invoice_sent',dateTime:new Date(Date.now()-30000).toISOString(),paymentId:null})});
+        assert.equal(legacyNull.status,200);assert.equal((await legacyNull.json() as any).data.resolution,'matched');
         const paymentNotices=[...httpNotifications.values()].filter(n=>n.targetType==='payments');
-        assert.equal(paymentNotices.length,1);assert.equal(paymentNotices[0].userId,user);
+        assert.equal(paymentNotices.length,2);assert.equal(paymentNotices[0].userId,user);
         const areaNotices=[...httpNotifications.values()].filter(n=>n.targetType==='area_verification');
         assert.equal(areaNotices.length,1);assert.equal(areaNotices[0].userId,stranger);
         const invalid=await fetch(base+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':'fixture-hook-key'},body:JSON.stringify({phone:'+77000000000',amount:99106,status:'success',dateTime:new Date().toISOString()})});assert.equal(invalid.status,400);

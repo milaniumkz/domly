@@ -2480,7 +2480,7 @@ export function buildV1Router(deps: {
     const result = await matchMoonPaymentStatus(deps.db, {
       phone: String(req.body.phone ?? ''), amount: Number(req.body.amount), status,
       dateTime: String(req.body.dateTime ?? ''),
-      paymentId: req.body.paymentId,
+      paymentId: req.body.paymentId ?? undefined,
     });
     await recordAudit('payment.webhook.moon_ai_kaspi', 'payment', result.payment?.id ?? null, {
       status, resolution: result.resolution, duplicate: result.duplicate,
