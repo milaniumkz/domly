@@ -354,6 +354,18 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
       await sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Internal event',phone:'+77000000000'},transport);
       assert.equal(calls.find(c=>c.path.endsWith('/messages')).body.data.text,'Здравствуйте! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?');
     });
+    await t.test('signup never falls back to the old template while approval is pending',async()=>{
+      const calls:string[]=[];
+      const transport=(async(url:any,init:any)=>{
+        assert.equal(init.method,'GET','no message may be sent');
+        const path=new URL(url).pathname;calls.push(path);
+        return new Response(JSON.stringify(path.endsWith('/threads')?{results:[]}:
+          {templates:[{id:215,status:'APPROVED'},{id:216,name:'domly_welcome_alena_formal_20261027',status:'PENDING'}]}),{status:200});
+      }) as typeof fetch;
+      await assert.rejects(sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Internal event',phone:'+77000000000'},transport),
+        (e:any)=>e.failureCode==='whatsapp_template_not_approved' && e.retryable===true);
+      assert.equal(calls.length,2);
+    });
     await t.test('bot conversations use only WABA and ignore grey WhatsApp threads',async()=>{
       for(const channel of ['whatsapp','whatsapp_business']) {
         for(const activeWindow of [true,false]) {
