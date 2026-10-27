@@ -215,7 +215,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
       assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM moon_ai_outbox WHERE payment_id=$1 AND kind='invoice'",[paymentId])).rows[0].n,1);
       await assert.rejects(queueMoonInvoice(db,{...payment,invoice_phone:'123'},'Bad'));
       await processMoonOutbox(db,send);assert.equal(sent.length,1);
-      assert.notEqual(sent[0].thread_id,paymentId);assert.equal(sent[0].data.text.includes('paymentId='),false);assert.equal(sent[0].source,'domly_invoice');assert.equal(sent[0].from_type,'user');
+      assert.notEqual(sent[0].thread_id,paymentId);assert.equal(sent[0].data.text.includes(`paymentId=${paymentId}`),true);assert.equal(sent[0].source,'domly_invoice');assert.equal(sent[0].from_type,'user');
       assert.ok(sent[0].data.text.includes('payment_sum=22000'));assert.ok(sent[0].data.text.includes('phone_number=77000000000'));
       await processMoonOutbox(db,send);assert.equal(sent.length,1);
     });
@@ -281,6 +281,18 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
       assert.equal(result.resolution,'ambiguous');assert.equal(result.payment,null);assert.equal(result.candidateIds.length,2);
       const rows=(await db.query('SELECT status,payload FROM payments WHERE id=ANY($1::uuid[])',[ids])).rows;
       for(const row of rows){assert.equal(row.status,'invoice_requested');assert.equal(row.payload.moonAiReview.reason,'ambiguous');}
+    });
+    await t.test('explicit invoice identity resolves equal amounts without cancelling the other payment', async () => {
+      const ids=[randomUUID(),randomUUID()],dateTime=new Date(Date.now()-30000).toISOString();
+      for(const id of ids)await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,invoice_phone,invoice_requested_at) VALUES($1,$2,'kaspi','invoice_requested',99107,'+77000000000',NOW()-INTERVAL '2 minutes')",[id,user]);
+      const event={phone:'+77000000000',amount:99107,status:'cancelled' as const,dateTime};
+      assert.equal((await matchMoonPaymentStatus(db,event)).resolution,'ambiguous');
+      const exact=await matchMoonPaymentStatus(db,{...event,paymentId:ids[0]} as any);
+      assert.equal(exact.resolution,'matched');assert.equal(exact.payment?.id,ids[0]);assert.equal(exact.payment?.status,'cancelled');
+      assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[ids[1]])).rows[0].status,'invoice_requested');
+      assert.equal((await matchMoonPaymentStatus(db,{...event,paymentId:ids[0]} as any)).duplicate,true);
+      assert.equal((await matchMoonPaymentStatus(db,{...event,paymentId:ids[1],amount:99108} as any)).resolution,'not_found');
+      await assert.rejects(matchMoonPaymentStatus(db,{...event,paymentId:'invalid'} as any));
     });
     await t.test('ID-free rejection, cancellation and manual confirmation keep their meaning', async () => {
       const {PaymentService,BonusService}=await import('../modules/domainServices');
@@ -515,7 +527,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
     for(const g of guests){await db.query('DELETE FROM moon_ai_outbox WHERE installation_id=$1',[g.id]);await db.query('UPDATE assistant_installations SET chat_id=NULL WHERE id=$1',[g.id]);await db.query('DELETE FROM chats WHERE id=$1',[g.chat_id]);await db.query('DELETE FROM assistant_installations WHERE id=$1',[g.id]);}
     await db.query('DELETE FROM moon_ai_outbox WHERE customer_id=ANY($1::uuid[])',[[user,stranger,idle]]);
     await db.query('DELETE FROM chats WHERE customer_id=ANY($1::uuid[])',[[user,stranger,idle]]);
-    await db.query("DELETE FROM moon_ai_payment_callbacks WHERE phone='77000000000' AND amount BETWEEN 99101 AND 99106");
+    await db.query("DELETE FROM moon_ai_payment_callbacks WHERE phone='77000000000' AND amount BETWEEN 99101 AND 99108");
     await db.query('DELETE FROM payment_events WHERE payment_id IN(SELECT id FROM payments WHERE customer_id=ANY($1::uuid[]))',[[user,stranger,idle]]);
     await db.query('DELETE FROM payments WHERE customer_id=ANY($1::uuid[])',[[user,stranger,idle]]);
     await db.query('DELETE FROM device_tokens WHERE user_id=ANY($1::uuid[])',[[user,stranger,idle]]);

@@ -30,7 +30,7 @@ export async function queueMoonInvoice(db: Database, payment: any, description: 
   if(!/^7\d{10}$/.test(phone)) throw new ApiError(400,'invalid_phone','Укажите корректный номер Kaspi.');
   if(!['pending','invoice_requested'].includes(payment.status) || Number(payment.amount)<=0) throw new ApiError(409,'invalid_payment_status','Счёт уже обработан.');
   const chat=await ensureAssistantChat(db,payment.customer_id);
-  const text=`Запрос счета Kaspi от приложения DOMLY. phone_number=${phone}; payment_sum=${Number(payment.amount)} KZT; описание: ${description}. Используй подключённую функцию create_order. Не меняй номер или сумму. Не создавай повторный счёт в этом служебном треде. Результат и статус оплаты отправляй в DOMLY через настроенный Custom API: phone, amount, status, dateTime; без ID платежа. Сообщи клиенту фактический результат.`;
+  const text=`Запрос счета Kaspi от приложения DOMLY. phone_number=${phone}; payment_sum=${Number(payment.amount)} KZT; описание: ${description}. Используй подключённую функцию create_order. Не меняй номер или сумму. Не создавай повторный счёт в этом служебном треде. Результат и статус оплаты отправляй в DOMLY через настроенный Custom API: phone, amount, status, dateTime, paymentId=${payment.id}. Сохрани paymentId именно этого счёта и передавай его при каждом изменении статуса; не подставляй ID другого счёта. Сообщи клиенту фактический результат.`;
   await db.transaction(async tx=>{
     const current=(await tx.query('SELECT * FROM payments WHERE id=$1 FOR UPDATE',[payment.id])).rows[0];
     if(!current || current.customer_id!==payment.customer_id || !['pending','invoice_requested'].includes(current.status)) throw new ApiError(409,'invalid_payment_status','Счёт уже обработан.');
@@ -226,8 +226,10 @@ async function applyMoonPaymentStatus(tx: Queryable, input: MoonPaymentStatusInp
 
 
 export async function matchMoonPaymentStatus(db: Database, input: {
-  phone: string; amount: number; status: 'invoice_sent'|'paid'|'rejected'|'cancelled'; dateTime: string;
+  phone: string; amount: number; status: 'invoice_sent'|'paid'|'rejected'|'cancelled'; dateTime: string; paymentId?: string;
 }) {
+  const paymentId = input.paymentId;
+  if (paymentId !== undefined && (typeof paymentId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(paymentId))) throw new ApiError(400, 'invalid_payment_id', 'Нужен корректный ID платежа.');
   const phone = input.phone.replace(/\D/g, '');
   if (!/^7\d{10}$/.test(phone)) throw new ApiError(400, 'invalid_phone', 'Нужен корректный номер Kaspi.');
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new ApiError(400, 'invalid_amount', 'Нужна положительная сумма платежа.');
@@ -236,7 +238,7 @@ export async function matchMoonPaymentStatus(db: Database, input: {
   if (Number.isNaN(time.getTime()) || time.getTime() > Date.now() + 300000) throw new ApiError(400, 'invalid_datetime', 'Некорректное время события.');
   const amount = Math.round(input.amount * 100) / 100;
   const eventTime = time.toISOString();
-  const fingerprint = createHash('sha256').update(JSON.stringify([phone, amount, input.status, eventTime])).digest('hex');
+  const fingerprint = createHash('sha256').update(JSON.stringify(paymentId ? [phone, amount, input.status, eventTime, paymentId.toLowerCase()] : [phone, amount, input.status, eventTime])).digest('hex');
   return db.transaction(async tx => {
     // Serialize all callbacks sharing this matching key, including duplicates.
     await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`moon:${phone}:${amount}`]);
@@ -250,16 +252,17 @@ export async function matchMoonPaymentStatus(db: Database, input: {
     const candidates = (await tx.query(`SELECT * FROM payments
       WHERE provider='kaspi' AND regexp_replace(invoice_phone,'[^0-9]','','g')=$1 AND amount=$2
         AND invoice_requested_at IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM payments retry
+        AND ($5::uuid IS NULL OR id=$5::uuid)
+        AND ($5::uuid IS NOT NULL OR NOT EXISTS (SELECT 1 FROM payments retry
           WHERE retry.payload->>'retryOfPaymentId'=payments.id::text
           AND regexp_replace(retry.invoice_phone,'[^0-9]','','g')=$1 AND retry.amount=$2
-          AND retry.invoice_requested_at<=$3::timestamptz)
+          AND retry.invoice_requested_at<=$3::timestamptz))
         AND invoice_requested_at<=$3::timestamptz+INTERVAL '1 second'
         AND invoice_requested_at>=$3::timestamptz-CASE WHEN $4='invoice_sent' THEN INTERVAL '20 minutes' ELSE INTERVAL '72 hours' END
-      ORDER BY invoice_requested_at DESC FOR UPDATE`, [phone, amount, eventTime, input.status])).rows;
+      ORDER BY invoice_requested_at DESC FOR UPDATE`, [phone, amount, eventTime, input.status, paymentId ?? null])).rows;
     const candidateIds = candidates.map(p => String(p.id));
     const resolution = candidates.length === 1 ? 'matched' : candidates.length ? 'ambiguous' : 'not_found';
-    const payload = {phone, amount, status: input.status, dateTime: eventTime};
+    const payload = {phone, amount, status: input.status, dateTime: eventTime, ...(paymentId ? {paymentId} : {})};
     const callback = (await tx.query(`INSERT INTO moon_ai_payment_callbacks(fingerprint,phone,amount,status,event_time,payment_id,resolution,candidate_ids,payload)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, [fingerprint, phone, amount, input.status, eventTime, resolution==='matched'?candidates[0].id:null, resolution, candidateIds, payload])).rows[0];
     if (resolution !== 'matched') {
