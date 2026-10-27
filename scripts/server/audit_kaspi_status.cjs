@@ -24,6 +24,14 @@ const {Client}=require('pg');
   if(!response.ok)throw Error('Function detail HTTP '+response.status);
   const f=await response.json();
   console.log(JSON.stringify({functionId:id,keys:Object.keys(f),name:f.name,parameters:(f.parameters||[]).map(x=>({name:x.name,type:x.type,required:x.required})),reactionKeys:Object.keys(f.reaction||{})}));
+  if(id===8517){
+   const r=await fetch(base+id+'/integrations/',{headers:{Authorization:`Bearer ${e.MOON_AI_REST_API_KEY}`},signal:AbortSignal.timeout(30000)});
+   if(!r.ok)throw Error('Integrations metadata HTTP '+r.status);
+   const data=await r.json();
+   const shape=(x,depth=0)=>depth>8?'...':Array.isArray(x)?x.map(v=>shape(v,depth+1)):x&&typeof x==='object'?Object.fromEntries(Object.entries(x).map(([k,v])=>[k,/^(id|type|integration_type|method|name)$/.test(k)?v:shape(v,depth+1)])):typeof x;
+   console.log(JSON.stringify({integrationShape:shape(data)}));
+  }
+
  }
 
 
