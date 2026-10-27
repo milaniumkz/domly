@@ -13,4 +13,11 @@ const {Client}=require('pg');
   for(const [name,sql]of Object.entries(queries))console.log(JSON.stringify({[name]:(await db.query(sql)).rows}));
   await db.query('ROLLBACK');
  }finally{await db.end();}
+ const e=process.env;
+ const base=`https://core.mooonai.com/api/v1/organizations/${e.MOON_AI_ORGANIZATION_ID}/agents/${e.MOON_AI_AGENT_ID}/functions/`;
+ const r=await fetch(base,{headers:{Authorization:`Bearer ${e.MOON_AI_REST_API_KEY}`},signal:AbortSignal.timeout(30000)});
+ if(!r.ok)throw Error('Function metadata HTTP '+r.status);
+ const body=await r.json();const list=Array.isArray(body)?body:(body.functions||body.items||body.data||[]);
+ console.log(JSON.stringify({functionResponseKeys:Object.keys(body),functions:Array.isArray(list)?list.map(x=>({id:x.id,name:x.name,type:x.type})):[]}));
+
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
