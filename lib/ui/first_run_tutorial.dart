@@ -187,6 +187,7 @@ class DomlyFirstRunTutorial {
         // ignore: use_build_context_synchronously
         context: navigator.context,
         barrierDismissible: false,
+        useSafeArea: false,
         barrierColor: Colors.transparent,
         builder: (context) {
           TranslationScope.watch(context);
@@ -417,9 +418,12 @@ class _DomlyCoachTutorialState extends State<_DomlyCoachTutorial> {
     final targetRect = _targetRect(size, safe, step);
     final bubbleAbove = targetRect.center.dy > size.height * 0.55;
     final bubbleWidth = (size.width - 32).clamp(280.0, 390.0);
-    final bubbleTop = bubbleAbove
-        ? (targetRect.top - 246).clamp(safe.top + 12, size.height - 260)
-        : (targetRect.bottom + 18).clamp(safe.top + 12, size.height - 260);
+    final bubbleLeft = (size.width - bubbleWidth) / 2;
+    final arrowAlignment = Alignment(
+      ((targetRect.center.dx - bubbleLeft - 17) / (bubbleWidth - 34) * 2 - 1)
+          .clamp(-0.85, 0.85),
+      0,
+    );
 
     return Material(
       color: DomlyPalette.surface(Colors.transparent),
@@ -444,22 +448,32 @@ class _DomlyCoachTutorialState extends State<_DomlyCoachTutorial> {
             ),
           ),
           Positioned(
-            left: (size.width - bubbleWidth) / 2,
-            top: bubbleTop.toDouble(),
+            left: bubbleLeft,
+            top: bubbleAbove ? null : targetRect.bottom + 18,
+            bottom: bubbleAbove ? size.height - targetRect.top + 18 : null,
             width: bubbleWidth,
-            child: _CoachBubble(
-              title: widget.title,
-              subtitle: widget.subtitle,
-              step: step,
-              index: widget.index,
-              total: widget.total,
-              isLast: isLast,
-              bubbleAboveTarget: bubbleAbove,
-              onSkip: () => Navigator.pop(context, _TutorialAction.skip),
-              onBack: widget.index == 0
-                  ? null
-                  : () => Navigator.pop(context, _TutorialAction.back),
-              onNext: () => Navigator.pop(context, _TutorialAction.next),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                  maxHeight: (bubbleAbove
+                          ? targetRect.top - safe.top - 30
+                          : size.height - safe.bottom - targetRect.bottom - 30)
+                      .clamp(0.0, size.height)),
+              child: SingleChildScrollView(
+                  child: _CoachBubble(
+                arrowAlignment: arrowAlignment,
+                title: widget.title,
+                subtitle: widget.subtitle,
+                step: step,
+                index: widget.index,
+                total: widget.total,
+                isLast: isLast,
+                bubbleAboveTarget: bubbleAbove,
+                onSkip: () => Navigator.pop(context, _TutorialAction.skip),
+                onBack: widget.index == 0
+                    ? null
+                    : () => Navigator.pop(context, _TutorialAction.back),
+                onNext: () => Navigator.pop(context, _TutorialAction.next),
+              )),
             ),
           ),
         ],
@@ -553,7 +567,7 @@ class _DomlyCoachTutorialState extends State<_DomlyCoachTutorial> {
         !renderObject.hasSize) {
       return null;
     }
-    final overlay = context.findRenderObject();
+    final overlay = Navigator.of(context).overlay?.context.findRenderObject();
     final origin = overlay is RenderBox && overlay.attached && overlay.hasSize
         ? overlay.localToGlobal(Offset.zero)
         : Offset.zero;
@@ -571,6 +585,7 @@ class _CoachBubble extends StatelessWidget {
     required this.total,
     required this.isLast,
     required this.bubbleAboveTarget,
+    required this.arrowAlignment,
     required this.onSkip,
     required this.onBack,
     required this.onNext,
@@ -583,6 +598,7 @@ class _CoachBubble extends StatelessWidget {
   final int total;
   final bool isLast;
   final bool bubbleAboveTarget;
+  final Alignment arrowAlignment;
   final VoidCallback onSkip;
   final VoidCallback? onBack;
   final VoidCallback onNext;
@@ -594,7 +610,10 @@ class _CoachBubble extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (!bubbleAboveTarget) const _CoachArrow(pointsDown: false),
+        if (!bubbleAboveTarget)
+          Align(
+              alignment: arrowAlignment,
+              child: const _CoachArrow(pointsDown: false)),
         Container(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
           decoration: BoxDecoration(
@@ -722,7 +741,10 @@ class _CoachBubble extends StatelessWidget {
             ],
           ),
         ),
-        if (bubbleAboveTarget) const _CoachArrow(pointsDown: true),
+        if (bubbleAboveTarget)
+          Align(
+              alignment: arrowAlignment,
+              child: const _CoachArrow(pointsDown: true)),
       ],
     );
   }

@@ -53,6 +53,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     bool? shown;
     await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(padding: const EdgeInsets.only(top: 40, bottom: 28)),
+        child: child!,
+      ),
       home: Builder(
           builder: (context) => TextButton(
               onPressed: () async {
@@ -82,6 +87,17 @@ void main() {
       expect(find.text(title), findsWidgets);
       expect(find.byKey(const ValueKey('tutorial-highlight')), findsOneWidget,
           reason: title);
+      if (title == 'Главная') {
+        final targetKey = DomlyTutorialTargets.resolveNavigationTarget(
+            DomlyTutorialTargets.cleanerBottomNav[0], '/cleaner/dashboard')!;
+        final target = tester.getRect(find.byKey(targetKey));
+        final highlight =
+            tester.getRect(find.byKey(const ValueKey('tutorial-highlight')));
+        expect(highlight.top, closeTo(target.top - 4, 0.5));
+        expect(highlight.left, closeTo(target.left - 4, 0.5));
+        expect(highlight.size, target.inflate(4).size);
+        expect(tester.getRect(find.text('Далее')).bottom, lessThan(target.top));
+      }
       if (title == 'Профиль') {
         await tester.tap(find.text('Пропустить'));
       } else {
@@ -93,22 +109,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('customer tutorial waits for asynchronously loaded home targets', (tester) async {
+  testWidgets('customer tutorial waits for asynchronously loaded home targets',
+      (tester) async {
     await tester.pumpWidget(MaterialApp(
-      home: Builder(builder: (context) => TextButton(onPressed: () {
-        unawaited(DomlyFirstRunTutorial.show(context, flavor: AppFlavor.customer));
-      }, child: const Text('Start'))),
-      onGenerateRoute: (settings) => MaterialPageRoute<void>(settings: settings, builder: (context) {
-        if (settings.name == '/client/training-order') {
-          WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.of(context).pop());
-          return const SizedBox();
-        }
-        if (settings.name == '/client/home') return const _DelayedTutorialHome();
-        return const DomlyShell(bottomNavigationBar: DomlyClientBottomNav(currentIndex: 1), child: SizedBox());
-      }),
+      home: Builder(
+          builder: (context) => TextButton(
+              onPressed: () {
+                unawaited(DomlyFirstRunTutorial.show(context,
+                    flavor: AppFlavor.customer));
+              },
+              child: const Text('Start'))),
+      onGenerateRoute: (settings) => MaterialPageRoute<void>(
+          settings: settings,
+          builder: (context) {
+            if (settings.name == '/client/training-order') {
+              WidgetsBinding.instance
+                  .addPostFrameCallback((_) => Navigator.of(context).pop());
+              return const SizedBox();
+            }
+            if (settings.name == '/client/home')
+              return const _DelayedTutorialHome();
+            return const DomlyShell(
+                bottomNavigationBar: DomlyClientBottomNav(currentIndex: 1),
+                child: SizedBox());
+          }),
     ));
     await tester.tap(find.text('Start'));
-    for (var i = 0; i < 15; i++) await tester.pump(const Duration(milliseconds: 100));
+    for (var i = 0; i < 15; i++)
+      await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('1 из 8'), findsOneWidget);
     expect(find.byKey(const ValueKey('tutorial-highlight')), findsOneWidget);
     await tester.tap(find.text('Пропустить').first);
@@ -150,6 +178,12 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     var homeBuilds = 0;
     await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          padding: const EdgeInsets.only(top: 40, bottom: 28),
+        ),
+        child: child!,
+      ),
       home: Builder(
           builder: (context) => TextButton(
               onPressed: () {
@@ -227,18 +261,33 @@ class _DelayedTutorialHome extends StatefulWidget {
   @override
   State<_DelayedTutorialHome> createState() => _DelayedTutorialHomeState();
 }
+
 class _DelayedTutorialHomeState extends State<_DelayedTutorialHome> {
   bool ready = false;
   Timer? timer;
   @override
   void initState() {
     super.initState();
-    timer = Timer(const Duration(milliseconds: 600), () { if (mounted) setState(() => ready = true); });
+    timer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted) setState(() => ready = true);
+    });
   }
+
   @override
-  void dispose() { timer?.cancel(); super.dispose(); }
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(body: ready
-    ? Column(children: [SizedBox(key: DomlyTutorialTargets.clientHomeTop, height: 60), SizedBox(key: DomlyTutorialTargets.clientOrderButton, height: 50, width: 250)])
-    : const CircularProgressIndicator());
+  Widget build(BuildContext context) => Scaffold(
+      body: ready
+          ? Column(children: [
+              SizedBox(key: DomlyTutorialTargets.clientHomeTop, height: 60),
+              SizedBox(
+                  key: DomlyTutorialTargets.clientOrderButton,
+                  height: 50,
+                  width: 250)
+            ])
+          : const CircularProgressIndicator());
 }
