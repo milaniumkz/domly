@@ -1,3 +1,4 @@
+import {cancelHomePurchase,resumeHomePurchase} from '../../modules/homePurchase';
 import { formatAddonRecord, formatServiceDescription } from '../../modules/serviceDescription';
 import {PublicTextCatalog} from '../../modules/publicTextCatalog';
 import {freezePackage} from '../../modules/packageFreeze';
@@ -940,6 +941,7 @@ export function buildV1Router(deps: {
     if (documents.length === 0) {
       throw new ApiError(400, 'documents_required', 'Загрузите документы для проверки.');
     }
+    if(!documents.some(d=>['selfie','selfieUrl'].includes(d.type)) && !(await deps.db.query("SELECT id FROM cleaner_documents WHERE cleaner_id=$1 AND type IN ('selfie','selfieUrl') LIMIT 1",[req.user!.id])).rows.length) throw new ApiError(400,'selfie_required','Сделайте селфи для фото профиля.');
     const savedDocuments = [];
     for (const item of documents) {
       const file = first((await deps.db.query(
@@ -1643,6 +1645,7 @@ export function buildV1Router(deps: {
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.area,
               cu.full_name AS customer_name, cu.phone AS customer_phone,
               cl.full_name AS cleaner_name, cl.phone AS cleaner_phone,
+              (SELECT f.public_url FROM cleaner_documents d JOIN files f ON f.id=d.file_id AND f.owner_id=d.cleaner_id WHERE d.cleaner_id=o.cleaner_id AND d.type IN ('selfie','selfieUrl') AND d.status='approved' ORDER BY d.created_at DESC LIMIT 1) AS cleaner_photo_url,
               COALESCE((SELECT json_agg(json_build_object('id',a.id,'key',a.id,'label',a.title_ru,'quantity',oa.quantity,
                 'price',oa.price,'durationMinutes',oa.duration_minutes,'paymentStatus',oa.payment_status))
                 FROM order_addons oa JOIN catalog_addons a ON a.id=oa.addon_id WHERE oa.order_id=o.id),'[]'::json) AS addons
@@ -1659,13 +1662,14 @@ export function buildV1Router(deps: {
       const purchases = (await deps.db.query(`SELECT pay.id, pay.customer_id, pay.customer_package_id,
         pay.status AS latest_payment_status, CASE WHEN pay.status='paid' THEN 'pending_assignment' ELSE 'pending_payment' END AS status,
         pay.amount AS total_amount, pay.amount AS payable_amount, pay.created_at, pay.updated_at,
-        pkg.name_ru AS package_name_ru, ca.city, ca.street, ca.house, ca.apartment, ca.area,
+        pkg.name_ru AS package_name_ru, cp.total_cleanings, ca.city, ca.street, ca.house, ca.apartment, ca.area,
         'package_purchase' AS view_kind
         FROM customer_packages cp JOIN catalog_packages pkg ON pkg.id=cp.package_id
         JOIN LATERAL(SELECT * FROM payments WHERE customer_package_id=cp.id ORDER BY created_at DESC LIMIT 1) pay ON TRUE
         LEFT JOIN customer_addresses ca ON ca.id=cp.address_id
         WHERE cp.customer_id=$1 AND NOT EXISTS(SELECT 1 FROM service_orders WHERE customer_package_id=cp.id AND status<>'cancelled')
-        AND pay.status NOT IN ('cancelled','refunded') ORDER BY pay.created_at DESC`,[req.user!.id])).rows;
+        AND cp.status <> 'cancelled' AND pay.status <> 'refunded'
+        AND (pay.status <> 'cancelled' OR cp.status='pending_payment') ORDER BY pay.created_at DESC`,[req.user!.id])).rows;
       orders.push(...purchases);
     }
     ok(res, orders);
@@ -2298,6 +2302,9 @@ export function buildV1Router(deps: {
     await recordAudit('payment.rejected', 'payment', String(req.params.id), { note: req.body.note ?? null }, req.user?.id);
     ok(res, payment);
   }));
+
+  router.post('/payments/:id/resume-purchase', auth(['customer']), asyncHandler(async(req,res)=>{ok(res,await resumeHomePurchase(deps.db,req.user!.id,String(req.params.id)));}));
+  router.post('/payments/:id/cancel-purchase', auth(['customer']), asyncHandler(async(req,res)=>{ok(res,await cancelHomePurchase(deps.db,deps.bonuses,req.user!.id,String(req.params.id)));}));
 
   router.post('/payments/:id/kaspi-invoice', auth(['customer', 'admin', 'superadmin']), asyncHandler(async (req, res) => {
     const payment = first((await deps.db.query(

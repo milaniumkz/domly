@@ -402,6 +402,13 @@
     ]
   },
   {
+    "key": "t_3f5fe4eec3ea6960",
+    "source": "{p0} · {p1} м²",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_d579a25fb85d9afc",
     "source": "{p0} · оплата отдельно",
     "locations": [
@@ -498,7 +505,8 @@
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/orders_screen.dart",
       "lib/screens/client/package_selection_screen.dart",
-      "lib/screens/client/profile_screen.dart"
+      "lib/screens/client/profile_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -1181,6 +1189,7 @@
       "lib/screens/cleaner/cleaner_order_history_screen.dart",
       "lib/screens/cleaner/cleaner_orders_screen.dart",
       "lib/screens/client/client_home_screen.dart",
+      "lib/ui/customer_home_reference.dart",
       "lib/utils/order_display.dart"
     ]
   },
@@ -1236,6 +1245,13 @@
     ]
   },
   {
+    "key": "t_c7bbecdd6b701ae0",
+    "source": "Ваш исполнитель",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_13fe7b893e852877",
     "source": "Ваш код: {p0}",
     "locations": [
@@ -1257,6 +1273,13 @@
     ]
   },
   {
+    "key": "t_5adbed6ecc73c263",
+    "source": "Ваш пакет уборок",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_8819e31b7fee10c5",
     "source": "Ваш прогресс",
     "locations": [
@@ -1268,6 +1291,13 @@
     "source": "Ваша скидка: {p0}%",
     "locations": [
       "lib/screens/client/profile_screen.dart"
+    ]
+  },
+  {
+    "key": "t_108a46252c8de3a6",
+    "source": "Ваша уборка назначена",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -1816,6 +1846,13 @@
     ]
   },
   {
+    "key": "t_2db422dfd98a4520",
+    "source": "Вы можете выбрать новый пакет.",
+    "locations": [
+      "lib/ui/home_order_actions.dart"
+    ]
+  },
+  {
     "key": "t_1d86e57cc1eedd35",
     "source": "Вы можете сразу оформить новый заказ.",
     "locations": [
@@ -1965,10 +2002,10 @@
     ]
   },
   {
-    "key": "t_86ade09e96d9e692",
-    "source": "Выберите новый пакет",
+    "key": "t_e76bd21ff8583bb3",
+    "source": "Выберите новый пакет для следующих уборок.",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -1993,13 +2030,6 @@
     "source": "Выберите пакет или дополнительные услуги",
     "locations": [
       "lib/screens/client/calculator_screen.dart"
-    ]
-  },
-  {
-    "key": "t_ee0a2cb1636d76d1",
-    "source": "Выберите пакет уборок для вашей квартиры",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart"
     ]
   },
   {
@@ -2042,7 +2072,8 @@
     "key": "t_424e0fe22c7cc891",
     "source": "Выберите способ оплаты",
     "locations": [
-      "lib/screens/common/kaspi_invoice_request_dialog.dart"
+      "lib/screens/common/kaspi_invoice_request_dialog.dart",
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -2148,8 +2179,8 @@
     "key": "t_e9b09d709dad0d9a",
     "source": "Выбрать дату и время",
     "locations": [
-      "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/orders_screen.dart"
+      "lib/screens/client/orders_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -2181,11 +2212,19 @@
     ]
   },
   {
+    "key": "t_8373ff4e6391ad94",
+    "source": "Выбрать новый пакет",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_49e76d9a72be979e",
     "source": "Выбрать пакет",
     "locations": [
       "lib/screens/client/client_home_screen.dart",
-      "lib/services/firestore_data_service.dart"
+      "lib/services/firestore_data_service.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -2321,7 +2360,8 @@
     "key": "t_3bc7450169c82451",
     "source": "Выполнено",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/screens/client/client_home_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -2388,6 +2428,7 @@
     "source": "Главная",
     "locations": [
       "lib/screens/client/client_home_screen.dart",
+      "lib/ui/customer_home_reference.dart",
       "lib/ui/domly_ui.dart",
       "lib/ui/first_run_tutorial.dart"
     ]
@@ -2472,13 +2513,6 @@
     ]
   },
   {
-    "key": "t_c4b5ee021c986d86",
-    "source": "Готовые решения на любой случай",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart"
-    ]
-  },
-  {
     "key": "t_4272905be3440a63",
     "source": "График",
     "locations": [
@@ -2541,7 +2575,8 @@
     "source": "Да, отменить",
     "locations": [
       "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/orders_screen.dart"
+      "lib/screens/client/orders_screen.dart",
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -2604,6 +2639,13 @@
     "locations": [
       "lib/screens/client/training_order_screen.dart",
       "lib/utils/form_validator.dart"
+    ]
+  },
+  {
+    "key": "t_658be1a7713567ed",
+    "source": "Дата выбрана. Сообщим, когда назначим исполнителя.",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -2732,24 +2774,17 @@
     ]
   },
   {
-    "key": "t_f0c251d711a3ce94",
-    "source": "Детали заказа",
+    "key": "t_6cc22cb0e54f541e",
+    "source": "Детали отмены",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
-    ]
-  },
-  {
-    "key": "t_f717d437a3714719",
-    "source": "Детали оплаты",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
     "key": "t_3604bf2e6a9ff017",
     "source": "Детали уборки",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -2946,6 +2981,13 @@
     ]
   },
   {
+    "key": "t_51d822d0312e976d",
+    "source": "Добрый день",
+    "locations": [
+      "lib/screens/client/client_home_screen.dart"
+    ]
+  },
+  {
     "key": "t_6e9296c72687479a",
     "source": "Договор оферты",
     "locations": [
@@ -2970,7 +3012,8 @@
     "key": "t_10b6121f90a5f1f3",
     "source": "Дождитесь счёта в Kaspi.",
     "locations": [
-      "lib/screens/common/order_payment_retry.dart"
+      "lib/screens/common/order_payment_retry.dart",
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -3062,6 +3105,13 @@
     "source": "Дом уже активен",
     "locations": [
       "lib/screens/client/house_waitlist_screen.dart"
+    ]
+  },
+  {
+    "key": "t_8fa0c51b6e67b73a",
+    "source": "Дома снова чисто",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -3235,7 +3285,8 @@
       "lib/screens/client/calculator_screen.dart",
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/orders_screen.dart",
-      "lib/services/app_config_service.dart"
+      "lib/services/app_config_service.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -3741,6 +3792,13 @@
     ]
   },
   {
+    "key": "t_ee12707f5d67462f",
+    "source": "Завершённая уборка",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_f6de15c50ab5a8af",
     "source": "Завтра",
     "locations": [
@@ -3992,6 +4050,7 @@
     "locations": [
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/orders_screen.dart",
+      "lib/ui/customer_home_reference.dart",
       "lib/ui/domly_ui.dart",
       "lib/ui/first_run_tutorial.dart"
     ]
@@ -4036,6 +4095,13 @@
     ]
   },
   {
+    "key": "t_d43137549af22103",
+    "source": "Заморожен",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_c047ca0359cfd66b",
     "source": "Заморожен до {date}",
     "locations": [
@@ -4058,6 +4124,13 @@
     ]
   },
   {
+    "key": "t_de63023d4b5b232a",
+    "source": "Заморозка до",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_d3317379cee74418",
     "source": "Занято {p0} ч из {p1} ч",
     "locations": [
@@ -4072,10 +4145,24 @@
     ]
   },
   {
+    "key": "t_8eeefad8d60b3042",
+    "source": "Запланировать следующую",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
+    "key": "t_95b864d959770246",
+    "source": "Запланировать уборку",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_5ac874799d5700ae",
     "source": "Запланируйте уборку",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -4145,7 +4232,8 @@
     "key": "t_9ef52835ca36482c",
     "source": "Запрос счёта отправлен",
     "locations": [
-      "lib/screens/common/order_payment_retry.dart"
+      "lib/screens/common/order_payment_retry.dart",
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -4219,12 +4307,20 @@
     ]
   },
   {
+    "key": "t_4708204f171e2e7b",
+    "source": "Заявка на счёт будет отменена. Вы сможете выбрать новый пакет.",
+    "locations": [
+      "lib/ui/home_order_actions.dart"
+    ]
+  },
+  {
     "key": "t_80c2b7e04ef9826d",
     "source": "Заявка отправлена",
     "locations": [
       "lib/screens/client/calculator_screen.dart",
       "lib/screens/client/house_waitlist_screen.dart",
-      "lib/screens/client/package_selection_screen.dart"
+      "lib/screens/client/package_selection_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -4372,7 +4468,8 @@
     "key": "t_9621cc690df00b89",
     "source": "Изменить дату",
     "locations": [
-      "lib/screens/client/orders_screen.dart"
+      "lib/screens/client/orders_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -4505,8 +4602,10 @@
     "locations": [
       "lib/screens/cleaner/cleaner_dashboard_screen.dart",
       "lib/screens/cleaner/cleaner_profile_screen.dart",
+      "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/orders_screen.dart",
-      "lib/services/firestore_data_service.dart"
+      "lib/services/firestore_data_service.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -4524,10 +4623,10 @@
     ]
   },
   {
-    "key": "t_164bcb95300ab3c9",
-    "source": "Исполнителя назначим после выбора даты",
+    "key": "t_e39a57082357a07e",
+    "source": "Исполнителя назначим после выбора даты.",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -4535,7 +4634,8 @@
     "source": "Использовано",
     "locations": [
       "lib/screens/client/package_calendar_screen.dart",
-      "lib/ui/customer_home_card.dart"
+      "lib/ui/customer_home_card.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -4642,6 +4742,13 @@
     ]
   },
   {
+    "key": "t_b4a006e556df3569",
+    "source": "История уборок",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_6617db55c1c6ab94",
     "source": "Источник подтверждения не указан",
     "locations": [
@@ -4698,13 +4805,6 @@
     ]
   },
   {
-    "key": "t_6f5f94d18d552115",
-    "source": "Ищем исполнителя",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart"
-    ]
-  },
-  {
     "key": "t_05274ef8cdca35a2",
     "source": "Ищем рядом с вами",
     "locations": [
@@ -4737,7 +4837,9 @@
     "key": "t_1f9971f3e8821008",
     "source": "К оплате",
     "locations": [
-      "lib/screens/client/package_calendar_screen.dart"
+      "lib/screens/client/package_calendar_screen.dart",
+      "lib/ui/customer_home_reference.dart",
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -4882,7 +4984,8 @@
     "source": "Квартира",
     "locations": [
       "lib/screens/client/package_selection_screen.dart",
-      "lib/screens/client/profile_screen.dart"
+      "lib/screens/client/profile_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -5437,6 +5540,13 @@
     ]
   },
   {
+    "key": "t_21f5305bc84bd3a9",
+    "source": "Менеджер выставит счёт. Мы сообщим, когда можно будет оплатить.",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_72231634902c90cb",
     "source": "Менеджер подтвердит оплату, после этого допы добавятся в уборку.",
     "locations": [
@@ -5574,7 +5684,7 @@
     "key": "t_2d9cfe1e3e4154fa",
     "source": "Мой пакет",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -5742,13 +5852,6 @@
     ]
   },
   {
-    "key": "t_59a416ade7bfd7c5",
-    "source": "На паузе",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart"
-    ]
-  },
-  {
     "key": "t_74c344b803806346",
     "source": "На проверке",
     "locations": [
@@ -5769,6 +5872,13 @@
     "source": "На этот номер будет выставлен счёт на оплату.",
     "locations": [
       "lib/screens/common/kaspi_invoice_request_dialog.dart"
+    ]
+  },
+  {
+    "key": "t_98612d051c6f9fe6",
+    "source": "Наводим чистоту",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -5882,6 +5992,14 @@
     ]
   },
   {
+    "key": "t_32c16defc003e982",
+    "source": "Написать исполнителю",
+    "locations": [
+      "lib/screens/client/client_home_screen.dart",
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_036dae7bc4da435d",
     "source": "Например: всё было готово к уборке",
     "locations": [
@@ -5903,6 +6021,7 @@
       "lib/screens/cleaner/cleaner_profile_screen.dart",
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/settings_screen.dart",
+      "lib/ui/customer_home_reference.dart",
       "lib/ui/domly_ui.dart",
       "lib/ui/first_run_tutorial.dart"
     ]
@@ -5954,6 +6073,13 @@
     "source": "Начните вводить город",
     "locations": [
       "lib/screens/client/profile_screen.dart"
+    ]
+  },
+  {
+    "key": "t_62765da0fd449897",
+    "source": "Начните с чистого дома",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -6071,10 +6197,10 @@
     ]
   },
   {
-    "key": "t_e5569b5881dd55db",
-    "source": "Не оплачено",
+    "key": "t_5e69124473af0c33",
+    "source": "Не оплачен",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -6339,7 +6465,8 @@
     "locations": [
       "lib/screens/common/complaint_screen.dart",
       "lib/screens/common/photo_report_screen.dart",
-      "lib/screens/common/review_screen.dart"
+      "lib/screens/common/review_screen.dart",
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -6362,6 +6489,13 @@
     "locations": [
       "lib/screens/cleaner/cleaner_dashboard_screen.dart",
       "lib/screens/cleaner/cleaner_orders_screen.dart"
+    ]
+  },
+  {
+    "key": "t_f8f64bbeccf991cb",
+    "source": "Не удалось оплатить",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -6418,7 +6552,15 @@
     "key": "t_6dc6dfb9f7cd49da",
     "source": "Не удалось открыть оплату",
     "locations": [
-      "lib/screens/client/online_payment_screen.dart"
+      "lib/screens/client/online_payment_screen.dart",
+      "lib/ui/home_order_actions.dart"
+    ]
+  },
+  {
+    "key": "t_0dfbac99d3fed1c4",
+    "source": "Не удалось открыть отчёт",
+    "locations": [
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -6448,6 +6590,13 @@
     "locations": [
       "lib/screens/cleaner/cleaner_orders_screen.dart",
       "lib/screens/client/orders_screen.dart"
+    ]
+  },
+  {
+    "key": "t_1c190259d9805603",
+    "source": "Не удалось отменить покупку",
+    "locations": [
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -6734,14 +6883,8 @@
     "locations": [
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/orders_screen.dart",
-      "lib/screens/common/notifications_screen.dart"
-    ]
-  },
-  {
-    "key": "t_67463e5e43acd88a",
-    "source": "Нет активного пакета",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/screens/common/notifications_screen.dart",
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -7324,6 +7467,13 @@
     ]
   },
   {
+    "key": "t_5ab4505bb9b322db",
+    "source": "Онлайн-оплата",
+    "locations": [
+      "lib/ui/home_order_actions.dart"
+    ]
+  },
+  {
     "key": "t_955246820837081e",
     "source": "Онлайн-платеж",
     "locations": [
@@ -7385,6 +7535,7 @@
     "key": "t_4c472a8b62a7b4c4",
     "source": "Оплата не завершена",
     "locations": [
+      "lib/screens/client/client_home_screen.dart",
       "lib/utils/customer_home_state.dart"
     ]
   },
@@ -7393,6 +7544,13 @@
     "source": "Оплата не завершена. Выберите способ оплаты.",
     "locations": [
       "lib/screens/common/order_payment_retry.dart"
+    ]
+  },
+  {
+    "key": "t_fcb21033c3ea3589",
+    "source": "Оплата не подтверждена. Выберите способ оплаты повторно.",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -7446,6 +7604,20 @@
     "locations": [
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/house_waitlist_screen.dart"
+    ]
+  },
+  {
+    "key": "t_5da9fdbfab7d46bb",
+    "source": "Оплатите счёт, чтобы выбрать дату уборки.",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
+    "key": "t_c0885d0fc7286090",
+    "source": "Оплатить",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -7577,7 +7749,7 @@
     "key": "t_76a8eb132a8ee5cd",
     "source": "Осталось",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -7846,6 +8018,13 @@
     ]
   },
   {
+    "key": "t_ac740653a628bc9c",
+    "source": "Отменена",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_5ebee19fe902c0f4",
     "source": "Отменено",
     "locations": [
@@ -7887,6 +8066,27 @@
     "locations": [
       "lib/screens/cleaner/cleaner_orders_screen.dart",
       "lib/screens/client/orders_screen.dart"
+    ]
+  },
+  {
+    "key": "t_38c31abdc2d91c50",
+    "source": "Отменить заявку",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
+    "key": "t_f28e0babbca3215d",
+    "source": "Отменить покупку",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
+    "key": "t_40747135fb7db1ff",
+    "source": "Отменить покупку?",
+    "locations": [
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -8069,6 +8269,13 @@
     ]
   },
   {
+    "key": "t_814a814d5b7b012b",
+    "source": "Отчёт об уборке",
+    "locations": [
+      "lib/ui/home_order_actions.dart"
+    ]
+  },
+  {
     "key": "t_86a948174d3e21ac",
     "source": "Оферта",
     "locations": [
@@ -8151,6 +8358,13 @@
     "source": "Оценить клиента",
     "locations": [
       "lib/screens/cleaner/cleaner_orders_screen.dart"
+    ]
+  },
+  {
+    "key": "t_5a031f4e67624dc4",
+    "source": "Оценить уборку",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -8266,10 +8480,16 @@
     ]
   },
   {
+    "key": "t_35b24b8c41d582ec",
+    "source": "Пакет ждёт оплаты",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_e5920888b0a5c01d",
     "source": "Пакет заморожен",
     "locations": [
-      "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/package_calendar_screen.dart"
     ]
   },
@@ -8277,7 +8497,7 @@
     "key": "t_13a2a5297ad03253",
     "source": "Пакет использован",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -8285,6 +8505,13 @@
     "source": "Пакет можно оплатить сейчас. В течение 48 часов отдел контроля качества приедет к вам для проверки площади. Также вы можете пройти проверку в приложении, загрузив план квартиры.",
     "locations": [
       "lib/screens/client/package_selection_screen.dart"
+    ]
+  },
+  {
+    "key": "t_526e946d4edf986f",
+    "source": "Пакет на паузе",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -8298,8 +8525,15 @@
     "key": "t_e95db610f822a98a",
     "source": "Пакет оплачен",
     "locations": [
-      "lib/screens/client/client_home_screen.dart",
+      "lib/ui/customer_home_reference.dart",
       "lib/utils/customer_home_state.dart"
+    ]
+  },
+  {
+    "key": "t_dfa9cc5e23d67796",
+    "source": "Пакет уборок",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -8612,6 +8846,20 @@
     ]
   },
   {
+    "key": "t_ebbbc22e8766e8df",
+    "source": "Подарите друзьям чистый дом",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
+    "key": "t_1b470fcaf86d67cc",
+    "source": "Подберите уборку под вашу квартиру.",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_e932c034377ad604",
     "source": "Подберите удобный пакет",
     "locations": [
@@ -8623,6 +8871,13 @@
     "source": "Подберите формат подписки",
     "locations": [
       "lib/screens/client/package_selection_screen.dart"
+    ]
+  },
+  {
+    "key": "t_73a500a6230f7d55",
+    "source": "Подбираем исполнителя",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -8756,6 +9011,13 @@
     ]
   },
   {
+    "key": "t_38ad4e95213b6ef7",
+    "source": "Подробнее о пакете",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_0f8be47a3580d70a",
     "source": "Подтвердите площадь документом.",
     "locations": [
@@ -8810,7 +9072,6 @@
     "source": "Подтвердить площадь",
     "locations": [
       "lib/screens/client/area_confirmation_screen.dart",
-      "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/profile_screen.dart"
     ]
   },
@@ -8825,7 +9086,8 @@
     "key": "t_9a9a7ee08cd76257",
     "source": "Подтверждена",
     "locations": [
-      "lib/screens/cleaner/cleaner_verification_screen.dart"
+      "lib/screens/cleaner/cleaner_verification_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -8913,11 +9175,25 @@
     ]
   },
   {
+    "key": "t_ebcbef7a650caf00",
+    "source": "Позаботимся о чистоте вашего дома",
+    "locations": [
+      "lib/screens/client/client_home_screen.dart"
+    ]
+  },
+  {
     "key": "t_fd042c9a3a77f5e2",
     "source": "Позже",
     "locations": [
       "lib/screens/client/area_confirmation_screen.dart",
       "lib/screens/common/customer_rating_dialog.dart"
+    ]
+  },
+  {
+    "key": "t_6433b522a1d7ceaa",
+    "source": "Поиск",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -8997,6 +9273,13 @@
     "source": "Показывает активные, подключаемые и планируемые дома.",
     "locations": [
       "lib/screens/common/cluster_map_screen.dart"
+    ]
+  },
+  {
+    "key": "t_f2d746652b74ff8a",
+    "source": "Покупка отменена",
+    "locations": [
+      "lib/ui/home_order_actions.dart"
     ]
   },
   {
@@ -9144,7 +9427,8 @@
     "locations": [
       "lib/screens/common/chat_screen.dart",
       "lib/screens/common/legal_document_screen.dart",
-      "lib/screens/common/order_payment_retry.dart"
+      "lib/screens/common/order_payment_retry.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -9318,10 +9602,45 @@
     ]
   },
   {
+    "key": "t_5a576e72681482fe",
+    "source": "Посмотреть заявку",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
+    "key": "t_37ab03a9442ddc11",
+    "source": "Посмотреть отчёт",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
+    "key": "t_0d539a6528dde89a",
+    "source": "Посмотреть чек-лист",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
+    "key": "t_5079780992540c0e",
+    "source": "Посмотрите детали отмены и выберите новую дату.",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_bf7cafe73f087ad6",
     "source": "Посмотрите короткие ролики о подготовке квартиры к уборке.",
     "locations": [
       "lib/screens/client/client_home_screen.dart"
+    ]
+  },
+  {
+    "key": "t_852bcc3da5485dc2",
+    "source": "Посмотрите отчёт и поделитесь впечатлениями.",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -9452,6 +9771,13 @@
     "source": "Пригласите соседей",
     "locations": [
       "lib/screens/client/bonus_screen.dart"
+    ]
+  },
+  {
+    "key": "t_ad4e7566392a5435",
+    "source": "Пригласить друга",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -9732,6 +10058,13 @@
     ]
   },
   {
+    "key": "t_f987452917073e30",
+    "source": "Продолжим заботу о доме?",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_3f75368ab95890bb",
     "source": "Продолжить",
     "locations": [
@@ -9809,6 +10142,7 @@
     "locations": [
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/profile_screen.dart",
+      "lib/ui/customer_home_reference.dart",
       "lib/ui/domly_ui.dart",
       "lib/ui/first_run_tutorial.dart"
     ]
@@ -9978,17 +10312,11 @@
     ]
   },
   {
-    "key": "t_74900898e58a23a8",
-    "source": "Рассчитай стоимость за пару шагов",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart"
-    ]
-  },
-  {
     "key": "t_d7fcf0d44ab77488",
     "source": "Рассчитать стоимость",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/screens/client/client_home_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -10175,6 +10503,13 @@
     "source": "Сводка по выполненным уборкам за период.",
     "locations": [
       "lib/screens/cleaner/cleaner_order_history_screen.dart"
+    ]
+  },
+  {
+    "key": "t_ec89fe2f92ef10fa",
+    "source": "Сделайте селфи. После проверки оно будет вашим фото профиля и будет видно заказчику назначенной уборки.",
+    "locations": [
+      "lib/screens/cleaner/cleaner_verification_screen.dart"
     ]
   },
   {
@@ -10433,7 +10768,8 @@
     "key": "t_1c3a5aa3f4610cf3",
     "source": "Следующая уборка",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/screens/client/client_home_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -10791,13 +11127,6 @@
     ]
   },
   {
-    "key": "t_743bf23613f34a6d",
-    "source": "Срок действия пакета продлевается на дни заморозки",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart"
-    ]
-  },
-  {
     "key": "t_6920a0aa8d8274a6",
     "source": "Срок зачисления средств зависит от банка-эмитента карты и правил платежной системы.",
     "locations": [
@@ -10805,10 +11134,10 @@
     ]
   },
   {
-    "key": "t_cd99074494b89b0c",
-    "source": "Срок пакета истёк",
+    "key": "t_9f7e2e1f1c3c5e55",
+    "source": "Срок пакета продлевается на дни заморозки.",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -11050,11 +11379,25 @@
     ]
   },
   {
+    "key": "t_0702a8af8995ac0e",
+    "source": "Счёт готовится",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_992725701c67f112",
     "source": "Счёт на KASPI.KZ",
     "locations": [
       "lib/screens/client/orders_screen.dart",
       "lib/utils/order_display.dart"
+    ]
+  },
+  {
+    "key": "t_5aa5e49bd7069476",
+    "source": "Счёт отменён",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -11090,6 +11433,13 @@
     "source": "Текущая скидка {p0}%",
     "locations": [
       "lib/screens/client/referral_stats_screen.dart"
+    ]
+  },
+  {
+    "key": "t_38e3b4718271908f",
+    "source": "Текущая уборка",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -11353,7 +11703,7 @@
     "key": "t_b509d96a5ffee9ac",
     "source": "Уборка завершена",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -11364,17 +11714,10 @@
     ]
   },
   {
-    "key": "t_ccdc061e92f86d45",
-    "source": "Уборка идёт",
+    "key": "t_f0d4a27c548d2eea",
+    "source": "Уборка началась в",
     "locations": [
-      "lib/screens/client/client_home_screen.dart"
-    ]
-  },
-  {
-    "key": "t_6913b785bd7fe067",
-    "source": "Уборка назначена",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -11389,7 +11732,8 @@
     "source": "Уборка отменена",
     "locations": [
       "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/orders_screen.dart"
+      "lib/screens/client/orders_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -11540,6 +11884,7 @@
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/settings_screen.dart",
       "lib/screens/common/notifications_screen.dart",
+      "lib/ui/customer_home_reference.dart",
       "lib/ui/domly_ui.dart",
       "lib/ui/first_run_tutorial.dart"
     ]
@@ -11710,6 +12055,13 @@
     "source": "Укажите улицу и номер дома.",
     "locations": [
       "lib/services/firestore_data_service.dart"
+    ]
+  },
+  {
+    "key": "t_5fd1a0fd0d09fec8",
+    "source": "Управлять заморозкой",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -11902,6 +12254,13 @@
     ]
   },
   {
+    "key": "t_9503fc70bdf6f852",
+    "source": "Фотографии отчёта пока не добавлены",
+    "locations": [
+      "lib/ui/home_order_actions.dart"
+    ]
+  },
+  {
     "key": "t_0191f834f74bce47",
     "source": "Фотоотчет",
     "locations": [
@@ -11993,6 +12352,13 @@
     "source": "Химчистка мебели",
     "locations": [
       "lib/services/app_config_service.dart"
+    ]
+  },
+  {
+    "key": "t_fa11a8644169d333",
+    "source": "Химчистка, мытьё окон и многое другое",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -12100,6 +12466,13 @@
     "source": "Чат пока недоступен",
     "locations": [
       "lib/screens/common/chat_screen.dart"
+    ]
+  },
+  {
+    "key": "t_99d164d4a067d33a",
+    "source": "Чат с исполнителем",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -12293,13 +12666,6 @@
     "source": "Чистота и комфорт по подписке.",
     "locations": [
       "lib/screens/phone_auth_screen.dart"
-    ]
-  },
-  {
-    "key": "t_712e742d0c23ed74",
-    "source": "Чистый дом начинается здесь",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart"
     ]
   },
   {
@@ -12832,6 +13198,13 @@
     ]
   },
   {
+    "key": "t_beed168817322eeb",
+    "source": "из",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_4469942473c637dd",
     "source": "изменение уборки",
     "locations": [
@@ -13309,14 +13682,16 @@
     "key": "t_8a10ccdcb2bfc2f0",
     "source": "уборки",
     "locations": [
-      "lib/screens/client/calculator_screen.dart"
+      "lib/screens/client/calculator_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
     "key": "t_e0489ff319cabebb",
     "source": "уборок",
     "locations": [
-      "lib/screens/client/calculator_screen.dart"
+      "lib/screens/client/calculator_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {

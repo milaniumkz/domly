@@ -543,6 +543,23 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     return PackageCatalogUtils.billingPeriodMonths(pkg);
   }
 
+  final _homeAddonTarget = GlobalKey();
+  bool _homeAddonFocusApplied = false;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (!_homeAddonFocusApplied && args is Map && args['focusAddons'] == true) {
+      _homeAddonFocusApplied = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final target = _homeAddonTarget.currentContext;
+        if (mounted && target != null)
+          Scrollable.ensureVisible(target,
+              duration: const Duration(milliseconds: 250), alignment: 0.05);
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -663,6 +680,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                   ),
                   const SizedBox(height: 13),
                   _FigmaAddonCard(
+                    key: _homeAddonTarget,
                     groups: _addonGroups,
                     total: quoteTotal > 0 ? quoteTotal : addonTotalPrice,
                     caption: _displayQuoteCaption,
@@ -2092,6 +2110,7 @@ class _FigmaPackageCard extends StatelessWidget {
 
 class _FigmaAddonCard extends StatelessWidget {
   const _FigmaAddonCard({
+    super.key,
     required this.groups,
     required this.total,
     required this.caption,

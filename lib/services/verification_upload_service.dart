@@ -11,7 +11,7 @@ class VerificationUploadService {
     required String type,
   }) async {
     final file = await _picker.pickImage(
-      source: ImageSource.gallery,
+      source: type == 'selfie' ? ImageSource.camera : ImageSource.gallery,
       imageQuality: 85,
       maxWidth: 1800,
     );

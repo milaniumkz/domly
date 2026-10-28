@@ -39,6 +39,18 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('home exposes only the assigned cleaner approved standalone selfie', async()=>{
+      const selfie=randomUUID(),identity=randomUUID(),order=randomUUID();
+      try{
+        await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1::uuid,$3,'test',$1::text,'https://example.com/profile-selfie'),($2::uuid,$3,'test',$2::text,'https://example.com/private-id')",[selfie,identity,cleaner]);
+        await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id,status) VALUES($1,'selfieUrl',$2,'approved'),($1,'selfieWithIdUrl',$3,'approved')",[cleaner,selfie,identity]);
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status) VALUES($1,$2,$3,'assigned')",[order,customer,cleaner]);
+        const response=await request('/orders','GET',undefined,true);
+        assert.equal(response.status,200);assert.equal(response.json.data.find((o:any)=>o.id===order).cleaner_photo_url,'https://example.com/profile-selfie');
+        await db.query("UPDATE cleaner_documents SET status='pending' WHERE file_id=$1",[selfie]);
+        assert.equal((await request('/orders','GET',undefined,true)).json.data.find((o:any)=>o.id===order).cleaner_photo_url,null);
+      }finally{await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('DELETE FROM cleaner_documents WHERE file_id=ANY($1::uuid[])',[[selfie,identity]]);await db.query('DELETE FROM files WHERE id=ANY($1::uuid[])',[[selfie,identity]]);}
+    });
     await t.test('information document retains its full body and independent bilingual summaries', async () => {
       const slug='legal-regression-'+randomUUID();
       const body='1. Первый пункт\n'+ 'Полный текст. '.repeat(1000)+'\n\n20. Последний пункт\nКонец документа';
