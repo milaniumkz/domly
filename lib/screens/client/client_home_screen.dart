@@ -324,6 +324,18 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                 },
                               ),
                             ),
+                          StreamBuilder<List<Map<String, dynamic>>>(
+                            stream: _customerSubscriptions,
+                            builder: (context, subscriptions) =>
+                                StreamBuilder<List<Map<String, dynamic>>>(
+                              stream: _customerOrders,
+                              builder: (context, orders) =>
+                                  subscriptions.hasData && orders.hasData
+                                      ? _prelaunchBookingButton(
+                                          subscriptions.data!, orders.data!)
+                                      : const SizedBox.shrink(),
+                            ),
+                          ),
                         ],
                       ),
                     ),
