@@ -625,6 +625,7 @@ class FirestoreDataService {
       'customerName': item['customer_name'],
       'customerPhone': item['customer_phone'],
       'cleanerName': item['cleaner_name'],
+      'cleanerPhotoUrl': item['cleaner_photo_url'],
       'cleanerPhone': item['cleaner_phone'],
       'date': date,
       'scheduledDateKey': date,
@@ -640,6 +641,7 @@ class FirestoreDataService {
       'price': _num(item['total_amount']).round(),
       'amount': _num(item['total_amount']).round(),
       'payableAmount': _num(item['payable_amount']).round(),
+      'totalVisits': _num(item['total_cleanings']).toInt(),
       'bonusSpent': _num(item['bonus_spent']).round(),
       'addonAmount': _num(item['addon_amount']).round(),
       'totalDurationMinutes': _num(item['estimated_duration_minutes']).toInt(),
@@ -7935,6 +7937,7 @@ class FirestoreDataService {
           'customerName': item['customer_name'],
           'customerPhone': item['customer_phone'],
           'cleanerName': item['cleaner_name'],
+          'cleanerPhotoUrl': item['cleaner_photo_url'],
           'cleanerPhone': item['cleaner_phone'],
           'createdAt': item['created_at'],
         };
@@ -7968,6 +7971,7 @@ class FirestoreDataService {
               'customerName': item['customer_name'],
               'customerPhone': item['customer_phone'],
               'cleanerName': item['cleaner_name'],
+              'cleanerPhotoUrl': item['cleaner_photo_url'],
               'cleanerPhone': item['cleaner_phone'],
               'createdAt': item['created_at'],
             };
@@ -13805,8 +13809,8 @@ class FirestoreDataService {
     await _saveAddonGroupToBackend(groupData);
   }
 
-  Future<void> deleteAdminAddonItem(String groupId,
-      Map<String, dynamic> groupData, String itemKey) async {
+  Future<void> deleteAdminAddonItem(
+      String groupId, Map<String, dynamic> groupData, String itemKey) async {
     if (_isDebugAdmin) {
       final items = ((groupData['items'] ?? const []) as List)
           .whereType<Map>()

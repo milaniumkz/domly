@@ -1,3 +1,7 @@
+import '../../ui/home_order_actions.dart';
+import '../../ui/customer_home_reference.dart';
+import '../../services/backend_api_service.dart';
+import '../../ui/customer_home_card.dart';
 import '../../ui/cleaning_schedule_summary.dart';
 import '../../utils/customer_home_state.dart';
 import '../../theme/domly_palette.dart';
@@ -320,6 +324,18 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                 },
                               ),
                             ),
+                          StreamBuilder<List<Map<String, dynamic>>>(
+                            stream: _customerSubscriptions,
+                            builder: (context, subscriptions) =>
+                                StreamBuilder<List<Map<String, dynamic>>>(
+                              stream: _customerOrders,
+                              builder: (context, orders) =>
+                                  subscriptions.hasData && orders.hasData
+                                      ? _prelaunchBookingButton(
+                                          subscriptions.data!, orders.data!)
+                                      : const SizedBox.shrink(),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1067,6 +1083,28 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                             planName: effectivePlanName,
                             allOrders: orders,
                           );
+                        }
+                        final recentOutcome = orders
+                            .where(isFinishedCleaning)
+                            .toList()
+                          ..sort((a, b) =>
+                              _orderTimestamp(b).compareTo(_orderTimestamp(a)));
+                        if (recentOutcome.isNotEmpty &&
+                            _orderTimestamp(recentOutcome.first).isAfter(
+                                DateTime.now()
+                                    .subtract(const Duration(hours: 24))) &&
+                            (pendingHomeOrder == null ||
+                                !_orderTimestamp(pendingHomeOrder).isAfter(
+                                    _orderTimestamp(recentOutcome.first)))) {
+                          return _referenceHome(
+                              profile: profile,
+                              userName: userName,
+                              subscriptions: subscriptions,
+                              orders: orders,
+                              slots: slots,
+                              order: recentOutcome.first,
+                              subscription:
+                                  schedulingSubscription ?? activeSubscription);
                         }
                         if (hasPendingDateSelection &&
                             activeSubscription != null) {
@@ -1894,544 +1932,315 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     return '';
   }
 
-  Widget _buildFigmaHomeShell({
-    required BuildContext context,
-    required Map<String, dynamic> profile,
-    required Map<String, dynamic>? activeSubscription,
-    required Map<String, dynamic>? schedulingSubscription,
-    required List<Map<String, dynamic>> allSubscriptions,
-    required List<Map<String, dynamic>> slots,
-    required Map<String, dynamic>? upcomingSlot,
-    required String userName,
-    required String planName,
-    required List<Map<String, dynamic>> allOrders,
-  }) {
-    if (upcomingSlot == null) {
-      return _buildFigmaHomeEmptyShell(
-        context: context,
-        userName: userName,
-        profile: profile,
-        allSubscriptions: allSubscriptions,
-        allOrders: allOrders,
-      );
-    }
+  Widget _buildFigmaHomeShell(
+          {required BuildContext context,
+          required Map<String, dynamic> profile,
+          required Map<String, dynamic>? activeSubscription,
+          required Map<String, dynamic>? schedulingSubscription,
+          required List<Map<String, dynamic>> allSubscriptions,
+          required List<Map<String, dynamic>> slots,
+          required String userName,
+          required String planName,
+          required List<Map<String, dynamic>> allOrders,
+          required Map<String, dynamic>? upcomingSlot}) =>
+      _referenceHome(
+          profile: profile,
+          userName: userName,
+          subscriptions: allSubscriptions,
+          orders: allOrders,
+          slots: slots,
+          order: upcomingSlot,
+          subscription: schedulingSubscription ?? activeSubscription);
+  Widget _buildFigmaPendingOrderShell(
+          {required BuildContext context,
+          required Map<String, dynamic> profile,
+          required Map<String, dynamic>? activeSubscription,
+          required Map<String, dynamic>? schedulingSubscription,
+          required List<Map<String, dynamic>> allSubscriptions,
+          required List<Map<String, dynamic>> slots,
+          required String userName,
+          required String planName,
+          required List<Map<String, dynamic>> allOrders,
+          required Map<String, dynamic> order}) =>
+      _referenceHome(
+          profile: profile,
+          userName: userName,
+          subscriptions: allSubscriptions,
+          orders: allOrders,
+          slots: slots,
+          order: order,
+          subscription: schedulingSubscription ?? activeSubscription);
+  Widget _buildFigmaHomeEmptyShell(
+          {required BuildContext context,
+          required String userName,
+          required Map<String, dynamic> profile,
+          required List<Map<String, dynamic>> allOrders,
+          required List<Map<String, dynamic>> allSubscriptions}) =>
+      _referenceHome(
+          profile: profile,
+          userName: userName,
+          subscriptions: allSubscriptions,
+          orders: allOrders,
+          slots: const []);
 
-    final dateText = cleaningDateLabel(upcomingSlot);
-    final statusText = _slotStatusText(
-      (upcomingSlot['status'] ?? '').toString(),
-    );
-    final timeText = (upcomingSlot['time'] ?? '09:00 - 12:27').toString();
-    final area = profile['area'] ?? upcomingSlot['area'] ?? 100;
-    final cleanerName = _slotCleanerDisplayName(upcomingSlot);
-    final totalVisits = _aggregateIncludedVisits(allSubscriptions);
-    final availableSelections = _aggregateAvailableSelections(
-      allSubscriptions,
-      slots,
-    );
-    final used = _aggregateUsedVisits(allSubscriptions, slots);
-    final canSelectDates = availableSelections > 0;
-    final primaryActionLabel =
-        canSelectDates ? 'Заказать уборку' : 'Выбрать пакет';
-    void primaryAction() {
-      _runProtectedAction(() {
-        if (canSelectDates) {
-          _openHomeCleaningOrder(
-            activeSubscription: activeSubscription,
-            subscriptionId: schedulingSubscription?['id']?.toString() ??
-                activeSubscription?['id']?.toString(),
-            canSelectDates: canSelectDates,
-          );
-          return;
-        }
-        _showHomePackagePicker();
-      });
-    }
-
-    final isCurrentCleaning = _isInProgressSlot(upcomingSlot);
-    final canCancelCleaning = !isCurrentCleaning &&
-        _canCustomerCancelSlot((upcomingSlot['status'] ?? '').toString());
-
-    return DomlyShell(
-      bottomNavigationBar: const CustomerHomeBottomNav(currentIndex: 0),
-      child: Container(
-        color: DomlyPalette.surface(const Color(0xFFFBFDF9)),
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(15, 8, 15, 104),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _FigmaHomeHero(
-                  key: DomlyTutorialTargets.clientHomeTop,
-                  userName: userName,
-                ),
-                if (profile['areaVerified'] != true &&
-                    profile['areaProofSubmitted'] != true &&
-                    (profile['addresses'] as List?)?.isNotEmpty == true)
-                  Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.square_foot),
-                        label: Text('Подтвердить площадь'.tr()),
-                        onPressed: () => Navigator.pushNamed(
-                            context, '/client/area-confirmation'),
-                      )),
-                if (_pendingConnectionAddresses(profile).isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _addressSwitcherCard(profile),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                const _PromoBannersSection(),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 34),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        (isCurrentCleaning
-                                ? 'Текущая уборка'
-                                : 'Следующая уборка')
-                            .tr(),
-                        style: TextStyle(
-                          color: DomlyPalette.foreground(Color(0xFF658170)),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          height: 19 / 14,
-                        ),
-                      ),
-                      const SizedBox(height: 9),
-                      CleaningScheduleSummary(
-                          dateText: dateText,
-                          status: _FigmaStatusPill(label: statusText),
-                          fontSize: 27),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 19),
-                CustomerNextCleaningCard(
-                  onTap: () => _runProtectedAction(
-                    () => _openFocusedClientOrder(upcomingSlot),
-                  ),
-                  timeText: timeText,
-                  areaText: '$area м²',
-                  cleanerName: cleanerName,
-                  planName: planName,
-                  totalVisits: totalVisits,
-                  availableSelections: availableSelections,
-                  used: used,
-                  showUsageStats: true,
-                  onSelectDates: isCurrentCleaning || !canSelectDates
-                      ? null
-                      : () => _runProtectedAction(
-                            () => Navigator.pushNamed(
-                              context,
-                              '/client/package-calendar',
-                              arguments: {
-                                'subscriptionId':
-                                    schedulingSubscription?['id'] ??
-                                        activeSubscription!['id'],
-                              },
-                            ),
-                          ),
-                  onDetails: () => _runProtectedAction(
-                    () => _openFocusedClientOrder(upcomingSlot),
-                  ),
-                  onCancel: canCancelCleaning
-                      ? () => _runProtectedAction(
-                            () => _cancelScheduledCleaning(upcomingSlot),
-                          )
-                      : null,
-                ),
-                OrderPaymentRetry(order: upcomingSlot, data: _data),
-                const SizedBox(height: 12),
-                _FigmaPrimaryHomeButton(
-                  key: DomlyTutorialTargets.clientOrderButton,
-                  label: primaryActionLabel,
-                  onPressed: primaryAction,
-                ),
-                const SizedBox(height: 10),
-                _prelaunchBookingButton(allSubscriptions, allOrders),
-                const SizedBox(height: 14),
-                const _CompanyPromotionsSection(),
-                const SizedBox(height: 14),
-                KeyedSubtree(
-                  key: DomlyTutorialTargets.clientPackageActions,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _FigmaHomeAction(
-                          caption: 'Готовые решения\nна любой случай',
-                          label: 'Выбрать пакет',
-                          icon: Icons.shopping_bag_outlined,
-                          onTap: () =>
-                              _runProtectedAction(_showHomePackagePicker),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _FigmaHomeAction(
-                          caption: 'Рассчитай стоимость\nза пару шагов',
-                          label: 'Калькулятор',
-                          icon: Icons.calculate_outlined,
-                          onTap: () => _runProtectedAction(
-                            () => Navigator.pushNamed(
-                              context,
-                              '/client/calculator',
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                _figmaBonusBanner(context),
-                const SizedBox(height: 88),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFigmaHomeEmptyShell({
-    required BuildContext context,
-    required String userName,
-    required Map<String, dynamic> profile,
-    required List<Map<String, dynamic>> allOrders,
-    required List<Map<String, dynamic>> allSubscriptions,
-  }) {
-    final houseId = (profile['houseId'] ?? '').toString().trim();
-    final houseStatus =
-        (profile['houseStatus'] ?? '').toString().trim().toUpperCase();
-    final showHouseWaitlistHome =
-        houseId.isNotEmpty && houseStatus.isNotEmpty && houseStatus != 'ACTIVE';
-    return DomlyShell(
-      bottomNavigationBar: const CustomerHomeBottomNav(currentIndex: 0),
-      child: Container(
-        color: DomlyPalette.surface(const Color(0xFFFBFDF9)),
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(15, 8, 15, 104),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _FigmaHomeHero(
-                  key: DomlyTutorialTargets.clientHomeTop,
-                  userName: userName,
-                ),
-                if (profile['areaVerified'] != true &&
-                    profile['areaProofSubmitted'] != true &&
-                    (profile['addresses'] as List?)?.isNotEmpty == true)
-                  Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.square_foot),
-                        label: Text('Подтвердить площадь'.tr()),
-                        onPressed: () => Navigator.pushNamed(
-                            context, '/client/area-confirmation'),
-                      )),
-                if (_pendingConnectionAddresses(profile).isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _addressSwitcherCard(profile),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                const _PromoBannersSection(),
-                const SizedBox(height: 24),
-                if (showHouseWaitlistHome) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _houseStatusSection(context, houseId),
-                  ),
-                ] else ...[
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 34),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Следующая уборка'.tr(),
-                          style: TextStyle(
-                            color: DomlyPalette.foreground(Color(0xFF658170)),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            height: 19 / 14,
-                          ),
-                        ),
-                        SizedBox(height: 13),
-                        CleaningScheduleSummary(
-                            dateText: 'Не запланировано'.tr(),
-                            status: _FigmaStatusPill(
-                                label: 'Ожидание', muted: true),
-                            fontSize: 16),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 19),
-                  _FigmaEmptyCleaningCard(
-                    onTap: () => _runProtectedAction(_showHomePackagePicker),
-                  ),
-                  const SizedBox(height: 14),
-                  _FigmaPrimaryHomeButton(
-                    key: DomlyTutorialTargets.clientOrderButton,
-                    label: 'Подобрать подписку',
-                    onPressed: () =>
-                        _runProtectedAction(_showHomePackagePicker),
-                  ),
-                  const SizedBox(height: 10),
-                  _prelaunchBookingButton(allSubscriptions, allOrders),
-                  const SizedBox(height: 14),
-                  const _CompanyPromotionsSection(),
-                  const SizedBox(height: 14),
-                  KeyedSubtree(
-                    key: DomlyTutorialTargets.clientPackageActions,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _FigmaHomeAction(
-                            caption: 'Готовые решения\nна любой случай',
-                            label: 'Выбрать пакет',
-                            icon: Icons.shopping_bag_outlined,
-                            onTap: () =>
-                                _runProtectedAction(_showHomePackagePicker),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _FigmaHomeAction(
-                            caption: 'Рассчитай стоимость\nза пару шагов',
-                            label: 'Калькулятор',
-                            icon: Icons.calculate_outlined,
-                            onTap: () => _runProtectedAction(
-                              () => Navigator.pushNamed(
-                                context,
-                                '/client/calculator',
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 33, right: 33),
-                    child: Text(
-                      'У Вас нет активной подписки\n'
-                              'Оформите ее, чтобы начать пользоваться сервисом'
-                          .tr(),
-                      style: TextStyle(
-                        color: DomlyPalette.foreground(Color(0xFF658170)),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        height: 18 / 13,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                const SizedBox(height: 20),
-                _figmaBonusBanner(context),
-                const SizedBox(height: 88),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFigmaPendingOrderShell({
-    required BuildContext context,
-    required Map<String, dynamic> profile,
-    required Map<String, dynamic>? activeSubscription,
-    required Map<String, dynamic>? schedulingSubscription,
-    required List<Map<String, dynamic>> allSubscriptions,
-    required List<Map<String, dynamic>> slots,
-    required Map<String, dynamic> order,
-    required String userName,
-    required String planName,
-    required List<Map<String, dynamic>> allOrders,
-  }) {
-    final area = profile['area'] ?? order['area'] ?? 100;
-    final statusText = _homeOrderStatusText(order);
-    final subtitle = _homeOrderSubtitle(order);
-    final orderId = (order['id'] ?? order['orderId'] ?? '').toString().trim();
-    final orderSubscriptionId =
-        (order['subscriptionId'] ?? '').toString().trim();
-    final calendarSubscriptionId = schedulingSubscription?['id']?.toString() ??
-        activeSubscription?['id']?.toString() ??
-        (orderSubscriptionId.isNotEmpty ? orderSubscriptionId : orderId);
-    final pendingSelections = _aggregateAvailableSelections(
-      allSubscriptions,
-      slots,
-    );
-    final canSelectDates =
-        calendarSubscriptionId.isNotEmpty && pendingSelections > 0;
-    void scheduleAction() {
-      _runProtectedAction(
-        () => _openHomeCleaningOrder(
-          activeSubscription: activeSubscription,
-          subscriptionId: calendarSubscriptionId,
-          canSelectDates: canSelectDates,
-        ),
-      );
-    }
-
-    void primaryAction() {
-      if (canSelectDates) {
-        scheduleAction();
-        return;
+  Widget _referenceHome(
+      {required Map<String, dynamic> profile,
+      required String userName,
+      required List<Map<String, dynamic>> subscriptions,
+      required List<Map<String, dynamic>> orders,
+      required List<Map<String, dynamic>> slots,
+      Map<String, dynamic>? order,
+      Map<String, dynamic>? subscription}) {
+    final history = orders.where(isFinishedCleaning).toList()
+      ..sort((a, b) => _orderTimestamp(b).compareTo(_orderTimestamp(a)));
+    final frozen =
+        subscriptions.where((s) => isHomePackageFrozen(s)).firstOrNull;
+    final exhausted = subscriptions
+        .where((s) =>
+            ['completed', 'exhausted'].contains(s['status']))
+        .firstOrNull;
+    var scene = HomeScene.empty;
+    var item = order;
+    var pkg = subscription;
+    if (order != null) {
+      final state = (order['orderStatus'] ?? order['status'] ?? '').toString();
+      if (_isInProgressSlot(order)) {
+        scene = HomeScene.cleaning;
+      } else if (scheduledCleaningDate(order) != null &&
+          order['type'] != 'package_purchase') {
+        scene = (order['cleanerId'] ?? '').toString().isNotEmpty
+            ? HomeScene.assigned
+            : HomeScene.searching;
+      } else if (order['paymentStatus'] == 'paid') {
+        scene = HomeScene.paid;
+      } else {
+        scene = switch (homePaymentTitle(order)) {
+          'Оплата не завершена' => HomeScene.failed,
+          'Ожидание оплаты' => HomeScene.unpaid,
+          _ => HomeScene.invoice
+        };
       }
-      _runProtectedAction(_showHomePackagePicker);
+      if (state == 'completed') scene = HomeScene.completed;
+      if (['cancelled', 'canceled'].contains(state))
+        scene = HomeScene.cancelled;
+    } else if (frozen != null) {
+      scene = HomeScene.frozen;
+      pkg = frozen;
+    } else if (exhausted != null) {
+      scene = HomeScene.exhausted;
+      pkg = exhausted;
+    } else if (history.isNotEmpty) {
+      item = history.first;
+      scene = (item['orderStatus'] ?? item['status']) == 'completed'
+          ? HomeScene.completed
+          : HomeScene.cancelled;
     }
-
-    final actionLabel = canSelectDates ? 'Заказать уборку' : 'Выбрать пакет';
-    final timeText = canSelectDates ? 'Выберите дату и время' : subtitle;
-    final cleanerText = canSelectDates
-        ? 'Исполнитель после выбора даты'
-        : 'Исполнитель будет назначен';
-    final totalVisits = _aggregateIncludedVisits(allSubscriptions);
-    final usedSelections = _aggregateUsedVisits(allSubscriptions, slots);
-
+    pkg ??= subscriptions
+        .where((p) =>
+            p['id'] == (item?['subscriptionId'] ?? item?['customerPackageId']))
+        .firstOrNull;
+    final total = pkg != null
+        ? (pkg['totalCleanings'] as num?)?.toInt() ?? _includedVisits(pkg)
+        : (item?['totalVisits'] as num?)?.toInt() ??
+            _aggregateIncludedVisits(subscriptions);
+    final used = scene == HomeScene.exhausted
+        ? total
+        : pkg != null
+            ? math.max(_usedVisits(pkg, slots), orders.where((o) =>
+                o['subscriptionId'] == pkg!['id'] &&
+                _isCompletedSlotStatus(o)).length)
+            : _aggregateUsedVisits(subscriptions, slots);
+    final left = pkg != null
+        ? (pkg['remainingCleanings'] as num?)?.toInt() ??
+            _availableSelections(pkg, slots)
+        : _aggregateAvailableSelections(subscriptions, slots);
+    final target = item ?? <String, dynamic>{};
+    final freeze = DateTime.tryParse((pkg?['freezeUntil'] ?? '').toString());
+    final started =
+        DateTime.tryParse((target['startedAt'] ?? '').toString())?.toLocal();
+    void act(HomeAction action) =>
+        _runProtectedAction(() => _homeReferenceAction(action, target, pkg));
     return DomlyShell(
-      bottomNavigationBar: const CustomerHomeBottomNav(currentIndex: 0),
-      child: Container(
-        color: DomlyPalette.surface(const Color(0xFFFBFDF9)),
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(15, 8, 15, 104),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _FigmaHomeHero(
-                  key: DomlyTutorialTargets.clientHomeTop,
-                  userName: userName,
-                ),
-                if (profile['areaVerified'] != true &&
-                    profile['areaProofSubmitted'] != true &&
-                    (profile['addresses'] as List?)?.isNotEmpty == true)
-                  Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.square_foot),
-                        label: Text('Подтвердить площадь'.tr()),
-                        onPressed: () => Navigator.pushNamed(
-                            context, '/client/area-confirmation'),
-                      )),
-                if (_pendingConnectionAddresses(profile).isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _addressSwitcherCard(profile),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                const _PromoBannersSection(),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 34),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Следующая уборка'.tr(),
-                        style: TextStyle(
-                          color: DomlyPalette.foreground(Color(0xFF658170)),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          height: 19 / 14,
-                        ),
-                      ),
-                      const SizedBox(height: 9),
-                      CleaningScheduleSummary(
-                          dateText: 'Дата не выбрана'.tr(),
-                          status: _FigmaStatusPill(label: statusText),
-                          fontSize: 22),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 19),
-                CustomerNextCleaningCard(
-                  onTap: canSelectDates
-                      ? scheduleAction
-                      : () => _runProtectedAction(
-                            () => _openFocusedClientOrder(order),
-                          ),
-                  timeText: timeText,
-                  areaText: '$area м²',
-                  cleanerName: cleanerText,
-                  planName: planName,
-                  totalVisits: totalVisits,
-                  availableSelections: pendingSelections,
-                  used: usedSelections,
-                  showUsageStats: true,
-                  onSelectDates: canSelectDates ? scheduleAction : null,
-                  onDetails: () =>
-                      _runProtectedAction(() => _openFocusedClientOrder(order)),
-                  onCancel: null,
-                ),
-                const SizedBox(height: 12),
-                _FigmaPrimaryHomeButton(
-                  key: DomlyTutorialTargets.clientOrderButton,
-                  label: actionLabel,
-                  onPressed: primaryAction,
-                ),
-                const SizedBox(height: 10),
-                _prelaunchBookingButton(allSubscriptions, allOrders),
-                const SizedBox(height: 14),
-                const _CompanyPromotionsSection(),
-                const SizedBox(height: 14),
-                KeyedSubtree(
-                  key: DomlyTutorialTargets.clientPackageActions,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _FigmaHomeAction(
-                          caption: 'Готовые решения\nна любой случай',
-                          label: 'Выбрать пакет',
-                          icon: Icons.shopping_bag_outlined,
-                          onTap: () =>
-                              _runProtectedAction(_showHomePackagePicker),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _FigmaHomeAction(
-                          caption: 'Рассчитай стоимость\nза пару шагов',
-                          label: 'Калькулятор',
-                          icon: Icons.calculate_outlined,
-                          onTap: () => _runProtectedAction(
-                            () => Navigator.pushNamed(
-                              context,
-                              '/client/calculator',
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                _figmaBonusBanner(context),
-                const SizedBox(height: 88),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+        bottomNavigationBar: HomeReferenceNavigation(
+            onNavigate: (route) =>
+                Navigator.pushReplacementNamed(context, route)),
+        child: Container(
+            color: DomlyPalette.surface(const Color(0xFFF0FAF5)),
+            child: SafeArea(
+                bottom: false,
+                child: Center(
+                    child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 100),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _referenceHeader(userName),
+                                  const SizedBox(height: 14),
+                                  const _PromoBannersSection(),
+                                  const SizedBox(height: 12),
+                                  if (_pendingConnectionAddresses(profile)
+                                      .isNotEmpty)
+                                    _addressSwitcherCard(profile),
+                                  CustomerHomeReference(
+                                      scene: scene,
+                                      primaryKey: DomlyTutorialTargets
+                                          .clientOrderButton,
+                                      onAction: act,
+                                      area: (target['area'] ??
+                                              profile['area'] ??
+                                              '—')
+                                          .toString(),
+                                      amount: homeAmountLabel(
+                                          (target['payableAmount'] as num? ?? 0)
+                                              .toInt()),
+                                      total: total,
+                                      used: used,
+                                      remaining: left,
+                                      date: cleaningDateLabel(target),
+                                      time: (target['time'] ?? '').toString(),
+                                      freezeDate: freeze == null
+                                          ? '—'
+                                          : domlyDateText(freeze),
+                                      startedAt: started == null
+                                          ? ''
+                                          : '${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}',
+                                      cleanerName: (target['cleanerName'] ?? '')
+                                          .toString(),
+                                      cleanerPhotoUrl: target['cleanerPhotoUrl']
+                                          ?.toString()),
+                                  const SizedBox(height: 12),
+                                  KeyedSubtree(
+                                      key: DomlyTutorialTargets
+                                          .clientPackageActions,
+                                      child: HomeReferenceShortcuts(
+                                          onAction: act)),
+                                  const SizedBox(height: 12),
+                                  const _CompanyPromotionsSection(),
+                                ])))))));
+  }
+
+  Widget _referenceHeader(String name) => Column(
+          key: DomlyTutorialTargets.clientHomeTop,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Image.asset('assets/logo.png',
+                  width: 52, height: 52, fit: BoxFit.contain),
+              const SizedBox(width: 8),
+              Text('DOMLY',
+                  style: TextStyle(
+                      fontSize: 23,
+                      color: DomlyPalette.foreground(const Color(0xFF082F2B)))),
+              const Spacer(),
+              StreamBuilder<int>(
+                  stream: _userUnreadActivityCount,
+                  initialData: 0,
+                  builder: (context, snapshot) => Badge(
+                      isLabelVisible: (snapshot.data ?? 0) > 0,
+                      child: IconButton(
+                          tooltip: 'Уведомления'.tr(),
+                          onPressed: () => _runProtectedAction(() =>
+                              Navigator.pushNamed(context, '/notifications')),
+                          icon: const Icon(Icons.notifications_none_outlined,
+                              size: 28))))
+            ]),
+            const SizedBox(height: 12),
+            Text('${'Добрый день'.tr()}, $name',
+                style: TextStyle(
+                    fontSize: 27,
+                    height: 1.15,
+                    fontWeight: FontWeight.w700,
+                    color: DomlyPalette.foreground(const Color(0xFF082F2B)))),
+            const SizedBox(height: 5),
+            Text('Позаботимся о чистоте вашего дома'.tr(),
+                style: TextStyle(
+                    fontSize: 16,
+                    color: DomlyPalette.foreground(const Color(0xFF667180))))
+          ]);
+
+  void _homeReferenceAction(HomeAction action, Map<String, dynamic> item,
+      Map<String, dynamic>? subscription) {
+    final id = _homeFocusOrderId(item);
+    void orders({String? action, bool history = false}) =>
+        Navigator.pushNamed(context, '/client/orders', arguments: {
+          'initialTab': history ? 'history' : 'active',
+          if (id.isNotEmpty) 'focusOrderId': id,
+          if (action != null) 'homeAction': action
+        });
+    switch (action) {
+      case HomeAction.packages:
+        _showHomePackagePicker();
+      case HomeAction.calculator:
+        Navigator.pushNamed(context, '/client/calculator');
+      case HomeAction.referral:
+        Navigator.pushNamed(context, '/client/bonus');
+      case HomeAction.addons:
+        Navigator.pushNamed(context, '/client/calculator',
+            arguments: {'focusAddons': true});
+      case HomeAction.schedule:
+        _openHomeCleaningOrder(
+            activeSubscription: subscription,
+            subscriptionId: subscription?['id']?.toString(),
+            canSelectDates:
+                subscription != null && !isHomePackageFrozen(subscription));
+      case HomeAction.package:
+      case HomeAction.usage:
+      case HomeAction.freeze:
+        if (subscription != null) {
+          Navigator.pushNamed(context, '/client/package-calendar', arguments: {
+            'subscriptionId': subscription['id'],
+            'openFreeze': action == HomeAction.freeze
+          });
+        } else {
+          orders(history: true);
+        }
+      case HomeAction.chat:
+        Navigator.pushNamed(context, '/chat', arguments: {'orderId': id});
+      case HomeAction.review:
+        Navigator.pushNamed(context, '/review', arguments: {'orderId': id});
+      case HomeAction.report:
+        showHomeReport(context, id);
+      case HomeAction.checklist:
+        orders(action: 'checklist');
+      case HomeAction.reschedule:
+        Navigator.pushNamed(context, '/client/orders',
+            arguments: {'editSlotId': id});
+      case HomeAction.cancelPurchase:
+        if (item['type'] == 'package_purchase') {
+          cancelHomePurchase(context, item);
+        } else {
+          orders(action: 'cancel');
+        }
+      case HomeAction.pay:
+      case HomeAction.retry:
+        showHomePayment(context, item);
+      case HomeAction.history:
+      case HomeAction.cancellation:
+        orders(history: true);
+      case HomeAction.details:
+      case HomeAction.request:
+              orders();
+      case HomeAction.cleaner:
+        showModalBottomSheet<void>(context: context, builder: (context) => SafeArea(
+          child: Padding(padding: const EdgeInsets.all(24), child: Column(
+            mainAxisSize: MainAxisSize.min, children: [
+              if ((item['cleanerPhotoUrl'] ?? '').toString().isNotEmpty)
+                ClipOval(child: Image.network(item['cleanerPhotoUrl'].toString(),
+                  width: 96, height: 96, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.person_outline, size: 64))),
+              const SizedBox(height: 16),
+              Text((item['cleanerName'] ?? 'Исполнитель'.tr()).toString(),
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              TextButton.icon(icon: const Icon(Icons.chat_bubble_outline),
+                label: Text('Написать исполнителю'.tr()), onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(this.context, '/chat', arguments: {'orderId': id});
+                }),
+            ]))));
+    }
   }
 
   Widget _figmaBonusBanner(BuildContext context) {
@@ -3779,6 +3588,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               (item['status'] ?? '').toString().trim().toLowerCase() ==
                   'active' &&
               _isPaidSubscription(item) &&
+              !isHomePackageFrozen(item) &&
               !_isAddonOnlySubscription(item) &&
               _includedVisits(item) > 0,
         )
@@ -4177,68 +3987,27 @@ class _FigmaHomeHero extends StatelessWidget {
   Widget build(BuildContext context) {
     DomlyPalette.watch(context);
 
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            DomlyPalette.surface(Color(0xFF439F73)),
-            DomlyPalette.surface(Color(0xFF80D4B0))
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 279,
-            top: -49,
-            child: Container(
-              width: 132,
-              height: 132,
-              decoration: BoxDecoration(
-                color:
-                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Positioned(
-            left: 22,
-            top: 9,
-            right: 22,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Добро пожаловать'.tr(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: DomlyPalette.foreground(Colors.white),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    height: 18 / 13,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  userName.trim().isEmpty ? "Пользователь".tr() : userName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: DomlyPalette.foreground(Colors.white),
-                    fontSize: 23,
-                    fontWeight: FontWeight.w700,
-                    height: 29 / 23,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 12),
+      child: Row(children: [
+        Image.asset('assets/logo.png',
+            width: 78, height: 64, fit: BoxFit.contain, semanticLabel: 'Domly'),
+        const SizedBox(width: 14),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Добро пожаловать'.tr(),
+              style: TextStyle(
+                  color: DomlyPalette.foreground(const Color(0xFF657C70)),
+                  fontSize: 14)),
+          const SizedBox(height: 4),
+          Text(userName.trim().isEmpty ? 'Пользователь'.tr() : userName,
+              style: TextStyle(
+                  color: DomlyPalette.foreground(const Color(0xFF203E31)),
+                  fontSize: 23,
+                  fontWeight: FontWeight.w700)),
+        ])),
+      ]),
     );
   }
 }

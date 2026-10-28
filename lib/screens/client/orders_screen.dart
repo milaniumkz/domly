@@ -243,6 +243,7 @@ class _OrdersScreenState extends State<OrdersScreen>
   String? _pendingEditSlotId;
   bool _pendingFocusHandled = false;
   String? _pendingFocusOrderId;
+  String? _homeAction;
 
   @override
   void initState() {
@@ -322,6 +323,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     if (args is! Map) {
       return;
     }
+    _homeAction = args['homeAction']?.toString();
     final rawTab = args['initialTab']?.toString().trim().toLowerCase();
     if (rawTab == 'history' || rawTab == 'completed') {
       _tabController.index = 1;
@@ -335,7 +337,8 @@ class _OrdersScreenState extends State<OrdersScreen>
         (args['focusOrderId'] ?? args['orderId'])?.toString().trim();
     if (focusOrderId != null && focusOrderId.isNotEmpty) {
       _pendingFocusOrderId = focusOrderId;
-      _tabController.index = 0;
+      if (rawTab != 'history' && rawTab != 'completed')
+        _tabController.index = 0;
     }
   }
 
@@ -594,7 +597,11 @@ class _OrdersScreenState extends State<OrdersScreen>
         _pendingFocusHandled = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            _showFigmaSlotActions(slot);
+            if (_homeAction == 'checklist') {
+              _showClientChecklist(slot);
+            } else {
+              _showFigmaSlotActions(slot);
+            }
           }
         });
         return;
@@ -603,6 +610,10 @@ class _OrdersScreenState extends State<OrdersScreen>
     for (final order in pendingOrders) {
       if (_orderIdentityValues(order).contains(focusId)) {
         _pendingFocusHandled = true;
+        if (_homeAction == 'cancel')
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _cancelPendingOrder(order);
+          });
         return;
       }
     }

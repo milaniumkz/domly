@@ -175,6 +175,11 @@ class _CleanerVerificationScreenState extends State<CleanerVerificationScreen> {
                               ),
                             const SizedBox(height: 2),
                             _stepTile('Шаг 1: Селфи', 'selfieUrl', 'selfie'),
+                            Padding(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: Text(
+                                    'Сделайте селфи. После проверки оно будет вашим фото профиля и будет видно заказчику назначенной уборки.'
+                                        .tr())),
                             _stepTile(
                               'Шаг 2: Фото с удостоверением',
                               'selfieWithIdUrl',
