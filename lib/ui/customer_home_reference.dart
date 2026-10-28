@@ -58,13 +58,14 @@ class CustomerHomeReference extends StatelessWidget {
       this.startedAt = '',
       this.cleanerName = '',
       this.cleanerPhotoUrl,
-      this.primaryKey});
+      this.primaryKey, this.cardKey, this.bookingKey, this.navigation});
   final HomeScene scene;
   final void Function(HomeAction) onAction;
   final String area, amount, date, time, freezeDate, startedAt, cleanerName;
   final String? cleanerPhotoUrl;
   final int total, used, remaining;
-  final Key? primaryKey;
+  final Key? primaryKey, cardKey, bookingKey;
+  final Widget? navigation;
   Color get ink => DomlyPalette.foreground(const Color(0xFF082F2B));
   Color get muted => DomlyPalette.foreground(const Color(0xFF667180));
 
@@ -114,13 +115,13 @@ class CustomerHomeReference extends StatelessWidget {
                 Icon(Icons.chevron_right, size: 20, color: muted)
               ])));
   Widget button(String label, HomeAction action, IconData icon,
-          {bool outlined = false}) =>
+          {bool outlined = false, bool primary = true}) =>
       Padding(
           padding: const EdgeInsets.only(top: 14),
           child: SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                  key: primaryKey,
+                  key: primary ? primaryKey : null,
                   onPressed: () => onAction(action),
                   icon: Icon(icon, size: 24),
                   label: Text(label.tr(),
@@ -426,7 +427,23 @@ class CustomerHomeReference extends StatelessWidget {
         ]);
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      panel(children),
+      KeyedSubtree(key: cardKey, child: panel(children)),
+      if (navigation != null) navigation!,
+      if ([HomeScene.searching, HomeScene.assigned, HomeScene.cleaning]
+          .contains(scene)) ...[
+        gap(10),
+        KeyedSubtree(key: bookingKey, child: panel([
+          info(Icons.calendar_today_outlined,
+              '${'Осталось'.tr()} $remaining ${'уборки'.tr()}'),
+          text('Доступно для записи на другую дату', size: 13, secondary: true),
+          button(
+              remaining > 0 ? 'Заказать уборку' : 'Выбрать новый пакет',
+              remaining > 0 ? HomeAction.schedule : HomeAction.packages,
+              Icons.add_task_outlined,
+              primary: false),
+          gap(6),
+        ])),
+      ],
       if (scene == HomeScene.completed) ...[
         gap(10),
         panel([

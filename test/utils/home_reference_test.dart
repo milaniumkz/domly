@@ -40,15 +40,34 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         final buttons = find.byType(OutlinedButton);
-        expect(buttons, findsOneWidget);
-        await tester.ensureVisible(buttons);
-        await tester.tap(buttons);
+        final hasExtra = [HomeScene.searching, HomeScene.assigned, HomeScene.cleaning].contains(scene);
+        expect(buttons, findsNWidgets(hasExtra ? 2 : 1));
+        await tester.ensureVisible(buttons.first);
+        await tester.tap(buttons.first);
+        if (hasExtra) {
+          await tester.ensureVisible(find.text('Заказать уборку'));
+          await tester.tap(find.text('Заказать уборку'));
+          expect(actions.last, HomeAction.schedule);
+          expect(find.text('Осталось 2 уборки'), findsOneWidget);
+        }
         await tester.pumpAndSettle();
         expect(actions, isNotEmpty);
         expect(tester.takeException(), isNull);
       });
     }
   }
+  testWidgets('no remaining visits offers a new package instead of scheduling', (tester) async {
+    final actions = <HomeAction>[];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(
+      child: CustomerHomeReference(scene: HomeScene.searching, total: 4,
+        remaining: 0, primaryKey: GlobalKey(), onAction: actions.add)))));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Заказать уборку'), findsNothing);
+    await tester.ensureVisible(find.text('Выбрать новый пакет'));
+    await tester.tap(find.text('Выбрать новый пакет'));
+    expect(actions, [HomeAction.packages]);
+  });
   testWidgets('progress visibly fills 1,2,4 of 4 segments', (tester) async {
     for (final count in [1, 2, 4]) {
       await tester.pumpWidget(MaterialApp(

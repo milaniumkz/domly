@@ -1294,6 +1294,13 @@
     ]
   },
   {
+    "key": "t_0678f06e70190c14",
+    "source": "Ваша уборка",
+    "locations": [
+      "lib/ui/first_run_tutorial.dart"
+    ]
+  },
+  {
     "key": "t_108a46252c8de3a6",
     "source": "Ваша уборка назначена",
     "locations": [
@@ -1320,6 +1327,13 @@
     "source": "Ваши данные и подписка",
     "locations": [
       "lib/screens/client/profile_screen.dart"
+    ]
+  },
+  {
+    "key": "t_9decf49d9f667b05",
+    "source": "Ваши заказанные уборки",
+    "locations": [
+      "lib/ui/first_run_tutorial.dart"
     ]
   },
   {
@@ -3449,6 +3463,13 @@
     ]
   },
   {
+    "key": "t_1955deb7343765f6",
+    "source": "Доступно для записи на другую дату",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
+    ]
+  },
+  {
     "key": "t_8c25926796ab1f8d",
     "source": "Доступно к выводу сейчас",
     "locations": [
@@ -3559,6 +3580,13 @@
     "source": "Если хотите заменить фото нажмите на него",
     "locations": [
       "lib/screens/client/area_confirmation_screen.dart"
+    ]
+  },
+  {
+    "key": "t_c198fc1e9a36ecf2",
+    "source": "Ещё одна уборка",
+    "locations": [
+      "lib/ui/first_run_tutorial.dart"
     ]
   },
   {
@@ -4026,7 +4054,7 @@
     "source": "Заказать уборку",
     "locations": [
       "lib/screens/client/client_home_screen.dart",
-      "lib/ui/first_run_tutorial.dart"
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -4381,6 +4409,13 @@
     ]
   },
   {
+    "key": "t_0f70a3e214a63950",
+    "source": "Здесь видно, сколько уборок доступно. Нажмите «Заказать уборку», чтобы выбрать другую дату, сохранив текущий заказ.",
+    "locations": [
+      "lib/ui/first_run_tutorial.dart"
+    ]
+  },
+  {
     "key": "t_ae2e9f2539f69405",
     "source": "Здесь вы можете настроить уведомления и заново пройти обучение.",
     "locations": [
@@ -4402,8 +4437,8 @@
     ]
   },
   {
-    "key": "t_98fc04f492b18260",
-    "source": "Здесь можно выбрать пакет или рассчитать стоимость по квадратуре.",
+    "key": "t_77feaaa67cabda1d",
+    "source": "Здесь можно выбрать дополнительные услуги или пригласить друга.",
     "locations": [
       "lib/ui/first_run_tutorial.dart"
     ]
@@ -4413,6 +4448,13 @@
     "source": "Здесь отображаются накопленные бонусы. История начислений и оплат открывается по нажатию на карточку.",
     "locations": [
       "lib/screens/client/bonus_screen.dart"
+    ]
+  },
+  {
+    "key": "t_58255e00f460bc40",
+    "source": "Здесь показаны статус уборки, дата и исполнитель. Кнопки в карточке зависят от состояния заказа.",
+    "locations": [
+      "lib/ui/first_run_tutorial.dart"
     ]
   },
   {
@@ -5341,6 +5383,13 @@
     "source": "Легенда",
     "locations": [
       "lib/screens/cleaner/cleaner_bonus_screen.dart"
+    ]
+  },
+  {
+    "key": "t_6fdaafa5bc054a72",
+    "source": "Листайте карточку влево или вправо. Первой показана ближайшая уборка. Автоматического переключения нет.",
+    "locations": [
+      "lib/ui/first_run_tutorial.dart"
     ]
   },
   {
@@ -8552,13 +8601,6 @@
     ]
   },
   {
-    "key": "t_2208e9605d7a114c",
-    "source": "Пакеты и калькулятор",
-    "locations": [
-      "lib/ui/first_run_tutorial.dart"
-    ]
-  },
-  {
     "key": "t_9fb889f04cf45367",
     "source": "Пакеты пока не загружены",
     "locations": [
@@ -9517,13 +9559,6 @@
     ]
   },
   {
-    "key": "t_3ed66244770e4d29",
-    "source": "После обучения реальный заказ начинается с этой кнопки. Дальше приложение считает сумму и ищет свободную уборщицу.",
-    "locations": [
-      "lib/ui/first_run_tutorial.dart"
-    ]
-  },
-  {
     "key": "t_c4d7bd939dfd004f",
     "source": "После ответа “Нет” уборщица не сможет завершить заказ без повторного подтверждения.",
     "locations": [
@@ -9683,8 +9718,7 @@
     "source": "Предварительная запись",
     "locations": [
       "lib/screens/client/client_home_screen.dart",
-      "lib/services/firestore_data_service.dart",
-      "lib/ui/first_run_tutorial.dart"
+      "lib/services/firestore_data_service.dart"
     ]
   },
   {
@@ -9750,6 +9784,13 @@
     "source": "Предложить допы",
     "locations": [
       "lib/screens/cleaner/cleaner_orders_screen.dart"
+    ]
+  },
+  {
+    "key": "t_9a8eb13bc82a76b3",
+    "source": "Предыдущая уборка",
+    "locations": [
+      "lib/ui/home_cleaning_pager.dart"
     ]
   },
   {
@@ -10769,7 +10810,8 @@
     "source": "Следующая уборка",
     "locations": [
       "lib/screens/client/client_home_screen.dart",
-      "lib/ui/customer_home_reference.dart"
+      "lib/ui/customer_home_reference.dart",
+      "lib/ui/home_cleaning_pager.dart"
     ]
   },
   {
@@ -11685,6 +11727,13 @@
     ]
   },
   {
+    "key": "t_d4199536affff40e",
+    "source": "Уборка {current} из {total}",
+    "locations": [
+      "lib/ui/home_cleaning_pager.dart"
+    ]
+  },
+  {
     "key": "t_0fd3b8ead3c15bf9",
     "source": "Уборка балкона",
     "locations": [
@@ -12111,6 +12160,13 @@
     "source": "Услуги",
     "locations": [
       "lib/services/firestore_data_service.dart"
+    ]
+  },
+  {
+    "key": "t_835ddc0355071e53",
+    "source": "Услуги и приглашения",
+    "locations": [
+      "lib/ui/first_run_tutorial.dart"
     ]
   },
   {
@@ -12834,13 +12890,6 @@
     "source": "Эксперт",
     "locations": [
       "lib/screens/cleaner/cleaner_bonus_screen.dart"
-    ]
-  },
-  {
-    "key": "t_faebf7bc89902d9e",
-    "source": "Эта кнопка нужна для заявки до запуска или без немедленной оплаты.",
-    "locations": [
-      "lib/ui/first_run_tutorial.dart"
     ]
   },
   {

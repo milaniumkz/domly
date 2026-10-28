@@ -137,7 +137,7 @@ void main() {
     await tester.tap(find.text('Start'));
     for (var i = 0; i < 15; i++)
       await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('1 из 8'), findsOneWidget);
+    expect(find.text('1 из 5'), findsOneWidget);
     expect(find.byKey(const ValueKey('tutorial-highlight')), findsOneWidget);
     await tester.tap(find.text('Пропустить').first);
     await tester.pumpAndSettle();
@@ -211,11 +211,11 @@ void main() {
                               height: 130,
                               width: 400),
                           SizedBox(
-                              key: DomlyTutorialTargets.clientOrderButton,
+                              key: DomlyTutorialTargets.clientCleaningCard,
                               height: 45,
                               width: 400),
                           SizedBox(
-                              key: DomlyTutorialTargets.clientPrelaunchButton,
+                              key: DomlyTutorialTargets.clientCleaningPager,
                               height: 45,
                               width: 400),
                         ]))));
@@ -285,7 +285,7 @@ class _DelayedTutorialHomeState extends State<_DelayedTutorialHome> {
         SizedBox(key: DomlyTutorialTargets.clientHomeTop, height: 60),
         if (ready)
           SizedBox(
-              key: DomlyTutorialTargets.clientOrderButton,
+              key: DomlyTutorialTargets.clientCleaningCard,
               height: 50,
               width: 250)
         else
