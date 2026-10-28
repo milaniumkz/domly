@@ -2116,6 +2116,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                           .clientPackageActions,
                                       child: HomeReferenceShortcuts(
                                           onAction: act)),
+                                  const SizedBox(height: 12),
+                                  const _CompanyPromotionsSection(),
                                 ])))))));
   }
 
