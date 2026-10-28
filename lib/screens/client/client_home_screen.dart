@@ -1,3 +1,5 @@
+import '../../ui/home_cleaning_pager.dart';
+import '../../utils/home_cleaning_orders.dart';
 import '../../ui/home_order_actions.dart';
 import '../../ui/customer_home_reference.dart';
 import '../../services/backend_api_service.dart';
@@ -41,6 +43,7 @@ class ClientHomeScreen extends StatefulWidget {
 }
 
 class _ClientHomeScreenState extends State<ClientHomeScreen> {
+  String? _visibleHomeCleaningId;
   final _data = FirestoreDataService.instance;
   late final _customerPackages = _data.customerPackagesStream();
   late final _customerProfile = _data.customerProfileStream();
@@ -1998,6 +2001,17 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       required List<Map<String, dynamic>> slots,
       Map<String, dynamic>? order,
       Map<String, dynamic>? subscription}) {
+    final cleanings = orderedHomeCleanings(orders);
+    var page = cleanings.indexWhere((o) => o['id'] == _visibleHomeCleaningId);
+    if (page < 0) page = 0;
+    if (cleanings.isNotEmpty) {
+      order = cleanings[page];
+      subscription = subscriptions.where((p) => p['id'] ==
+          (order!['subscriptionId'] ?? order['customerPackageId'])).firstOrNull;
+    }
+    void changePage(int index) => setState(() {
+      _visibleHomeCleaningId = cleanings[index]['id'].toString();
+    });
     final history = orders.where(isFinishedCleaning).toList()
       ..sort((a, b) => _orderTimestamp(b).compareTo(_orderTimestamp(a)));
     final frozen =
@@ -2090,7 +2104,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                   if (_pendingConnectionAddresses(profile)
                                       .isNotEmpty)
                                     _addressSwitcherCard(profile),
-                                  CustomerHomeReference(
+                                  HomeCleaningPager(
+                                    index: page, count: cleanings.length,
+                                    onChanged: changePage,
+                                    child: CustomerHomeReference(
+                                      cardKey: DomlyTutorialTargets.clientCleaningCard,
+                                      bookingKey: DomlyTutorialTargets.clientBookingSummary,
+                                      navigation: cleanings.length < 2 ? null : HomeCleaningPageIndicator(
+                                        key: DomlyTutorialTargets.clientCleaningPager,
+                                        index: page, count: cleanings.length, onChanged: changePage),
                                       scene: scene,
                                       primaryKey: DomlyTutorialTargets
                                           .clientOrderButton,
@@ -2116,7 +2138,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                       cleanerName: (target['cleanerName'] ?? '')
                                           .toString(),
                                       cleanerPhotoUrl: target['cleanerPhotoUrl']
-                                          ?.toString()),
+                                          ?.toString())),
                                   const SizedBox(height: 12),
                                   KeyedSubtree(
                                       key: DomlyTutorialTargets

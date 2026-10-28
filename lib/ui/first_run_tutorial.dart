@@ -81,7 +81,8 @@ class DomlyFirstRunTutorial {
     required AppFlavor flavor,
   }) async {
     var shown = false;
-    final steps = flavor == AppFlavor.pro ? _cleanerSteps : _clientSteps;
+    final steps = List<_TutorialStep>.of(
+        flavor == AppFlavor.pro ? _cleanerSteps : _clientSteps);
     final navigator = Navigator.of(context);
     final title = flavor == AppFlavor.pro
         ? 'Как работать в Domly Pro'
@@ -185,6 +186,13 @@ class DomlyFirstRunTutorial {
           await WidgetsBinding.instance.endOfFrame;
         }
       }
+      // Resolve optional home sections before showing the first step so the
+      // counter has no gaps when there is only one order or no paid package.
+      if (index == 0 && flavor != AppFlavor.pro) {
+        steps.removeWhere((candidate) =>
+            candidate != step && candidate.routeName == '/client/home' &&
+            candidate.targetKey?.currentContext == null);
+      }
       shown = true;
       final action = await showDialog<_TutorialAction>(
         // ignore: use_build_context_synchronously
@@ -216,21 +224,29 @@ class DomlyFirstRunTutorial {
   static final _clientSteps = [
     _TutorialStep(
       icon: Icons.auto_awesome,
-      title: 'Заказать уборку',
+      title: 'Ваша уборка',
       body:
-          'После обучения реальный заказ начинается с этой кнопки. Дальше приложение считает сумму и ищет свободную уборщицу.',
+          'Здесь показаны статус уборки, дата и исполнитель. Кнопки в карточке зависят от состояния заказа.',
       target: _TutorialTarget.primaryAction,
       routeName: '/client/home',
-      targetKey: DomlyTutorialTargets.clientOrderButton,
+      targetKey: DomlyTutorialTargets.clientCleaningCard,
     ),
     _TutorialStep(
       icon: Icons.calendar_month_outlined,
-      title: 'Предварительная запись',
+      title: 'Ваши заказанные уборки',
       body:
-          'Эта кнопка нужна для заявки до запуска или без немедленной оплаты.',
+          'Листайте карточку влево или вправо. Первой показана ближайшая уборка. Автоматического переключения нет.',
       target: _TutorialTarget.prelaunch,
       routeName: '/client/home',
-      targetKey: DomlyTutorialTargets.clientPrelaunchButton,
+      targetKey: DomlyTutorialTargets.clientCleaningPager,
+    ),
+    _TutorialStep(
+      icon: Icons.add_task_outlined,
+      title: 'Ещё одна уборка',
+      body: 'Здесь видно, сколько уборок доступно. Нажмите «Заказать уборку», чтобы выбрать другую дату, сохранив текущий заказ.',
+      target: _TutorialTarget.secondaryActions,
+      routeName: '/client/home',
+      targetKey: DomlyTutorialTargets.clientBookingSummary,
     ),
     _TutorialStep(
       icon: Icons.campaign_outlined,
@@ -242,8 +258,8 @@ class DomlyFirstRunTutorial {
     ),
     _TutorialStep(
       icon: Icons.inventory_2_outlined,
-      title: 'Пакеты и калькулятор',
-      body: 'Здесь можно выбрать пакет или рассчитать стоимость по квадратуре.',
+      title: 'Услуги и приглашения',
+      body: 'Здесь можно выбрать дополнительные услуги или пригласить друга.',
       target: _TutorialTarget.secondaryActions,
       routeName: '/client/home',
       targetKey: DomlyTutorialTargets.clientPackageActions,

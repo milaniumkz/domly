@@ -33,6 +33,9 @@ class DomlyTutorialTargets {
     return route == null ? null : _navigationKeys[route]?[index];
   }
 
+  static final clientCleaningCard = GlobalKey(debugLabel: 'client_cleaning_card');
+  static final clientCleaningPager = GlobalKey(debugLabel: 'client_cleaning_pager');
+  static final clientBookingSummary = GlobalKey(debugLabel: 'client_booking_summary');
   static final clientHomeTop = GlobalKey(debugLabel: 'client_home_top');
   static final clientOrderButton = GlobalKey(debugLabel: 'client_order_button');
   static final clientPrelaunchButton =
