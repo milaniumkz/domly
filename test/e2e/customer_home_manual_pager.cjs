@@ -5,14 +5,15 @@ module.exports=async({p,root})=>{
  p.__homeState='multi';await p.goto('https://domly.kz/customer/#/client/home');
  await p.waitForSelector('flutter-view',{state:'attached'});await p.waitForTimeout(1600);
  await p.evaluate(()=>document.querySelector('flt-semantics-placeholder')?.click());
- await p.getByText('Уборка 1 из 4',{exact:true}).waitFor();
+ await p.waitForTimeout(1200);fs.writeFileSync(root+'/manual-pager-initial.txt',await p.locator('body').innerText());await p.screenshot({path:root+'/evidence/manual-pager-initial.png'});
+ await p.getByText('Уборка 1 из 4',{exact:true}).waitFor({state:'attached'});
  for(let n=1;n<=4;n++){
   const text=await p.locator('body').innerText();assert(text.includes(n+' ноября 2026'));
   assert(text.includes('Осталось 4 уборки'));assert(text.includes('Заказать уборку'));
   assert(text.includes(n===2?'Ваша уборка назначена':'Подбираем исполнителя'));
   await p.screenshot({path:root+'/evidence/manual-pager-'+n+'.png'});
   if(n<4){await p.mouse.move(315,430);await p.mouse.down();await p.mouse.move(70,430,{steps:12});await p.mouse.up();
-   await p.getByText('Уборка '+(n+1)+' из 4',{exact:true}).waitFor();}
+   await p.getByText('Уборка '+(n+1)+' из 4',{exact:true}).waitFor({state:'attached'});}
  }
  await p.waitForTimeout(6000);assert((await p.locator('body').innerText()).includes('Уборка 4 из 4'));
  await p.mouse.wheel(0,450);await p.waitForTimeout(300);

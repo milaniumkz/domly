@@ -13,6 +13,7 @@ class HomeCleaningPager extends StatelessWidget {
     var distance = 0.0;
     return GestureDetector(
     behavior: HitTestBehavior.opaque,
+    excludeFromSemantics: true,
     onHorizontalDragStart: (_) => distance = 0,
     onHorizontalDragUpdate: (details) => distance += details.delta.dx,
     onHorizontalDragEnd: count < 2 ? null : (details) {
