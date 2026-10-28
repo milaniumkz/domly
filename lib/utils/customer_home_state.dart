@@ -41,3 +41,34 @@ bool isFinishedCleaning(Map<String, dynamic> order) => {
         .toString()
         .trim()
         .toLowerCase());
+
+bool isHomePackageFrozen(Map<String, dynamic> item, {DateTime? now}) {
+  final until = DateTime.tryParse((item['freezeUntil'] ?? '').toString());
+  return item['status'] == 'frozen' ||
+      (until != null && until.isAfter(now ?? DateTime.now()));
+}
+
+String homePaymentTitle(Map<String, dynamic> order) {
+  final payment = order['latestPaymentStatus'] ?? order['paymentStatus'];
+  if (['cancelled', 'rejected', 'failed'].contains(payment))
+    return 'Оплата не завершена';
+  if (payment == 'paid') return 'Пакет оплачен';
+  if (payment == 'invoice_requested') return 'Ожидание оплаты';
+  return 'Ожидание счёта';
+}
+
+String homePaymentDescription(Map<String, dynamic> order) {
+  switch (homePaymentTitle(order)) {
+    case 'Оплата не завершена':
+      return 'Заказ сохранён. Вы можете выбрать другой способ оплаты.';
+    case 'Пакет оплачен':
+      return 'Оплата подтверждена';
+    case 'Ожидание оплаты':
+      return 'Счёт уже выставлен. Статус обновится после оплаты.';
+    default:
+      return 'Заявка отправлена. Дождитесь выставления счёта.';
+  }
+}
+
+String homeAmountLabel(int amount) =>
+    '${amount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (match) => '${match[1]} ')} ₸';

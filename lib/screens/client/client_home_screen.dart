@@ -1,3 +1,4 @@
+import '../../ui/customer_home_card.dart';
 import '../../ui/cleaning_schedule_summary.dart';
 import '../../utils/customer_home_state.dart';
 import '../../theme/domly_palette.dart';
@@ -1920,8 +1921,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     final statusText = _slotStatusText(
       (upcomingSlot['status'] ?? '').toString(),
     );
-    final timeText = (upcomingSlot['time'] ?? '09:00 - 12:27').toString();
-    final area = profile['area'] ?? upcomingSlot['area'] ?? 100;
+    final timeText = (upcomingSlot['time'] ?? '').toString();
+    final area = upcomingSlot['area'] ?? profile['area'] ?? '—';
     final cleanerName = _slotCleanerDisplayName(upcomingSlot);
     final totalVisits = _aggregateIncludedVisits(allSubscriptions);
     final availableSelections = _aggregateAvailableSelections(
@@ -1987,64 +1988,41 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 const SizedBox(height: 12),
                 const _PromoBannersSection(),
                 const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 34),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        (isCurrentCleaning
-                                ? 'Текущая уборка'
-                                : 'Следующая уборка')
-                            .tr(),
-                        style: TextStyle(
-                          color: DomlyPalette.foreground(Color(0xFF658170)),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          height: 19 / 14,
-                        ),
-                      ),
-                      const SizedBox(height: 9),
-                      CleaningScheduleSummary(
-                          dateText: dateText,
-                          status: _FigmaStatusPill(label: statusText),
-                          fontSize: 27),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 19),
-                CustomerNextCleaningCard(
-                  onTap: () => _runProtectedAction(
-                    () => _openFocusedClientOrder(upcomingSlot),
-                  ),
-                  timeText: timeText,
-                  areaText: '$area м²',
-                  cleanerName: cleanerName,
+                CustomerHomeCard(
+                  title: isCurrentCleaning
+                      ? 'Уборка идёт'
+                      : ((upcomingSlot['cleanerId'] ?? '').toString().isNotEmpty
+                          ? 'Уборка назначена'
+                          : 'Ищем исполнителя'),
+                  status: statusText,
+                  description: '$dateText\n$cleanerName',
+                  icon: isCurrentCleaning
+                      ? Icons.cleaning_services_outlined
+                      : Icons.calendar_month_outlined,
+                  metadata: [
+                    timeText,
+                    '$area м²',
+                    '${'Осталось'.tr()}: $availableSelections'
+                  ],
                   planName: planName,
-                  totalVisits: totalVisits,
-                  availableSelections: availableSelections,
+                  total: totalVisits,
                   used: used,
-                  showUsageStats: true,
-                  onSelectDates: isCurrentCleaning || !canSelectDates
+                  primaryLabel: 'Детали уборки',
+                  onPrimary: () => _runProtectedAction(
+                      () => _openFocusedClientOrder(upcomingSlot)),
+                  detailsLabel: 'Выбрать даты',
+                  onDetails: isCurrentCleaning || !canSelectDates
                       ? null
-                      : () => _runProtectedAction(
-                            () => Navigator.pushNamed(
-                              context,
-                              '/client/package-calendar',
+                      : () => _runProtectedAction(() => Navigator.pushNamed(
+                              context, '/client/package-calendar',
                               arguments: {
                                 'subscriptionId':
                                     schedulingSubscription?['id'] ??
-                                        activeSubscription!['id'],
-                              },
-                            ),
-                          ),
-                  onDetails: () => _runProtectedAction(
-                    () => _openFocusedClientOrder(upcomingSlot),
-                  ),
+                                        activeSubscription?['id'],
+                              })),
                   onCancel: canCancelCleaning
                       ? () => _runProtectedAction(
-                            () => _cancelScheduledCleaning(upcomingSlot),
-                          )
+                          () => _cancelScheduledCleaning(upcomingSlot))
                       : null,
                 ),
                 OrderPaymentRetry(order: upcomingSlot, data: _data),
@@ -2098,6 +2076,73 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         ),
       ),
     );
+  }
+
+  Widget _homeIdleCard(List<Map<String, dynamic>> subscriptions,
+      List<Map<String, dynamic>> orders) {
+    final frozen =
+        subscriptions.where((item) => isHomePackageFrozen(item)).firstOrNull;
+    final exhausted = subscriptions
+        .where((item) =>
+            ['completed', 'expired', 'exhausted'].contains(item['status']) ||
+            (item['status'] == 'active' &&
+                (item['remainingCleanings'] as num?) == 0))
+        .firstOrNull;
+    final history = orders.where(isFinishedCleaning).toList()
+      ..sort((a, b) => _orderTimestamp(b).compareTo(_orderTimestamp(a)));
+    final last = history.firstOrNull;
+    if (frozen != null) {
+      return CustomerHomeCard(
+          primaryKey: DomlyTutorialTargets.clientOrderButton,
+          title: 'Пакет заморожен',
+          status: 'На паузе',
+          description: 'Срок действия пакета продлевается на дни заморозки',
+          icon: Icons.ac_unit_outlined,
+          planName: (frozen['package'] ?? 'Мой пакет').toString(),
+          primaryLabel: 'Мой пакет',
+          onPrimary: () => _runProtectedAction(() => Navigator.pushNamed(
+              context, '/client/package-calendar',
+              arguments: {'subscriptionId': frozen['id']})));
+    }
+    if (exhausted != null) {
+      return CustomerHomeCard(
+          primaryKey: DomlyTutorialTargets.clientOrderButton,
+          title: exhausted['status'] == 'expired'
+              ? 'Срок пакета истёк'
+              : 'Пакет использован',
+          status: 'Выберите новый пакет',
+          description: '',
+          icon: Icons.task_alt,
+          planName: (exhausted['package'] ?? 'Мой пакет').toString(),
+          primaryLabel: 'Выбрать пакет',
+          onPrimary: () => _runProtectedAction(_showHomePackagePicker),
+          onDetails: () => _runProtectedAction(
+              () => Navigator.pushNamed(context, '/client/orders')));
+    }
+    if (last != null) {
+      final completed = (last['orderStatus'] ?? last['status']) == 'completed';
+      return CustomerHomeCard(
+          primaryKey: DomlyTutorialTargets.clientOrderButton,
+          title: completed ? 'Уборка завершена' : 'Уборка отменена',
+          status: completed ? 'Выполнено' : 'Отменено',
+          description: cleaningDateLabel(last),
+          icon: completed ? Icons.task_alt : Icons.event_busy_outlined,
+          primaryLabel: 'Выбрать пакет',
+          onPrimary: () => _runProtectedAction(_showHomePackagePicker),
+          onDetails: () => _runProtectedAction(() => Navigator.pushNamed(
+                  context, '/client/orders', arguments: {
+                'initialTab': 'history',
+                'focusOrderId': _homeFocusOrderId(last)
+              })));
+    }
+    return CustomerHomeCard(
+        primaryKey: DomlyTutorialTargets.clientOrderButton,
+        title: 'Чистый дом начинается здесь',
+        status: 'Нет активного пакета',
+        description: 'Выберите пакет уборок для вашей квартиры',
+        icon: Icons.home_outlined,
+        primaryLabel: 'Выбрать пакет',
+        onPrimary: () => _runProtectedAction(_showHomePackagePicker));
   }
 
   Widget _buildFigmaHomeEmptyShell({
@@ -2154,41 +2199,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     child: _houseStatusSection(context, houseId),
                   ),
                 ] else ...[
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 34),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Следующая уборка'.tr(),
-                          style: TextStyle(
-                            color: DomlyPalette.foreground(Color(0xFF658170)),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            height: 19 / 14,
-                          ),
-                        ),
-                        SizedBox(height: 13),
-                        CleaningScheduleSummary(
-                            dateText: 'Не запланировано'.tr(),
-                            status: _FigmaStatusPill(
-                                label: 'Ожидание', muted: true),
-                            fontSize: 16),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 19),
-                  _FigmaEmptyCleaningCard(
-                    onTap: () => _runProtectedAction(_showHomePackagePicker),
-                  ),
+                  _homeIdleCard(allSubscriptions, allOrders),
                   const SizedBox(height: 14),
-                  _FigmaPrimaryHomeButton(
-                    key: DomlyTutorialTargets.clientOrderButton,
-                    label: 'Подобрать подписку',
-                    onPressed: () =>
-                        _runProtectedAction(_showHomePackagePicker),
-                  ),
-                  const SizedBox(height: 10),
                   _prelaunchBookingButton(allSubscriptions, allOrders),
                   const SizedBox(height: 14),
                   const _CompanyPromotionsSection(),
@@ -2223,22 +2235,6 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 25),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 33, right: 33),
-                    child: Text(
-                      'У Вас нет активной подписки\n'
-                              'Оформите ее, чтобы начать пользоваться сервисом'
-                          .tr(),
-                      style: TextStyle(
-                        color: DomlyPalette.foreground(Color(0xFF658170)),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        height: 18 / 13,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                 ],
                 const SizedBox(height: 20),
                 _figmaBonusBanner(context),
@@ -2263,9 +2259,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     required String planName,
     required List<Map<String, dynamic>> allOrders,
   }) {
-    final area = profile['area'] ?? order['area'] ?? 100;
-    final statusText = _homeOrderStatusText(order);
-    final subtitle = _homeOrderSubtitle(order);
+    final area = order['area'] ?? profile['area'] ?? '—';
     final orderId = (order['id'] ?? order['orderId'] ?? '').toString().trim();
     final orderSubscriptionId =
         (order['subscriptionId'] ?? '').toString().trim();
@@ -2288,19 +2282,6 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       );
     }
 
-    void primaryAction() {
-      if (canSelectDates) {
-        scheduleAction();
-        return;
-      }
-      _runProtectedAction(_showHomePackagePicker);
-    }
-
-    final actionLabel = canSelectDates ? 'Заказать уборку' : 'Выбрать пакет';
-    final timeText = canSelectDates ? 'Выберите дату и время' : subtitle;
-    final cleanerText = canSelectDates
-        ? 'Исполнитель после выбора даты'
-        : 'Исполнитель будет назначен';
     final totalVisits = _aggregateIncludedVisits(allSubscriptions);
     final usedSelections = _aggregateUsedVisits(allSubscriptions, slots);
 
@@ -2340,55 +2321,44 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 const SizedBox(height: 12),
                 const _PromoBannersSection(),
                 const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 34),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Следующая уборка'.tr(),
-                        style: TextStyle(
-                          color: DomlyPalette.foreground(Color(0xFF658170)),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          height: 19 / 14,
-                        ),
-                      ),
-                      const SizedBox(height: 9),
-                      CleaningScheduleSummary(
-                          dateText: 'Дата не выбрана'.tr(),
-                          status: _FigmaStatusPill(label: statusText),
-                          fontSize: 22),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 19),
-                CustomerNextCleaningCard(
-                  onTap: canSelectDates
+                CustomerHomeCard(
+                  primaryKey: DomlyTutorialTargets.clientOrderButton,
+                  title: canSelectDates
+                      ? 'Запланируйте уборку'
+                      : homePaymentTitle(order),
+                  status: canSelectDates || order['paymentStatus'] == 'paid'
+                      ? 'Пакет оплачен'
+                      : 'Не оплачено',
+                  description: canSelectDates
+                      ? 'Исполнителя назначим после выбора даты'
+                      : homePaymentDescription(order),
+                  icon: canSelectDates
+                      ? Icons.calendar_month_outlined
+                      : Icons.receipt_long_outlined,
+                  metadata: [
+                    '$area м²',
+                    if (canSelectDates)
+                      '${'Осталось'.tr()}: $pendingSelections',
+                    if (!canSelectDates && order['payableAmount'] is num)
+                      homeAmountLabel((order['payableAmount'] as num).toInt()),
+                  ],
+                  planName: planName,
+                  total: canSelectDates ? totalVisits : null,
+                  used: canSelectDates ? usedSelections : null,
+                  primaryLabel:
+                      canSelectDates ? 'Выбрать дату и время' : 'Детали оплаты',
+                  onPrimary: canSelectDates
                       ? scheduleAction
                       : () => _runProtectedAction(
-                            () => _openFocusedClientOrder(order),
-                          ),
-                  timeText: timeText,
-                  areaText: '$area м²',
-                  cleanerName: cleanerText,
-                  planName: planName,
-                  totalVisits: totalVisits,
-                  availableSelections: pendingSelections,
-                  used: usedSelections,
-                  showUsageStats: true,
-                  onSelectDates: canSelectDates ? scheduleAction : null,
+                          () => _openFocusedClientOrder(order)),
+                  detailsLabel: canSelectDates ? 'Мой пакет' : 'Детали заказа',
                   onDetails: () =>
                       _runProtectedAction(() => _openFocusedClientOrder(order)),
-                  onCancel: null,
+                  footer: order['type'] == 'package_purchase'
+                      ? null
+                      : OrderPaymentRetry(order: order, data: _data),
                 ),
                 const SizedBox(height: 12),
-                _FigmaPrimaryHomeButton(
-                  key: DomlyTutorialTargets.clientOrderButton,
-                  label: actionLabel,
-                  onPressed: primaryAction,
-                ),
-                const SizedBox(height: 10),
                 _prelaunchBookingButton(allSubscriptions, allOrders),
                 const SizedBox(height: 14),
                 const _CompanyPromotionsSection(),
@@ -3779,6 +3749,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               (item['status'] ?? '').toString().trim().toLowerCase() ==
                   'active' &&
               _isPaidSubscription(item) &&
+              !isHomePackageFrozen(item) &&
               !_isAddonOnlySubscription(item) &&
               _includedVisits(item) > 0,
         )
@@ -4177,68 +4148,27 @@ class _FigmaHomeHero extends StatelessWidget {
   Widget build(BuildContext context) {
     DomlyPalette.watch(context);
 
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            DomlyPalette.surface(Color(0xFF439F73)),
-            DomlyPalette.surface(Color(0xFF80D4B0))
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 279,
-            top: -49,
-            child: Container(
-              width: 132,
-              height: 132,
-              decoration: BoxDecoration(
-                color:
-                    DomlyPalette.surface(Colors.white.withValues(alpha: 0.08)),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Positioned(
-            left: 22,
-            top: 9,
-            right: 22,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Добро пожаловать'.tr(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: DomlyPalette.foreground(Colors.white),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    height: 18 / 13,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  userName.trim().isEmpty ? "Пользователь".tr() : userName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: DomlyPalette.foreground(Colors.white),
-                    fontSize: 23,
-                    fontWeight: FontWeight.w700,
-                    height: 29 / 23,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 12),
+      child: Row(children: [
+        Image.asset('assets/logo.png',
+            width: 78, height: 64, fit: BoxFit.contain, semanticLabel: 'Domly'),
+        const SizedBox(width: 14),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Добро пожаловать'.tr(),
+              style: TextStyle(
+                  color: DomlyPalette.foreground(const Color(0xFF657C70)),
+                  fontSize: 14)),
+          const SizedBox(height: 4),
+          Text(userName.trim().isEmpty ? 'Пользователь'.tr() : userName,
+              style: TextStyle(
+                  color: DomlyPalette.foreground(const Color(0xFF203E31)),
+                  fontSize: 23,
+                  fontWeight: FontWeight.w700)),
+        ])),
+      ]),
     );
   }
 }
