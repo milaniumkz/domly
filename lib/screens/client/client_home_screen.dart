@@ -152,6 +152,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     String title = 'Выберите пакет',
     String subtitle = 'Сразу откроем оформление заказа по выбранному пакету.',
   }) async {
+    // A sheet owns its subscriptions. The home page remains mounted beneath it;
+    // single-subscription streams cannot be reused here or on a later opening.
+    final pickerPackages = _data.customerPackagesStream();
+    final pickerSubscriptions = _data.customerSubscriptionsStream();
+    final pickerOrders = _data.customerOrdersStream();
+    final pickerPrelaunch = _data.customerPrelaunchBookingsStream();
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: DomlyPalette.surface(Colors.transparent),
@@ -174,7 +180,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 ],
               ),
               child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: _customerPackages,
+                stream: pickerPackages,
                 builder: (context, snapshot) {
                   TranslationScope.watch(context);
                   final packages = _mergeHomePackages(
@@ -325,14 +331,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                               ),
                             ),
                           StreamBuilder<List<Map<String, dynamic>>>(
-                            stream: _customerSubscriptions,
+                            stream: pickerSubscriptions,
                             builder: (context, subscriptions) =>
                                 StreamBuilder<List<Map<String, dynamic>>>(
-                              stream: _customerOrders,
+                              stream: pickerOrders,
                               builder: (context, orders) =>
                                   subscriptions.hasData && orders.hasData
                                       ? _prelaunchBookingButton(
-                                          subscriptions.data!, orders.data!)
+                                          subscriptions.data!, orders.data!,
+                                          bookings: pickerPrelaunch)
                                       : const SizedBox.shrink(),
                             ),
                           ),
@@ -2817,10 +2824,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Widget _prelaunchBookingButton(
     List<Map<String, dynamic>> subscriptions,
-    List<Map<String, dynamic>> orders,
-  ) {
+    List<Map<String, dynamic>> orders, {
+    required Stream<List<Map<String, dynamic>>> bookings,
+  }) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _customerPrelaunchBookings,
+      stream: bookings,
       builder: (context, prelaunchSnapshot) {
         TranslationScope.watch(context);
         final hasPrelaunch = _hasActivePrelaunchBooking(prelaunchSnapshot.data);
