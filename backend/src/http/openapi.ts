@@ -419,6 +419,8 @@ export const openApiSpec = {
         requestBody: jsonBody({ status: 'approved' }),
       },
     },
+    '/payments/{id}/resume-purchase': { post: { ...secured('Заказчик: повторить оплату своей неоплаченной покупки пакета'), parameters: [path('id')] } },
+    '/payments/{id}/cancel-purchase': { post: { ...secured('Заказчик: отменить неоплаченную покупку пакета и вернуть списанные бонусы'), parameters: [path('id')] } },
     '/payments/{id}/confirm': { post: { ...secured('Админ: подтвердить оплату'), parameters: [path('id')] } },
     '/payments/{id}/reject': { post: { ...secured('Админ: отклонить оплату'), parameters: [path('id')] } },
     '/payments/{id}/kaspi-invoice': {
