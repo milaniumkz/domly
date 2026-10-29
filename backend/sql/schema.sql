@@ -1534,3 +1534,21 @@ CREATE INDEX IF NOT EXISTS notification_deliveries_pending
 
 -- Preserve editable summaries independently of the full legal/information text.
 ALTER TABLE content_pages ADD COLUMN IF NOT EXISTS presentation JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- A deletion closes access immediately; support can restore the same account for 30 days.
+CREATE TABLE IF NOT EXISTS account_deletion_requests (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  previous_status TEXT NOT NULL,
+  previous_registration_status TEXT,
+  previous_verification_status TEXT,
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  restore_until TIMESTAMPTZ NOT NULL,
+  restored_at TIMESTAMPTZ,
+  restored_by UUID REFERENCES app_users(id) ON DELETE SET NULL,
+  anonymized_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS account_deletion_active_user ON account_deletion_requests(user_id)
+  WHERE restored_at IS NULL AND anonymized_at IS NULL;
+CREATE INDEX IF NOT EXISTS account_deletion_expiry ON account_deletion_requests(restore_until)
+  WHERE restored_at IS NULL AND anonymized_at IS NULL;

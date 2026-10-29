@@ -119,7 +119,7 @@ export const openApiSpec = {
       },
     },
     '/me': {
-      delete: { ...secured('Удалить и обезличить свой аккаунт'), responses: okError() },
+      delete: { ...secured('Закрыть доступ к своему аккаунту; поддержка может восстановить его 30 дней, затем контакты обезличиваются'), responses: okError() },
       get: secured('Текущий пользователь'),
       patch: {
         ...secured('Обновить профиль пользователя'),
@@ -610,6 +610,7 @@ export const openApiSpec = {
       },
     },
     '/admin/packagePurchases/{id}/details': { get: { ...secured('Админ: детали покупки пакета и история платежей'), parameters: [path('id')] } },
+    '/admin/users/{id}/restore': { post: { ...secured('Админ: восстановить удалённый аккаунт в течение 30 дней без изменения пакетов и платежей'), parameters: [path('id')] } },
     '/admin/orders/{id}/details': { get: { ...secured('Админ: детали заказа, клиент, уборщица, допы, платежи'), parameters: [path('id')] } },
     '/admin/orders/{id}': {
       patch: {

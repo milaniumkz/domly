@@ -4570,7 +4570,13 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
               SELECT u.id, u.created_at FROM app_users u ${where}
               ORDER BY u.created_at DESC,u.id DESC LIMIT $${values.length - 1} OFFSET $${values.length}
             )
-            SELECT u.id, u.numeric_id, u.full_name, u.phone, u.email, u.status, u.rating, u.bonus_balance, u.created_at,
+            SELECT u.id, u.numeric_id, u.full_name, u.phone, u.email, u.status, u.rating, u.bonus_balance, u.created_at,u.deleted_at,
+                   (SELECT MAX(d.restore_until) FROM account_deletion_requests d WHERE d.user_id=u.id AND d.restored_at IS NULL AND d.anonymized_at IS NULL) AS restore_until,
+                   (SELECT COUNT(*)::int FROM customer_packages cp WHERE cp.customer_id=u.id AND EXISTS
+                     (SELECT 1 FROM payments p WHERE p.customer_package_id=cp.id AND p.status IN ('paid','refunded'))) AS paid_package_count,
+                   (SELECT COALESCE(SUM(p.amount),0) FROM payments p WHERE p.customer_id=u.id AND p.status IN ('paid','refunded')) AS paid_total,
+                   (SELECT COALESCE(SUM(cp.available_cleanings),0) FROM customer_packages cp WHERE cp.customer_id=u.id
+                     AND cp.status IN ('active','frozen') AND EXISTS(SELECT 1 FROM payments p WHERE p.customer_package_id=cp.id AND p.status='paid')) AS remaining_paid_cleanings,
                    (SELECT COUNT(*)::int FROM service_orders o WHERE o.customer_id=u.id) AS orders_count,
                    (SELECT COUNT(*)::int FROM payments pay WHERE pay.customer_id=u.id) AS payments_count
             FROM page JOIN app_users u ON u.id=page.id

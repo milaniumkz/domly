@@ -1113,3 +1113,12 @@ test('cleaner offer pushes request background priority, audible channels and ret
   }
   assert.equal(buildFcmMessage(['device'],'Сообщение','Текст',{targetType:'chat'}).android,undefined);
 });
+
+
+test('deleted accounts cannot request a login code during the support recovery period',async()=>{
+  let sent=0;
+  const db={query:async()=>({rows:[{role:'customer',status:'blocked',deleted_at:new Date()}]})};
+  const service=new AuthService(db as any,{sendOtp:async()=>{sent++;}} as any);
+  await assert.rejects(service.requestOtp('+77000000000','customer'),(error:any)=>error.code==='account_deleted');
+  assert.equal(sent,0);
+});

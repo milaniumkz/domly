@@ -2,6 +2,7 @@ import '../utils/admin_addon_text.dart';
 import '../utils/legal_document_sections.dart';
 import 'admin_text_catalog.dart';
 import 'admin_order_actions.dart';
+import 'package_purchase_service.dart';
 import '../localization/kazakh_translations.dart';
 import '../utils/addon_request_data.dart';
 import 'notification_count_stream.dart';
@@ -22,6 +23,7 @@ import 'dart:math' as math;
 
 import '../utils/backend_compat.dart';
 import '../utils/admin_cleaner_data.dart';
+import '../utils/admin_customer_data.dart';
 import '../utils/admin_order_data.dart';
 import '../utils/cleaner_order_data.dart';
 import 'package:flutter/foundation.dart';
@@ -1080,7 +1082,9 @@ class FirestoreDataService {
       );
     }
     return _backendPollingStream(
-      () => BackendApiService.instance.getList('/admin/users'),
+      () => loadAdminCustomers((offset, limit) => BackendApiService.instance
+          .getList('/admin/users',
+              query: {'offset': '$offset', 'limit': '$limit'})),
     ).map((items) {
       items.sort((a, b) {
         final leftMs = _timestampMillis(
@@ -1093,6 +1097,10 @@ class FirestoreDataService {
       });
       return items;
     });
+  }
+
+  Future<void> restoreDeletedCustomer(String userId) async {
+    await BackendApiService.instance.postMap('/admin/users/$userId/restore');
   }
 
   Stream<List<Map<String, dynamic>>> adminReferralStatsStream() {
@@ -1720,9 +1728,9 @@ class FirestoreDataService {
       );
     }
     return _backendPollingStream(() => loadAdminOrders(
-      (offset, limit) => BackendApiService.instance.getList('/admin/orders',
-        query: {'offset': '$offset', 'limit': '$limit'}),
-    ));
+          (offset, limit) => BackendApiService.instance.getList('/admin/orders',
+              query: {'offset': '$offset', 'limit': '$limit'}),
+        ));
   }
 
   Stream<List<Map<String, dynamic>>> adminOrderRecordsStream() {
@@ -1730,11 +1738,13 @@ class FirestoreDataService {
     return _backendPollingStream(() async {
       final lists = await Future.wait([
         for (final section in ['orders', 'packagePurchases'])
-          loadAdminOrders((offset, limit) => BackendApiService.instance.getList('/admin/$section',
-            query: {'offset': '$offset', 'limit': '$limit'})),
+          loadAdminOrders((offset, limit) => BackendApiService.instance.getList(
+              '/admin/$section',
+              query: {'offset': '$offset', 'limit': '$limit'})),
       ]);
-      return [...lists[0], ...lists[1]]..sort((a,b) =>
-        _timestampMillis(b['createdAt']).compareTo(_timestampMillis(a['createdAt'])));
+      return [...lists[0], ...lists[1]]..sort((a, b) =>
+          _timestampMillis(b['createdAt'])
+              .compareTo(_timestampMillis(a['createdAt'])));
     });
   }
 
@@ -11666,6 +11676,7 @@ class FirestoreDataService {
 
   Future<Map<String, dynamic>> cancelPendingOrder({
     required String orderId,
+    bool packagePurchase = false,
   }) async {
     final normalizedOrderId = orderId.trim();
     if (normalizedOrderId.isEmpty) {
@@ -11713,6 +11724,9 @@ class FirestoreDataService {
       return {'ok': true, 'orderId': orderId};
     }
 
+    if (packagePurchase) {
+      return cancelUnpaidPackage(BackendApiService.instance, orderId);
+    }
     try {
       final mapped = await BackendApiService.instance.postMap(
         '/orders/$orderId/cancel',
@@ -12499,8 +12513,10 @@ class FirestoreDataService {
       return;
     }
     if (data['type'] == 'order_status') {
-      await changeAdminOrderStatus(BackendApiService.instance,
-        (data['orderId'] ?? '').toString(), (data['toStatus'] ?? '').toString());
+      await changeAdminOrderStatus(
+          BackendApiService.instance,
+          (data['orderId'] ?? '').toString(),
+          (data['toStatus'] ?? '').toString());
       return;
     }
     await BackendApiService.instance.postMap(

@@ -12,7 +12,8 @@ import { env } from '../common/env';
 import { WapiOtpService, FcmService } from './integrations';
 import { publishToUser, publishToUsers } from '../realtime/sse';
 
-function assertOtpAccountActive(user: {status?: string} | undefined) {
+function assertOtpAccountActive(user: {status?: string;deleted_at?: unknown} | undefined) {
+  if(user?.deleted_at)throw new ApiError(403,'account_deleted','Аккаунт удалён. В течение 30 дней его можно восстановить через поддержку.');
   if (user?.status === 'blocked') throw new ApiError(403, 'account_blocked', 'Аккаунт заблокирован. Обратитесь в поддержку.');
   if (user?.status === 'rejected') throw new ApiError(403, 'account_rejected', 'Заявка аккаунта отклонена. Обратитесь в поддержку.');
 }
@@ -24,7 +25,7 @@ export class AuthService {
     if (role !== undefined && !['customer','cleaner'].includes(role)) throw new ApiError(400, 'invalid_role', 'Недопустимый тип аккаунта.');
     const normalized = normalizePhone(phone);
     const user = first<{role: string; status: string}>((await this.db.query(
-      'SELECT role,status FROM app_users WHERE phone=$1 AND role=$2', [normalized,role ?? 'customer'],
+      'SELECT role,status,deleted_at FROM app_users WHERE phone=$1 AND role=$2', [normalized,role ?? 'customer'],
     )).rows);
     assertOtpAccountActive(user);
     const code = String(crypto.randomInt(100000, 1000000));
@@ -60,7 +61,7 @@ export class AuthService {
       throw new ApiError(400, 'invalid_otp', 'Неверный или истекший код.');
     }
     const existingUser = first<{ id: string; status: string }>((await this.db.query(
-      `SELECT id,status FROM app_users WHERE phone=$1 AND role=$2`,
+      `SELECT id,status,deleted_at FROM app_users WHERE phone=$1 AND role=$2`,
       [normalized,role],
     )).rows);
     assertOtpAccountActive(existingUser);

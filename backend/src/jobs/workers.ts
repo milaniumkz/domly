@@ -1,3 +1,4 @@
+import {anonymizeExpiredAccountDeletions} from '../modules/accountDeletion';
 import {processNotificationDeliveries} from '../modules/notificationDelivery';
 import {translateKazakh,sendLocalizedPush} from '../localization';
 import {technicalTick} from '../technical/runtime';
@@ -98,6 +99,7 @@ workers.push(new Worker('payments', async (job) => {
 }, { connection }));
 
 workers.push(new Worker('maintenance', async (job) => {
+  if(job.name==='anonymize-deleted-accounts'){await anonymizeExpiredAccountDeletions(db);return;}
   if (job.name === 'cleanup-expired-auth') {
     const otp = (await db.query<{ count: string }>(
       `WITH deleted AS (
@@ -194,6 +196,10 @@ void (async()=>{
   for(const job of await moonQueue.getRepeatableJobs())if(job.name==='moon-ai-outbox'&&Number(job.every)!==2000)await moonQueue.removeRepeatableByKey(job.key);
   await moonQueue.add('moon-ai-outbox', {}, {jobId:'moon-ai-outbox',repeat:{every:2000},removeOnComplete:true});
 })();
+
+void maintenanceQueue.add('anonymize-deleted-accounts', {}, {
+  jobId:'anonymize-deleted-accounts',repeat:{every:300_000},removeOnComplete:true,
+});
 
 void maintenanceQueue.add('cleanup-expired-auth', {}, {
   jobId: 'cleanup-expired-auth',

@@ -1,3 +1,4 @@
+import {requestAccountDeletion,anonymizeExpiredAccountDeletions} from '../modules/accountDeletion';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -6,13 +7,14 @@ import { AddressInfo } from 'node:net';
 import { Database } from '../infrastructure/db/Database';
 import { mobileRouter } from '../http/routes/mobile';
 import { errorHandler } from '../common/api';
-import { signAccessToken } from '../common/auth';
+import { configureAuthDatabase, signAccessToken } from '../common/auth';
 import { packageQuote } from '../modules/packageQuote';
 import { updateOrderAddons } from '../modules/orderAddons';
 import { qualifyReferral } from '../modules/referrals';
 
 test('mobile backend persistence, permissions, pricing and account lifecycle', {skip: !process.env.DOMLY_INTEGRATION_DATABASE_URL}, async t => {
   const db = new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
+  configureAuthDatabase(db);
   const customer = randomUUID(), inviter = randomUUID(), admin = randomUUID();
   const house = randomUUID(), pkg = randomUUID(), addon = randomUUID(), cp = randomUUID(), payment = randomUUID(), video = randomUUID(), order = randomUUID();
   const app = express();
@@ -120,14 +122,44 @@ test('mobile backend persistence, permissions, pricing and account lifecycle', {
       assert.equal((await request('/me','DELETE')).status,409);
       await db.query("UPDATE service_orders SET status='completed' WHERE id=$1",[order]);
     });
-    await t.test('account deletion revokes access and anonymizes identity', async () => {
-      assert.equal((await request('/me','DELETE')).status,200);
+    await t.test('account deletion revokes access and retains identity for thirty-day recovery', async () => {
+      const before=(await db.query('SELECT phone FROM app_users WHERE id=$1',[customer])).rows[0];
+      const response=await request('/me','DELETE');
+      assert.equal(response.status,200);
+      assert.ok(Date.parse(response.json.data.restoreUntil)>Date.now()+29*86400000);
       assert.equal((await request('/referrals')).status,401);
-      const user=(await db.query('SELECT phone,deleted_at FROM app_users WHERE id=$1',[customer])).rows[0];
-      assert.ok(user.deleted_at);
-      assert.ok(user.phone.startsWith('deleted-'));
+      const user=(await db.query('SELECT phone,deleted_at,auth_version FROM app_users WHERE id=$1',[customer])).rows[0];
+      assert.ok(user.deleted_at);assert.equal(user.phone,before.phone);assert.equal(user.auth_version,1);
+      assert.equal((await anonymizeExpiredAccountDeletions(db)).anonymized,0);
     });
+    await t.test('support restores the same account and entitlements without reviving old sessions',async()=>{
+      const before=(await db.query('SELECT * FROM customer_packages WHERE id=$1',[cp])).rows[0];
+      assert.equal((await request('/admin/users/'+customer+'/restore','POST',{},inviter)).status,403);
+      const restored=await Promise.all([request('/admin/users/'+customer+'/restore','POST',{},admin,'admin'),request('/admin/users/'+customer+'/restore','POST',{},admin,'admin')]);
+      assert.ok(restored.every(r=>r.status===200));
+      assert.equal(restored.filter(r=>r.json.data.changed).length,1);
+      const user=(await db.query('SELECT * FROM app_users WHERE id=$1',[customer])).rows[0];
+      assert.equal(user.deleted_at,null);assert.equal(user.phone,'test-'+customer);assert.equal(user.auth_version,2);
+      assert.deepEqual((await db.query('SELECT * FROM customer_packages WHERE id=$1',[cp])).rows[0],before);
+      assert.equal((await request('/referrals')).status,401);
+      const fresh=signAccessToken({id:customer,role:'customer',phone:user.phone,authVersion:user.auth_version});
+      assert.equal((await fetch(base+'/referrals',{headers:{Authorization:'Bearer '+fresh}})).status,200);
+      assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM audit_logs WHERE action='account.restored' AND entity_id=$1",[customer])).rows[0].n),1);
+    });
+    await t.test('expiry anonymizes contact data but preserves purchase and payment history',async()=>{
+      await requestAccountDeletion(db,customer);
+      await db.query("UPDATE account_deletion_requests SET restore_until=NOW()-INTERVAL '1 second' WHERE user_id=$1 AND restored_at IS NULL",[customer]);
+      assert.equal((await request('/admin/users/'+customer+'/restore','POST',{},admin,'admin')).status,410);
+      assert.equal((await anonymizeExpiredAccountDeletions(db)).anonymized,1);
+      assert.equal((await anonymizeExpiredAccountDeletions(db)).anonymized,0);
+      const user=(await db.query('SELECT phone,full_name,deleted_at FROM app_users WHERE id=$1',[customer])).rows[0];
+      assert.ok(user.phone.startsWith('deleted-'));assert.equal(user.full_name,null);assert.ok(user.deleted_at);
+      assert.ok((await db.query('SELECT id FROM customer_packages WHERE id=$1',[cp])).rows.length);
+      assert.ok((await db.query('SELECT id FROM payments WHERE id=$1',[payment])).rows.length);
+    });
+
   } finally {
+    configureAuthDatabase(null);
     await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
     await db.query('DELETE FROM bonus_transactions WHERE payment_id=$1',[payment]);
     await db.query('DELETE FROM payments WHERE id=$1',[payment]);
@@ -139,6 +171,7 @@ test('mobile backend persistence, permissions, pricing and account lifecycle', {
     await db.query('DELETE FROM training_videos WHERE id=$1',[video]);
     await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);
     await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+    await db.query('DELETE FROM audit_logs WHERE actor_id=ANY($1::uuid[]) OR entity_id=$2::text',[[customer,inviter,admin],customer]);
     await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[customer,inviter,admin]]);
     await db.close();
   }

@@ -11,6 +11,7 @@ import '../../services/app_config_service.dart';
 import '../../services/call_service.dart';
 import '../../services/firestore_data_service.dart';
 import '../../services/payment_link_service.dart';
+import '../../services/package_purchase_service.dart';
 import '../common/kaspi_invoice_request_dialog.dart';
 import '../../ui/domly_ui.dart';
 import '../../ui/info_dialog.dart';
@@ -1580,8 +1581,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     final isCombinedPaidPackages = order['combinedPaidPackages'] == true;
     final combinedPackageCount =
         (order['combinedPackageCount'] as num?)?.toInt() ?? 1;
-    final canCancelPendingOrder =
-        paymentStatus != 'paid' && order['type'] != 'package_purchase';
+    final canCancelPendingOrder = canCancelPendingPayment(order);
     final orderId = (order['id'] ?? order['orderId'] ?? '').toString().trim();
     final subscriptionId = (order['subscriptionId'] ?? '').toString().trim();
     final schedulingSubscriptionId =
@@ -2565,7 +2565,9 @@ class _OrdersScreenState extends State<OrdersScreen>
     }
     setState(() => _locallyCancelledOrderIds.add(orderId));
     try {
-      await _data.cancelPendingOrder(orderId: orderId);
+      await _data.cancelPendingOrder(
+          orderId: orderId,
+          packagePurchase: order['type'] == 'package_purchase');
       if (!mounted) {
         return;
       }
