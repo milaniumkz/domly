@@ -1,3 +1,4 @@
+import '../models/domly_models.dart';
 import '../utils/admin_addon_text.dart';
 import '../utils/legal_document_sections.dart';
 import 'admin_text_catalog.dart';
@@ -8723,7 +8724,7 @@ class FirestoreDataService {
     }
     final area = (slot['area'] as num?)?.toInt() ?? 0;
     if (area > 0) {
-      return (90 + area * 1.2).round().clamp(90, 420);
+      return PriceCalculation.calculateDurationMinutes(area.toDouble());
     }
     return 120;
   }
@@ -11052,7 +11053,7 @@ class FirestoreDataService {
     if (area <= 0) {
       return 120;
     }
-    return (90 + area * 1.2).round().clamp(90, 420);
+    return PriceCalculation.calculateDurationMinutes(area.toDouble());
   }
 
   Future<Map<String, dynamic>> reschedule({

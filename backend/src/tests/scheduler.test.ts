@@ -115,13 +115,13 @@ function createService(overrides: Partial<{ cleaners: any[]; orders: any[]; rand
   return { service, cleanerRepository, orderRepository, assignments };
 }
 
-test('estimateCleaningDuration uses area buckets', () => {
+test('estimateCleaningDuration uses 1.6 minutes per square metre', () => {
   const { service } = createService();
-  assert.equal(service.estimateCleaningDuration(45), 2);
-  assert.equal(service.estimateCleaningDuration(60), 3);
-  assert.equal(service.estimateCleaningDuration(90), 4);
-  assert.equal(service.estimateCleaningDuration(120), 5);
-  assert.equal(service.estimateCleaningDuration(170), 6);
+  assert.equal(service.estimateCleaningDuration(45), 72/60);
+  assert.equal(service.estimateCleaningDuration(60), 96/60);
+  assert.equal(service.estimateCleaningDuration(90), 144/60);
+  assert.equal(service.estimateCleaningDuration(120), 192/60);
+  assert.equal(service.estimateCleaningDuration(170), 272/60);
 });
 
 test('calculateCleanerFairnessScore prefers less loaded cleaner', async () => {

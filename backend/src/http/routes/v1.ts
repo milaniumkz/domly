@@ -1,3 +1,4 @@
+import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
 import {cancelHomePurchase,resumeHomePurchase} from '../../modules/homePurchase';
 import { formatAddonRecord, formatServiceDescription } from '../../modules/serviceDescription';
 import {PublicTextCatalog} from '../../modules/publicTextCatalog';
@@ -4845,8 +4846,8 @@ export function buildRuntimeConfig(settings: Record<string, any>) {
       },
       assignmentRules,
       pricing: {
-        baseCleaningMinutes: settings.baseCleaningMinutes ?? 120,
-        minutesPerM2: settings.minutesPerM2 ?? 1.2,
+        baseCleaningMinutes: settings.baseCleaningMinutes ?? 0,
+        minutesPerM2: settings.minutesPerM2 ?? 1.6,
         defaultBonusMaxPercent: settings.defaultBonusMaxPercent ?? 50,
         allowBonusForPackagePurchase: settings.allowBonusForPackagePurchase ?? false,
         skipZeroAmountInvoice: settings.skipZeroAmountInvoice ?? true,
@@ -5015,11 +5016,11 @@ async function ensurePackageQualityCheck(db: Database, notifications: Notificati
 async function estimateCleaningDurationMinutes(
   db: Pick<Database, 'query'>,
   addressId?: string,
-  addons: Array<{ duration_minutes?: number }> = [],
+  addons: Array<{ duration_minutes?: number; quantity?: number }> = [],
 ): Promise<number> {
   const settings = await readAppSettings(db);
-  const baseMinutes = Number(settings.baseCleaningMinutes ?? 120);
-  const minutesPerM2 = Number(settings.minutesPerM2 ?? 1.2);
+  const baseMinutes = Number(settings.baseCleaningMinutes ?? 0);
+  const minutesPerM2 = Number(settings.minutesPerM2 ?? 1.6);
   const address = addressId
     ? (await db.query<{ area: string; verified_area: string | null }>(
       `SELECT area, verified_area FROM customer_addresses WHERE id=$1`,
@@ -5027,8 +5028,8 @@ async function estimateCleaningDurationMinutes(
     )).rows[0]
     : null;
   const area = Number(address?.verified_area ?? address?.area ?? 50);
-  const addonMinutes = addons.reduce((sum, addon) => sum + Number(addon.duration_minutes ?? 0), 0);
-  return Math.max(30, Math.round(baseMinutes + area * minutesPerM2 + addonMinutes));
+  const addonMinutes = addons.reduce((sum, addon) => sum + Number(addon.duration_minutes ?? 0) * Number(addon.quantity ?? 1), 0);
+  return cleaningDurationMinutes(area, addonMinutes, baseMinutes, minutesPerM2);
 }
 
 async function initProviderPayment(

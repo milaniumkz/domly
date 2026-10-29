@@ -12,50 +12,16 @@ void main() {
         expect(PriceCalculation.calculateDurationMinutes(-10), 120);
       });
 
-      test('calculates 45m² correctly', () {
-        // 45 * 1.6 + 30 = 102
-        expect(PriceCalculation.calculateDurationMinutes(45), 102);
-      });
-
-      test('calculates 60m² correctly', () {
-        // 60 * 1.6 + 30 = 126
-        expect(PriceCalculation.calculateDurationMinutes(60), 126);
-      });
-
-      test('calculates 75m² correctly', () {
-        // 75 * 1.6 + 30 = 150
-        expect(PriceCalculation.calculateDurationMinutes(75), 150);
-      });
-
-      test('calculates 100m² correctly', () {
-        // 100 * 1.6 + 30 = 190
-        expect(PriceCalculation.calculateDurationMinutes(100), 190);
-      });
-
-      test('caps at 480 minutes (8 hours)', () {
-        // 500 * 1.6 + 30 = 830, should cap at 480
-        expect(PriceCalculation.calculateDurationMinutes(500), 480);
-      });
-
-      test('caps at 480 minutes for very large area', () {
-        expect(PriceCalculation.calculateDurationMinutes(1000), 480);
-      });
-
-      test('calculates required production audit area cases', () {
-        expect(PriceCalculation.calculateDurationMinutes(40), 94);
-        expect(PriceCalculation.calculateDurationMinutes(80), 158);
-        expect(PriceCalculation.calculateDurationMinutes(120), 222);
-        expect(PriceCalculation.calculateDurationMinutes(220), 382);
-        expect(PriceCalculation.calculateDurationMinutes(300), 480);
-        expect(PriceCalculation.calculateDurationMinutes(500), 480);
+      test('uses only 1.6 minutes per square metre without a fixed addition', () {
+        for (final entry in <double, int>{45:72,60:96,67:107,75:120,100:160,220:352,300:480,500:800}.entries) {
+          expect(PriceCalculation.calculateDurationMinutes(entry.key), entry.value);
+        }
       });
     });
 
     group('calculateDurationHours', () {
       test('converts minutes to hours correctly', () {
-        final hours = PriceCalculation.calculateDurationHours(75);
-        // 75 * 1.6 + 30 = 150 minutes = 2.5 hours
-        expect(hours, closeTo(2.5, 0.01));
+        expect(PriceCalculation.calculateDurationHours(220), closeTo(5 + 52/60, 0.001));
       });
     });
 

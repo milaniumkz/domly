@@ -39,6 +39,26 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('duration migration updates future cleaning and preserves history and addon minutes',async()=>{
+      const rollback=new Error('rollback duration fixture');
+      const id=randomUUID(),large=randomUUID(),done=randomUUID(),started=randomUUID(),addon=randomUUID();
+      await assert.rejects(()=>db.transaction(async tx=>{
+        await tx.query("DELETE FROM app_settings WHERE key='futureCleaningDurationRecalculatedV1'");
+        await tx.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,estimated_duration_minutes,area,status) VALUES($1,$5,CURRENT_DATE+2,'10:00','13:50',230,67,'assigned'),($2,$5,CURRENT_DATE+2,'10:00','16:24',384,220,'waiting_cleaner'),($3,$5,CURRENT_DATE+2,'10:00','13:20',200,67,'completed'),($4,$5,CURRENT_DATE+2,'10:00','13:20',200,67,'in_progress')",[id,large,done,started,customer]);
+        await tx.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes) VALUES($1,'Duration fixture',100,15)",[addon]);
+        await tx.query("INSERT INTO order_addons(order_id,addon_id,quantity,duration_minutes,payment_status) VALUES($1,$2,2,30,'paid')",[id,addon]);
+        const schema=readFileSync('sql/schema.sql','utf8');
+        const migration=schema.slice(schema.indexOf('-- Recalculate future, unstarted appointments once'));
+        await tx.query(migration);
+        const row=(await tx.query('SELECT * FROM service_orders WHERE id=$1',[id])).rows[0];
+        assert.equal(row.estimated_duration_minutes,137);assert.equal(row.start_time,'10:00:00');assert.equal(row.end_time,'12:17:00');
+        assert.equal((await tx.query('SELECT estimated_duration_minutes FROM service_orders WHERE id=$1',[large])).rows[0].estimated_duration_minutes,352);
+        for(const unchanged of [done,started])assert.equal((await tx.query('SELECT estimated_duration_minutes FROM service_orders WHERE id=$1',[unchanged])).rows[0].estimated_duration_minutes,200);
+        await tx.query(migration);
+        assert.equal((await tx.query("SELECT COUNT(*)::int AS n FROM audit_logs WHERE entity_id=$1 AND action='cleaning.duration_recalculated'",[id])).rows[0].n,1);
+        throw rollback;
+      }),error=>error===rollback);
+    });
     await t.test('offline cleaner cannot receive or accept offers and can return online',async()=>{
       const worker=randomUUID(),order=randomUUID();
       const scheduling=new SchedulingService(db);

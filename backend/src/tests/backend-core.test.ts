@@ -1,3 +1,4 @@
+import {cleaningDurationMinutes} from '../modules/cleaningDuration';
 import {fitsBookingHours,validateBookingHours} from '../modules/bookingValidation';
 import { formatAddonRecord, formatServiceDescription } from '../modules/serviceDescription';
 import {gunzipSync} from 'node:zlib';
@@ -1134,4 +1135,11 @@ test('evening booking preserves duration and finishes by 21:00', () => {
   assert.equal(fitsBookingHours('07:59',180),false);
   assert.equal(fitsBookingHours('18:00',NaN),false);
   assert.throws(()=>validateBookingHours('18:00',240));
+});
+
+test('standard cleaning uses 1.6 min per m2 and add-ons remain additive',()=>{
+  assert.equal(cleaningDurationMinutes(67),107);
+  assert.equal(cleaningDurationMinutes(220),352);
+  assert.equal(cleaningDurationMinutes(67,45),152);
+  assert.equal(cleaningDurationMinutes(500),800);
 });
