@@ -13083,13 +13083,6 @@
     ]
   },
   {
-    "key": "t_ffdb5aa815b506e6",
-    "source": "выбор",
-    "locations": [
-      "lib/services/firestore_data_service.dart"
-    ]
-  },
-  {
     "key": "t_cc50b5b8f7cfa0cd",
     "source": "вымыть пол",
     "locations": [
@@ -13433,13 +13426,6 @@
   {
     "key": "t_a521744834e6909c",
     "source": "обе роли",
-    "locations": [
-      "lib/services/firestore_data_service.dart"
-    ]
-  },
-  {
-    "key": "t_e837624fa61e8842",
-    "source": "ожидает",
     "locations": [
       "lib/services/firestore_data_service.dart"
     ]

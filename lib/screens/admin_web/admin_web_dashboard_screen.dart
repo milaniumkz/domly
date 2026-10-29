@@ -1,4 +1,6 @@
 import '../../utils/admin_addon_text.dart';
+import '../../utils/admin_order_data.dart';
+import '../../services/backend_api_service.dart';
 import '../../utils/admin_date_time.dart';
 import '../../utils/payment_approval_data.dart';
 import 'dart:math' as math;
@@ -1816,8 +1818,24 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
 
   Widget _orders() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.adminAssignmentItemsStream(),
+      stream: _data.adminOrderRecordsStream(),
       builder: (context, snapshot) {
+        if (!snapshot.hasData && snapshot.hasError) {
+          return Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Не удалось загрузить заказы'.tr()),
+            const SizedBox(height: 8),
+            Text(UserErrorMessage.message(snapshot.error)),
+            TextButton(
+                onPressed: () =>
+                    BackendApiService.instance.dataRevision.value++,
+                child: Text('Повторить'.tr())),
+          ]));
+        }
+        if (!snapshot.hasData &&
+            snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final streamOrders = snapshot.data ?? const <Map<String, dynamic>>[];
         final debugSeedOrders = _debugSeedOrders();
         final orders = DebugSession.enabled &&
@@ -1924,6 +1942,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               toolbar: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (cleanersSnapshot.hasError)
+                    _adminWarningBox(
+                        'Не удалось загрузить уборщиц. Обновите страницу перед назначением.'),
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
@@ -2129,6 +2150,14 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     required List<Map<String, dynamic>> cleaners,
     required List<Map<String, dynamic>> orders,
   }) {
+    if (!DebugSession.enabled) {
+      return _adminOrderCardContent(
+          context: context,
+          data: data,
+          customer: const {},
+          cleaners: cleaners,
+          orders: orders);
+    }
     final customerId =
         (data['customerId'] ?? data['userId'] ?? '').toString().trim();
     return FutureBuilder<Map<String, Map<String, dynamic>>>(
@@ -2206,15 +2235,17 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 width: 42,
                 child: Checkbox(
                   value: _selectedOrderIds.contains(orderId),
-                  onChanged: (value) {
-                    setState(() {
-                      if (value == true) {
-                        _selectedOrderIds.add(orderId);
-                      } else {
-                        _selectedOrderIds.remove(orderId);
-                      }
-                    });
-                  },
+                  onChanged: data['type'] == 'package_purchase'
+                      ? null
+                      : (value) {
+                          setState(() {
+                            if (value == true) {
+                              _selectedOrderIds.add(orderId);
+                            } else {
+                              _selectedOrderIds.remove(orderId);
+                            }
+                          });
+                        },
                 ),
               ),
               _miniInfo('Клиент', customerName),
@@ -2246,40 +2277,53 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           child: Text('Детали'.tr()),
         ),
         TextButton.icon(
-          onPressed: () =>
-              _openAssignCleaner(context, orderId, data, cleaners, orders),
+          onPressed: canAdminAssignOrder(data)
+              ? () =>
+                  _openAssignCleaner(context, orderId, data, cleaners, orders)
+              : null,
           icon: Icon(Icons.person_add_alt_1_outlined),
-          label: Text('Назначить уборщицу'.tr()),
+          label: Text((cleanerId.isEmpty
+                  ? 'Назначить уборщицу'
+                  : 'Переназначить уборщицу')
+              .tr()),
         ),
-        PopupMenuButton<String>(
-          onSelected: (value) async {
-            await _handleSelectedOrdersStatusAction(
-              {orderId},
-              value,
-              [data],
-              cleaners,
-              orders,
-            );
-          },
-          itemBuilder: (context) => [
-            PopupMenuItem(
-              value: 'assigned',
-              child: Text('Статус: назначен'.tr()),
-            ),
-            PopupMenuItem(
-              value: 'in_progress',
-              child: Text('Статус: в работе'.tr()),
-            ),
-            PopupMenuItem(
-              value: 'completed',
-              child: Text('Статус: завершен'.tr()),
-            ),
-            PopupMenuItem(
-              value: 'canceled',
-              child: Text('Статус: отменен'.tr()),
-            ),
-          ],
-        ),
+        if (canAdminCancelOrder(data))
+          TextButton.icon(
+            onPressed: () => _handleSelectedOrdersStatusAction(
+                {orderId}, 'canceled', [data], cleaners, orders),
+            icon: const Icon(Icons.cancel_outlined),
+            label: Text('Отменить заказ'.tr()),
+          ),
+        if (data['type'] != 'package_purchase')
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              await _handleSelectedOrdersStatusAction(
+                {orderId},
+                value,
+                [data],
+                cleaners,
+                orders,
+              );
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'assigned',
+                child: Text('Статус: назначен'.tr()),
+              ),
+              PopupMenuItem(
+                value: 'in_progress',
+                child: Text('Статус: в работе'.tr()),
+              ),
+              PopupMenuItem(
+                value: 'completed',
+                child: Text('Статус: завершен'.tr()),
+              ),
+              PopupMenuItem(
+                value: 'canceled',
+                child: Text('Статус: отменен'.tr()),
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -2289,15 +2333,28 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     Map<String, dynamic> data,
     String displayId,
   ) async {
+    Map<String, dynamic> details = const {};
+    if (!DebugSession.enabled) {
+      try {
+        details = await _data.adminOrderDetails((data['id'] ?? '').toString(),
+            packagePurchase: data['type'] == 'package_purchase');
+        data = {...data, ...Map<String, dynamic>.from(details['order'] as Map)};
+      } catch (error) {
+        if (context.mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(UserErrorMessage.message(error))));
+        return;
+      }
+    }
     final customerId =
         (data['customerId'] ?? data['userId'] ?? '').toString().trim();
-    final customers = customerId.isEmpty
+    final customers = !DebugSession.enabled || customerId.isEmpty
         ? const <String, Map<String, dynamic>>{}
         : await _data.adminCustomersByIds([customerId]);
     final customer = customers[customerId] ?? const <String, dynamic>{};
     final cleanerId =
         (data['cleanerId'] ?? data['assignedCleanerId'] ?? '').toString();
-    final cleaners = cleanerId.trim().isEmpty
+    final cleaners = !DebugSession.enabled || cleanerId.trim().isEmpty
         ? const <String, Map<String, dynamic>>{}
         : await _data.adminCleanersByIds([cleanerId]);
     final cleaner = cleaners[cleanerId] ?? const <String, dynamic>{};
@@ -2338,8 +2395,17 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           'Уборщица': cleanerName,
           if (cleanerId.trim().isNotEmpty) 'Телефон уборщицы': cleanerPhone,
         }),
+        _detailSection('Адрес и доступ', {
+          'Адрес': (data['address'] ?? '—').toString(),
+          'Подъезд': (data['entrance'] ?? '—').toString(),
+          'Этаж': (data['floor'] ?? '—').toString(),
+          'Домофон': (data['intercom'] ?? '—').toString(),
+          'Комментарий': (data['access_comment'] ?? '—').toString(),
+        }),
         _detailSection('Финансы', {
           'Сумма': '${data['price'] ?? 0} ₸',
+          'К доплате': '${data['payableAmount'] ?? 0} ₸',
+          'Бонусы': '${data['bonusAppliedAmount'] ?? 0} ₸',
           'Оплата': paymentStatusLabel(
             (data['paymentStatus'] ?? '—').toString(),
           ),
@@ -2349,6 +2415,32 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           'Заказанные допы': addonLabels.isEmpty ? 'нет' : addonLabels,
           'Отдельная оплата': '${data['addonsSeparatePaymentTotal'] ?? 0} ₸',
         }),
+        if ((details['payments'] as List? ?? []).isNotEmpty)
+          _detailSection('Платежи', {
+            for (final (index, payment)
+                in (details['payments'] as List).whereType<Map>().indexed)
+              '${index + 1}. ${payment['provider'] ?? ''}':
+                  '${paymentStatusLabel((payment['status'] ?? '').toString())} · ${payment['amount']} ₸ · ${_formatAdminDateTime(payment['created_at'])}',
+          }),
+        if ((details['offers'] as List? ?? []).isNotEmpty)
+          _detailSection('Предложения уборщицам', {
+            for (final (index, offer)
+                in (details['offers'] as List).whereType<Map>().indexed)
+              '${index + 1}. ${offer['cleaner_name'] ?? offer['cleaner_id']}':
+                  '${offer['cleaner_phone'] ?? ''} · ${{
+                        'offered': 'Ожидает ответа',
+                        'declined': 'Отказ',
+                        'expired': 'Истекло',
+                        'accepted': 'Принято'
+                      }[offer['status']] ?? offer['status']} · ${_formatAdminDateTime(offer['created_at'])}',
+          }),
+        if ((details['history'] as List? ?? []).isNotEmpty)
+          _detailSection('История статусов', {
+            for (final (index, event)
+                in (details['history'] as List).whereType<Map>().indexed)
+              '${index + 1}. ${_orderStatusLabel((event['new_status'] ?? '').toString())}':
+                  '${_formatAdminDateTime(event['created_at'])} · ${event['actor_name'] ?? ''} · ${event['comment'] ?? ''}',
+          }),
         _detailSection('Назначение', {
           'Статус назначения': _adminOrderAssignmentText(data),
           'Очередь уборщиц': _candidateQueueDetailsText(
@@ -3278,6 +3370,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   }
 
   bool _isAdminPackagePurchaseOrder(Map<String, dynamic> data) {
+    if (data['type'] == 'package_purchase') return true;
     final pricingMode = (data['pricingMode'] ?? '').toString().toLowerCase();
     final packageId = (data['packageId'] ?? '').toString().toLowerCase();
     if (pricingMode == 'addons_only' || packageId == 'addons_only') {
@@ -3295,6 +3388,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   }
 
   bool _isAdminCleaningVisitOrder(Map<String, dynamic> data) {
+    if (data['type'] == 'package_purchase') return false;
     final pricingMode = (data['pricingMode'] ?? '').toString().toLowerCase();
     final packageId = (data['packageId'] ?? '').toString().toLowerCase();
     final scopeType = (data['scopeType'] ?? '').toString().toLowerCase();
@@ -5427,14 +5521,10 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final addressController = TextEditingController(
       text: (order['address'] ?? '').toString(),
     );
-    final orderStatus =
-        (order['orderStatus'] ?? order['status'] ?? '').toString();
     final scopeType = _adminOrderScopeType(order);
-    final statusWarning = scopeType == 'schedule_slot'
+    final statusWarning = canAdminAssignOrder(order)
         ? ''
-        : orderStatus != 'pending_assignment'
-            ? 'Заказ сейчас нельзя назначить: статус "$orderStatus". Нужно, чтобы заказ был в ожидании назначения уборщицы.'
-            : '';
+        : 'Этот заказ сейчас нельзя назначить. Проверьте статус и оплату допуслуг.';
     final noCleanerWarning = freeCleaners.isEmpty
         ? 'Нет свободных уборщиц. Проверьте: уборщица подтверждена, работает в этом городе и районе, и у нее нет пересечения по времени.'
         : '';
@@ -5512,11 +5602,13 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: timeController,
+                    readOnly: true,
                     decoration: const InputDecoration(labelText: 'Время'),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: addressController,
+                    readOnly: true,
                     decoration: const InputDecoration(labelText: 'Адрес'),
                   ),
                   const SizedBox(height: 16),
@@ -5525,6 +5617,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     child: ElevatedButton(
                       onPressed: selectedCleanerId == null ||
                               freeCleaners.isEmpty ||
+                              statusWarning.isNotEmpty ||
                               assigning
                           ? null
                           : () async {
@@ -10341,7 +10434,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Статус отправлен на смену: ${_orderStatusLabel(status)} (${orderIds.length})'
+            'Статус изменён: ${_orderStatusLabel(status)} (${orderIds.length})'
                 .tr(),
           ),
         ),
@@ -10364,6 +10457,33 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     List<Map<String, dynamic>> allOrders,
   ) async {
     if (orderIds.isEmpty) {
+      return;
+    }
+    if (visibleOrders.any((order) =>
+        orderIds.contains(order['id']) &&
+        order['type'] == 'package_purchase')) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Для изменения заказа выберите уборку, а не покупку пакета.'
+                  .tr())));
+      return;
+    }
+    if (status == 'canceled' || status == 'cancelled') {
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+                title: Text('Отменить заказ?'.tr()),
+                content: Text('Заказов для отмены: ${orderIds.length}'.tr()),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: Text('Нет'.tr())),
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: Text('Отменить'.tr())),
+                ],
+              ));
+      if (confirmed == true) await _bulkUpdateOrders(orderIds, status);
       return;
     }
     if (status == 'assigned') {

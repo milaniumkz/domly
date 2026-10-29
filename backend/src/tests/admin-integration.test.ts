@@ -448,6 +448,57 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
       }
     });
+    await t.test('admin lists every visit with details and can assign or cancel unassigned orders',async()=>{
+      const owner=randomUUID(),worker=randomUUID(),address=randomUUID(),pkg=randomUUID(),purchase=randomUUID(),addon=randomUUID();
+      const orders=[randomUUID(),randomUUID()],payments=[randomUUID(),randomUUID()];
+      const phone='admin-order-owner-'+owner;
+      try {
+        await db.query("INSERT INTO app_users(id,phone,role,status,full_name) VALUES($1,$2,'customer','approved','Клиент заказа'),($3,$4,'cleaner','approved','Уборщица заказа')",[owner,phone,worker,'admin-order-worker-'+worker]);
+        await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,apartment,area) VALUES($1,$2,'Астана','Тестовая','1','12',100)",[address,owner]);
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Пакет заказа',4,800)",[pkg]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,$4,4,4,'active')",[purchase,owner,pkg,address]);
+        for(const id of orders)await db.query("INSERT INTO service_orders(id,customer_id,package_id,address_id,status,scheduled_date,start_time,end_time,area,total_amount) VALUES($1,$2,$3,$4,'waiting_cleaner','2038-01-01','08:00','10:00',100,200)",[id,owner,pkg,address]);
+        await db.query("INSERT INTO catalog_addons(id,title_ru,price) VALUES($1,'Окна',20)",[addon]);
+        await db.query("INSERT INTO order_addons(order_id,addon_id,quantity,price,payment_status) VALUES($1,$2,2,20,'paid')",[orders[0],addon]);
+        await db.query("INSERT INTO payments(id,customer_id,order_id,provider,status,amount) VALUES($1,$2,$3,'kaspi','paid',200)",[payments[0],owner,orders[0]]);
+        await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,status,amount) VALUES($1,$2,$3,'kaspi','paid',800)",[payments[1],owner,purchase]);
+        await db.query("INSERT INTO order_offers(order_id,cleaner_id,status,expires_at) VALUES($1,$2,'offered',NOW()+INTERVAL '2 minutes')",[orders[0],worker]);
+        const list=await request('/admin/orders?search='+phone);
+        assert.equal(list.status,200);assert.equal(list.json.data.length,2);
+        const row=list.json.data.find((o:any)=>o.id===orders[0]);
+        assert.equal(row.customer_name,'Клиент заказа');assert.equal(row.customer_phone,phone);
+        assert.equal(row.street,'Тестовая');assert.equal(row.package_name_ru,'Пакет заказа');
+        assert.equal(row.latest_payment_status,'paid');assert.equal(row.addons[0].label,'Окна');
+        const first=(await request('/admin/orders?search='+phone+'&limit=1&offset=0')).json.data;
+        const second=(await request('/admin/orders?search='+phone+'&limit=1&offset=1')).json.data;
+        assert.equal(first.length,1);assert.equal(second.length,1);assert.notEqual(first[0].id,second[0].id);
+        const purchases=await request('/admin/packagePurchases?search='+phone);
+        assert.equal(purchases.status,200);assert.equal(purchases.json.data[0].id,purchase);
+        assert.equal(purchases.json.data[0].latest_payment_status,'paid');
+        const purchaseDetails=await request('/admin/packagePurchases/'+purchase+'/details');
+        assert.equal(purchaseDetails.status,200);assert.equal(purchaseDetails.json.data.payments[0].id,payments[1]);
+        assert.equal((await request('/admin/packagePurchases/'+purchase+'/details','GET',undefined,true)).status,403);
+        assert.equal((await request('/admin/orders/'+orders[0]+'/assign-cleaner','POST',{cleanerId:worker})).status,200);
+        const details=await request('/admin/orders/'+orders[0]+'/details');
+        assert.equal(details.status,200);assert.equal(details.json.data.order.cleaner_id,worker);
+        assert.equal(details.json.data.payments[0].id,payments[0]);
+        assert.equal(details.json.data.offers[0].status,'expired');
+        assert.equal(details.json.data.history.at(-1).new_status,'assigned');
+        assert.equal((await request('/admin/orders/'+orders[1],'PATCH',{status:'cancelled'})).status,200);
+        assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[orders[1]])).rows[0].status,'cancelled');
+      } finally {
+        await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[]) OR user_id=ANY($2::uuid[])',[orders,[owner,worker]]);
+        await db.query('DELETE FROM payments WHERE id=ANY($1::uuid[])',[payments]);
+        await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[orders]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
+        await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+        await db.query('DELETE FROM cleaner_profiles WHERE user_id=$1',[worker]);
+        await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[owner,worker]]);
+      }
+    });
     await t.test('cancel searching order expires offers and permits account deletion', async()=>{
       const owner=randomUUID(),order=randomUUID();
       const ownRequest=async(path:string,method='POST')=>fetch(base+path,{method,headers:{
@@ -790,7 +841,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       assert.equal((await request('/admin/files/preview?url=http%3A%2F%2Flocalhost%2Fprivate')).status,404);
     });
     await t.test('all admin list sections load and deny customer access',async()=>{
-      for(const section of ['cities','orders','payments','complaints','reviews','checklistReports','photoReports','cleaners','users','preorders','quality','addressRequests','payouts','audit','zones','houses','checklistTemplates','packages','addons','addonGroups','banners','promotions','promotionRedemptions','contentPages','videoViews']) {
+      for(const section of ['cities','orders','packagePurchases','payments','complaints','reviews','checklistReports','photoReports','cleaners','users','preorders','quality','addressRequests','payouts','audit','zones','houses','checklistTemplates','packages','addons','addonGroups','banners','promotions','promotionRedemptions','contentPages','videoViews']) {
         assert.equal((await request('/admin/'+section)).status,200,section);
         assert.equal((await request('/admin/'+section,'GET',undefined,true)).status,403,section+' permissions');
       }
