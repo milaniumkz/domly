@@ -1,3 +1,4 @@
+import '../../ui/customer_progress_info.dart';
 import '../../theme/domly_palette.dart';
 import '../../utils/service_coverage.dart';
 import '../../utils/profile_address.dart';
@@ -298,10 +299,7 @@ class ProfileScreen extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: ProfileSummaryCard(
-                                    onTap: () => _showInfo(
-                                        context,
-                                        'Ваш прогресс',
-                                        'Уровень зависит от суммы оплаченных услуг за текущий месяц. Приглашённые клиенты не влияют на этот прогресс.'),
+                                    onTap: () => _showProgressInfo(context,profile),
                                     height: 180,
                                     padding: const EdgeInsets.fromLTRB(
                                       27,
@@ -418,11 +416,7 @@ class ProfileScreen extends StatelessWidget {
                                     ).withValues(alpha: 0.75),
                                     child: InkWell(
                                       customBorder: const CircleBorder(),
-                                      onTap: () => _showInfo(
-                                        context,
-                                        'Ваш прогресс',
-                                        'Уровень зависит от суммы оплаченных услуг за текущий месяц. Приглашённые клиенты не влияют на этот прогресс.',
-                                      ),
+                                      onTap: () => _showProgressInfo(context,profile),
                                       child: SizedBox(
                                         width: 23,
                                         height: 23,
@@ -713,6 +707,13 @@ class ProfileScreen extends StatelessWidget {
       default:
         return 'Наш любимый Новичок';
     }
+  }
+
+  static void _showProgressInfo(BuildContext context,Map<String,dynamic> profile) {
+    showModalBottomSheet<void>(context:context,showDragHandle:true,isScrollControlled:true,
+      builder:(context)=>SafeArea(child:ConstrainedBox(
+        constraints:BoxConstraints(maxHeight:MediaQuery.sizeOf(context).height*.85),
+        child:SingleChildScrollView(padding:const EdgeInsets.all(24),child:CustomerProgressInfo(profile:profile)))));
   }
 
   static void _showInfo(BuildContext context, String title, String subtitle) {

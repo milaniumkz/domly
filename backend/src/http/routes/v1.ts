@@ -470,7 +470,7 @@ export function buildV1Router(deps: {
     delete safeUser.password_hash;
     if (req.user!.role === 'customer') {
       const tierRules = buildRuntimeConfig(await readAppSettings(deps.db)).rules.customerTierRules;
-      Object.assign(safeUser, await customerMonthlyProgress(deps.db, req.user!.id, tierRules));
+      Object.assign(safeUser, await customerMonthlyProgress(deps.db, req.user!.id, tierRules), {customer_tier_rules:tierRules});
       const stats = first<any>((await deps.db.query('SELECT COUNT(*)::int AS total FROM user_referrals WHERE inviter_id=$1 AND qualified_at IS NOT NULL', [req.user!.id])).rows);
       const own = first<any>((await deps.db.query("SELECT 'DOMLY-' || u.numeric_id AS code FROM user_referrals r JOIN app_users u ON u.id=r.inviter_id WHERE r.customer_id=$1", [req.user!.id])).rows);
       Object.assign(safeUser, {referralCode: `DOMLY-${safeUser.numeric_id}`, referredByCode: own?.code,

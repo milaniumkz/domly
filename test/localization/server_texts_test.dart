@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:domly/theme/domly_palette.dart';
 import 'package:domly/localization/translation_controller.dart';
@@ -6,6 +7,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('startup can use bundled texts without waiting for a stalled remote catalogue',()async{
+    final remote=Completer<List<Map<String,dynamic>>>();
+    final controller=TranslationController(loadRows:()=>remote.future);
+    await controller.init(waitForRemote:false).timeout(const Duration(seconds:1));
+    expect(controller.isReady,isTrue);
+    expect(controller.translate('Получить код'),isNotEmpty);
+    remote.complete([{'source':'Получить код','key':TranslationController.translationKey('Получить код'),'ru':'Запросить код'}]);
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.translate('Получить код'),'Запросить код');
+    controller.dispose();
+  });
   test(
       'live catalogue changes once, preserves amounts and retains last good texts offline',
       () async {

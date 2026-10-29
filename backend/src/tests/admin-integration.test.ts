@@ -39,6 +39,14 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('customer info receives the configured tier descriptions and thresholds',async()=>{
+      const response=await request('/me','GET',undefined,true);
+      assert.equal(response.status,200);
+      const rules=response.json.data.user.customer_tier_rules;
+      assert.ok(Array.isArray(rules)&&rules.length>=4);
+      assert.ok(rules.every((r:any)=>r.labelRu&&Number.isFinite(r.minMonthlySpent)&&Number.isFinite(r.discountPercent)));
+      assert.ok(rules.some((r:any)=>r.minMonthlySpent===100000));
+    });
     await t.test('duration migration updates future cleaning and preserves history and addon minutes',async()=>{
       const rollback=new Error('rollback duration fixture');
       const id=randomUUID(),large=randomUUID(),done=randomUUID(),started=randomUUID(),addon=randomUUID();

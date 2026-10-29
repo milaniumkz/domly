@@ -46,7 +46,7 @@ class TranslationController extends ChangeNotifier {
 
   static TranslationController? get active => _active;
 
-  Future<void> init() async {
+  Future<void> init({bool waitForRemote = true}) async {
     _active = this;
     final savedLocale = _preferences?.getString(_preferencesKey);
     final platformLocale =
@@ -65,7 +65,8 @@ class TranslationController extends ChangeNotifier {
     _isReady = true;
     notifyListeners();
 
-    await refresh();
+    final initialRefresh=refresh();
+    if(waitForRemote){await initialRefresh;}else{unawaited(initialRefresh);}
     if (_disposed) return;
     _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       unawaited(refresh());

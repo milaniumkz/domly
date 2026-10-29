@@ -388,6 +388,13 @@
     ]
   },
   {
+    "key": "t_114413601a6761a3",
+    "source": "{p0}",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
+    ]
+  },
+  {
     "key": "t_77b99336b4e2cffc",
     "source": "{p0} + доп. услуги {p1}",
     "locations": [
@@ -1290,7 +1297,15 @@
     "key": "t_8819e31b7fee10c5",
     "source": "Ваш прогресс",
     "locations": [
-      "lib/screens/client/profile_screen.dart"
+      "lib/screens/client/profile_screen.dart",
+      "lib/ui/customer_progress_info.dart"
+    ]
+  },
+  {
+    "key": "t_1555faf499d5ed55",
+    "source": "Ваш текущий статус",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
     ]
   },
   {
@@ -1790,6 +1805,13 @@
     ]
   },
   {
+    "key": "t_dad15ae6903a24eb",
+    "source": "Все статусы",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
+    ]
+  },
+  {
     "key": "t_c94ae839efe08b8b",
     "source": "Все статусы счетов и платежей",
     "locations": [
@@ -1864,6 +1886,13 @@
     "source": "Вы действительно хотите отменить эту уборку? После отмены она вернется в доступные уборки пакета, и вы сможете выбрать другую дату и время.",
     "locations": [
       "lib/screens/client/orders_screen.dart"
+    ]
+  },
+  {
+    "key": "t_b81847558cc2bad8",
+    "source": "Вы достигли максимального статуса.",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
     ]
   },
   {
@@ -2914,6 +2943,13 @@
     ]
   },
   {
+    "key": "t_954dde9b14864199",
+    "source": "До следующего статуса осталось: {amount} ₸",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
+    ]
+  },
+  {
     "key": "t_2f3fdfafe17a4bfa",
     "source": "До следующего уровня 1 оплата",
     "locations": [
@@ -3305,8 +3341,7 @@
       "lib/screens/client/calculator_screen.dart",
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/orders_screen.dart",
-      "lib/services/app_config_service.dart",
-      "lib/ui/customer_home_reference.dart"
+      "lib/services/app_config_service.dart"
     ]
   },
   {
@@ -4983,7 +5018,8 @@
     "source": "Калькулятор",
     "locations": [
       "lib/screens/client/calculator_screen.dart",
-      "lib/screens/client/client_home_screen.dart"
+      "lib/screens/client/client_home_screen.dart",
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -6090,8 +6126,8 @@
     ]
   },
   {
-    "key": "t_14eaa871df660c43",
-    "source": "Начать",
+    "key": "t_bc20cb680aa47094",
+    "source": "Начать уборку",
     "locations": [
       "lib/screens/cleaner/cleaner_orders_screen.dart"
     ]
@@ -7735,6 +7771,13 @@
     ]
   },
   {
+    "key": "t_98d8e2086c80ca08",
+    "source": "Оплачено за текущий месяц: {amount} ₸",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
+    ]
+  },
+  {
     "key": "t_21407eea91dbe14f",
     "source": "Оплачено, ожидает, отклонено",
     "locations": [
@@ -8648,6 +8691,13 @@
     "locations": [
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/package_selection_screen.dart"
+    ]
+  },
+  {
+    "key": "t_baf40f1df041b24b",
+    "source": "Пакеты, уборки и дополнительные услуги",
+    "locations": [
+      "lib/ui/customer_home_reference.dart"
     ]
   },
   {
@@ -10403,6 +10453,13 @@
     ]
   },
   {
+    "key": "t_33c60871790ffda4",
+    "source": "Расходы за месяц: от {amount} ₸",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
+    ]
+  },
+  {
     "key": "t_43f7ac6eb2438eff",
     "source": "Реальная покупка ещё не оплачена",
     "locations": [
@@ -10826,6 +10883,13 @@
     ]
   },
   {
+    "key": "t_1b3c307907b38296",
+    "source": "Скидка: {percent}%",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
+    ]
+  },
+  {
     "key": "t_148ebf5555c2f685",
     "source": "Скидки по количеству квартир",
     "locations": [
@@ -10868,6 +10932,13 @@
     "source": "Следующий платеж: {p0}",
     "locations": [
       "lib/screens/client/profile_screen.dart"
+    ]
+  },
+  {
+    "key": "t_3b06a65fd42d8b44",
+    "source": "Следующий уровень — с {amount} ₸",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
     ]
   },
   {
@@ -12156,13 +12227,6 @@
     ]
   },
   {
-    "key": "t_a8f1a45da056fa8d",
-    "source": "Уровень зависит от суммы оплаченных услуг за текущий месяц. Приглашённые клиенты не влияют на этот прогресс.",
-    "locations": [
-      "lib/screens/client/profile_screen.dart"
-    ]
-  },
-  {
     "key": "t_9f125697dba90f22",
     "source": "Уровень скидки растет по мере оплаченных приглашений. Подробную статистику можно открыть на этом экране.",
     "locations": [
@@ -12191,6 +12255,13 @@
     ]
   },
   {
+    "key": "t_834909d9ef21f8bb",
+    "source": "Условия статусов ещё не загружены. Обновите профиль.",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
+    ]
+  },
+  {
     "key": "t_b0bc2d1b64a491fe",
     "source": "Условия уборки",
     "locations": [
@@ -12216,6 +12287,13 @@
     "source": "Услуги с пометкой \"Оплачивается отдельно при оценке специалиста\" менеджер рассчитает отдельно.",
     "locations": [
       "lib/screens/client/client_home_screen.dart"
+    ]
+  },
+  {
+    "key": "t_2ac0458d4559fb5e",
+    "source": "Учитываются подтверждённые оплаты за текущий календарный месяц по времени Казахстана, включая оплату бонусами. Неоплаченные и возвращённые платежи не учитываются. В новом месяце сумма рассчитывается заново. Приглашённые клиенты не влияют на статус.",
+    "locations": [
+      "lib/ui/customer_progress_info.dart"
     ]
   },
   {
@@ -12450,13 +12528,6 @@
     "source": "Химчистка мебели",
     "locations": [
       "lib/services/app_config_service.dart"
-    ]
-  },
-  {
-    "key": "t_fa11a8644169d333",
-    "source": "Химчистка, мытьё окон и многое другое",
-    "locations": [
-      "lib/ui/customer_home_reference.dart"
     ]
   },
   {

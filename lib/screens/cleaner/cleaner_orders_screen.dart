@@ -460,6 +460,12 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
               const Spacer(),
             ],
           ),
+          if(status=='assigned'||status=='confirmed') ...[
+            const SizedBox(height: 8),
+            SizedBox(width:double.infinity,child:DomlyPrimaryButton(
+              label:'Начать уборку',onPressed:()=>_handlePrimaryAction(order))),
+            const SizedBox(height: 8),
+          ],
           const SizedBox(height: 2),
           Text("Заказ: {p0}".tr(params: {'p0': (displayId).toString()})),
           Text("Дата: {p0}".tr(params: {'p0': (dateLabel).toString()})),
@@ -586,7 +592,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                   ),
                 ],
                 const SizedBox(height: 2),
-                SizedBox(
+                if(status!='assigned'&&status!='confirmed') SizedBox(
                   width: double.infinity,
                   child: DomlyPrimaryButton(
                     label: _primaryActionLabel(status),
@@ -839,6 +845,12 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                   .toString()
             }),
           ),
+          if(status=='assigned'||status=='confirmed') ...[
+            const SizedBox(height: 8),
+            SizedBox(width:double.infinity,child:DomlyPrimaryButton(
+              label:'Начать уборку',onPressed:()=>_handlePrimaryAction(slot))),
+            const SizedBox(height: 8),
+          ],
           Text("Клиент: {p0}"
               .tr(params: {'p0': ((slot['customerName'] ?? '—')).toString()})),
           if (customerPhone.isNotEmpty)
@@ -937,7 +949,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                 ),
                 const SizedBox(height: 8),
               ],
-              SizedBox(
+              if(status!='assigned'&&status!='confirmed') SizedBox(
                 width: double.infinity,
                 child: DomlyPrimaryButton(
                   label: _primaryActionLabel(status),
@@ -1410,7 +1422,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     switch (status) {
       case 'confirmed':
       case 'assigned':
-        return 'Начать';
+        return 'Начать уборку';
       case 'start_pending':
         return 'Ждём клиента';
       case 'in_progress':

@@ -249,7 +249,10 @@ class BackendApiService {
     final uri = _uri(path, query);
     switch (method) {
       case 'GET':
-        return _client.get(uri, headers: headers);
+        return _client.get(uri, headers: headers).timeout(
+          const Duration(seconds:20),
+          onTimeout:()=>throw const BackendApiException(code:'request_timeout',
+            message:'Сервис временно недоступен. Попробуйте позже.',statusCode:503));
       case 'POST':
         return _client.post(uri, headers: headers, body: encodedBody);
       case 'PATCH':

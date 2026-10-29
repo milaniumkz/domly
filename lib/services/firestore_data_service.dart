@@ -444,7 +444,8 @@ class FirestoreDataService {
         'monthly_spent',
         'next_tier_threshold',
         'tier_progress',
-        'tier_discount_percent'
+        'tier_discount_percent',
+        'customer_tier_rules'
       ])
         key: user[key],
       'referralCode': user['referralCode'],

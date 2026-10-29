@@ -74,7 +74,7 @@ class _BootstrapHostState extends State<_BootstrapHost> {
       final translationController = TranslationController(
         preferences: preferences,
       );
-      await translationController.init();
+      await translationController.init(waitForRemote:false);
       AppLogger.d('BOOT', 'Translations initialized');
 
       final authService = AuthService(config: config);

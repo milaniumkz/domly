@@ -8,13 +8,9 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure, customer-payment-audit]
+        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
-        required: false
-        type: string
-      customer_name_sha256:
-        description: SHA-256 of a normalized customer name token for read-only diagnosis
         required: false
         type: string
       expected_plan:
@@ -51,17 +47,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
-          CUSTOMER_NAME_SHA256: ${{ inputs.customer_name_sha256 }}
         run: |
-          if [ "$ACTION" = "customer-payment-audit" ]; then
-            set -euo pipefail
-            [[ "$CUSTOMER_NAME_SHA256" =~ ^[a-f0-9]{64}$ ]]
-            [[ "$REPORT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/=]+$ ]]
-            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/customer_payment_audit.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/customer_payment_audit.cjs"
-            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
-              "set -eu; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e CUSTOMER_NAME_SHA256='$CUSTOMER_NAME_SHA256' -e REPORT_PUBLIC_KEY='$REPORT_PUBLIC_KEY' api node < '$DEPLOY_PATH/shared/customer_payment_audit.cjs'" > customer-payment-audit.enc.json
-            exit 0
-          fi
           if [ "$ACTION" = "kaspi-callback-configure" ]; then
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/configure_kaspi_callback.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/configure_kaspi_callback.cjs"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
@@ -136,12 +122,3 @@ jobs:
           path: bonus-recovery.enc.json
           if-no-files-found: error
           retention-days: 90
-
-      - name: Preserve encrypted customer support report
-        if: inputs.action == 'customer-payment-audit'
-        uses: actions/upload-artifact@v4
-        with:
-          name: customer-payment-audit-${{ github.run_id }}
-          path: customer-payment-audit.enc.json
-          if-no-files-found: error
-          retention-days: 1
