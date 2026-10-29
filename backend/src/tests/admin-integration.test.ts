@@ -39,6 +39,38 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('offline cleaner cannot receive or accept offers and can return online',async()=>{
+      const worker=randomUUID(),order=randomUUID();
+      const scheduling=new SchedulingService(db);
+      async function profile(body?:object){
+        const response=await fetch(base+'/cleaner/profile',{method:body?'PATCH':'GET',headers:{Authorization:'Bearer '+signAccessToken({id:worker,role:'cleaner',phone:'online-test'}),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+        return {status:response.status,json:await response.json() as any};
+      }
+      try {
+        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'online-'+worker]);
+        await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
+        await db.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,'2039-03-04','18:00','21:00','waiting_cleaner')",[order,customer]);
+        const offer=await scheduling.offerNextCleaner(order) as any;
+        assert.equal(offer.cleaner_id,worker);
+        assert.equal((await profile({isOnline:'false'})).status,400);
+        assert.equal((await profile({isOnline:false})).status,200);
+        assert.equal((await profile()).json.data.profile.is_online,false);
+        assert.deepEqual(await scheduling.cleanerOffers(worker),[]);
+        await assert.rejects(()=>scheduling.acceptOfferById(offer.id,worker),(error:any)=>error.code==='cleaner_offline');
+        assert.equal(await scheduling.offerNextCleaner(order),null);
+        assert.equal((await profile({isOnline:true})).status,200);
+        assert.equal((await profile()).json.data.profile.is_online,true);
+        const next=await scheduling.offerNextCleaner(order) as any;
+        assert.equal(next.cleaner_id,worker);
+        await scheduling.acceptOfferById(next.id,worker);
+        await profile({isOnline:false});
+        assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[order])).rows[0].status,'assigned');
+      } finally {
+        await db.query('DELETE FROM order_status_history WHERE order_id=$1',[order]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
+        await db.query('DELETE FROM app_users WHERE id=$1',[worker]);
+      }
+    });
     await t.test('evening slots include 18:00 and preserve the 21:00 finish limit',async()=>{
       await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
       await db.query("UPDATE cleaner_profiles SET verification_status='approved' WHERE user_id=$1",[cleaner]);

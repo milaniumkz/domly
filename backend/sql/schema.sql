@@ -1556,3 +1556,5 @@ CREATE INDEX IF NOT EXISTS account_deletion_expiry ON account_deletion_requests(
 -- Extend the former default schedule without overwriting a customized schedule.
 UPDATE app_settings SET value='["08:00","10:00","12:00","14:00","16:00","18:00"]'::jsonb, updated_at=NOW()
 WHERE key='slotStartTimes' AND value='["08:00","10:00","12:00","14:00","16:00"]'::jsonb;
+
+ALTER TABLE cleaner_profiles ADD COLUMN IF NOT EXISTS is_online BOOLEAN NOT NULL DEFAULT TRUE;

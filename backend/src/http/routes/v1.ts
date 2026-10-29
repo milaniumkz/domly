@@ -851,6 +851,7 @@ export function buildV1Router(deps: {
   }));
 
   router.patch('/cleaner/profile', auth(['cleaner']), asyncHandler(async (req, res) => {
+    if(req.body.isOnline !== undefined && typeof req.body.isOnline !== 'boolean')throw new ApiError(400,'invalid_availability','Выберите онлайн или офлайн.');
     const profile = await deps.db.transaction(async client => {
     await client.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[req.user!.id]);
     const zoneIds = req.body.zoneIds;
@@ -897,6 +898,14 @@ export function buildV1Router(deps: {
         req.body.emergencyContactRelation ?? null,
       ],
     )).rows);
+    if(req.body.isOnline !== undefined){
+      await client.query('UPDATE cleaner_profiles SET is_online=$2,updated_at=NOW() WHERE user_id=$1',[req.user!.id,req.body.isOnline]);
+      if(!req.body.isOnline){
+        // Let the maintenance worker pass these orders to the next online cleaner.
+        await client.query("UPDATE order_offers SET expires_at=NOW() WHERE cleaner_id=$1 AND status='offered'",[req.user!.id]);
+      }
+      if(profile)(profile as any).is_online=req.body.isOnline;
+    }
     return profile;
     });
     ok(res, profile);

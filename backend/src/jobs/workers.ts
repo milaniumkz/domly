@@ -76,7 +76,7 @@ workers.push(new Worker('notifications', async (job) => {
 
 workers.push(new Worker('cleaner-alarms', async (job) => {
   const { cleanerId, orderId, titleRu, bodyRu, notificationId } = job.data;
-  const active=(await db.query(`SELECT 1 FROM order_offers f JOIN service_orders o ON o.id=f.order_id
+  const active=(await db.query(`SELECT 1 FROM order_offers f JOIN service_orders o ON o.id=f.order_id JOIN cleaner_profiles cp ON cp.user_id=f.cleaner_id AND cp.is_online=TRUE
     WHERE f.order_id=$1 AND f.cleaner_id=$2 AND f.status='offered' AND f.expires_at>NOW()
     AND o.status IN ('pending_assignment','waiting_cleaner') AND o.cleaner_id IS NULL LIMIT 1`,[orderId,cleanerId])).rows.length;
   if(!active)return;
@@ -141,7 +141,11 @@ workers.push(new Worker('maintenance', async (job) => {
      WHERE status='offered' AND expires_at <= NOW()
      RETURNING order_id, cleaner_id`,
   )).rows;
-  const orderIds = [...new Set(expired.map((row) => row.order_id))];
+  const waiting=(await db.query<{id:string}>(`SELECT o.id FROM service_orders o
+    WHERE o.status IN ('pending_assignment','waiting_cleaner') AND o.cleaner_id IS NULL AND o.payable_amount<=0
+    AND NOT EXISTS(SELECT 1 FROM order_offers f WHERE f.order_id=o.id AND f.status='offered' AND f.expires_at>NOW())
+    ORDER BY o.updated_at,o.id LIMIT 100`)).rows;
+  const orderIds = [...new Set([...expired.map(row => row.order_id),...waiting.map(row => row.id)])];
   const settings = await readSettings();
   const ttlMinutes = Number(settings.cleanerOfferTtlMinutes ?? 2);
   for (const orderId of orderIds) {

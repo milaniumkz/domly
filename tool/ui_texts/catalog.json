@@ -7124,6 +7124,20 @@
     ]
   },
   {
+    "key": "t_da0b81dcd52bab1d",
+    "source": "Новые заказы не поступают. Принятые заказы остаются доступны.",
+    "locations": [
+      "lib/ui/cleaner_availability_switch.dart"
+    ]
+  },
+  {
+    "key": "t_9ebd788340f4911b",
+    "source": "Новые заказы приходят, даже когда приложение свёрнуто.",
+    "locations": [
+      "lib/ui/cleaner_availability_switch.dart"
+    ]
+  },
+  {
     "key": "t_7bbec6ae0c15cc22",
     "source": "Новые предложения",
     "locations": [
@@ -7513,6 +7527,13 @@
     "source": "Они появятся в чек-листе после согласования и оплаты.",
     "locations": [
       "lib/screens/cleaner/cleaner_checklist_screen.dart"
+    ]
+  },
+  {
+    "key": "t_76e9fb6aa15c71b8",
+    "source": "Онлайн",
+    "locations": [
+      "lib/ui/cleaner_availability_switch.dart"
     ]
   },
   {
@@ -8329,6 +8350,13 @@
     "source": "Оферта",
     "locations": [
       "lib/screens/client/profile_screen.dart"
+    ]
+  },
+  {
+    "key": "t_aba1153e3374b1e6",
+    "source": "Офлайн",
+    "locations": [
+      "lib/ui/cleaner_availability_switch.dart"
     ]
   },
   {
