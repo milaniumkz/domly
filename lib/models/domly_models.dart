@@ -663,11 +663,11 @@ class Cleaner {
 // ============================================================================
 
 class PriceCalculation {
-  /// Calculate cleaning duration in minutes: area * 1.6 + 30
+  /// Calculate cleaning duration in minutes: area * 1.6
   static int calculateDurationMinutes(double area) {
     if (area <= 0) return 120; // minimum 2 hours
-    final minutes = (area * 1.6 + 30).round();
-    return minutes.clamp(0, 480); // cap at 8 hours
+    final minutes = (area * 1.6).round();
+    return minutes < 1 ? 1 : minutes;
   }
 
   /// Calculate duration in hours (for backward compatibility)

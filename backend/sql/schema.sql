@@ -560,8 +560,8 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 INSERT INTO app_settings (key, value)
 VALUES
-  ('baseCleaningMinutes', '120'::jsonb),
-  ('minutesPerM2', '1.2'::jsonb),
+  ('baseCleaningMinutes', '0'::jsonb),
+  ('minutesPerM2', '1.6'::jsonb),
   ('slotStartTimes', '["08:00","10:00","12:00","14:00","16:00","18:00"]'::jsonb),
   ('qualityCheckHours', '48'::jsonb),
   ('bonusPaymentEnabled', 'true'::jsonb),
@@ -1558,3 +1558,57 @@ UPDATE app_settings SET value='["08:00","10:00","12:00","14:00","16:00","18:00"]
 WHERE key='slotStartTimes' AND value='["08:00","10:00","12:00","14:00","16:00"]'::jsonb;
 
 ALTER TABLE cleaner_profiles ADD COLUMN IF NOT EXISTS is_online BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Apply the requested duration formula once; later administrator edits survive deploys.
+WITH applied AS (
+  INSERT INTO app_settings(key,value) VALUES('cleaningDurationFormulaVersion','1'::jsonb)
+  ON CONFLICT(key) DO NOTHING RETURNING key
+)
+UPDATE app_settings SET value=CASE key WHEN 'baseCleaningMinutes' THEN '0'::jsonb ELSE '1.6'::jsonb END,updated_at=NOW()
+WHERE key IN ('baseCleaningMinutes','minutesPerM2') AND EXISTS(SELECT 1 FROM applied);
+
+-- Recalculate future, unstarted appointments once, as requested by the owner.
+DO $$
+DECLARE changed_count INTEGER;
+BEGIN
+  INSERT INTO app_settings(key,value) VALUES('futureCleaningDurationRecalculatedV1','true'::jsonb)
+  ON CONFLICT(key) DO NOTHING;
+  IF FOUND THEN
+    WITH candidates AS MATERIALIZED (
+      SELECT o.id,o.cleaner_id,o.scheduled_date,o.start_time,o.end_time AS old_end,
+        o.estimated_duration_minutes AS old_minutes,
+        GREATEST(1,ROUND(COALESCE(NULLIF(a.verified_area,0),NULLIF(a.area,0),NULLIF(o.area,0),50)*1.6+
+          COALESCE((SELECT SUM(oa.duration_minutes) FROM order_addons oa WHERE oa.order_id=o.id
+            AND oa.payment_status NOT IN ('cancelled','rejected','refunded')),0)))::int AS minutes
+      FROM service_orders o LEFT JOIN customer_addresses a ON a.id=o.address_id
+      WHERE o.status IN ('draft','pending_payment','pending_assignment','waiting_cleaner','assigned','confirmed')
+        AND o.scheduled_date+o.start_time>(NOW() AT TIME ZONE 'Asia/Almaty')
+    ), changed AS (
+      UPDATE service_orders o SET estimated_duration_minutes=c.minutes,
+        end_time=c.start_time+c.minutes*INTERVAL '1 minute',updated_at=NOW()
+      FROM candidates c WHERE o.id=c.id
+        AND EXTRACT(EPOCH FROM c.start_time)/60+c.minutes<=21*60
+        AND NOT EXISTS(SELECT 1 FROM service_orders other WHERE other.cleaner_id=c.cleaner_id
+          AND other.id<>c.id AND other.scheduled_date=c.scheduled_date
+          AND other.status NOT IN ('cancelled','canceled','completed')
+          AND other.start_time<c.start_time+c.minutes*INTERVAL '1 minute' AND other.end_time>c.start_time)
+      RETURNING o.id,c.old_minutes,c.old_end,o.estimated_duration_minutes,o.end_time
+    )
+    INSERT INTO audit_logs(action,entity_type,entity_id,payload)
+      SELECT 'cleaning.duration_recalculated','order',id::text,
+        jsonb_build_object('oldMinutes',old_minutes,'newMinutes',estimated_duration_minutes,
+          'oldEnd',old_end,'newEnd',end_time,'minutesPerM2',1.6) FROM changed;
+    GET DIAGNOSTICS changed_count = ROW_COUNT;
+    RAISE NOTICE 'Future cleaning durations recalculated: %',changed_count;
+  END IF;
+END $$;
+
+-- Preserve the best available package description for historical purchases.
+UPDATE customer_packages cp SET purchase_config=COALESCE(cp.purchase_config,'{}'::jsonb)||
+  jsonb_build_object('packageSnapshot',to_jsonb(pkg),'packageSnapshotSource','catalog_at_backfill')
+FROM catalog_packages pkg WHERE pkg.id=cp.package_id
+  AND (cp.purchase_config->'packageSnapshot' IS NULL OR cp.purchase_config->'packageSnapshot'='null'::jsonb);
+
+UPDATE customer_packages cp SET purchase_config=COALESCE(cp.purchase_config,'{}'::jsonb)||
+  jsonb_build_object('addressSnapshot',to_jsonb(a)) FROM customer_addresses a
+WHERE a.id=cp.address_id AND (cp.purchase_config->'addressSnapshot' IS NULL OR cp.purchase_config->'addressSnapshot'='null'::jsonb);

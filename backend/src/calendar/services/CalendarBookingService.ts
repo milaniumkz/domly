@@ -1,3 +1,4 @@
+import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
 import { UnitOfWork } from '../../domain/repositories/UnitOfWork';
 import { timeToMinutes } from '../../shared/Month';
 import { CalendarRepository } from '../repositories/CalendarRepository';
@@ -20,13 +21,7 @@ export class CalendarBookingService {
   ) {}
 
   estimateCleaningDuration(area: number): number {
-    if (area >= 30 && area < 50) return 2;
-    if (area >= 50 && area < 75) return 3;
-    if (area >= 75 && area < 100) return 4;
-    if (area >= 100 && area < 150) return 5;
-    if (area >= 150 && area < 200) return 6;
-    if (area >= 200) return Math.max(7, Math.ceil(area / 35));
-    return 1.5;
+    return cleaningDurationMinutes(area) / 60;
   }
 
   async getAvailableDates(userId: string, apartmentId: string, packageId: string, month: string): Promise<Array<{ date: string; availableSlots: number }>> {

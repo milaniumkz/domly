@@ -17,6 +17,13 @@ export async function requestAccountDeletion(db: Database, userId: string) {
       (user_id,previous_status,previous_registration_status,previous_verification_status,restore_until)
       VALUES($1,$2,$3,$4,NOW()+INTERVAL '30 days') RETURNING *`,
       [userId,user.status,profile?.registration_status??null,profile?.verification_status??null])).rows[0];
+    await tx.query(`UPDATE customer_packages cp SET purchase_config=COALESCE(cp.purchase_config,'{}'::jsonb)||
+      jsonb_build_object('packageSnapshot',to_jsonb(pkg),'packageSnapshotSource','catalog_at_deletion')
+      FROM catalog_packages pkg WHERE cp.customer_id=$1 AND pkg.id=cp.package_id
+      AND (cp.purchase_config->'packageSnapshot' IS NULL OR cp.purchase_config->'packageSnapshot'='null'::jsonb)`,[userId]);
+    await tx.query(`UPDATE customer_packages cp SET purchase_config=COALESCE(cp.purchase_config,'{}'::jsonb)||
+      jsonb_build_object('addressSnapshot',to_jsonb(a)) FROM customer_addresses a WHERE cp.customer_id=$1 AND a.id=cp.address_id
+      AND (cp.purchase_config->'addressSnapshot' IS NULL OR cp.purchase_config->'addressSnapshot'='null'::jsonb)`,[userId]);
     await tx.query('DELETE FROM device_tokens WHERE user_id=$1',[userId]);
     await tx.query('UPDATE refresh_sessions SET revoked_at=NOW() WHERE user_id=$1',[userId]);
     await tx.query(`UPDATE app_users SET status='blocked',deleted_at=NOW(),
@@ -62,6 +69,10 @@ export async function anonymizeExpiredAccountDeletions(db: Database, limit=100) 
       const deletion=(await tx.query(`SELECT * FROM account_deletion_requests WHERE user_id=$1
         AND restored_at IS NULL AND anonymized_at IS NULL AND restore_until<=NOW() FOR UPDATE`,[candidate.user_id])).rows[0];
       if(!deletion)return false;
+      await tx.query(`UPDATE customer_packages SET purchase_config=jsonb_set(purchase_config,'{addressSnapshot}',
+        jsonb_build_object('anonymized',true,'area',purchase_config#>'{addressSnapshot,area}',
+          'verified_area',purchase_config#>'{addressSnapshot,verified_area}'))
+        WHERE customer_id=$1 AND purchase_config ? 'addressSnapshot'`,[user.id]);
       await tx.query(`UPDATE customer_addresses SET city='Удалено',settlement=NULL,street='Удалено',house='-',apartment=NULL,
         entrance=NULL,floor=NULL,intercom=NULL,access_comment=NULL,area=NULL,latitude=NULL,longitude=NULL WHERE user_id=$1`,[user.id]);
       await tx.query(`UPDATE cleaner_profiles SET home_address=NULL,emergency_contact_phone=NULL,

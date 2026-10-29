@@ -1,3 +1,4 @@
+import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
 import {cancelHomePurchase,resumeHomePurchase} from '../../modules/homePurchase';
 import { formatAddonRecord, formatServiceDescription } from '../../modules/serviceDescription';
 import {PublicTextCatalog} from '../../modules/publicTextCatalog';
@@ -1368,7 +1369,7 @@ export function buildV1Router(deps: {
     )).rows);
     if (!pkg) throw new ApiError(404, 'not_found', 'Пакет не найден.');
     const address = first<{ id: string; area: string; verified_area: string | null; city: string; settlement: string | null; street: string; house: string; apartment: string | null }>((await deps.db.query(
-      `SELECT id, area, verified_area, city, settlement, street, house, apartment FROM customer_addresses WHERE id=$1 AND user_id=$2`,
+      `SELECT * FROM customer_addresses WHERE id=$1 AND user_id=$2`,
       [req.body.addressId, req.user!.id],
     )).rows);
     if (!address?.area) throw new ApiError(400, 'area_required', 'Заполните площадь квартиры в профиле.');
@@ -1377,7 +1378,7 @@ export function buildV1Router(deps: {
     const customerPackage = first((await deps.db.query(
       `INSERT INTO customer_packages (customer_id, package_id, address_id, total_cleanings, available_cleanings, months, status, purchase_config)
        VALUES ($1,$2,$3,$4,$4,$5,'pending_payment',$6) RETURNING *`,
-      [req.user!.id, pkg.id, address.id, quote.cleaningCount, pkg.months, quote],
+      [req.user!.id, pkg.id, address.id, quote.cleaningCount, pkg.months, {...quote,addressSnapshot:address}],
     )).rows);
     const payment = await deps.payments.createPayment({
       customerId: req.user!.id,
@@ -2609,6 +2610,23 @@ export function buildV1Router(deps: {
     )).rows);
   }));
 
+  router.get('/admin/users/:id/purchases',auth(['admin','superadmin']),asyncHandler(async(req,res)=>{
+    const owner=first((await deps.db.query("SELECT id,deleted_at FROM app_users WHERE id=$1 AND role='customer'",[req.params.id])).rows);
+    if(!owner)throw new ApiError(404,'not_found','Клиент не найден.');
+    const purchases=(await deps.db.query(`SELECT cp.*,COALESCE(cp.purchase_config->'addressSnapshot',to_jsonb(ca)) AS purchased_address,
+      COALESCE(cp.purchase_config#>>'{packageSnapshot,name_ru}',pkg.name_ru,'Пакет') AS package_name,
+      COALESCE(cp.purchase_config#>>'{packageSnapshot,name_kk}',pkg.name_kk) AS package_name_kk,
+      (SELECT COUNT(*)::int FROM service_orders o WHERE o.customer_package_id=cp.id AND o.status='completed') AS completed_cleanings,
+      (SELECT COUNT(*)::int FROM service_orders o WHERE o.customer_package_id=cp.id AND o.status NOT IN ('completed','cancelled','canceled')) AS booked_cleanings,
+      COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY p.created_at DESC,p.id) FROM payments p WHERE p.customer_package_id=cp.id OR EXISTS(SELECT 1 FROM service_orders related WHERE related.id=p.order_id AND related.customer_package_id=cp.id)),'[]'::jsonb) AS payments,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('id',o.id,'number',o.numeric_id,'date',o.scheduled_date,'startTime',o.start_time,'status',o.status) ORDER BY o.scheduled_date DESC,o.id)
+        FROM service_orders o WHERE o.customer_package_id=cp.id),'[]'::jsonb) AS orders
+      FROM customer_packages cp LEFT JOIN catalog_packages pkg ON pkg.id=cp.package_id
+      LEFT JOIN customer_addresses ca ON ca.id=cp.address_id
+      WHERE cp.customer_id=$1 ORDER BY cp.created_at DESC,cp.id`,[req.params.id])).rows;
+    ok(res,{customer:owner,purchases});
+  }));
+
   router.get('/admin/packagePurchases/:id/details', auth(['admin','superadmin']), asyncHandler(async(req,res)=>{
     const order = first((await deps.db.query(`SELECT cp.*, cp.id AS customer_package_id,'package_purchase' AS view_kind,
       cu.full_name AS customer_name,cu.phone AS customer_phone,pkg.name_ru AS package_name_ru,
@@ -3665,7 +3683,7 @@ export function buildV1Router(deps: {
         house: string;
         apartment: string | null;
       }>((await deps.db.query(
-        `SELECT id, area, verified_area, city, settlement, street, house, apartment FROM customer_addresses WHERE id=$1 AND user_id=$2`,
+        `SELECT * FROM customer_addresses WHERE id=$1 AND user_id=$2`,
         [preorder.address_id, req.user!.id],
       )).rows)
       : null;
@@ -3675,7 +3693,7 @@ export function buildV1Router(deps: {
     const customerPackage = first<{ id: string }>((await deps.db.query(
       `INSERT INTO customer_packages (customer_id, package_id, address_id, total_cleanings, available_cleanings, months, status, purchase_config)
        VALUES ($1,$2,$3,$4,$4,$5,'pending_payment',$6) RETURNING *`,
-      [req.user!.id, pkg.id, preorder.address_id, pkg.cleaning_count, pkg.months],
+      [req.user!.id, pkg.id, preorder.address_id, pkg.cleaning_count, pkg.months,{packageSnapshot:pkg,addressSnapshot:address,area,monthlyPrice:total}],
     )).rows);
     const payment = await deps.payments.createPayment({
       customerId: req.user!.id,
@@ -4582,7 +4600,11 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
               ORDER BY u.created_at DESC,u.id DESC LIMIT $${values.length - 1} OFFSET $${values.length}
             )
             SELECT u.id, u.numeric_id, u.full_name, u.phone, u.email, u.status, u.rating, u.bonus_balance, u.created_at,u.deleted_at,
+                   ca.city,ca.street,ca.house,ca.apartment,ca.entrance,ca.floor,ca.residential_complex,COALESCE(ca.verified_area,ca.area) AS area,
+                   NULLIF(CONCAT_WS(', ',ca.city,ca.street,ca.house,CASE WHEN ca.apartment IS NOT NULL THEN 'кв. '||ca.apartment END),'') AS address,
                    (SELECT MAX(d.restore_until) FROM account_deletion_requests d WHERE d.user_id=u.id AND d.restored_at IS NULL AND d.anonymized_at IS NULL) AS restore_until,
+                   (SELECT COALESCE(jsonb_agg(COALESCE(cp.purchase_config#>>'{packageSnapshot,name_ru}',pkg.name_ru,'Пакет') ORDER BY cp.created_at DESC),'[]'::jsonb)
+                     FROM customer_packages cp LEFT JOIN catalog_packages pkg ON pkg.id=cp.package_id WHERE cp.customer_id=u.id) AS package_names,
                    (SELECT COUNT(*)::int FROM customer_packages cp WHERE cp.customer_id=u.id AND EXISTS
                      (SELECT 1 FROM payments p WHERE p.customer_package_id=cp.id AND p.status IN ('paid','refunded'))) AS paid_package_count,
                    (SELECT COALESCE(SUM(p.amount),0) FROM payments p WHERE p.customer_id=u.id AND p.status IN ('paid','refunded')) AS paid_total,
@@ -4591,6 +4613,7 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
                    (SELECT COUNT(*)::int FROM service_orders o WHERE o.customer_id=u.id) AS orders_count,
                    (SELECT COUNT(*)::int FROM payments pay WHERE pay.customer_id=u.id) AS payments_count
             FROM page JOIN app_users u ON u.id=page.id
+            LEFT JOIN LATERAL (SELECT * FROM customer_addresses a WHERE a.user_id=u.id ORDER BY a.is_primary DESC,a.created_at DESC,a.id LIMIT 1) ca ON TRUE
             ORDER BY u.created_at DESC,u.id DESC`,
       values,
     };
@@ -4845,8 +4868,8 @@ export function buildRuntimeConfig(settings: Record<string, any>) {
       },
       assignmentRules,
       pricing: {
-        baseCleaningMinutes: settings.baseCleaningMinutes ?? 120,
-        minutesPerM2: settings.minutesPerM2 ?? 1.2,
+        baseCleaningMinutes: settings.baseCleaningMinutes ?? 0,
+        minutesPerM2: settings.minutesPerM2 ?? 1.6,
         defaultBonusMaxPercent: settings.defaultBonusMaxPercent ?? 50,
         allowBonusForPackagePurchase: settings.allowBonusForPackagePurchase ?? false,
         skipZeroAmountInvoice: settings.skipZeroAmountInvoice ?? true,
@@ -5015,11 +5038,11 @@ async function ensurePackageQualityCheck(db: Database, notifications: Notificati
 async function estimateCleaningDurationMinutes(
   db: Pick<Database, 'query'>,
   addressId?: string,
-  addons: Array<{ duration_minutes?: number }> = [],
+  addons: Array<{ duration_minutes?: number; quantity?: number }> = [],
 ): Promise<number> {
   const settings = await readAppSettings(db);
-  const baseMinutes = Number(settings.baseCleaningMinutes ?? 120);
-  const minutesPerM2 = Number(settings.minutesPerM2 ?? 1.2);
+  const baseMinutes = Number(settings.baseCleaningMinutes ?? 0);
+  const minutesPerM2 = Number(settings.minutesPerM2 ?? 1.6);
   const address = addressId
     ? (await db.query<{ area: string; verified_area: string | null }>(
       `SELECT area, verified_area FROM customer_addresses WHERE id=$1`,
@@ -5027,8 +5050,8 @@ async function estimateCleaningDurationMinutes(
     )).rows[0]
     : null;
   const area = Number(address?.verified_area ?? address?.area ?? 50);
-  const addonMinutes = addons.reduce((sum, addon) => sum + Number(addon.duration_minutes ?? 0), 0);
-  return Math.max(30, Math.round(baseMinutes + area * minutesPerM2 + addonMinutes));
+  const addonMinutes = addons.reduce((sum, addon) => sum + Number(addon.duration_minutes ?? 0) * Number(addon.quantity ?? 1), 0);
+  return cleaningDurationMinutes(area, addonMinutes, baseMinutes, minutesPerM2);
 }
 
 async function initProviderPayment(

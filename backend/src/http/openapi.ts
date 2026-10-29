@@ -609,6 +609,7 @@ export const openApiSpec = {
         requestBody: jsonBody({ action: 'payment.confirmed', entityType: 'payment', entityId: 'uuid', metadata: {} }),
       },
     },
+    '/admin/users/{id}/purchases': {get: {...secured('Полная история пакетов, оплат и уборок клиента, включая удалённых'),parameters:[path('id')]}},
     '/admin/packagePurchases/{id}/details': { get: { ...secured('Админ: детали покупки пакета и история платежей'), parameters: [path('id')] } },
     '/admin/users/{id}/restore': { post: { ...secured('Админ: восстановить удалённый аккаунт в течение 30 дней без изменения пакетов и платежей'), parameters: [path('id')] } },
     '/admin/orders/{id}/details': { get: { ...secured('Админ: детали заказа, клиент, уборщица, допы, платежи'), parameters: [path('id')] } },

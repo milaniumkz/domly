@@ -1497,6 +1497,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           _miniInfo('Дом', house),
           _miniInfo('Площадь', area == '—' ? '—' : '$area м²'),
           _miniInfo('Бонусы', '$bonuses ₸'),
+          if((customer['packageNames'] as List? ?? const []).isNotEmpty)
+            _miniInfo('Пакеты',(customer['packageNames'] as List).join(', ')),
           if ((customer['paidPackageCount'] as num? ?? 0) > 0) ...[
             _miniInfo('Куплено пакетов', '${customer['paidPackageCount']}'),
             _miniInfo(
@@ -1537,19 +1539,79 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
   }
 
-  void _showCustomerPurchases(Map<String, dynamic> customer) {
-    setState(() {
-      _selectedIndex = _sectionIndexByKey('orders');
-      _searchQuery = (customer['phone'] ?? customer['id'] ?? '').toString();
-      _ordersTabFilter = 'Все заказы';
-      _statusFilter = 'Все';
-      _clusterFilter = 'Все';
-      _cleanerFilter = 'Все';
-      _serviceAreaFilter = 'Все';
-      _assignmentStatusFilter = 'Все';
-      _filterStartDate = null;
-      _filterEndDate = null;
-    });
+  Future<void> _showCustomerPurchases(Map<String, dynamic> customer) async {
+    try {
+      final purchases=await _data.adminCustomerPurchases(customer['id'].toString());
+      if(!mounted)return;
+      await _openEntityDetails(context,title:'Пакеты и оплаты · ${customer['name'] ?? customer['id']}',
+        sections:_customerPurchaseSections(purchases));
+    } catch(error) {
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(UserErrorMessage.message(error))));
+    }
+  }
+
+  List<_DetailSection> _customerPurchaseSections(List<Map<String,dynamic>> purchases) {
+    if(purchases.isEmpty)return [_detailSection('История покупок',{'Пакеты':'Покупок нет'})];
+    String status(dynamic value)=> const {'active':'Активен','frozen':'Заморожен','pending_payment':'Ожидает оплаты',
+      'paid':'Оплачен','refunded':'Возвращён','cancelled':'Отменён','rejected':'Отклонён','pending':'Ожидает оплаты',
+      'invoice_requested':'Счёт запрошен','draft':'Черновик','expired':'Истёк','completed':'Завершён'}['$value'] ?? '$value';
+    return purchases.expand((purchase){
+      final config=Map<String,dynamic>.from(purchase['purchase_config'] as Map? ?? const {});
+      final snapshot=Map<String,dynamic>.from(config['packageSnapshot'] as Map? ?? const {});
+      final address=Map<String,dynamic>.from(purchase['purchased_address'] as Map? ?? const {});
+      final pricing=Map<String,dynamic>.from(config['pricingSnapshot'] as Map? ?? const {});
+      final payments=(purchase['payments'] as List? ?? const []).whereType<Map>();
+      final addons=(config['addons'] as List? ?? const []).whereType<Map>();
+      final orders=(purchase['orders'] as List? ?? const []).whereType<Map>();
+      final name=(purchase['package_name'] ?? snapshot['name_ru'] ?? 'Пакет').toString();
+      return <_DetailSection>[
+        _detailSection(name,{
+          'ID покупки':'${purchase['id']}',
+          'Дата покупки':_formatAdminDateTime(purchase['created_at']),
+          'Статус пакета':status(purchase['status']),
+          'Срок пакета':'${config['billingPeriodMonths'] ?? purchase['months'] ?? snapshot['months'] ?? '—'} мес.',
+          'Уборок в месяц':'${config['cleaningsPerMonth'] ?? snapshot['cleaning_count'] ?? '—'}',
+          'Всего уборок':'${purchase['total_cleanings'] ?? 0}',
+          'Завершено уборок':'${purchase['completed_cleanings'] ?? 0}',
+          'Забронировано уборок':'${purchase['booked_cleanings'] ?? 0}',
+          'Доступно уборок':'${purchase['available_cleanings'] ?? 0}',
+          'Начало действия':_formatAdminDateTime(purchase['period_start']),
+          'Окончание действия':_formatAdminDateTime(purchase['period_end']),
+          'Заморожен до':_formatAdminDateTime(purchase['freeze_until']),
+          'Стоимость покупки':config['monthlyPrice']==null?'См. историю платежей':'${config['monthlyPrice']} ₸',
+          'Тариф за м²':'${pricing['pricePerM2'] ?? snapshot['price_per_m2'] ?? '—'} ₸',
+          'Скидка':'${config['discountAmount'] ?? 0} ₸',
+          'Дополнительные услуги':addons.isEmpty?'Нет':addons.map((a)=>'${a['title'] ?? a['id']} × ${a['quantity'] ?? 1} · ${a['total'] ?? a['price'] ?? 0} ₸').join('\n'),
+        }),
+        _detailSection('Объект · $name',{
+          'Адрес':address['anonymized']==true?'Данные обезличены':[address['city'],address['settlement'],address['street'],address['house']].where((v)=>v!=null&&'$v'.isNotEmpty).join(', '),
+          'Дом':'${address['house'] ?? '—'}',
+          'ЖК':_firstText([address['residential_complex']]),
+          'Квартира':'${address['apartment'] ?? '—'}',
+          'Подъезд':'${address['entrance'] ?? '—'}',
+          'Этаж':'${address['floor'] ?? '—'}',
+          'Домофон':'${address['intercom'] ?? '—'}',
+          'Площадь при покупке':'${config['area'] ?? address['area'] ?? '—'} м²',
+          'Подтверждённая площадь':'${address['verified_area'] ?? '—'} м²',
+          'Комментарий':'${address['access_comment'] ?? '—'}',
+        }),
+        for(final payment in payments)_detailSection('Платёж №${payment['numeric_id'] ?? payment['id']}',{
+          'ID платежа':'${payment['id']}',
+          'Заказ':'${payment['order_id'] ?? 'Покупка пакета'}',
+          'Статус':status(payment['status']),
+          'Способ оплаты':const {'kaspi':'Kaspi.kz','bcc':'Онлайн-платёж','manual':'Вручную','bonus':'Бонусы'}['${payment['provider']}'] ?? '${payment['provider']}',
+          'Сумма счёта':'${payment['amount']} ₸',
+          'Бонусами':'${payment['bonus_amount'] ?? 0} ₸',
+          'Создан':_formatAdminDateTime(payment['created_at']),
+          'Оплачен':_formatAdminDateTime(payment['paid_at']),
+          'Применён к пакету':_formatAdminDateTime(payment['applied_at']),
+          'Номер счёта в банке':'${payment['external_id'] ?? '—'}',
+        }),
+        _detailSection('Уборки по пакету · $name',{
+          'История':orders.isEmpty?'Уборки ещё не назначены':orders.map((o)=>'№${o['number'] ?? o['id']} · ${o['date'] ?? '—'} ${o['startTime'] ?? ''} · ${_orderStatusLabel('${o['status']}')}').join('\n'),
+        }),
+      ];
+    }).toList();
   }
 
   Future<void> _restoreCustomer(Map<String, dynamic> customer) async {
@@ -1809,11 +1871,20 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             customer['updatedAt'],
       );
 
-  void _openCustomerDetails(
+  Future<void> _openCustomerDetails(
     BuildContext context,
     Map<String, dynamic> customer,
     int displayNumber,
-  ) {
+  ) async {
+    List<Map<String,dynamic>> purchases=const [];
+    if(!DebugSession.enabled){
+      try { purchases=await _data.adminCustomerPurchases(customer['id'].toString()); }
+      catch(error){
+        if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(UserErrorMessage.message(error))));
+        return;
+      }
+    }
+    if(!context.mounted)return;
     final phone = _firstText([
       customer['phone'],
       customer['phoneNumber'],
@@ -1863,6 +1934,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           'Удалён': _formatAdminDateTime(customer['deletedAt']),
           'Восстановление до': _formatAdminDateTime(customer['restoreUntil']),
         }),
+        ..._customerPurchaseSections(purchases),
         _detailSection('Адрес', {
           'Город': _firstText([customer['city']]),
           'Дом / ЖК': _firstText([

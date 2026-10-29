@@ -1,3 +1,4 @@
+import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
 import { Cleaner, CleanerDayLoad, CleanerMonthlyStats } from '../../domain/entities/Cleaner';
 import { FairnessScoreSnapshot } from '../../domain/entities/Assignment';
 import { Order } from '../../domain/entities/Order';
@@ -33,13 +34,7 @@ export class SchedulerService {
   ) {}
 
   estimateCleaningDuration(area: number): number {
-    if (area >= 30 && area < 50) return 2;
-    if (area >= 50 && area < 75) return 3;
-    if (area >= 75 && area < 100) return 4;
-    if (area >= 100 && area < 150) return 5;
-    if (area >= 150 && area < 200) return 6;
-    if (area >= 200) return Math.max(7, Math.ceil(area / 35));
-    return 1.5;
+    return cleaningDurationMinutes(area) / 60;
   }
 
   async getCleanerMonthlyStats(cleanerId: string, month: string): Promise<CleanerMonthlyStats> {

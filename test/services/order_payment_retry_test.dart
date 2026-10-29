@@ -1,9 +1,24 @@
+import 'package:domly/screens/common/kaspi_invoice_request_dialog.dart';
 import 'package:domly/screens/common/order_payment_retry.dart';
 import 'package:domly/services/firestore_data_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('Kaspi preview shows zero after full bonus spend and restores balance on uncheck', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (context) => TextButton(
+      onPressed: () => showKaspiInvoiceRequestOptionsDialog(context,
+        bonusBalance: 65500, maxBonusToSpend: 65500, paymentAmount: 65500, initialUseBonus: true),
+      child: const Text('Open'),
+    )))));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Бонусов на балансе: 65500 ₸'), findsOneWidget);
+    expect(find.text('Бонусов останется после оплаты: 0 ₸'), findsOneWidget);
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    expect(find.text('Бонусов останется после оплаты: 65500 ₸'), findsOneWidget);
+  });
   testWidgets('saved unpaid order without a created invoice can retry payment', (tester) async {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: OrderPaymentRetry(
       data: FirestoreDataService.instance,
@@ -54,10 +69,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Оплатить бонусами: доступно 4000 ₸'), findsOneWidget);
+    expect(find.text('Бонусов останется после оплаты: 10000 ₸'), findsOneWidget);
     expect(find.text('Оплатить бонусами'), findsOneWidget);
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
     expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+    expect(find.text('Бонусов на балансе: 10000 ₸'), findsOneWidget);
+    expect(find.text('Бонусов останется после оплаты: 6000 ₸'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   testWidgets('retry shows retained bonuses and the exact new invoice amount', (tester) async {
