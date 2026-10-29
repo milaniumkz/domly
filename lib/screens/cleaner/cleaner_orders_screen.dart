@@ -31,6 +31,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
   late final Stream<int> _notificationsStream;
   late final Stream<List<Map<String, dynamic>>> _chatSummariesStream;
   bool _initialTabApplied = false;
+  String? _focusOrderId;
   final Set<String> _acceptingOfferIds = <String>{};
   final Set<String> _rejectingOfferIds = <String>{};
   final Set<String> _respondedOfferKeys = <String>{};
@@ -66,6 +67,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     if (args is! Map) {
       return;
     }
+    _focusOrderId = (args['focusOrderId'] ?? args['orderId'])?.toString();
     final rawTab = args['initialTab']?.toString().trim().toLowerCase();
     if (rawTab == 'completed' || rawTab == 'history' || rawTab == 'done') {
       _tabController.index = 1;
@@ -318,6 +320,12 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     required List<Map<String, dynamic>> chatSummaries,
     required bool hasServiceAreas,
   }) {
+    bool focused(Map<String, dynamic> item) =>
+        _focusOrderId != null &&
+        ['id', 'orderId', 'sourceOrderId', 'customerOrderId', 'scheduleSlotId']
+            .any((key) => item[key]?.toString() == _focusOrderId);
+    final focusedOffer = offers.where(focused).firstOrNull;
+    final focusedSlot = slots.where(focused).firstOrNull;
     if (!hasServiceAreas && offers.isEmpty && slots.isEmpty) {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -344,6 +352,13 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
       children: [
+        if (focusedOffer != null) ...[
+          _offerCard(focusedOffer),
+          const SizedBox(height: 12),
+        ] else if (focusedSlot != null) ...[
+          _slotCard(focusedSlot, chatSummaries: chatSummaries),
+          const SizedBox(height: 12),
+        ],
         if (!hasServiceAreas) ...[
           const SizedBox(height: 4),
           CleanerServiceAreaNotice(
@@ -362,7 +377,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
             ),
           ),
           const SizedBox(height: 8),
-          for (final offer in offers) ...[
+          for (final offer in offers.where((item) => item != focusedOffer)) ...[
             _offerCard(offer),
             const SizedBox(height: 8),
           ],
@@ -378,7 +393,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
             ),
           ),
           const SizedBox(height: 8),
-          for (final slot in slots) ...[
+          for (final slot in slots.where((item) => item != focusedSlot)) ...[
             _slotCard(slot, chatSummaries: chatSummaries),
             const SizedBox(height: 10),
           ],

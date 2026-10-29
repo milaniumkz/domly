@@ -942,15 +942,20 @@ export function buildV1Router(deps: {
       throw new ApiError(400, 'documents_required', 'Загрузите документы для проверки.');
     }
     if(!documents.some(d=>['selfie','selfieUrl'].includes(d.type)) && !(await deps.db.query("SELECT id FROM cleaner_documents WHERE cleaner_id=$1 AND type IN ('selfie','selfieUrl') LIMIT 1",[req.user!.id])).rows.length) throw new ApiError(400,'selfie_required','Сделайте селфи для фото профиля.');
-    const savedDocuments = [];
+    const ownedDocuments = [];
     for (const item of documents) {
-      const file = first((await deps.db.query(
-        `INSERT INTO files (owner_id, bucket, object_key, mime_type, public_url)
-         VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (bucket, object_key) DO UPDATE SET public_url=EXCLUDED.public_url
-         RETURNING *`,
-        [req.user!.id, 'external', `cleaner-documents/${req.user!.id}/${item.type}`, null, item.url],
-      )).rows);
+      const key = storageKey(item.url);
+      const file = key ? first<any>((await deps.db.query(
+        `SELECT f.* FROM files f WHERE f.owner_id=$1 AND f.object_key=$2
+         AND NOT EXISTS (SELECT 1 FROM banners b WHERE b.image_file_id=f.id OR b.image_url=f.public_url)
+         AND NOT EXISTS (SELECT 1 FROM promotions p WHERE p.banner_file_id=f.id)`,
+        [req.user!.id, key],
+      )).rows) : null;
+      if (!file) throw new ApiError(400, 'invalid_document', 'Загрузите собственное фото или документ через приложение.');
+      ownedDocuments.push({item, file});
+    }
+    const savedDocuments = [];
+    for (const {item, file} of ownedDocuments) {
       const document = first((await deps.db.query(
         `INSERT INTO cleaner_documents (cleaner_id, type, file_id, status)
          VALUES ($1,$2,$3,'pending')
@@ -1587,7 +1592,7 @@ export function buildV1Router(deps: {
         bodyRu: 'Вам поступил новый заказ на подтверждение.',
         targetType: 'order_offer',
         targetId: (nextOffer as any).order_id,
-        dedupeKey: `order-offer-${(nextOffer as any).order_id}-${(nextOffer as any).cleaner_id}`,
+        dedupeKey: `order-offer-${(nextOffer as any).order_id}-${(nextOffer as any).cleaner_id}-${new Date((nextOffer as any).expires_at).toISOString()}`,
       });
     } else {
       await deps.notifications.createAdminEvent({
@@ -1623,7 +1628,7 @@ export function buildV1Router(deps: {
         bodyRu: 'Вам поступил новый заказ на подтверждение.',
         targetType: 'order_offer',
         targetId: String(req.params.id),
-        dedupeKey: `order-offer-${String(req.params.id)}-${(nextOffer as any).cleaner_id}`,
+        dedupeKey: `order-offer-${String(req.params.id)}-${(nextOffer as any).cleaner_id}-${new Date((nextOffer as any).expires_at).toISOString()}`,
       });
     } else {
       await deps.notifications.createAdminEvent({
@@ -1645,7 +1650,10 @@ export function buildV1Router(deps: {
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.area,
               cu.full_name AS customer_name, cu.phone AS customer_phone,
               cl.full_name AS cleaner_name, cl.phone AS cleaner_phone,
-              (SELECT f.public_url FROM cleaner_documents d JOIN files f ON f.id=d.file_id AND f.owner_id=d.cleaner_id WHERE d.cleaner_id=o.cleaner_id AND d.type IN ('selfie','selfieUrl') AND d.status='approved' ORDER BY d.created_at DESC LIMIT 1) AS cleaner_photo_url,
+              (SELECT f.public_url FROM cleaner_documents d JOIN files f ON f.id=d.file_id AND f.owner_id=d.cleaner_id WHERE d.cleaner_id=o.cleaner_id AND d.type IN ('selfie','selfieUrl') AND d.status='approved'
+                AND NOT EXISTS (SELECT 1 FROM banners b WHERE b.image_file_id=f.id OR b.image_url=f.public_url)
+                AND NOT EXISTS (SELECT 1 FROM promotions pr WHERE pr.banner_file_id=f.id)
+                ORDER BY d.created_at DESC LIMIT 1) AS cleaner_photo_url,
               COALESCE((SELECT json_agg(json_build_object('id',a.id,'key',a.id,'label',a.title_ru,'quantity',oa.quantity,
                 'price',oa.price,'durationMinutes',oa.duration_minutes,'paymentStatus',oa.payment_status))
                 FROM order_addons oa JOIN catalog_addons a ON a.id=oa.addon_id WHERE oa.order_id=o.id),'[]'::json) AS addons

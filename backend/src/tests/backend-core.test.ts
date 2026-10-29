@@ -10,7 +10,7 @@ import { ApiError, errorHandler } from '../common/api';
 import { auth, signAccessToken, signRefreshToken, verifyRefreshToken, verifyAccessToken } from '../common/auth';
 import { env, validateEnvConfig } from '../common/env';
 import { AuthService, normalizePhone, NotificationService, PaymentService, PricingService, SchedulingService } from '../modules/domainServices';
-import { FcmService, normalizeText, PaymentGatewayService, toLatin, WapiOtpService } from '../modules/integrations';
+import { buildFcmMessage, FcmService, normalizeText, PaymentGatewayService, toLatin, WapiOtpService } from '../modules/integrations';
 import { acquirePaymentApplication, buildRuntimeConfig, buildRuntimeSettingsMeta, recordPaymentEvent, updatePaymentProviderPayload } from '../http/routes/v1';
 import { openApiSpec } from '../http/openapi';
 import { validateBootstrapPassword } from '../scripts/bootstrap-admin';
@@ -924,6 +924,55 @@ test('signed media URLs preserve storage references, expire and reject tampering
 });
 
 
+test('order offers repeat full rounds for one, two and three available cleaners', async () => {
+  for (const ids of [['a'], ['a','b'], ['a','b','c']]) {
+    let clock=0;
+    let orderStatus='pending_assignment';
+    let available=ids.map(id=>({id}));
+    const offers: any[]=[];
+    const query=async(sql:string,values:any[]=[]) => {
+      if(sql.startsWith('SELECT * FROM service_orders')) return {rows:[{id:'order',status:orderStatus,scheduled_date:'2030-01-02',start_time:'10:00',end_time:'12:00'}]};
+      if(sql.includes("SET status='declined'")) {
+        const offer=offers.find(o=>o.cleaner_id===values[1] && o.status==='offered');
+        if(!offer)return {rows:[]};
+        offer.status='declined';return {rows:[{id:offer.id}]};
+      }
+      if(sql.includes("status IN ('declined','expired')")) return {rows:offers.filter(o=>['declined','expired'].includes(o.status))};
+      if(sql.startsWith('SELECT * FROM order_offers'))return {rows:offers.filter(o=>o.status==='offered')};
+      if(sql.includes('ORDER BY created_at ASC'))return {rows:[...offers].sort((a,b)=>a.created_at-b.created_at)};
+      if(sql.includes('INSERT INTO order_offers')) {
+        let offer=offers.find(o=>o.cleaner_id===values[1]);
+        if(!offer){offer={id:values[1],cleaner_id:values[1],order_id:values[0]};offers.push(offer);}
+        Object.assign(offer,{status:'offered',created_at:++clock,expires_at:new Date(Date.now()+clock+120000)});
+        return {rows:[{...offer}]};
+      }
+      if(sql.includes("SET status='waiting_cleaner'"))return {rows:[]};
+      throw Error('Unexpected query: '+sql);
+    };
+    const db={query,transaction:async(fn:any)=>fn({query})};
+    const service=new SchedulingService(db as any);
+    service.availableCleaners=async()=>available;
+    let offer:any=await service.offerNextCleaner('order');
+    for(let turn=0;turn<ids.length*3;turn++) {
+      assert.equal(offer.cleaner_id,ids[turn%ids.length]);
+      assert.equal(offers.filter(o=>o.status==='offered').length,1);
+      const unchanged:any=await service.offerNextCleaner('order');
+      assert.equal(unchanged.expires_at,offers.find(o=>o.status==='offered').expires_at);
+      offer=await service.declineOffer('order',offer.cleaner_id);
+    }
+    offers.forEach(o=>o.status='expired');
+    available=available.slice(-1);
+    const renewed:any=await service.offerNextCleaner('order',ids);
+    assert.equal(renewed.cleaner_id,ids[ids.length-1]);
+    offers.forEach(o=>o.status='expired');available=[];
+    assert.equal(await service.offerNextCleaner('order',ids),null);
+    for(const status of ['assigned','cancelled','completed','in_progress']) {
+      orderStatus=status;
+      assert.equal(await service.offerNextCleaner('order',ids),null);
+    }
+  }
+});
+
 test('unpaid extras block cleaner dispatch and acceptance even with stale assignment status', async () => {
   let reads = 0;
   const db = {transaction: async (fn: any) => fn({query: async (sql: string) => {
@@ -1044,4 +1093,23 @@ test('formats both languages without changing source records or business fields'
   assert.ok(result.description_ru.includes('\n• Первый'));
   assert.ok(result.description_kk.includes('\n• Бірінші'));
   assert.ok(!row.description_ru.includes('\n'));
+});
+
+
+test('cleaner offer pushes request background priority, audible channels and retain order navigation', () => {
+  for (const targetType of ['order_offer','new_order_offer','scheduled_order_offer']) {
+    const data={targetType,targetId:'order-1',notificationId:'notification-1'};
+    const message=buildFcmMessage(['device'],'Заказ','Подтвердите заказ',data);
+    assert.equal(message.android?.priority,'high');
+    assert.equal(message.android?.notification?.channelId,'domly_order_offer_alarm_v2');
+    assert.equal(message.android?.notification?.sound,'domly_order_alarm');
+    assert.equal(message.apns?.payload?.aps.sound,'default');
+    assert.equal(message.webpush?.headers?.Urgency,'high');
+    const webLink=new URL(message.webpush!.fcmOptions!.link!);
+    assert.equal(webLink.pathname,'/pro/');
+    assert.equal(webLink.hash,'#/cleaner/orders?focusOrderId=order-1');
+    assert.deepEqual(message.data,data);
+    assert.deepEqual(message.notification,{title:'Заказ',body:'Подтвердите заказ'});
+  }
+  assert.equal(buildFcmMessage(['device'],'Сообщение','Текст',{targetType:'chat'}).android,undefined);
 });

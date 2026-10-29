@@ -82,7 +82,7 @@ workers.push(new Worker('cleaner-alarms', async (job) => {
 
   await sendLocalizedPush(db,fcm,{userId:cleanerId,titleRu:titleRu ?? 'Новый заказ',bodyRu:bodyRu ?? 'Вам поступил новый заказ. Откройте приложение.'},{
     targetType:'order_offer',targetId:orderId,notificationId:notificationId??'',alarm:'true',
-  });
+  },{requireDelivery:true});
   await publishToUser(cleanerId, {
     type: 'cleaner_alarm',
     orderId,
@@ -160,7 +160,7 @@ workers.push(new Worker('maintenance', async (job) => {
         'Вам поступил новый заказ на подтверждение.',
         'order_offer',
         orderId,
-        `order-offer-${orderId}-${offer.cleaner_id}`,
+        `order-offer-${orderId}-${offer.cleaner_id}-${new Date(offer.expires_at).toISOString()}`,
       );
     } else {
       await notifyRole(

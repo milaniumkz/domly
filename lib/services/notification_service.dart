@@ -21,6 +21,20 @@ class NotificationService {
   static final StreamController<Map<String, dynamic>> _tapController =
       StreamController<Map<String, dynamic>>.broadcast();
 
+  static final List<Map<String, dynamic>> _pendingTaps = [];
+
+  static List<Map<String, dynamic>> takePendingTaps() {
+    final taps = List<Map<String, dynamic>>.from(_pendingTaps);
+    _pendingTaps.clear();
+    return taps;
+  }
+
+  static bool isOrderOffer(Map<String, dynamic> data) => [
+        'order_offer',
+        'new_order_offer',
+        'scheduled_order_offer'
+      ].contains(data['targetType'] ?? data['type']);
+
   static Stream<Map<String, dynamic>> get notificationTaps =>
       _tapController.stream;
 
@@ -117,6 +131,16 @@ class NotificationService {
       },
     );
     await _configureAndroidChannels();
+    final launch = await _localNotifications.getNotificationAppLaunchDetails();
+    final launchPayload = launch?.notificationResponse?.payload;
+    if (launch?.didNotificationLaunchApp == true && launchPayload != null) {
+      try {
+        final decoded = jsonDecode(launchPayload);
+        if (decoded is Map) {
+          _emitNotificationTap(Map<String, dynamic>.from(decoded));
+        }
+      } catch (_) {}
+    }
 
     final token = await FirebaseMessaging.instance.getToken();
     final platform =
@@ -138,7 +162,9 @@ class NotificationService {
       await _storeInboxMessage(message);
 
       final type = (message.data['type'] ?? '').toString();
-      final isUrgentOrderOffer = type == 'new_order_offer';
+      final isUrgentOrderOffer =
+          NotificationService.isOrderOffer(message.data) &&
+          type != 'scheduled_order_offer';
       final isScheduledOrderOffer = type == 'scheduled_order_offer';
       final isOrderOffer = isUrgentOrderOffer || isScheduledOrderOffer;
       final channelId = isUrgentOrderOffer
@@ -173,7 +199,10 @@ class NotificationService {
             ? AudioAttributesUsage.alarm
             : AudioAttributesUsage.notification,
       );
-      final details = NotificationDetails(android: androidDetails);
+      final details = NotificationDetails(
+        android: androidDetails,
+        iOS: const DarwinNotificationDetails(presentSound: true),
+      );
 
       await _localNotifications.show(
         notification.hashCode,
@@ -200,7 +229,12 @@ class NotificationService {
     if (data.isEmpty || _tapController.isClosed) {
       return;
     }
-    _tapController.add(Map<String, dynamic>.from(data));
+    final tap = Map<String, dynamic>.from(data);
+    if (!_tapController.hasListener) {
+      _pendingTaps.add(tap);
+      return;
+    }
+    _tapController.add(tap);
   }
 
   Future<void> _saveBackendDeviceToken({
