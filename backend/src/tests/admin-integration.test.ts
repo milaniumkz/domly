@@ -459,7 +459,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("INSERT INTO service_orders(id,customer_id,status,scheduled_date,start_time,end_time) VALUES($1,$2,'waiting_cleaner','2031-01-01','10:00','12:00')",[order,owner]);
         await db.query("INSERT INTO order_offers(order_id,cleaner_id,status,expires_at) VALUES($1,$2,'offered',NOW()+INTERVAL '2 minutes')",[order,cleaner]);
         assert.equal((await ownRequest('/me','DELETE')).status,409);
-        assert.equal((await request('/orders/'+order+'/cancel','POST',{},true)).status,404);
+        assert.equal((await request('/orders/'+order+'/cancel','POST',{},true)).status,403);
         assert.equal((await ownRequest('/orders/'+order+'/cancel')).status,200);
         assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[order])).rows[0].status,'cancelled');
         assert.equal((await db.query('SELECT status FROM order_offers WHERE order_id=$1',[order])).rows[0].status,'expired');
