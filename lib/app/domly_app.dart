@@ -193,12 +193,14 @@ class _DomlyAppState extends State<DomlyApp> {
         return;
       }
       if (!authController.isAuthenticated) return;
-      final type = (payload['type'] ?? '').toString();
+      final type = (payload['targetType'] ?? payload['target_type'] ?? payload['type'] ?? '').toString();
       if (config.adminSurface) {
         final route = (payload['route'] ?? '').toString().trim();
         final targetRoute = route.startsWith('/admin/web')
             ? route
-            : type.contains('payment')
+            : type=='work_schedule'
+                ? '/admin/web?section=work_schedules'
+                : type.contains('payment')
                 ? '/admin/web?section=payments'
                 : '/admin/web';
         syncAppUrlRoute(targetRoute);

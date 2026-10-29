@@ -186,11 +186,17 @@ export const openApiSpec = {
         requestBody: jsonBody({ area: 80, status: 'active' }),
       },
     },
+    '/cleaner/work-schedule': {
+      get:secured('Текущая и следующая недели работы и статусы согласования'),
+      post:{...secured('Отправить неделю работы на одобрение'),requestBody:jsonBody({weekStart:'2026-10-26',days:[],clientRequestId:'unique-key'})},
+    },
+    '/admin/work-schedules':{get:secured('Заявки на одобрение графиков уборщиц')},
+    '/admin/work-schedules/{id}/review':{post:{...secured('Одобрить или отклонить график'),parameters:[path('id')],requestBody:jsonBody({decision:'approved',comment:''})}},
     '/cleaner/profile': {
       get: secured('Профиль уборщицы'),
       patch: {
         ...secured('Обновить профиль, районы и настройки звука уборщицы'),
-        requestBody: jsonBody({ fullName: 'Анна', soundVolume: 80, alarmSound: 'system', isOnline: true }),
+        requestBody: jsonBody({ fullName: 'Анна', soundVolume: 80, alarmSound: 'system' }),
       },
     },
     '/cleaner/documents': {

@@ -1,3 +1,5 @@
+import '../../utils/booking_error_message.dart';
+import '../../utils/package_availability.dart';
 import '../common/package_freeze_dialog.dart';
 import '../../theme/domly_palette.dart';
 import 'dart:async';
@@ -333,11 +335,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     if (subscription == null || !_isPaidSubscription(subscription)) {
       return 0;
     }
-    return (_includedVisits(subscription) -
-            _usedVisitsForSubscription(subscription) -
-            _scheduledVisitsForSubscription(subscription))
-        .clamp(0, 99)
-        .toInt();
+    return availablePackageVisits(subscription,fallback:_includedVisits(subscription)-
+      _usedVisitsForSubscription(subscription)-_scheduledVisitsForSubscription(subscription));
   }
 
   int _aggregateIncludedVisits(List<Map<String, dynamic>> subscriptions) {
@@ -2424,26 +2423,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     }
   }
 
-  String _scheduleErrorText(Object error) {
-    if (UserErrorMessage.isAuthError(error)) {
-      return UserErrorMessage.message(error);
-    }
-    final text = error.toString();
-    if (text.contains('Authentication required') ||
-        text.contains('unauthenticated')) {
-      return 'Сессия обновляется. Нажмите подтвердить еще раз.';
-    }
-    if (text.contains('Slot ') && text.contains(' is unavailable')) {
-      return 'Это время уже недоступно. Обновите список и выберите другое время.';
-    }
-    if (text.contains('Cleaning can only be booked at least')) {
-      return 'Выберите время, которое еще не прошло.';
-    }
-    if (text.contains('Cleaning cannot be booked in the past')) {
-      return 'Дата уже прошла. Выберите сегодня или любой следующий день.';
-    }
-    return 'Проверьте выбранное время и попробуйте снова.';
-  }
+  String _scheduleErrorText(Object error)=>bookingErrorMessage(error);
 
   void _schedulePastSelectionCleanup() {
     if (!_selectedTimes.keys.any(_isPastDateKey)) {

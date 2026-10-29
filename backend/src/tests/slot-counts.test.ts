@@ -23,10 +23,13 @@ test('batched calendar preserves overlap boundaries, zones and approved verifica
    await db.query('UPDATE service_orders SET status=$2 WHERE id=$1',[order,status]);
    assert.deepEqual((await service.availableSlotCounts('2039-02-03',slots,zone)).map(s=>s.cleanersCount),[1,1,1,1]);
   }
-  await db.query('UPDATE cleaner_profiles SET is_online=FALSE WHERE user_id=$1',[cleaner]);
-  assert.deepEqual((await service.availableSlotCounts('2039-02-03',slots,zone)).map(s=>s.cleanersCount),[0,0,0,0]);
-  assert.deepEqual(await service.availableCleaners('2039-02-03','08:00','10:00',zone),[]);
-  await db.query('UPDATE cleaner_profiles SET is_online=TRUE WHERE user_id=$1',[cleaner]);
+  await db.query("UPDATE service_orders SET status='assigned',start_time='18:00',end_time='00:41',estimated_duration_minutes=401 WHERE id=$1",[order]);
+  const night=[{startTime:'00:00',endTime:'01:00'},{startTime:'00:41',endTime:'01:41'}];
+  assert.deepEqual((await service.availableSlotCounts('2039-02-04',night,zone)).map(s=>s.cleanersCount),[0,1]);
+  assert.equal(await service.cleanerAvailable(cleaner,'2039-02-04','00:00','01:00'),false);
+  assert.equal(await service.cleanerAvailable(cleaner,'2039-02-04','00:41','01:41'),true);
+  assert.equal((await service.availableCleaners('2039-02-04','00:00','01:00',zone)).length,0);
+  await db.query("UPDATE service_orders SET status='completed' WHERE id=$1",[order]);
   const all=await service.availableSlotCounts('2039-02-03',slots);
   for(let i=0;i<slots.length;i++)assert.equal(all[i].cleanersCount,(await service.availableCleaners('2039-02-03',slots[i].startTime,slots[i].endTime)).length);
  }finally{

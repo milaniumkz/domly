@@ -1,3 +1,4 @@
+import '../../utils/package_availability.dart';
 import '../../ui/home_cleaning_pager.dart';
 import '../../utils/home_cleaning_orders.dart';
 import '../../ui/home_order_actions.dart';
@@ -2009,6 +2010,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       subscription = subscriptions.where((p) => p['id'] ==
           (order!['subscriptionId'] ?? order['customerPackageId'])).firstOrNull;
     }
+    final currentPackage=_selectActiveSubscription(subscriptions,slots);
+    if(preferAvailablePackageOverHistory(currentPackage,order,hasActiveCleaning:cleanings.isNotEmpty)){
+      subscription=currentPackage;
+      order={...currentPackage!,'type':'package_purchase','paymentStatus':'paid','customerPackageId':currentPackage['id']};
+    }
     void changePage(int index) => setState(() {
       _visibleHomeCleaningId = cleanings[index]['id'].toString();
     });
@@ -2060,27 +2066,29 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         .where((p) =>
             p['id'] == (item?['subscriptionId'] ?? item?['customerPackageId']))
         .firstOrNull;
-    final total = pkg != null
-        ? (pkg['totalCleanings'] as num?)?.toInt() ?? _includedVisits(pkg)
+    final balancePackage = currentPackage ?? pkg;
+    final total = balancePackage != null
+        ? (balancePackage['totalCleanings'] as num?)?.toInt() ?? _includedVisits(balancePackage)
         : (item?['totalVisits'] as num?)?.toInt() ??
             _aggregateIncludedVisits(subscriptions);
     final used = scene == HomeScene.exhausted
         ? total
-        : pkg != null
-            ? math.max(_usedVisits(pkg, slots), orders.where((o) =>
-                o['subscriptionId'] == pkg!['id'] &&
+        : balancePackage != null
+            ? math.max(_usedVisits(balancePackage, slots), orders.where((o) =>
+                o['subscriptionId'] == balancePackage!['id'] &&
                 _isCompletedSlotStatus(o)).length)
             : _aggregateUsedVisits(subscriptions, slots);
-    final left = pkg != null
-        ? (pkg['remainingCleanings'] as num?)?.toInt() ??
-            _availableSelections(pkg, slots)
+    final left = balancePackage != null
+        ? (balancePackage['remainingCleanings'] as num?)?.toInt() ??
+            _availableSelections(balancePackage, slots)
         : _aggregateAvailableSelections(subscriptions, slots);
     final target = item ?? <String, dynamic>{};
     final freeze = DateTime.tryParse((pkg?['freezeUntil'] ?? '').toString());
     final started =
         DateTime.tryParse((target['startedAt'] ?? '').toString())?.toLocal();
     void act(HomeAction action) =>
-        _runProtectedAction(() => _homeReferenceAction(action, target, pkg));
+        _runProtectedAction(() => _homeReferenceAction(action, target,
+          const {HomeAction.schedule,HomeAction.package,HomeAction.usage,HomeAction.freeze}.contains(action) ? balancePackage : pkg));
     return DomlyShell(
         bottomNavigationBar: HomeReferenceNavigation(
             onNavigate: (route) =>
@@ -2213,7 +2221,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             activeSubscription: subscription,
             subscriptionId: subscription?['id']?.toString(),
             canSelectDates:
-                subscription != null && !isHomePackageFrozen(subscription));
+                subscription != null && !isHomePackageFrozen(subscription) && _availableSelections(subscription,const [])>0);
       case HomeAction.package:
       case HomeAction.usage:
       case HomeAction.freeze:
@@ -3656,16 +3664,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   int _aggregateAvailableSelections(
     List<Map<String, dynamic>> subscriptions,
     List<Map<String, dynamic>> slots,
-  ) {
-    final active = _activePaidPackageSubscriptions(subscriptions);
-    final included = active.fold<int>(
-      0,
-      (total, subscription) => total + _includedVisits(subscription),
-    );
-    final used = _aggregateUsedVisits(active, slots);
-    final scheduled = _aggregateScheduledVisits(active, slots);
-    return math.max(included - used - scheduled, 0);
-  }
+  ) => _activePaidPackageSubscriptions(subscriptions).fold<int>(
+    0,(total,subscription)=>total+_availableSelections(subscription,slots));
 
   bool _isAddonOnlySubscription(Map<String, dynamic> subscription) {
     final type = (subscription['type'] ??
@@ -3940,7 +3940,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     final calculated = _includedVisits(subscription) -
         _usedVisits(subscription, slots) -
         _scheduledVisits(subscription, slots);
-    return math.max(calculated, 0);
+    return availablePackageVisits(subscription,fallback:calculated);
   }
 
   Widget _videoActionButton() {

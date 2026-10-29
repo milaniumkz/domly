@@ -309,7 +309,12 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                           ...selected.map(
                             (item) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),
-                              child: DomlyCard(
+                              child: InkWell(
+                                borderRadius:BorderRadius.circular(22),
+                                onTap:()=>Navigator.pushNamed(context,'/cleaner/orders',arguments:{
+                                  'initialTab':'active','focusOrderId':item['orderId']??item['sourceOrderId']??item['id'],
+                                }),
+                                child: DomlyCard(
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -411,6 +416,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                     ),
                                   ],
                                 ),
+                              ),
                               ),
                             ),
                           ),

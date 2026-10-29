@@ -20,14 +20,14 @@ void main() {
               )),
         ))));
         final addons = find.ancestor(
-            of: find.text('Дополнительные услуги'),
+            of: find.text('Калькулятор'),
             matching: find.byType(InkWell));
         final referral = find.ancestor(
             of: find.text('Пригласить друга'), matching: find.byType(InkWell));
         expect(tester.getSize(addons).height, tester.getSize(referral).height);
         await tester.tap(addons);
         await tester.tap(referral);
-        expect(tapped, [HomeAction.addons, HomeAction.referral]);
+        expect(tapped, [HomeAction.calculator, HomeAction.referral]);
         expect(tester.takeException(), isNull);
       });
     }

@@ -1,3 +1,4 @@
+import '../../ui/admin_work_schedules.dart';
 import '../../utils/admin_addon_text.dart';
 import '../../utils/admin_order_data.dart';
 import '../../utils/admin_customer_data.dart';
@@ -772,6 +773,11 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               'Назначение, контроль статусов и ручные действия по заказам.',
           icon: Icons.receipt_long_outlined,
           builder: _orders,
+        ),
+        _AdminSection(
+          key:'work_schedules',title:'Графики работы',
+          subtitle:'Одобрение режимов работы уборщиц на текущую и следующую недели.',
+          icon:Icons.event_available,builder:()=>AdminWorkSchedules(search:_searchQuery),
         ),
         _AdminSection(
           key: 'customers',
@@ -4251,6 +4257,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                               ),
                             ],
                           ),
+                          if(data['type']=='work_schedule')TextButton.icon(
+                            onPressed:()=>setState(()=>_selectedIndex=_sectionIndexByKey('work_schedules')),
+                            icon:const Icon(Icons.event_available),label:Text('Открыть графики работы'.tr())),
                           const SizedBox(height: 12),
                           Wrap(
                             spacing: 8,

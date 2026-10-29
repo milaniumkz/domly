@@ -507,10 +507,10 @@ class HomeReferenceShortcuts extends StatelessWidget {
           child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(
             child: _tile(
-                'Дополнительные услуги',
-                'Химчистка, мытьё окон и многое другое',
-                Icons.auto_awesome_outlined,
-                HomeAction.addons)),
+                'Калькулятор',
+                'Пакеты, уборки и дополнительные услуги',
+                Icons.calculate_outlined,
+                HomeAction.calculator)),
         const SizedBox(width: 10),
         Expanded(
             child: _tile('Пригласить друга', 'Подарите друзьям чистый дом',

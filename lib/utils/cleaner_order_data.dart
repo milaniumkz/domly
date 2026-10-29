@@ -1,3 +1,5 @@
+import 'cleaning_time_range.dart';
+
 Map<String, dynamic> mapCleanerWorkItem(Map<String, dynamic> row,
     {bool offer = false}) {
   final orderId = row['order_id'] ?? row['orderId'] ?? row['id'];
@@ -30,7 +32,11 @@ Map<String, dynamic> mapCleanerWorkItem(Map<String, dynamic> row,
     'date': row['scheduled_date'] ?? row['date'],
     'scheduledDateKey':
         row['scheduled_date'] ?? row['scheduledDateKey'] ?? row['date'],
-    'time': row['time'] ?? (end.isEmpty ? start : '$start - $end'),
+    'time': row['time'] ??
+        cleaningTimeRange(start, end,
+            date: row['scheduled_date'] ?? row['date'],
+            durationMinutes: row['estimated_duration_minutes'] ??
+                row['estimatedDurationMinutes']),
     'startTime': start,
     'endTime': end,
     'orderNumber':
