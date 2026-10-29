@@ -11,7 +11,7 @@ export const defaultTranslations: DefaultTranslation[] = [
   { key: 'nav.profile', ru: 'Профиль', kk: 'Профиль' },
   { key: 'nav.notifications', ru: 'Уведомления', kk: 'Хабарламалар' },
   { key: 'nav.settings', ru: 'Настройки', kk: 'Баптаулар' },
-  { key: 'auth.login_title', ru: 'Вход в DOMLY', kk: 'DOMLY жүйесіне кіру' },
+  { key: 'auth.login_title', ru: 'Вход в DomLY', kk: 'DomLY жүйесіне кіру' },
   { key: 'auth.phone', ru: 'Номер телефона', kk: 'Телефон нөмірі' },
   { key: 'auth.sms_code', ru: 'Код подтверждения', kk: 'Растау коды' },
   { key: 'common.save', ru: 'Сохранить', kk: 'Сақтау' },

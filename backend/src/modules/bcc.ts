@@ -55,7 +55,7 @@ function escapeHtml(value: unknown): string {
 }
 export function bccPaymentHtml(actionUrl: string, fields: Record<string,unknown>, method: 'get'|'post' = 'post'): string {
   const inputs = Object.entries(fields).map(([name,value])=>`<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`).join('\n');
-  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Domly — BCC</title></head><body><p>Открываем страницу банка…</p><form id="bcc-payment" method="${method}" action="${escapeHtml(actionUrl)}">${inputs}<button type="submit">Перейти к оплате</button></form><script>document.getElementById('bcc-payment').submit();</script></body></html>`;
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DomLY — BCC</title></head><body><p>Открываем страницу банка…</p><form id="bcc-payment" method="${method}" action="${escapeHtml(actionUrl)}">${inputs}<button type="submit">Перейти к оплате</button></form><script>document.getElementById('bcc-payment').submit();</script></body></html>`;
 }
 
 function decodeHtml(value: string): string {

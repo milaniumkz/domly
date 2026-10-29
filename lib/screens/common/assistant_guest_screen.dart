@@ -84,7 +84,7 @@ class _AssistantGuestScreenState extends State<AssistantGuestScreen> {
             child: Column(children: [
       Padding(
           padding: EdgeInsets.all(20),
-          child: Text('Помощник Domly'.tr(),
+          child: Text('Помощник DomLY'.tr(),
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
       TextButton(
           onPressed: () async {

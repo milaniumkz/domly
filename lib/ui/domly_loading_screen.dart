@@ -8,7 +8,7 @@ class DomlyLoadingScreen extends StatelessWidget {
   const DomlyLoadingScreen({
     super.key,
     this.logoAsset = 'assets/logo.png',
-    this.title = 'DOMLY',
+    this.title = 'DomLY',
     this.subtitle = 'Готовим ваш сервис уборки',
   });
 

@@ -1,6 +1,6 @@
 #include "../Generated.xcconfig"
 PRODUCT_BUNDLE_IDENTIFIER = com.domly.customer
-APP_DISPLAY_NAME = DOMLY
+APP_DISPLAY_NAME = DomLY
 ASSETCATALOG_COMPILER_APPICON_NAME = AppIconDomly
 MAPS_API_KEY =
 

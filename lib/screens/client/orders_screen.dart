@@ -1424,7 +1424,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     if (packageId == 'addons_only') {
       return 'Доп. услуги к уборке';
     }
-    return 'Заказ DOMLY';
+    return 'Заказ DomLY';
   }
 
   List<String> _pendingOrderAddonLines(Map<String, dynamic> order) {

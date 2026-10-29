@@ -34,7 +34,7 @@ export async function runtimeStatus(db:Database,storage:StorageService,redis?:{p
  return {observedAt,lastSuccessfulUpdate:observedAt,checks,counts:counts.rows[0],worker:beat?{...beat,available:Date.now()-new Date(beat.observed_at).getTime()<90000}:{available:false,reason:'Нет сигнала worker.'},
   resources:{scope:'Процесс API, не весь сервер',rssBytes:process.memoryUsage().rss,heapBytes:process.memoryUsage().heapUsed,uptimeSeconds:Math.floor(process.uptime()),disk},
   host,release:process.env.APP_RELEASE??'не передана',collector:{...health,configured:Boolean(secretKey())},audit,
-  organizations:{applicable:false,reason:'В Domly нет модели организаций. Область доступа — пользователи, квартиры, заказы и кластеры; организация не определяется по IP.'},
+  organizations:{applicable:false,reason:'В DomLY нет модели организаций. Область доступа — пользователи, квартиры, заказы и кластеры; организация не определяется по IP.'},
   historyCoverage:'Сбор начинается с установки этой версии. Незаписанные ранее действия и локальные действия старых клиентов восстановить нельзя.'};
 }
 function validPush(endpoint:string){try{const u=new URL(endpoint);return u.protocol==='https:'&&(u.hostname==='fcm.googleapis.com'||u.hostname.endsWith('.push.apple.com')||u.hostname==='updates.push.services.mozilla.com'||u.hostname.endsWith('.notify.windows.com'))&&!u.username&&!u.password;}catch{return false;}}
@@ -57,7 +57,7 @@ async function pushTick(db:Database){
   try{
    if(!validPush(row.subscription.endpoint))throw {statusCode:400};
    const url='/api/tech/#'+(row.problem_id?'problems/'+row.problem_id:'notifications');
-   await webpush.sendNotification(row.subscription,JSON.stringify({severity:row.importance,title:row.importance==='critical'?'Критическое событие Domly':'Событие технической панели',body:'Откройте техническую панель для проверки.',tag:row.notification_id,url}),{TTL:86400,urgency:row.importance==='critical'?'high':'normal',timeout:5000});
+   await webpush.sendNotification(row.subscription,JSON.stringify({severity:row.importance,title:row.importance==='critical'?'Критическое событие DomLY':'Событие технической панели',body:'Откройте техническую панель для проверки.',tag:row.notification_id,url}),{TTL:86400,urgency:row.importance==='critical'?'high':'normal',timeout:5000});
    await db.query("UPDATE tech_push_deliveries SET status='sent',sent_at=NOW(),failure_code=NULL WHERE id=$1",[row.id]);
   }catch(e:any){
    const expired=[404,410].includes(e.statusCode);

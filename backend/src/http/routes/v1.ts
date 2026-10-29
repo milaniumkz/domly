@@ -1392,7 +1392,7 @@ export function buildV1Router(deps: {
     if (payment.payableAmount === 0) {
       await applyPaidPayment(payment.payment);
     } else {
-      const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Покупка пакета DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Покупка пакета DomLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
     }
     if (!address.verified_area) {
@@ -1533,7 +1533,7 @@ export function buildV1Router(deps: {
     if (result.payableAmount === 0) {
       await applyPaidPayment(result.payment);
     } else {
-      const provider = await initConfiguredPayment(deps.paymentGateway, result, req, 'Оплата заказа DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, result, req, 'Оплата заказа DomLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (result.payment as any).id, provider);
     }
     return result;
@@ -2074,7 +2074,7 @@ export function buildV1Router(deps: {
       await applyPaidPayment(payment.payment);
     } else {
       const invoiceReq = {...req, body: {...req.body, invoicePhone: req.body.kaspiPhone}};
-      const provider = await initConfiguredPayment(deps.paymentGateway, payment, invoiceReq, 'Оплата допуслуг DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, payment, invoiceReq, 'Оплата допуслуг DomLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
     }
     ok(res, { requestId: req.params.id, paymentId: (payment as any).payment.id, ...payment });
@@ -2335,7 +2335,7 @@ export function buildV1Router(deps: {
       [req.params.id, phone, env.moonAiEnabled],
     )).rows);
     if (!updated) throw new ApiError(400, 'invalid_payment_status', 'По этому платежу нельзя выставить счёт.');
-    const provider = await initConfiguredPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DOMLY');
+    const provider = await initConfiguredPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DomLY');
     if (provider) await updatePaymentProviderPayload(deps.db, String(req.params.id), provider);
     await deps.notifications.createAdminEvent({
       event: 'new_payment',
@@ -2367,7 +2367,7 @@ export function buildV1Router(deps: {
       [req.params.id],
     )).rows);
     if (!updated) throw new ApiError(400, 'invalid_payment_status', 'По этому платежу нельзя открыть онлайн-оплату.');
-    const provider = await initConfiguredPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DOMLY');
+    const provider = await initConfiguredPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DomLY');
     if (provider) await updatePaymentProviderPayload(deps.db, String(req.params.id), provider);
     ok(res, { payment: updated, ...provider });
   }));
@@ -3358,7 +3358,7 @@ export function buildV1Router(deps: {
       [req.params.id, req.user!.id],
     );
     ok(res, (await deps.db.query(
-      `SELECT cm.*, COALESCE(u.full_name,'Помощник Domly') AS sender_name, u.phone AS sender_phone, COALESCE(u.role::text,cm.sender_kind) AS sender_role,
+      `SELECT cm.*, COALESCE(u.full_name,'Помощник DomLY') AS sender_name, u.phone AS sender_phone, COALESCE(u.role::text,cm.sender_kind) AS sender_role,
               f.public_url AS file_url, f.mime_type AS file_mime_type, f.size_bytes AS file_size_bytes
        FROM chat_messages cm
        LEFT JOIN app_users u ON u.id=cm.sender_id
@@ -3692,7 +3692,7 @@ export function buildV1Router(deps: {
     if (payment.payableAmount === 0) {
       await applyPaidPayment(payment.payment);
     } else {
-      const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Оплата предварительной записи DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Оплата предварительной записи DomLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
     }
     ok(res, { preorderId: preorder.id, customerPackage, ...payment });
@@ -3726,7 +3726,7 @@ export function buildV1Router(deps: {
     for (const preorder of rows) {
       await deps.notifications.create({
         userId: preorder.customer_id,
-        titleRu: 'DOMLY запущен',
+        titleRu: 'DomLY запущен',
         bodyRu: `Старт уборок назначен на ${req.body.startDate}. Оплатите предварительную запись в приложении.`,
         targetType: 'preorder',
         targetId: preorder.id,
@@ -5050,11 +5050,11 @@ function formatPaymentAddress(address?: {
   house?: string | null;
   apartment?: string | null;
 } | null): string {
-  if (!address) return 'DOMLY service payment';
+  if (!address) return 'DomLY service payment';
   const parts = [address.city, address.settlement, address.street, address.house, address.apartment ? `apt ${address.apartment}` : null]
     .filter(Boolean)
     .join(', ');
-  return toLatin(parts || 'DOMLY service payment');
+  return toLatin(parts || 'DomLY service payment');
 }
 
 export async function updatePaymentProviderPayload(db: Database, paymentId: string, provider: unknown) {

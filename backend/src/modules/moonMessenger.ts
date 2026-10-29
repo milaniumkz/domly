@@ -1,7 +1,7 @@
 import {env} from '../common/env';
 import {ApiError} from '../common/api';
 
-export const signupWelcomeText = 'Здравствуйте! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?';
+export const signupWelcomeText = 'Здравствуйте! 👋 Я Алена из поддержки DomLY. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?';
 export const signupWelcomeTemplate = 'domly_welcome_alena_formal_20261027';
 
 export function moonMessengerReady(): boolean {
@@ -44,10 +44,10 @@ export async function sendMessengerFollowup(input:{id:string;kind:string;text:st
   if(thread && thread.status!=='active')throw new MoonMessengerError('whatsapp_conversation_paused');
   const reference=`domly:${input.kind}:${input.id}`;
   const intro=input.kind==='area_verification'
-    ? 'Перед уборкой нужно подтвердить площадь квартиры. Пришлите в этот WhatsApp-чат чёткий технический план с адресом и общей площадью квартиры. Либо откройте мобильное приложение Domly → Профиль → Подтвердить площадь → Фото технического плана, прикрепите чёткий снимок и нажмите «Подтвердить площадь». Если не хотите отправлять документ, напишите — согласуем дату и время проверки отделом качества до уборки.'
+    ? 'Перед уборкой нужно подтвердить площадь квартиры. Пришлите в этот WhatsApp-чат чёткий технический план с адресом и общей площадью квартиры. Либо откройте мобильное приложение DomLY → Профиль → Подтвердить площадь → Фото технического плана, прикрепите чёткий снимок и нажмите «Подтвердить площадь». Если не хотите отправлять документ, напишите — согласуем дату и время проверки отделом качества до уборки.'
     : input.kind==='inactive_signup'
     ? signupWelcomeText
-    : 'Вы начали оформление уборки в Domly, но оплата пока не завершена. Можем помочь с оформлением или оплатой.';
+    : 'Вы начали оформление уборки в DomLY, но оплата пока не завершена. Можем помочь с оформлением или оплатой.';
   if(thread && Date.parse(thread.free_form_window_expires_at ?? '')>Date.now()+30000) {
     const result=await request(`/threads/${encodeURIComponent(thread.id)}/messages`,'POST',{
       data:{text:input.kind==='inactive_signup'?signupWelcomeText:`Здравствуйте! ${intro} Напишите нам, если нужна помощь.`},message_type:'text',from_type:'manager',

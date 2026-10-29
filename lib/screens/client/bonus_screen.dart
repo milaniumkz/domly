@@ -77,8 +77,8 @@ class _BonusScreenState extends State<BonusScreen> {
     }
     final link = _referralLinkFromCode(referralCode);
     await Share.share(
-      'Присоединяйся к DOMLY. Используй мой код: $referralCode. $link',
-      subject: 'Приглашение в DOMLY',
+      'Присоединяйся к DomLY. Используй мой код: $referralCode. $link',
+      subject: 'Приглашение в DomLY',
     );
   }
 

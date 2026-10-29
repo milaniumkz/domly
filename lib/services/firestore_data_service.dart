@@ -5098,7 +5098,7 @@ class FirestoreDataService {
               );
       final cleanerName =
           (customerOrder?['cleanerName'] ?? '').toString().trim();
-      return cleanerName.isNotEmpty ? cleanerName : 'Менеджер DOMLY';
+      return cleanerName.isNotEmpty ? cleanerName : 'Менеджер DomLY';
     }
     if (_isTemporaryCleanerSession) {
       final slot = _temporaryCleanerScheduleSlots()
@@ -5115,7 +5115,7 @@ class FirestoreDataService {
           (slot?['customerName'] ?? slot?['client'] ?? '').toString().trim();
       return customerName.isNotEmpty ? customerName : 'Клиент';
     }
-    return 'DOMLY';
+    return 'DomLY';
   }
 
   Stream<List<Map<String, dynamic>>> _temporaryChatSummariesStream() {

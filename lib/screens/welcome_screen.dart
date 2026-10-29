@@ -110,7 +110,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 FadeTransition(
                   opacity: _fadeAnimation,
                   child: Text(
-                    "DOMLY".tr(),
+                    "DomLY".tr(),
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,

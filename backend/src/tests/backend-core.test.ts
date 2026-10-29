@@ -340,7 +340,7 @@ test('Green API sends only a fixed OTP message and requires a message receipt',a
     globalThis.fetch=(async(url:any,init:any)=>{if(String(url).includes('/getStateInstance/'))return {ok:true,json:async()=>({stateInstance:'authorized'})};calls.push({url,body:JSON.parse(init.body)});return {ok:true,json:async()=>({idMessage:'receipt'})};}) as any;
     await new WapiOtpService().sendOtp('+77052597368','123456');
     assert.equal(calls[0].url,'https://7700.api.greenapi.com/waInstance770012345678/sendMessage/fixture-secret');
-    assert.deepEqual(calls[0].body,{chatId:'77052597368@c.us',message:'DOMLY код подтверждения: 123456'});
+    assert.deepEqual(calls[0].body,{chatId:'77052597368@c.us',message:'DomLY код подтверждения: 123456'});
     for(const code of ['hello','12345','1234567'])await assert.rejects(()=>new WapiOtpService().sendOtp('+77052597368',code),(e:any)=>e.code==='invalid_otp_payload');
     assert.equal(calls.length,1);
     for(const mock of [async()=>({ok:false}),async()=>({ok:true,json:async()=>({})}),async()=>({ok:true,json:async()=>({idMessage:''})}),async()=>{throw Error('secret URL must not escape');}]) {
@@ -425,7 +425,7 @@ test('PaymentGatewayService builds BCC payload with required fields', async () =
   const result = await gateway.createBccPayment({
     paymentId: '12345678-1234-1234-1234-123456789012',
     amount: 7500,
-    description: 'Оплата заказа DOMLY',
+    description: 'Оплата заказа DomLY',
     clientIp: '127.0.0.1',
     language: 'ru',
     mInfo: 'Астана, Тәуелсіздік 39',
@@ -436,7 +436,7 @@ test('PaymentGatewayService builds BCC payload with required fields', async () =
   assert.equal(payload.CURRENCY, '398');
   assert.equal(payload.CLIENT_IP, '127.0.0.1');
   assert.equal(payload.LANG, 'ru');
-  assert.equal(payload.DESC, 'Оплата заказа DOMLY');
+  assert.equal(payload.DESC, 'Оплата заказа DomLY');
   assert.equal(JSON.parse(Buffer.from(String(payload.M_INFO),'base64').toString()).billAddrLine1, 'Kazakhstan');
   assert.match(String(payload.ORDER),/^\d{7,32}$/);
   assert.match(String(payload.P_SIGN),/^[A-F0-9]{40}$/);

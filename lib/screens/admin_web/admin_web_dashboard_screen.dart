@@ -297,7 +297,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1F2937),
         title: Text(
-          'DOMLY Админ-панель'.tr(),
+          'DomLY Админ-панель'.tr(),
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
@@ -663,7 +663,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'DOMLY',
+                    'DomLY',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w800,

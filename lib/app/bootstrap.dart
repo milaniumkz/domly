@@ -130,7 +130,7 @@ class _BootstrapHostState extends State<_BootstrapHost> {
         debugShowCheckedModeBanner: false,
         home: DomlyLoadingScreen(
           logoAsset: domlyLogoAsset(widget.config.flavor),
-          title: widget.config.flavor == AppFlavor.pro ? 'Domly Pro' : 'DOMLY',
+          title: widget.config.flavor == AppFlavor.pro ? 'DomLY Pro' : 'DomLY',
         ),
       );
     }

@@ -6,7 +6,7 @@ Future<void> main() async {
   await bootstrap(
     const AppConfig(
       flavor: AppFlavor.customer,
-      title: 'Domly Admin Web',
+      title: 'DomLY Admin Web',
       initialRoute: '/admin/web',
       postAuthRoute: '/admin/web',
       deferAuthForCustomerActions: false,

@@ -40,7 +40,7 @@ void main() {
         messageId: 'foreground-bot-test',
         data: {'targetType': 'assistant_chat', 'targetId': 'chat'},
         notification:
-            RemoteNotification(title: 'Помощник Domly', body: 'Ответ готов'));
+            RemoteNotification(title: 'Помощник DomLY', body: 'Ответ готов'));
     NotificationService.forwardForegroundMessage(reply);
     NotificationService.forwardForegroundMessage(reply);
     NotificationService.forwardForegroundMessage(const RemoteMessage(

@@ -199,7 +199,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           height: 120,
                           children: [
                             _SettingsOptionTile(
-                              title: 'Помощник Domly',
+                              title: 'Помощник DomLY',
                               subtitle: 'Открыть чат',
                               indicator: _SettingsTileIndicator.chevron,
                               onTap: _openAssistant,
@@ -673,7 +673,7 @@ class _AboutAppCard extends StatelessWidget {
           ),
           SizedBox(height: 3),
           Text(
-            "Domly 1.0.0".tr(),
+            "DomLY 1.0.0".tr(),
             style: TextStyle(
               color: DomlyPalette.foreground(_SettingsScreenState._foreground),
               fontSize: 14,

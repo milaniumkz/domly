@@ -50,17 +50,17 @@ android {
         create("domly") {
             dimension = "app"
             applicationId = "com.domly.customer"
-            resValue("string", "app_name", "DOMLY")
+            resValue("string", "app_name", "DomLY")
         }
         create("domlyPro") {
             dimension = "app"
             applicationId = "com.domly.pro"
-            resValue("string", "app_name", "Domly Pro")
+            resValue("string", "app_name", "DomLY Pro")
         }
         create("domlyAdmin") {
             dimension = "app"
             applicationId = "com.domly.admin"
-            resValue("string", "app_name", "Domly Admin")
+            resValue("string", "app_name", "DomLY Admin")
         }
     }
 

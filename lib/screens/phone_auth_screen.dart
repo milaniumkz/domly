@@ -167,8 +167,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   Widget build(BuildContext context) {
     DomlyPalette.watch(context);
 
-    final titleText = widget.title == 'Domly Pro'
-        ? 'Вход в Domly Pro'.tr()
+    final titleText = widget.title == 'DomLY Pro'
+        ? 'Вход в DomLY Pro'.tr()
         : 'Вход в {title}'.tr(params: {'title': widget.title});
 
     return DomlyShell(
@@ -341,7 +341,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             !AppScope.of(context).config.adminSurface)
           TextButton(
               onPressed: () => Navigator.pushNamed(context, '/assistant'),
-              child: Text('Помощник Domly'.tr())),
+              child: Text('Помощник DomLY'.tr())),
         if (!_hasValidPhone) ...[
           const SizedBox(height: 10),
           Align(

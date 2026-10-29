@@ -30,7 +30,7 @@ export async function queueMoonInvoice(db: Database, payment: any, description: 
   if(!/^7\d{10}$/.test(phone)) throw new ApiError(400,'invalid_phone','Укажите корректный номер Kaspi.');
   if(!['pending','invoice_requested'].includes(payment.status) || Number(payment.amount)<=0) throw new ApiError(409,'invalid_payment_status','Счёт уже обработан.');
   const chat=await ensureAssistantChat(db,payment.customer_id);
-  const text=`Запрос счета Kaspi от приложения DOMLY. phone_number=${phone}; payment_sum=${Number(payment.amount)} KZT; описание: ${description}. Используй подключённую функцию create_order. Не меняй номер или сумму. Не создавай повторный счёт в этом служебном треде. Результат и статус оплаты отправляй в DOMLY через настроенный Custom API: phone, amount, status, dateTime, paymentId=${payment.id}. Сохрани paymentId именно этого счёта и передавай его при каждом изменении статуса; не подставляй ID другого счёта. Сообщи клиенту фактический результат.`;
+  const text=`Запрос счета Kaspi от приложения DomLY. phone_number=${phone}; payment_sum=${Number(payment.amount)} KZT; описание: ${description}. Используй подключённую функцию create_order. Не меняй номер или сумму. Не создавай повторный счёт в этом служебном треде. Результат и статус оплаты отправляй в DomLY через настроенный Custom API: phone, amount, status, dateTime, paymentId=${payment.id}. Сохрани paymentId именно этого счёта и передавай его при каждом изменении статуса; не подставляй ID другого счёта. Сообщи клиенту фактический результат.`;
   await db.transaction(async tx=>{
     const current=(await tx.query('SELECT * FROM payments WHERE id=$1 FOR UPDATE',[payment.id])).rows[0];
     if(!current || current.customer_id!==payment.customer_id || !['pending','invoice_requested'].includes(current.status)) throw new ApiError(409,'invalid_payment_status','Счёт уже обработан.');
@@ -49,7 +49,7 @@ export async function scheduleCheckoutFollowup(db: Database, payment: any) {
   const chat=await ensureAssistantChat(db,payment.customer_id);
   await db.query(`INSERT INTO moon_ai_outbox(customer_id,chat_id,payment_id,kind,dedupe_key,payload,run_after)
     VALUES($1,$2,$3,'abandoned_checkout',$4,$5,NOW()+INTERVAL '5 minutes') ON CONFLICT(dedupe_key) DO NOTHING`,
-    [payment.customer_id,chat.id,payment.id,`followup:${payment.id}`,{text:`Служебное событие DOMLY: клиент начал оформление покупки, но не завершил оплату за 5 минут. Вежливо уточни, нужна ли помощь с оформлением или оплатой. Не создавай новый счёт без запроса клиента и не утверждай, что покупка оплачена.`}]);
+    [payment.customer_id,chat.id,payment.id,`followup:${payment.id}`,{text:`Служебное событие DomLY: клиент начал оформление покупки, но не завершил оплату за 5 минут. Вежливо уточни, нужна ли помощь с оформлением или оплатой. Не создавай новый счёт без запроса клиента и не утверждай, что покупка оплачена.`}]);
 }
 export async function queueAssistantMessage(db: Queryable, chatId: string, customerId: string, messageId: string, text: string, fileUrl?: string) {
   if(!moonAiReady()) throw new ApiError(503,'integration_not_configured','Помощник временно недоступен.');
@@ -179,10 +179,10 @@ export async function acceptMoonChatEvent(db: Database, notifications: Pick<Noti
   const {message}=accepted;
   // Notification has an independent dedupe key, so retries repair a push failure.
   if(chat.customer_id) {
-    await notifications.create({userId:chat.customer_id,titleRu:'Помощник Domly',bodyRu:text.slice(0,160)||'Вам прислали файл.',targetType:'assistant_chat',targetId:chatId,dedupeKey:`moon-chat:${id}`});
+    await notifications.create({userId:chat.customer_id,titleRu:'Помощник DomLY',bodyRu:text.slice(0,160)||'Вам прислали файл.',targetType:'assistant_chat',targetId:chatId,dedupeKey:`moon-chat:${id}`});
   } else if(message) {
     const tokens=(await db.query('SELECT token FROM assistant_installation_tokens WHERE installation_id=$1',[chat.installation_id])).rows.map((t:any)=>t.token);
-    await new FcmService().send(tokens,'Помощник Domly',text.slice(0,160)||'Новое сообщение',{targetType:'assistant_guest',targetId:chatId});
+    await new FcmService().send(tokens,'Помощник DomLY',text.slice(0,160)||'Новое сообщение',{targetType:'assistant_guest',targetId:chatId});
   }
   return {accepted:true,duplicate:accepted.duplicate};
 }
@@ -280,7 +280,7 @@ export async function scheduleSignupFollowup(db: Database, customerId: string) {
   const chat=await ensureAssistantChat(db,customerId);
   await db.query(`INSERT INTO moon_ai_outbox(customer_id,chat_id,kind,dedupe_key,payload,run_after)
     VALUES($1,$2,'inactive_signup',$3,$4,NOW()+INTERVAL '5 minutes') ON CONFLICT(dedupe_key) DO NOTHING`,
-    [customerId,chat.id,`signup:${customerId}`,{text:'Служебное событие DOMLY: пользователь зарегистрировался 5 минут назад, но не начал оформление покупки. Поздоровайся, предложи помочь выбрать уборку. Не выставляй счёт без явного запроса клиента.'}]);
+    [customerId,chat.id,`signup:${customerId}`,{text:'Служебное событие DomLY: пользователь зарегистрировался 5 минут назад, но не начал оформление покупки. Поздоровайся, предложи помочь выбрать уборку. Не выставляй счёт без явного запроса клиента.'}]);
 }
 export async function ensureGuestSession(db: Database, key: string) {
   if(!moonAiReady()) throw new ApiError(503,'integration_not_configured','Помощник пока не подключён.');

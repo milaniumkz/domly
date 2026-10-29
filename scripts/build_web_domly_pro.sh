@@ -39,8 +39,8 @@ import sys
 
 path = Path(sys.argv[1])
 content = path.read_text()
-content = content.replace("<title>domly</title>", "<title>Domly Pro</title>")
-content = content.replace('content="domly"', 'content="Domly Pro"')
+content = content.replace("<title>DomLY</title>", "<title>DomLY Pro</title>")
+content = content.replace('content="DomLY"', 'content="DomLY Pro"')
 boot_route = """  <script>
     (function () {
       function normalizeBootRoute(value) {
@@ -167,13 +167,13 @@ import sys
 
 path = Path(sys.argv[1])
 manifest = {
-    "name": "Domly Pro",
-    "short_name": "Domly Pro",
+    "name": "DomLY Pro",
+    "short_name": "DomLY Pro",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#F2FAF4",
     "theme_color": "#3D8A63",
-    "description": "Domly Pro cleaner app.",
+    "description": "DomLY Pro cleaner app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": False,
     "icons": [

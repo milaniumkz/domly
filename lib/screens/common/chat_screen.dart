@@ -93,7 +93,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       const SizedBox(height: 12),
                       Text(
                         summarySnap.data?['type'] == 'assistant'
-                            ? 'Помощник Domly'
+                            ? 'Помощник DomLY'
                             : unreadCount > 0
                                 ? 'Чат заказа ({count})'.tr(
                                     params: {'count': unreadCount.toString()},

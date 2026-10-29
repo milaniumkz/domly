@@ -364,7 +364,7 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         return new Response(JSON.stringify(result),{status:200});
       }) as typeof fetch;
       await sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Internal event',phone:'+77000000000'},transport);
-      assert.equal(calls.find(c=>c.path.endsWith('/messages')).body.data.text,'Здравствуйте! 👋 Я Алена из поддержки Domly. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?');
+      assert.equal(calls.find(c=>c.path.endsWith('/messages')).body.data.text,'Здравствуйте! 👋 Я Алена из поддержки DomLY. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?');
     });
     await t.test('signup never falls back to the old template while approval is pending',async()=>{
       const calls:string[]=[];

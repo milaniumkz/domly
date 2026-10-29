@@ -80,7 +80,7 @@ export const env = {
   bccReturnUrl: process.env.BCC_RETURN_URL ?? '',
   bccMode: process.env.BCC_MODE ?? 'disabled',
   bccGatewayUrl: process.env.BCC_GATEWAY_URL ?? '',
-  bccMerchantName: process.env.BCC_MERCHANT_NAME ?? 'DOMLY',
+  bccMerchantName: process.env.BCC_MERCHANT_NAME ?? 'DomLY',
   bccNotifyUser: process.env.BCC_NOTIFY_USER ?? '',
   bccNotifyPassword: process.env.BCC_NOTIFY_PASSWORD ?? '',
   minioEndpoint: process.env.MINIO_ENDPOINT ?? 'localhost',
@@ -111,7 +111,7 @@ export type EnvConfig = typeof env;
 
 export class EnvValidationError extends Error {
   constructor(public readonly issues: string[]) {
-    super(`Invalid DOMLY backend environment:\n- ${issues.join('\n- ')}`);
+    super(`Invalid DomLY backend environment:\n- ${issues.join('\n- ')}`);
   }
 }
 

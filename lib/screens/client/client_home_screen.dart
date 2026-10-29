@@ -2158,7 +2158,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               Image.asset('assets/logo.png',
                   width: 52, height: 52, fit: BoxFit.contain),
               const SizedBox(width: 8),
-              Text('DOMLY',
+              Text('DomLY',
                   style: TextStyle(
                       fontSize: 23,
                       color: DomlyPalette.foreground(const Color(0xFF082F2B)))),
@@ -2571,12 +2571,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       final invite = await _data.ensureReferralLink();
       final referralCode = (invite['referralCode'] ?? '').toString().trim();
       final referralLink = (invite['referralLink'] ?? '').toString().trim();
-      final shareText = StringBuffer('Подключай DOMLY в наш дом. ')
+      final shareText = StringBuffer('Подключай DomLY в наш дом. ')
         ..write('Открой веб-версию приложения: $referralLink');
       if (referralCode.isNotEmpty) {
         shareText.write(' Используй мой код: $referralCode');
       }
-      await Share.share(shareText.toString(), subject: 'Приглашение в DOMLY');
+      await Share.share(shareText.toString(), subject: 'Приглашение в DomLY');
     });
   }
 
@@ -4021,7 +4021,7 @@ class _FigmaHomeHero extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 12),
       child: Row(children: [
         Image.asset('assets/logo.png',
-            width: 78, height: 64, fit: BoxFit.contain, semanticLabel: 'Domly'),
+            width: 78, height: 64, fit: BoxFit.contain, semanticLabel: 'DomLY'),
         const SizedBox(width: 14),
         Expanded(
             child:

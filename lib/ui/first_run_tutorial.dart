@@ -85,8 +85,8 @@ class DomlyFirstRunTutorial {
         flavor == AppFlavor.pro ? _cleanerSteps : _clientSteps);
     final navigator = Navigator.of(context);
     final title = flavor == AppFlavor.pro
-        ? 'Как работать в Domly Pro'
-        : 'Как пользоваться Domly';
+        ? 'Как работать в DomLY Pro'
+        : 'Как пользоваться DomLY';
     final subtitle = flavor == AppFlavor.pro
         ? 'Короткое обучение по заказам, календарю, чату и профилю.'
         : 'Короткое обучение по заказу уборки, оплате и уведомлениям.';

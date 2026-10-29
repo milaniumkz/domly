@@ -85,7 +85,7 @@ const Map<String, Map<String, String>> kBuiltinTranslations =
     'kk': 'Тапсырыстарға оралу',
     'en': 'Back to orders',
   },
-  'Вход в Domly Pro': {'kk': 'Domly Pro-ға кіру', 'en': 'Sign in to Domly Pro'},
+  'Вход в DomLY Pro': {'kk': 'DomLY Pro-ға кіру', 'en': 'Sign in to DomLY Pro'},
   'Вход в {title}': {'kk': '{title} кіру', 'en': 'Sign in to {title}'},
   'Чистота и комфорт по подписке.': {
     'kk': 'Жазылым бойынша тазалық пен жайлылық.',

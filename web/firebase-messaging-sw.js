@@ -18,7 +18,7 @@ messaging.onBackgroundMessage((payload) => {
   if (payload.notification) return;
   const notification = payload.notification || {};
   const data = payload.data || {};
-  const title = notification.title || 'DOMLY';
+  const title = notification.title || 'DomLY';
   const options = {
     body: notification.body || '',
     icon: '/icons/Icon-192.png',

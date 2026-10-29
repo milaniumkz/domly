@@ -54,7 +54,7 @@ void main() {
     final mode = ValueNotifier(false);
     await tester.pumpWidget(ValueListenableBuilder<bool>(
         valueListenable: mode,
-        child: const DomlyCard(child: Text('DOMLY')),
+        child: const DomlyCard(child: Text('DomLY')),
         builder: (context, dark, child) => MaterialApp(
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,

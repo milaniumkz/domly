@@ -34,8 +34,8 @@ import sys
 
 path = Path(sys.argv[1])
 content = path.read_text()
-content = content.replace("<title>domly</title>", "<title>Domly Admin Web</title>")
-content = content.replace('content="domly"', 'content="Domly Admin Web"')
+content = content.replace("<title>DomLY</title>", "<title>DomLY Admin Web</title>")
+content = content.replace('content="DomLY"', 'content="DomLY Admin Web"')
 boot_route = """  <script>
     (function () {
       function normalizeBootRoute(value) {
@@ -95,13 +95,13 @@ import sys
 
 path = Path(sys.argv[1])
 manifest = {
-    "name": "Domly Admin Web",
-    "short_name": "Domly Admin",
+    "name": "DomLY Admin Web",
+    "short_name": "DomLY Admin",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
     "theme_color": "#20382B",
-    "description": "Domly admin web panel.",
+    "description": "DomLY admin web panel.",
     "orientation": "portrait-primary",
     "prefer_related_applications": False,
     "icons": [
