@@ -65,6 +65,8 @@ String _orderStatusLabel(String status, {String fallback = 'Ожидание'}) 
     case 'pending':
     case 'pending_assignment':
       return 'Ожидание назначения';
+    case 'waiting_cleaner':
+      return 'Ищем уборщицу';
     case 'pending_payment':
       return 'Ожидает оплату';
     case 'assigned':

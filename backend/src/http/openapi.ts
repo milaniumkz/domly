@@ -609,6 +609,7 @@ export const openApiSpec = {
         requestBody: jsonBody({ action: 'payment.confirmed', entityType: 'payment', entityId: 'uuid', metadata: {} }),
       },
     },
+    '/admin/packagePurchases/{id}/details': { get: { ...secured('Админ: детали покупки пакета и история платежей'), parameters: [path('id')] } },
     '/admin/orders/{id}/details': { get: { ...secured('Админ: детали заказа, клиент, уборщица, допы, платежи'), parameters: [path('id')] } },
     '/admin/orders/{id}': {
       patch: {

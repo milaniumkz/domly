@@ -2598,12 +2598,30 @@ export function buildV1Router(deps: {
     )).rows);
   }));
 
+  router.get('/admin/packagePurchases/:id/details', auth(['admin','superadmin']), asyncHandler(async(req,res)=>{
+    const order = first((await deps.db.query(`SELECT cp.*, cp.id AS customer_package_id,'package_purchase' AS view_kind,
+      cu.full_name AS customer_name,cu.phone AS customer_phone,pkg.name_ru AS package_name_ru,
+      ca.city,ca.street,ca.house,ca.apartment,ca.area,ca.entrance,ca.floor,ca.intercom,ca.access_comment,
+      pay.numeric_id,pay.id AS payment_id,pay.status AS latest_payment_status,COALESCE(pay.amount,0) AS total_amount,COALESCE(pay.bonus_amount,0) AS bonus_spent,
+      CASE WHEN pay.status='paid' THEN 0 ELSE COALESCE(pay.amount,0) END AS payable_amount
+      FROM customer_packages cp JOIN app_users cu ON cu.id=cp.customer_id
+      LEFT JOIN catalog_packages pkg ON pkg.id=cp.package_id
+      LEFT JOIN customer_addresses ca ON ca.id=cp.address_id
+      LEFT JOIN LATERAL (SELECT * FROM payments p WHERE p.customer_package_id=cp.id ORDER BY p.created_at DESC,p.id DESC LIMIT 1) pay ON TRUE
+      WHERE cp.id=$1`,[req.params.id])).rows);
+    if(!order)throw new ApiError(404,'not_found','Покупка не найдена.');
+    const payments=(await deps.db.query('SELECT * FROM payments WHERE customer_package_id=$1 ORDER BY created_at DESC',[req.params.id])).rows;
+    ok(res,{order,addons:[],payments,offers:[],history:[]});
+  }));
+
   router.get('/admin/orders/:id/details', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const order = first((await deps.db.query(
       `SELECT o.*, cu.full_name AS customer_name, cu.phone AS customer_phone, cu.email AS customer_email,
               cl.full_name AS cleaner_name, cl.phone AS cleaner_phone,
-              ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.area AS profile_area, ca.verified_area,
-              cp.total_cleanings, cp.available_cleanings, p.name_ru AS package_name_ru, p.name_kk AS package_name_kk
+              ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.floor, ca.intercom, ca.access_comment, ca.area AS profile_area, ca.verified_area,
+              cp.total_cleanings, cp.available_cleanings, p.name_ru AS package_name_ru, p.name_kk AS package_name_kk,
+              COALESCE((SELECT p.status FROM payments p WHERE p.order_id=o.id ORDER BY p.created_at DESC LIMIT 1),
+                (SELECT p.status FROM payments p WHERE p.id=cp.purchase_payment_id)) AS latest_payment_status
        FROM service_orders o
        JOIN app_users cu ON cu.id=o.customer_id
        LEFT JOIN app_users cl ON cl.id=o.cleaner_id
@@ -2622,14 +2640,16 @@ export function buildV1Router(deps: {
        ORDER BY oa.created_at ASC`,
       [req.params.id],
     )).rows;
-    const payments = (await deps.db.query(`SELECT * FROM payments WHERE order_id=$1 ORDER BY created_at DESC`, [req.params.id])).rows;
+    const payments = (await deps.db.query(`SELECT * FROM payments WHERE order_id=$1 OR id=(SELECT purchase_payment_id FROM customer_packages WHERE id=$2) ORDER BY created_at DESC`, [req.params.id,(order as any).customer_package_id])).rows;
     const offers = (await deps.db.query(
       `SELECT oo.*, u.full_name AS cleaner_name, u.phone AS cleaner_phone
        FROM order_offers oo JOIN app_users u ON u.id=oo.cleaner_id
        WHERE oo.order_id=$1 ORDER BY oo.created_at DESC`,
       [req.params.id],
     )).rows;
-    ok(res, { order, addons, payments, offers });
+    const history = (await deps.db.query(`SELECT h.*,u.full_name AS actor_name FROM order_status_history h
+      LEFT JOIN app_users u ON u.id=h.actor_id WHERE h.order_id=$1 ORDER BY h.created_at,h.id`,[req.params.id])).rows;
+    ok(res, { order, addons, payments, offers, history });
   }));
 
   router.get('/admin/payments/:id/details', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
@@ -4315,6 +4335,7 @@ export function buildV1Router(deps: {
   router.get('/admin/:section', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const allowed: Record<string, { table: string; base?: string; search?: string[] }> = {
       orders: { table: 'service_orders' },
+      packagePurchases: { table: 'customer_packages' },
       payments: { table: 'payments' },
       complaints: { table: 'complaints', search: ['title', 'body'] },
       reviews: { table: 'reviews', search: ['comment'] },
@@ -4413,15 +4434,35 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
     return done(
       `SELECT o.*, cu.full_name AS customer_name, cu.phone AS customer_phone,
               cl.full_name AS cleaner_name, cl.phone AS cleaner_phone,
-              ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.verified_area,
-              pkg.name_ru AS package_name_ru
+              ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.floor, ca.intercom, ca.access_comment, ca.verified_area,
+              pkg.name_ru AS package_name_ru, cp.total_cleanings, cp.available_cleanings,
+              COALESCE((SELECT p.status FROM payments p WHERE p.order_id=o.id ORDER BY p.created_at DESC LIMIT 1),
+                (SELECT p.status FROM payments p WHERE p.id=cp.purchase_payment_id)) AS latest_payment_status,
+              COALESCE((SELECT json_agg(json_build_object('id',oa.id,'key',a.id,'label',a.title_ru,'quantity',oa.quantity,
+                'price',oa.price,'durationMinutes',oa.duration_minutes,'paymentStatus',oa.payment_status))
+                FROM order_addons oa JOIN catalog_addons a ON a.id=oa.addon_id WHERE oa.order_id=o.id),'[]'::json) AS addons
        FROM service_orders o
        JOIN app_users cu ON cu.id=o.customer_id
        LEFT JOIN app_users cl ON cl.id=o.cleaner_id
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
-       LEFT JOIN catalog_packages pkg ON pkg.id=o.package_id`,
-      'o.created_at DESC',
+       LEFT JOIN catalog_packages pkg ON pkg.id=o.package_id
+       LEFT JOIN customer_packages cp ON cp.id=o.customer_package_id`,
+      'o.created_at DESC, o.id DESC',
     );
+  }
+  if (section === 'packagePurchases') {
+    addCommon('cp',['cu.full_name','cu.phone','pkg.name_ru']);
+    return done(`SELECT cp.*, cp.id AS customer_package_id, 'package_purchase' AS view_kind,
+      cu.full_name AS customer_name,cu.phone AS customer_phone,pkg.name_ru AS package_name_ru,
+      ca.city,ca.street,ca.house,ca.apartment,ca.area,ca.entrance,ca.floor,ca.intercom,ca.access_comment,
+      pay.numeric_id,pay.id AS payment_id,pay.status AS latest_payment_status,
+      COALESCE(pay.amount,0) AS total_amount,COALESCE(pay.bonus_amount,0) AS bonus_spent,
+      CASE WHEN pay.status='paid' THEN 0 ELSE COALESCE(pay.amount,0) END AS payable_amount
+      FROM customer_packages cp JOIN app_users cu ON cu.id=cp.customer_id
+      LEFT JOIN catalog_packages pkg ON pkg.id=cp.package_id
+      LEFT JOIN customer_addresses ca ON ca.id=cp.address_id
+      LEFT JOIN LATERAL (SELECT * FROM payments p WHERE p.customer_package_id=cp.id ORDER BY p.created_at DESC,p.id DESC LIMIT 1) pay ON TRUE`,
+      'cp.created_at DESC,cp.id DESC');
   }
   if (section === 'payments') {
     addCommon('p', ['p.numeric_id::text', 'u.full_name', 'u.phone', 'o.numeric_id::text', 'pkg.name_ru']);

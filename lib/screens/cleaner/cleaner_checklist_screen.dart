@@ -2,6 +2,7 @@ import '../../theme/domly_palette.dart';
 import 'dart:async';
 
 import '../../utils/backend_compat.dart';
+import '../../utils/cleaner_checklist_data.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/app_config_service.dart';
@@ -171,77 +172,69 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
                         ),
                         builder: (context, addonRequestsSnapshot) {
                           TranslationScope.watch(context);
-                          return StreamBuilder<List<Map<String, dynamic>>>(
-                            stream: _data.customerPackagesStream(),
-                            builder: (context, packagesSnapshot) {
-                              TranslationScope.watch(context);
-                              final assignments = _mergeAssignments(
-                                slotsSnapshot.data ??
-                                    const <Map<String, dynamic>>[],
-                                ordersSnapshot.data ??
-                                    const <Map<String, dynamic>>[],
-                              );
-                              final order = _mergePaidAddonRequestsIntoOrder(
-                                _findOrderData(assignments),
-                                addonRequestsSnapshot.data ??
-                                    const <Map<String, dynamic>>[],
-                              );
-                              final orderedAddons = _addonLabels(order);
-                              final baseTasks = _baseTasksForOrder(
-                                order,
-                                packagesSnapshot.data ??
-                                    const <Map<String, dynamic>>[],
-                              );
-                              _orderedAddons = orderedAddons;
-                              _orderedAddonsDetailed = _addonDetails(order);
+                          final assignments = _mergeAssignments(
+                            slotsSnapshot.data ??
+                                const <Map<String, dynamic>>[],
+                            ordersSnapshot.data ??
+                                const <Map<String, dynamic>>[],
+                          );
+                          final order = _mergePaidAddonRequestsIntoOrder(
+                            _findOrderData(assignments),
+                            addonRequestsSnapshot.data ??
+                                const <Map<String, dynamic>>[],
+                          );
+                          final orderedAddons = _addonLabels(order);
+                          final baseTasks = cleanerBaseChecklistTasks(
+                            requiredTasks: _requiredTasks,
+                            templateGroups: _templateGroups,
+                          );
+                          _orderedAddons = orderedAddons;
+                          _orderedAddonsDetailed = _addonDetails(order);
 
-                              return ListView(
-                                padding: const EdgeInsets.fromLTRB(
-                                  20,
-                                  16,
-                                  20,
-                                  24,
-                                ),
-                                children: [
-                                  _baseTasksCard(order, baseTasks),
-                                  const SizedBox(height: 14),
-                                  if (orderedAddons.isNotEmpty) ...[
-                                    _orderedAddonsCard(orderedAddons),
-                                    const SizedBox(height: 14),
-                                  ],
-                                  _proposeAddonsCard(order),
-                                  const SizedBox(height: 14),
-                                  DomlyCard(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Комментарий'.tr(),
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w700,
-                                            color: DomlyPalette.foreground(
-                                                DomlyColors.foreground),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        TextField(
-                                          controller: _noteController,
-                                          maxLines: 4,
-                                          decoration: InputDecoration(
-                                            hintText:
-                                                'Комментарий по уборке или инциденту'
-                                                    .tr(),
-                                          ),
-                                        ),
-                                      ],
+                          return ListView(
+                            padding: const EdgeInsets.fromLTRB(
+                              20,
+                              16,
+                              20,
+                              24,
+                            ),
+                            children: [
+                              _baseTasksCard(order, baseTasks),
+                              const SizedBox(height: 14),
+                              if (orderedAddons.isNotEmpty) ...[
+                                _orderedAddonsCard(orderedAddons),
+                                const SizedBox(height: 14),
+                              ],
+                              _proposeAddonsCard(order),
+                              const SizedBox(height: 14),
+                              DomlyCard(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Комментарий'.tr(),
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: DomlyPalette.foreground(
+                                            DomlyColors.foreground),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 96),
-                                ],
-                              );
-                            },
+                                    const SizedBox(height: 10),
+                                    TextField(
+                                      controller: _noteController,
+                                      maxLines: 4,
+                                      decoration: InputDecoration(
+                                        hintText:
+                                            'Комментарий по уборке или инциденту'
+                                                .tr(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 96),
+                            ],
                           );
                         },
                       );
@@ -775,152 +768,6 @@ class _CleanerChecklistScreenState extends State<CleanerChecklistScreen> {
         ],
       ),
     );
-  }
-
-  List<String> _baseTasksForOrder(
-    Map<String, dynamic> order,
-    List<Map<String, dynamic>> packages,
-  ) {
-    final package = _packageForOrder(order, packages);
-    final packageTasks = <String>[
-      if (package != null) ..._extractPackageChecklistItems(package),
-      ..._extractPackageChecklistItems(order),
-    ];
-    final result = <String>[];
-    void add(String value) {
-      final text = value.trim();
-      if (text.isEmpty || _isPackageMetaText(text)) {
-        return;
-      }
-      if (!result.any((item) => item.toLowerCase() == text.toLowerCase())) {
-        result.add(text);
-      }
-    }
-
-    for (final task in packageTasks) {
-      add(task);
-    }
-    if (result.isEmpty) {
-      for (final task in _baseTemplateTasks()) {
-        add(task);
-      }
-    }
-    return result.isEmpty
-        ? const [
-            'Протереть пыль',
-            'Пропылесосить',
-            'Вымыть пол',
-            'Очистить кухню',
-            'Очистить санузел',
-          ]
-        : result;
-  }
-
-  Map<String, dynamic>? _packageForOrder(
-    Map<String, dynamic> order,
-    List<Map<String, dynamic>> packages,
-  ) {
-    final packageId = (order['packageId'] ?? order['package_id'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
-    final packageName = (order['package'] ?? order['packageName'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
-    for (final package in packages) {
-      final id = (package['id'] ?? package['key'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final name = (package['name'] ?? package['title'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      if (packageId.isNotEmpty && id == packageId) {
-        return package;
-      }
-      if (packageName.isNotEmpty && name == packageName) {
-        return package;
-      }
-    }
-    return null;
-  }
-
-  List<String> _extractPackageChecklistItems(Map<String, dynamic> data) {
-    final result = <String>[];
-    void append(Object? value) {
-      if (value is List) {
-        for (final item in value) {
-          append(item);
-        }
-        return;
-      }
-      if (value is Map) {
-        append(
-          value['label'] ??
-              value['title'] ??
-              value['name'] ??
-              value['text'] ??
-              value['description'],
-        );
-        return;
-      }
-      final text = (value ?? '').toString().trim();
-      if (text.isNotEmpty) {
-        result.add(text);
-      }
-    }
-
-    for (final key in const [
-      'checklistItems',
-      'checklist',
-      'standardTasks',
-      'standardServices',
-      'includedServices',
-      'included',
-      'includes',
-      'services',
-      'features',
-      'whatIncluded',
-      'whatIncludes',
-      'items',
-    ]) {
-      append(data[key]);
-    }
-    return result;
-  }
-
-  List<String> _baseTemplateTasks() {
-    if (_requiredTasks != null) {
-      return _requiredTasks!
-          .where((task) => !task.startsWith('Доп. услуга: '))
-          .toList();
-    }
-    for (final group in _templateGroups) {
-      final key = (group['key'] ?? '').toString();
-      if (key != 'base_tasks') {
-        continue;
-      }
-      return ((group['items'] ?? const []) as List)
-          .map((item) => item.toString().trim())
-          .where((item) => item.isNotEmpty)
-          .toList();
-    }
-    return const [];
-  }
-
-  bool _isPackageMetaText(String value) {
-    final text = value
-        .toLowerCase()
-        .replaceAll('ё', 'е')
-        .replaceAll(RegExp(r'[^а-яa-z0-9]+'), ' ')
-        .trim();
-    return text.contains('стоимость зависит') ||
-        text.contains('площад') ||
-        text.contains('цена') ||
-        text.contains('скидк') ||
-        text.contains('оплата отдельно');
   }
 
   Widget _baseTile(String task) {

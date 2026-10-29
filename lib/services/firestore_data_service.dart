@@ -1,6 +1,7 @@
 import '../utils/admin_addon_text.dart';
 import '../utils/legal_document_sections.dart';
 import 'admin_text_catalog.dart';
+import 'admin_order_actions.dart';
 import '../localization/kazakh_translations.dart';
 import '../utils/addon_request_data.dart';
 import 'notification_count_stream.dart';
@@ -21,6 +22,7 @@ import 'dart:math' as math;
 
 import '../utils/backend_compat.dart';
 import '../utils/admin_cleaner_data.dart';
+import '../utils/admin_order_data.dart';
 import '../utils/cleaner_order_data.dart';
 import 'package:flutter/foundation.dart';
 
@@ -1717,187 +1719,37 @@ class FirestoreDataService {
         (items) => items.map(_debugAdminOrderView).toList(),
       );
     }
+    return _backendPollingStream(() => loadAdminOrders(
+      (offset, limit) => BackendApiService.instance.getList('/admin/orders',
+        query: {'offset': '$offset', 'limit': '$limit'}),
+    ));
+  }
+
+  Stream<List<Map<String, dynamic>>> adminOrderRecordsStream() {
+    if (_isDebugAdmin) return adminAssignmentItemsStream();
     return _backendPollingStream(() async {
-      final live = await BackendApiService.instance.getList('/admin/orders');
-      const bridge = <Map<String, dynamic>>[];
-      final merged = <String, Map<String, dynamic>>{};
-      for (final item in [...bridge, ...live]) {
-        final id = (item['id'] ?? item['orderId'] ?? '').toString().trim();
-        if (id.isEmpty) {
-          continue;
-        }
-        final existing = merged[id] ?? const <String, dynamic>{};
-        merged[id] = {
-          ...existing,
-          ...item,
-          'id': id,
-          'orderId': item['orderId'] ?? id,
-        };
-      }
-      final items =
-          _dedupeAdminOrderItems(merged.values.where(_shouldShowInAdminOrders))
-            ..sort(
-              (a, b) => _timestampMillis(
-                b['createdAt'] ?? b['date'] ?? b['updatedAt'],
-              ).compareTo(
-                _timestampMillis(
-                  a['createdAt'] ?? a['date'] ?? a['updatedAt'],
-                ),
-              ),
-            );
-      return items;
-    }, interval: const Duration(seconds: 2));
+      final lists = await Future.wait([
+        for (final section in ['orders', 'packagePurchases'])
+          loadAdminOrders((offset, limit) => BackendApiService.instance.getList('/admin/$section',
+            query: {'offset': '$offset', 'limit': '$limit'})),
+      ]);
+      return [...lists[0], ...lists[1]]..sort((a,b) =>
+        _timestampMillis(b['createdAt']).compareTo(_timestampMillis(a['createdAt'])));
+    });
   }
 
-  bool _shouldShowInAdminOrders(Map<String, dynamic> item) {
-    final type = (item['type'] ?? '').toString().toLowerCase();
-    if (type == 'prelaunch_prebooking') {
-      return false;
-    }
-    if (type != 'prelaunch_order') {
-      return true;
-    }
-    final status =
-        (item['orderStatus'] ?? item['status'] ?? '').toString().toLowerCase();
-    final paymentStatus = (item['paymentStatus'] ?? '')
-        .toString()
-        .toLowerCase()
-        .replaceAll('-', '_');
-    return status != 'prelaunch_waiting' &&
-        status != 'prelaunch_started' &&
-        paymentStatus == 'paid';
-  }
-
-  List<Map<String, dynamic>> _dedupeAdminOrderItems(
-    Iterable<Map<String, dynamic>> items,
-  ) {
-    final byId = <String, Map<String, dynamic>>{};
-    for (final item in items) {
-      final id = (item['id'] ?? item['orderId'] ?? '').toString().trim();
-      if (id.isEmpty) {
-        continue;
-      }
-      byId[id] = _mergeAdminOrderDuplicate(byId[id], item);
-    }
-
-    final byVisit = <String, Map<String, dynamic>>{};
-    var fallbackIndex = 0;
-    for (final item in byId.values) {
-      final key = _adminOrderVisitKey(item) ?? 'id:${fallbackIndex++}';
-      byVisit[key] = _mergeAdminOrderDuplicate(byVisit[key], item);
-    }
-    return byVisit.values.toList();
-  }
-
-  String? _adminOrderVisitKey(Map<String, dynamic> item) {
-    final customerId =
-        (item['customerId'] ?? item['userId'] ?? '').toString().trim();
-    final dateKey = _adminOrderDateKey(item);
-    final timeKey = _adminOrderTimeKey(item);
-    if (customerId.isEmpty || dateKey.isEmpty || timeKey.isEmpty) {
-      return null;
-    }
-    return '$customerId|$dateKey|$timeKey';
-  }
-
-  String _adminOrderDateKey(Map<String, dynamic> item) {
-    final explicit = (item['scheduledDateKey'] ??
-            item['visitDateKey'] ??
-            item['dateKey'] ??
-            '')
-        .toString()
-        .trim();
-    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(explicit)) {
-      return explicit;
-    }
-    final date = _valueToDate(
-      item['scheduledFor'] ??
-          item['scheduledDate'] ??
-          item['visitDate'] ??
-          item['date'],
-    );
-    if (date == null) {
-      return '';
-    }
-    return '${date.year.toString().padLeft(4, '0')}-'
-        '${date.month.toString().padLeft(2, '0')}-'
-        '${date.day.toString().padLeft(2, '0')}';
-  }
-
-  String _adminOrderTimeKey(Map<String, dynamic> item) {
-    final raw = (item['time'] ??
-            item['scheduledTime'] ??
-            item['orderTime'] ??
-            item['timeRange'] ??
-            '')
-        .toString()
-        .toLowerCase()
-        .trim();
-    if (raw.isEmpty || raw == '—' || raw.contains('ожидает')) {
-      return '';
-    }
-    final times = RegExp(r'\d{1,2}:\d{2}').allMatches(raw).toList();
-    if (times.length >= 2) {
-      return '${times[0].group(0)}-${times[1].group(0)}';
-    }
-    return raw.contains('выбор') ? '' : raw;
-  }
-
-  Map<String, dynamic> _mergeAdminOrderDuplicate(
-    Map<String, dynamic>? current,
-    Map<String, dynamic> next,
-  ) {
-    if (current == null) {
-      return next;
-    }
-    final preferred =
-        _adminOrderDuplicateScore(next) >= _adminOrderDuplicateScore(current)
-            ? next
-            : current;
-    final fallback = identical(preferred, next) ? current : next;
+  Future<Map<String, dynamic>> adminOrderDetails(String orderId,
+      {bool packagePurchase = false}) async {
+    final details = await BackendApiService.instance.getMap(
+        '/admin/${packagePurchase ? 'packagePurchases' : 'orders'}/$orderId/details');
     return {
-      ...fallback,
-      ...preferred,
-      'addons': _preferAdminList(preferred['addons'], fallback['addons']),
-      'addonsDetailed': _preferAdminList(
-        preferred['addonsDetailed'],
-        fallback['addonsDetailed'],
-      ),
-      'separatePaymentAddons': _preferAdminList(
-        preferred['separatePaymentAddons'],
-        fallback['separatePaymentAddons'],
-      ),
+      ...details,
+      'order': mapAdminOrder({
+        ...Map<String, dynamic>.from(details['order'] as Map),
+        'addons': details['addons'] ?? const [],
+      })
     };
   }
-
-  int _adminOrderDuplicateScore(Map<String, dynamic> item) {
-    var score = 0;
-    if (_adminList(item['addonsDetailed']).isNotEmpty ||
-        _adminList(item['addons']).isNotEmpty) {
-      score += 20;
-    }
-    if ((item['scheduledDateKey'] ?? '').toString().trim().isNotEmpty) {
-      score += 8;
-    }
-    if ((item['subscriptionId'] ?? '').toString().trim().isNotEmpty) {
-      score += 4;
-    }
-    if ((item['assignmentStatus'] ?? '').toString().trim().isNotEmpty) {
-      score += 2;
-    }
-    if (_timestampMillis(item['updatedAt'] ?? item['createdAt']) > 0) {
-      score += 1;
-    }
-    return score;
-  }
-
-  List<dynamic> _preferAdminList(Object? primary, Object? fallback) {
-    final left = _adminList(primary);
-    return left.isNotEmpty ? left : _adminList(fallback);
-  }
-
-  List<dynamic> _adminList(Object? value) =>
-      value is List ? value : const <dynamic>[];
 
   Stream<List<Map<String, dynamic>>> adminCleanerDailyScheduleStream() {
     if (_isDebugAdmin) {
@@ -2001,6 +1853,7 @@ class FirestoreDataService {
   }
 
   Stream<List<Map<String, dynamic>>> adminAssignmentItemsStream() {
+    if (!_isDebugAdmin) return adminOrdersStream();
     return _combineLatestLists(
       adminOrdersStream(),
       adminScheduleSlotsStream(),
@@ -12643,6 +12496,11 @@ class FirestoreDataService {
           _notifyDebugStateChanged();
         }
       }
+      return;
+    }
+    if (data['type'] == 'order_status') {
+      await changeAdminOrderStatus(BackendApiService.instance,
+        (data['orderId'] ?? '').toString(), (data['toStatus'] ?? '').toString());
       return;
     }
     await BackendApiService.instance.postMap(
