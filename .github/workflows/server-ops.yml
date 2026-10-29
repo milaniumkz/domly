@@ -108,7 +108,7 @@ jobs:
           fi
           if [ "$ACTION" = "status" ]; then
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
-              "APP_DIR='$DEPLOY_PATH/current' bash '$DEPLOY_PATH/current/scripts/server/ops.sh' status; df -h '$DEPLOY_PATH'; ps -C rsync -o comm,etime,pcpu,pmem || true"
+              "docker ps --format '{{.Names}} {{.Image}} {{.Status}}'; ps -eo pid,ppid,comm,etime,pcpu,pmem --sort=-pcpu | head -25; free -m; df -h '$DEPLOY_PATH'; cat '$DEPLOY_PATH/REVISION'"
             exit 0
           fi
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
