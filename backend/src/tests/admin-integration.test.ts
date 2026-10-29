@@ -1,3 +1,4 @@
+import {workingScheduleWeeks,workWeekDates} from '../modules/workingSchedule';
 import {readFileSync} from 'node:fs';
 import {defaultRequiredTasks} from '../modules/checklists';
 import sharp from 'sharp';
@@ -42,7 +43,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await t.test('customer info receives the configured tier descriptions and thresholds',async()=>{
       const response=await request('/me','GET',undefined,true);
       assert.equal(response.status,200);
-      const rules=response.json.data.user.customer_tier_rules;
+      const rules=response.json.data.customer_tier_rules;
       assert.ok(Array.isArray(rules)&&rules.length>=4);
       assert.ok(rules.every((r:any)=>r.labelRu&&Number.isFinite(r.minMonthlySpent)&&Number.isFinite(r.discountPercent)));
       assert.ok(rules.some((r:any)=>r.minMonthlySpent===100000));
@@ -67,34 +68,45 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         throw rollback;
       }),error=>error===rollback);
     });
-    await t.test('offline cleaner cannot receive or accept offers and can return online',async()=>{
+    await t.test('work schedule approval gates offers by start time and suspends revised weeks',async()=>{
       const worker=randomUUID(),order=randomUUID();
-      const scheduling=new SchedulingService(db);
-      async function profile(body?:object){
-        const response=await fetch(base+'/cleaner/profile',{method:body?'PATCH':'GET',headers:{Authorization:'Bearer '+signAccessToken({id:worker,role:'cleaner',phone:'online-test'}),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+      const service=new SchedulingService(db),week=workingScheduleWeeks().nextWeekStart;
+      const date=workWeekDates(week)[3];
+      const days=workWeekDates(week).map(date=>({date,working:true,startTime:'12:00',endTime:'20:00'}));
+      async function send(path:string,body?:object){
+        const response=await fetch(base+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+signAccessToken({id:worker,role:'cleaner',phone:'work-test'}),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
         return {status:response.status,json:await response.json() as any};
       }
-      try {
-        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'online-'+worker]);
+      try{
+        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'work-'+worker]);
         await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
-        await db.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,'2039-03-04','18:00','21:00','waiting_cleaner')",[order,customer]);
-        const offer=await scheduling.offerNextCleaner(order) as any;
-        assert.equal(offer.cleaner_id,worker);
-        assert.equal((await profile({isOnline:'false'})).status,400);
-        assert.equal((await profile({isOnline:false})).status,200);
-        assert.equal((await profile()).json.data.profile.is_online,false);
-        assert.deepEqual(await scheduling.cleanerOffers(worker),[]);
-        await assert.rejects(()=>scheduling.acceptOfferById(offer.id,worker),(error:any)=>error.code==='offer_not_found');
-        await assert.rejects(()=>scheduling.acceptOffer(order,worker),(error:any)=>error.code==='cleaner_offline');
-        assert.equal(await scheduling.offerNextCleaner(order),null);
-        assert.equal((await profile({isOnline:true})).status,200);
-        assert.equal((await profile()).json.data.profile.is_online,true);
-        const next=await scheduling.offerNextCleaner(order) as any;
-        assert.equal(next.cleaner_id,worker);
-        await scheduling.acceptOfferById(next.id,worker);
-        await profile({isOnline:false});
+        await db.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,$3,'13:00','21:00','waiting_cleaner')",[order,customer,date]);
+        assert.equal(await service.offerNextCleaner(order),null);
+        assert.equal((await send('/cleaner/work-schedule',{weekStart:'2030-01-01',days})).status,400);
+        const submitted=await send('/cleaner/work-schedule',{weekStart:week,days,clientRequestId:'work-1'});
+        assert.equal(submitted.status,201);const id=submitted.json.data.id;
+        assert.equal((await send('/cleaner/work-schedule',{weekStart:week,days,clientRequestId:'work-1'})).json.data.id,id);
+        assert.equal(await service.offerNextCleaner(order),null);
+        assert.equal((await send('/admin/work-schedules/'+id+'/review',{decision:'approved'})).status,403);
+        assert.equal((await request('/admin/work-schedules/'+id+'/review','POST',{decision:'approved'})).status,200);
+        const own=await send('/cleaner/work-schedule');assert.equal(own.status,200);assert.equal(own.json.data.approved.length,7);
+        assert.ok((await request('/admin/notifications')).json.data.some((n:any)=>n.target_type==='work_schedule'&&n.target_id===id));
+        const offer=await service.offerNextCleaner(order) as any;assert.equal(offer.cleaner_id,worker);
+        assert.equal((await service.availableCleaners(date,'11:00','12:00',undefined,db,true)).some((c:any)=>c.id===worker),false);
+        assert.equal((await service.availableCleaners(date,'20:01','21:00',undefined,db,true)).some((c:any)=>c.id===worker),false);
+        assert.equal((await service.availableCleaners(date,'18:00','21:00',undefined,db,true)).some((c:any)=>c.id===worker),true);
+        const revision=await send('/cleaner/work-schedule',{weekStart:week,days,clientRequestId:'work-2'});
+        assert.deepEqual(await service.cleanerOffers(worker),[]);
+        await assert.rejects(()=>service.acceptOffer(order,worker),(error:any)=>error.code==='outside_working_hours');
+        assert.equal((await request('/admin/work-schedules/'+id+'/review','POST',{decision:'approved'})).status,409);
+        await request('/admin/work-schedules/'+revision.json.data.id+'/review','POST',{decision:'approved'});
+        const renewed=await service.offerNextCleaner(order) as any;await service.acceptOfferById(renewed.id,worker);
+        const off=await send('/cleaner/work-schedule',{weekStart:week,days:days.map(day=>({date:day.date,working:false})),clientRequestId:'work-3'});
+        await request('/admin/work-schedules/'+off.json.data.id+'/review','POST',{decision:'approved'});
         assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[order])).rows[0].status,'assigned');
-      } finally {
+      }finally{
+        await db.query("DELETE FROM notifications WHERE target_type='work_schedule' AND target_id IN (SELECT id::text FROM cleaner_work_schedule_requests WHERE cleaner_id=$1)",[worker]);
+        await db.query("DELETE FROM audit_logs WHERE actor_id=$1 OR (entity_type='work_schedule' AND entity_id IN(SELECT id::text FROM cleaner_work_schedule_requests WHERE cleaner_id=$1))",[worker]);
         await db.query('DELETE FROM order_status_history WHERE order_id=$1',[order]);
         await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
         await db.query('DELETE FROM app_users WHERE id=$1',[worker]);
@@ -112,6 +124,29 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.ok(longer.json.data.some((slot:any)=>slot.startTime==='16:00'&&slot.endTime==='20:00'));
         assert.ok(longer.json.data.every((slot:any)=>slot.startTime<='18:00'&&slot.endTime<='21:00'));
         assert.ok(!longer.json.data.some((slot:any)=>slot.startTime==='18:00'));
+        const pkg=randomUUID(),address=randomUUID(),purchase=randomUUID(),addon=randomUUID();
+        const key='late-preview-'+purchase;
+        try{
+          await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Preview',4,100)",[pkg]);
+          await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Тестовая','1',100)",[address,customer]);
+          await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes) VALUES($1,'Окна',100,60)",[addon]);
+          await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status,purchase_config) VALUES($1,$2,$3,$4,4,4,'active',$5)",[purchase,customer,pkg,address,{addons:[{id:addon,pricingType:'per_visit',durationMinutes:60}]}]);
+          const preview=await request('/scheduling/available-slots?date=2039-02-03&customerPackageId='+purchase+'&durationMinutes=1','GET',undefined,true);
+          assert.equal(preview.status,200);
+          assert.ok(preview.json.data.some((slot:any)=>slot.startTime==='16:00'&&slot.endTime==='19:40'&&slot.durationMinutes===220));
+          assert.ok(!preview.json.data.some((slot:any)=>slot.startTime==='18:00'));
+          assert.equal((await request('/scheduling/available-slots?date=2039-02-03&customerPackageId='+purchase)).status,404);
+          const blocked=await request('/orders','POST',{customerPackageId:purchase,date:'2039-02-03',startTime:'18:00',idempotencyKey:key},true);
+          assert.equal(blocked.status,400);assert.match(JSON.stringify(blocked.json),/21:00/);
+          assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,4);
+        }finally{
+          await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND key=$2',[customer,key]);
+          await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
+          await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+          await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);
+          await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+        }
+
       } finally {
         await db.query("UPDATE app_users SET status='pending' WHERE id=$1",[cleaner]);
         await db.query("UPDATE cleaner_profiles SET verification_status='pending' WHERE user_id=$1",[cleaner]);
@@ -940,6 +975,8 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
         await db.query("UPDATE cleaner_profiles SET verification_status='approved' WHERE user_id=$1",[cleaner]);
         await db.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,estimated_duration_minutes,area,status) VALUES($1,$2,'2030-01-02','10:00','12:00',120,100,'pending_assignment')",[order,customer]);
+        const shift=(await db.query("INSERT INTO cleaner_work_schedule_requests(cleaner_id,week_start,days,status) VALUES($1,'2029-12-31','[]'::jsonb,'approved') RETURNING id",[cleaner])).rows[0];
+        await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2030-01-02','08:00','18:00',$2)",[cleaner,shift.id]);
         const candidates=await service.availableCleaners('2030-01-02','10:00','12:00');
         const offer=await service.offerNextCleaner(order,candidates.filter((c:any)=>c.id!==cleaner).map((c:any)=>c.id)) as any;
         assert.equal(offer.cleaner_id,cleaner);

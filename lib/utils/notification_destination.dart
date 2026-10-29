@@ -23,6 +23,7 @@ NotificationDestination? notificationDestination(Map<String, dynamic> item,
           .firstOrNull ??
       '';
   final orders = cleaner ? '/cleaner/orders' : '/client/orders';
+  if(type=='work_schedule'&&cleaner)return const NotificationDestination('/cleaner/home');
   if (type.contains('bonus') || type == 'referral_bonus') {
     return NotificationDestination(
         cleaner ? '/cleaner/bonus' : '/client/bonus');

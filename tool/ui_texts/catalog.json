@@ -1694,6 +1694,13 @@
     ]
   },
   {
+    "key": "t_6eb1432a3265b906",
+    "source": "Воскресенье",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_e8376360dddcb1d0",
     "source": "Временная сессия",
     "locations": [
@@ -1861,6 +1868,13 @@
     ]
   },
   {
+    "key": "t_677afb97c3d05cb9",
+    "source": "Вторник",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_724c59170ee66dd7",
     "source": "Вход в DomLY Pro",
     "locations": [
@@ -1964,7 +1978,7 @@
     "key": "t_59d08cb8f4e85de7",
     "source": "Выберите время, которое еще не прошло.",
     "locations": [
-      "lib/screens/client/package_calendar_screen.dart"
+      "lib/utils/booking_error_message.dart"
     ]
   },
   {
@@ -2443,6 +2457,13 @@
     ]
   },
   {
+    "key": "t_d2b60ac86c624c4d",
+    "source": "Выходной",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
+    ]
+  },
+  {
     "key": "t_141179ad9cfdf71c",
     "source": "Генеральная",
     "locations": [
@@ -2567,6 +2588,13 @@
     "source": "График",
     "locations": [
       "lib/screens/cleaner/cleaner_dashboard_screen.dart"
+    ]
+  },
+  {
+    "key": "t_7a22b82ea38e3c05",
+    "source": "График отправлен на одобрение",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
     ]
   },
   {
@@ -2752,7 +2780,7 @@
     "key": "t_99665b79e2de26ec",
     "source": "Дата уже прошла. Выберите сегодня или любой следующий день.",
     "locations": [
-      "lib/screens/client/package_calendar_screen.dart"
+      "lib/utils/booking_error_message.dart"
     ]
   },
   {
@@ -2905,6 +2933,13 @@
     "source": "Для сохранения нужны личные данные и рабочие районы.",
     "locations": [
       "lib/screens/cleaner/cleaner_profile_screen.dart"
+    ]
+  },
+  {
+    "key": "t_1520dcf50638530a",
+    "source": "До",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
     ]
   },
   {
@@ -4171,6 +4206,13 @@
     ]
   },
   {
+    "key": "t_11fd92f3e24548f2",
+    "source": "Заменён новой заявкой",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_d43137549af22103",
     "source": "Заморожен",
     "locations": [
@@ -4931,6 +4973,13 @@
       "lib/screens/client/package_calendar_screen.dart",
       "lib/ui/customer_home_reference.dart",
       "lib/ui/home_order_actions.dart"
+    ]
+  },
+  {
+    "key": "t_c26e88cf2e365f9a",
+    "source": "Каждая неделя отправляется на одобрение отдельно. До одобрения новые заказы по этому графику не поступают.",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
     ]
   },
   {
@@ -5951,6 +6000,13 @@
     ]
   },
   {
+    "key": "t_195c5449741a2b41",
+    "source": "На одобрении",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_74c344b803806346",
     "source": "На проверке",
     "locations": [
@@ -6111,6 +6167,13 @@
     "locations": [
       "lib/screens/cleaner/cleaner_checklist_screen.dart",
       "lib/screens/cleaner/cleaner_orders_screen.dart"
+    ]
+  },
+  {
+    "key": "t_38ec73251a7e8612",
+    "source": "Настроить режим работы",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
     ]
   },
   {
@@ -6293,6 +6356,13 @@
     "source": "Не найдена предварительная запись.",
     "locations": [
       "lib/services/firestore_data_service.dart"
+    ]
+  },
+  {
+    "key": "t_683efd7ed1e2fe6f",
+    "source": "Не настроен",
+    "locations": [
+      "lib/utils/working_schedule.dart"
     ]
   },
   {
@@ -7174,20 +7244,6 @@
     ]
   },
   {
-    "key": "t_da0b81dcd52bab1d",
-    "source": "Новые заказы не поступают. Принятые заказы остаются доступны.",
-    "locations": [
-      "lib/ui/cleaner_availability_switch.dart"
-    ]
-  },
-  {
-    "key": "t_9ebd788340f4911b",
-    "source": "Новые заказы приходят, даже когда приложение свёрнуто.",
-    "locations": [
-      "lib/ui/cleaner_availability_switch.dart"
-    ]
-  },
-  {
     "key": "t_7bbec6ae0c15cc22",
     "source": "Новые предложения",
     "locations": [
@@ -7421,6 +7477,13 @@
     ]
   },
   {
+    "key": "t_0a0f150905b0b081",
+    "source": "Одобрен",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_79b12234ad73197d",
     "source": "Одобрена",
     "locations": [
@@ -7577,13 +7640,6 @@
     "source": "Они появятся в чек-листе после согласования и оплаты.",
     "locations": [
       "lib/screens/cleaner/cleaner_checklist_screen.dart"
-    ]
-  },
-  {
-    "key": "t_76e9fb6aa15c71b8",
-    "source": "Онлайн",
-    "locations": [
-      "lib/ui/cleaner_availability_switch.dart"
     ]
   },
   {
@@ -8024,6 +8080,13 @@
     ]
   },
   {
+    "key": "t_4909c5ca0ed5b900",
+    "source": "Отклонён",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_8002c67cc05a5b85",
     "source": "Открой веб-версию приложения: {p0}",
     "locations": [
@@ -8339,6 +8402,13 @@
     ]
   },
   {
+    "key": "t_1a20751a5a5717d0",
+    "source": "Отправить эту неделю на одобрение",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
+    ]
+  },
+  {
     "key": "t_23346aeb2f289b52",
     "source": "Отправлено {p0}",
     "locations": [
@@ -8385,7 +8455,8 @@
       "lib/screens/common/chat_screen.dart",
       "lib/screens/common/photo_report_screen.dart",
       "lib/screens/common/review_screen.dart",
-      "lib/screens/phone_auth_screen.dart"
+      "lib/screens/phone_auth_screen.dart",
+      "lib/ui/cleaner_work_schedule.dart"
     ]
   },
   {
@@ -8407,13 +8478,6 @@
     "source": "Оферта",
     "locations": [
       "lib/screens/client/profile_screen.dart"
-    ]
-  },
-  {
-    "key": "t_aba1153e3374b1e6",
-    "source": "Офлайн",
-    "locations": [
-      "lib/ui/cleaner_availability_switch.dart"
     ]
   },
   {
@@ -9545,6 +9609,13 @@
     ]
   },
   {
+    "key": "t_256d12fe7ff9f23b",
+    "source": "Понедельник",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_f127f2a1ee8ffd71",
     "source": "Понятно",
     "locations": [
@@ -9562,6 +9633,7 @@
       "lib/screens/common/chat_screen.dart",
       "lib/screens/common/legal_document_screen.dart",
       "lib/screens/common/order_payment_retry.dart",
+      "lib/ui/cleaner_work_schedule.dart",
       "lib/ui/customer_home_reference.dart"
     ]
   },
@@ -10117,7 +10189,7 @@
     "key": "t_07baa3486be500e8",
     "source": "Проверьте выбранное время и попробуйте снова.",
     "locations": [
-      "lib/screens/client/package_calendar_screen.dart"
+      "lib/utils/booking_error_message.dart"
     ]
   },
   {
@@ -10167,6 +10239,13 @@
     "source": "Проверяем профиль, адрес и заказы",
     "locations": [
       "lib/ui/domly_loading_screen.dart"
+    ]
+  },
+  {
+    "key": "t_dd895d2a8fa87763",
+    "source": "Проверяется только начало уборки. Последнее начало для клиента — 18:00.",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
     ]
   },
   {
@@ -10337,10 +10416,24 @@
     ]
   },
   {
+    "key": "t_90f314d3bf4630e9",
+    "source": "Пятница",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_6e3672e210524839",
     "source": "Рабочие районы *",
     "locations": [
       "lib/screens/cleaner/cleaner_profile_screen.dart"
+    ]
+  },
+  {
+    "key": "t_61c75da0bf39b705",
+    "source": "Рабочий день",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
     ]
   },
   {
@@ -10478,6 +10571,13 @@
     "source": "Редактировать личные данные",
     "locations": [
       "lib/screens/cleaner/cleaner_profile_screen.dart"
+    ]
+  },
+  {
+    "key": "t_f23fe5c74960ea1f",
+    "source": "Режим работы",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
     ]
   },
   {
@@ -10741,6 +10841,7 @@
     "key": "t_2f18e214c78a85ed",
     "source": "Сервис временно недоступен. Попробуйте позже.",
     "locations": [
+      "lib/services/backend_api_service.dart",
       "lib/utils/user_error_message.dart"
     ]
   },
@@ -10793,13 +10894,6 @@
     "source": "Сессия истекла. Войдите в приложение заново.",
     "locations": [
       "lib/utils/user_error_message.dart"
-    ]
-  },
-  {
-    "key": "t_93ac49cee10dbda1",
-    "source": "Сессия обновляется. Нажмите подтвердить еще раз.",
-    "locations": [
-      "lib/screens/client/package_calendar_screen.dart"
     ]
   },
   {
@@ -10909,6 +11003,13 @@
     "source": "Следующая {p0}%",
     "locations": [
       "lib/screens/client/referral_stats_screen.dart"
+    ]
+  },
+  {
+    "key": "t_672592ce2da35b1f",
+    "source": "Следующая неделя",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
     ]
   },
   {
@@ -11261,6 +11362,13 @@
     ]
   },
   {
+    "key": "t_f81e505f9bbb2dcd",
+    "source": "Среда",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_32b9d804cce67459",
     "source": "Средняя оценка",
     "locations": [
@@ -11471,6 +11579,13 @@
     ]
   },
   {
+    "key": "t_b1dda156ff0d9487",
+    "source": "Суббота",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_912cf38c422cf684",
     "source": "Сумма изменилась. Обновите экран и попробуйте оформить пакет ещё раз.",
     "locations": [
@@ -11574,6 +11689,20 @@
     "source": "Счёт через интеграцию MooonAI / Kaspi",
     "locations": [
       "lib/utils/payment_approval_data.dart"
+    ]
+  },
+  {
+    "key": "t_50eb9ae7ae7e995d",
+    "source": "Текущая и следующая недели",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
+    ]
+  },
+  {
+    "key": "t_93bfe43a535f316a",
+    "source": "Текущая неделя",
+    "locations": [
+      "lib/ui/cleaner_work_schedule.dart"
     ]
   },
   {
@@ -12720,6 +12849,13 @@
     ]
   },
   {
+    "key": "t_903dac9fa4f5bbc1",
+    "source": "Четверг",
+    "locations": [
+      "lib/utils/working_schedule.dart"
+    ]
+  },
+  {
     "key": "t_cc0d2087d5aad8a0",
     "source": "Чистка верхних полок, антресолей и шкафов",
     "locations": [
@@ -13016,7 +13152,7 @@
     "key": "t_feb1f329f0afc314",
     "source": "Это время уже недоступно. Обновите список и выберите другое время.",
     "locations": [
-      "lib/screens/client/package_calendar_screen.dart"
+      "lib/utils/booking_error_message.dart"
     ]
   },
   {

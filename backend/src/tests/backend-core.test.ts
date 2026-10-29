@@ -1,3 +1,4 @@
+import {workingScheduleWeeks,normalizeWorkSchedule,workWeekDates} from '../modules/workingSchedule';
 import {cleaningDurationMinutes} from '../modules/cleaningDuration';
 import {fitsBookingHours,validateBookingHours} from '../modules/bookingValidation';
 import { formatAddonRecord, formatServiceDescription } from '../modules/serviceDescription';
@@ -1130,6 +1131,7 @@ test('evening booking preserves duration and finishes by 21:00', () => {
   assert.equal(fitsBookingHours('18:00:00',180),true);
   assert.equal(fitsBookingHours('18:00',181),false);
   assert.equal(fitsBookingHours('18:30',120),false);
+  assert.equal(fitsBookingHours('18:05',120),false);
   assert.equal(fitsBookingHours('16:00',240),true);
   assert.equal(fitsBookingHours('08:00',180),true);
   assert.equal(fitsBookingHours('07:59',180),false);
@@ -1142,4 +1144,15 @@ test('standard cleaning uses 1.6 min per m2 and add-ons remain additive',()=>{
   assert.equal(cleaningDurationMinutes(220),352);
   assert.equal(cleaningDurationMinutes(67,45),152);
   assert.equal(cleaningDurationMinutes(500),800);
+});
+
+test('working weeks use Kazakhstan dates and enforce seven explicit daily intervals',()=>{
+  const now=Date.parse('2026-11-01T20:00:00Z');
+  const weeks=workingScheduleWeeks(now);
+  assert.equal(weeks.currentWeekStart,'2026-11-02');assert.equal(weeks.nextWeekStart,'2026-11-09');
+  const days=workWeekDates(weeks.nextWeekStart).map(date=>({date,working:true,startTime:'12:00',endTime:'20:00'}));
+  assert.equal(normalizeWorkSchedule({weekStart:weeks.nextWeekStart,days},now).days.length,7);
+  assert.throws(()=>normalizeWorkSchedule({weekStart:weeks.nextWeekStart,days:days.slice(1)},now));
+  assert.throws(()=>normalizeWorkSchedule({weekStart:'2026-12-01',days},now));
+  assert.throws(()=>normalizeWorkSchedule({weekStart:weeks.nextWeekStart,days:days.map(d=>({...d,endTime:'11:00'}))},now));
 });

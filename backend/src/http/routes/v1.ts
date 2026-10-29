@@ -1,3 +1,4 @@
+import {readWorkingSchedule,submitWorkingSchedule,reviewWorkingSchedule} from '../../modules/workingSchedule';
 import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
 import {cancelHomePurchase,resumeHomePurchase} from '../../modules/homePurchase';
 import { formatAddonRecord, formatServiceDescription } from '../../modules/serviceDescription';
@@ -834,6 +835,39 @@ export function buildV1Router(deps: {
     ok(res, row, 201);
   }));
 
+  router.get('/cleaner/work-schedule',auth(['cleaner']),asyncHandler(async(req,res)=>{
+    ok(res,await readWorkingSchedule(deps.db,req.user!.id));
+  }));
+  router.post('/cleaner/work-schedule',auth(['cleaner']),asyncHandler(async(req,res)=>{
+    const saved=await deps.db.atomic(async()=>{
+      const request=await submitWorkingSchedule(deps.db,req.user!.id,req.body);
+      for(const role of ['admin','superadmin'] as const)await deps.notifications.create({role,
+        titleRu:'График уборщицы ожидает одобрения',bodyRu:'Проверьте режим работы на неделю и одобрите или отклоните заявку.',
+        targetType:'work_schedule',targetId:request.id,dedupeKey:'work-schedule-'+request.id+'-'+role});
+      return request;
+    });
+    ok(res,saved,201);
+  }));
+  router.get('/admin/work-schedules',auth(['admin','superadmin']),asyncHandler(async(req,res)=>{
+    const {limit,offset}=pageParams(req.query);
+    const filter=req.query.status?String(req.query.status):null;
+    ok(res,(await deps.db.query(`SELECT r.*,u.full_name AS cleaner_name,u.phone AS cleaner_phone,
+      reviewer.full_name AS reviewer_name FROM cleaner_work_schedule_requests r JOIN app_users u ON u.id=r.cleaner_id
+      LEFT JOIN app_users reviewer ON reviewer.id=r.reviewed_by WHERE ($1::text IS NULL OR r.status=$1)
+      ORDER BY (r.status='pending') DESC,r.created_at DESC,r.id LIMIT $2 OFFSET $3`,[filter,limit,offset])).rows);
+  }));
+  router.post('/admin/work-schedules/:id/review',auth(['admin','superadmin']),asyncHandler(async(req,res)=>{
+    const saved=await deps.db.atomic(async()=>{
+      const request=await reviewWorkingSchedule(deps.db,String(req.params.id),req.user!.id,String(req.body.decision),String(req.body.comment??''));
+      await deps.notifications.create({userId:request.cleaner_id,
+        titleRu:request.status==='approved'?'График работы одобрен':'График работы отклонён',
+        bodyRu:request.status==='approved'?'Новые заказы будут предлагаться в утверждённое время.':request.review_comment||'Измените график и отправьте на одобрение снова.',
+        targetType:'work_schedule',targetId:request.id,dedupeKey:'work-review-'+request.id+'-'+request.status});
+      return request;
+    });
+    ok(res,saved);
+  }));
+
   router.get('/cleaner/profile', auth(['cleaner']), asyncHandler(async (req, res) => {
     const profile = first((await deps.db.query(
       `SELECT u.id, u.numeric_id, u.phone, u.full_name, u.email, u.status, u.rating, u.created_at AS registered_at,
@@ -852,7 +886,6 @@ export function buildV1Router(deps: {
   }));
 
   router.patch('/cleaner/profile', auth(['cleaner']), asyncHandler(async (req, res) => {
-    if(req.body.isOnline !== undefined && typeof req.body.isOnline !== 'boolean')throw new ApiError(400,'invalid_availability','Выберите онлайн или офлайн.');
     const profile = await deps.db.transaction(async client => {
     await client.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[req.user!.id]);
     const zoneIds = req.body.zoneIds;
@@ -899,14 +932,6 @@ export function buildV1Router(deps: {
         req.body.emergencyContactRelation ?? null,
       ],
     )).rows);
-    if(req.body.isOnline !== undefined){
-      await client.query('UPDATE cleaner_profiles SET is_online=$2,updated_at=NOW() WHERE user_id=$1',[req.user!.id,req.body.isOnline]);
-      if(!req.body.isOnline){
-        // Let the maintenance worker pass these orders to the next online cleaner.
-        await client.query("UPDATE order_offers SET expires_at=NOW() WHERE cleaner_id=$1 AND status='offered'",[req.user!.id]);
-      }
-      if(profile)(profile as any).is_online=req.body.isOnline;
-    }
     return profile;
     });
     ok(res, profile);
@@ -2145,9 +2170,18 @@ export function buildV1Router(deps: {
     const addons = addonIds.length
       ? (await deps.db.query<{ duration_minutes: number }>(`SELECT duration_minutes FROM catalog_addons WHERE id = ANY($1::uuid[])`, [addonIds])).rows
       : [];
-    const duration = Number(req.query.durationMinutes ?? 0) > 0
+    let duration = Number(req.query.durationMinutes ?? 0) > 0
       ? Number(req.query.durationMinutes)
       : await estimateCleaningDurationMinutes(deps.db, req.query.addressId ? String(req.query.addressId) : undefined, addons);
+    if(req.query.customerPackageId){
+      const purchase=first<any>((await deps.db.query('SELECT address_id,purchase_config FROM customer_packages WHERE id=$1 AND customer_id=$2',[String(req.query.customerPackageId),req.user!.id])).rows);
+      if(!purchase)throw new ApiError(404,'not_found','Пакет не найден.');
+      const prepaid=(purchase.purchase_config?.addons??[]) as any[];
+      const prepaidIds=new Set(prepaid.map(item=>item.id));
+      const extraIds=addonIds.filter(id=>!prepaidIds.has(id));
+      const extra=extraIds.length?(await deps.db.query<{duration_minutes:number}>('SELECT duration_minutes FROM catalog_addons WHERE id=ANY($1::uuid[])',[extraIds])).rows:[];
+      duration=await estimateCleaningDurationMinutes(deps.db,purchase.address_id,extra)+prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes??0),0);
+    }
     const intervals = slots.filter((start: string) => fitsBookingHours(start, duration)).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration)}));
     const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined);
     const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));

@@ -1,4 +1,4 @@
-import '../../ui/cleaner_availability_switch.dart';
+import '../../ui/cleaner_work_schedule.dart';
 import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
@@ -269,10 +269,7 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                                 SliverToBoxAdapter(
                                   child: Padding(
                                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                                    child: CleanerAvailabilitySwitch(
-                                      online: profile['isOnline'] != false,
-                                      onChanged: (value) => _data.updateCleanerProfile({'isOnline': value}),
-                                    ),
+                                    child: const CleanerWorkScheduleButton(),
                                   ),
                                 ),
                                 SliverToBoxAdapter(

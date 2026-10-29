@@ -767,6 +767,18 @@ class FirestoreDataService {
     return num.tryParse(value.toString());
   }
 
+  Future<Map<String,dynamic>> cleanerWorkingSchedule()=>BackendApiService.instance.getMap('/cleaner/work-schedule');
+  Future<Map<String,dynamic>> submitWorkingSchedule(Map<String,dynamic> body)=>BackendApiService.instance.postMap('/cleaner/work-schedule',body:body);
+  Stream<List<Map<String,dynamic>>> adminWorkingSchedulesStream({String? status})=>_backendPollingStream(() async {
+    final result=<Map<String,dynamic>>[];
+    for(var offset=0;;offset+=200){
+      final rows=await BackendApiService.instance.getList('/admin/work-schedules',query:{'limit':'200','offset':'$offset',if(status!=null)'status':status});
+      result.addAll(rows);if(rows.length<200)break;
+    }
+    return result;
+  },interval:const Duration(seconds:10));
+  Future<Map<String,dynamic>> reviewWorkingSchedule(String id,String decision,String comment)=>BackendApiService.instance.postMap('/admin/work-schedules/$id/review',body:{'decision':decision,'comment':comment});
+
   Stream<Map<String, dynamic>?> cleanerProfileStream() {
     if (_isDebugCleaner) {
       return _debugSharedCleanerProfileStream();
@@ -817,7 +829,6 @@ class FirestoreDataService {
       'dailyWorkLimitMinutes': _num(
         profile['daily_work_limit_minutes'],
       ).round(),
-      'isOnline': profile['is_online'] != false,
       'soundEnabled': profile['sound_enabled'],
       'soundVolume': _num(profile['sound_volume']).round(),
       'soundKey': profile['sound_key'],
@@ -1966,7 +1977,7 @@ class FirestoreDataService {
       return _debugSnapshotStream(() => const <Map<String, dynamic>>[]);
     }
     return _backendPollingStream(
-        () => BackendApiService.instance.getList('/admin/notifications'),
+        () async => (await BackendApiService.instance.getList('/admin/notifications')).map(_mapBackendNotification).toList(),
         interval: const Duration(seconds: 2));
   }
 
@@ -3665,7 +3676,6 @@ class FirestoreDataService {
           'monthlyAreaLimit': data['monthlyAreaLimit'],
         if (data['dailyWorkLimitMinutes'] != null)
           'dailyWorkLimitMinutes': data['dailyWorkLimitMinutes'],
-        if (data['isOnline'] != null) 'isOnline': data['isOnline'],
         if (data['soundEnabled'] != null) 'soundEnabled': data['soundEnabled'],
         if (data['soundVolume'] != null) 'soundVolume': data['soundVolume'],
         if (data['soundKey'] != null) 'soundKey': data['soundKey'],
@@ -10339,6 +10349,7 @@ class FirestoreDataService {
     final dates = await loadAvailableCalendarDays(candidates,
         loadSlots: (dateKey) => _loadBackendAvailableSlots(
             dateKey: dateKey,
+            customerPackageId: subscriptionId,
             addressId: (subscription['addressId'] ?? '').toString()));
     return {'ok': true, 'dates': dates, 'backend': true};
   }
@@ -10361,6 +10372,7 @@ class FirestoreDataService {
     }
     final slots = await _loadBackendAvailableSlots(
       dateKey: dateKey,
+      customerPackageId: subscriptionId,
       addressId: (subscription['addressId'] ?? '').toString(),
     );
     return {'ok': true, 'date': dateKey, 'slots': slots, 'backend': true};
@@ -10369,12 +10381,14 @@ class FirestoreDataService {
   Future<List<Map<String, dynamic>>> _loadBackendAvailableSlots({
     required String dateKey,
     String? addressId,
+    String? customerPackageId,
     List<String> addonIds = const [],
   }) async {
     final rows = await BackendApiService.instance.getList(
       '/scheduling/available-slots',
       query: {
         'date': dateKey,
+        if(customerPackageId!=null)'customerPackageId':customerPackageId,
         if (addressId != null && addressId.trim().isNotEmpty)
           'addressId': addressId.trim(),
         if (addonIds.isNotEmpty) 'addonIds': addonIds.join(','),

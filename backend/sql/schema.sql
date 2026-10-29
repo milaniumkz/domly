@@ -1612,3 +1612,28 @@ FROM catalog_packages pkg WHERE pkg.id=cp.package_id
 UPDATE customer_packages cp SET purchase_config=COALESCE(cp.purchase_config,'{}'::jsonb)||
   jsonb_build_object('addressSnapshot',to_jsonb(a)) FROM customer_addresses a
 WHERE a.id=cp.address_id AND (cp.purchase_config->'addressSnapshot' IS NULL OR cp.purchase_config->'addressSnapshot'='null'::jsonb);
+
+CREATE TABLE IF NOT EXISTS cleaner_work_schedule_requests (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+ cleaner_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+ week_start DATE NOT NULL,
+ days JSONB NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','superseded')),
+ client_request_id TEXT,
+ review_comment TEXT,
+ reviewed_by UUID REFERENCES app_users(id) ON DELETE SET NULL,
+ reviewed_at TIMESTAMPTZ,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ UNIQUE(cleaner_id,client_request_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_cleaner_pending_work_week ON cleaner_work_schedule_requests(cleaner_id,week_start) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS idx_work_schedule_review ON cleaner_work_schedule_requests(status,created_at DESC);
+CREATE TABLE IF NOT EXISTS cleaner_working_days (
+ cleaner_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+ work_date DATE NOT NULL,
+ start_time TIME NOT NULL,
+ end_time TIME NOT NULL,
+ request_id UUID NOT NULL REFERENCES cleaner_work_schedule_requests(id) ON DELETE CASCADE,
+ PRIMARY KEY(cleaner_id,work_date),
+ CHECK(end_time>start_time)
+);
