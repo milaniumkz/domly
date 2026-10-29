@@ -1602,3 +1602,13 @@ BEGIN
     RAISE NOTICE 'Future cleaning durations recalculated: %',changed_count;
   END IF;
 END $$;
+
+-- Preserve the best available package description for historical purchases.
+UPDATE customer_packages cp SET purchase_config=COALESCE(cp.purchase_config,'{}'::jsonb)||
+  jsonb_build_object('packageSnapshot',to_jsonb(pkg),'packageSnapshotSource','catalog_at_backfill')
+FROM catalog_packages pkg WHERE pkg.id=cp.package_id
+  AND (cp.purchase_config->'packageSnapshot' IS NULL OR cp.purchase_config->'packageSnapshot'='null'::jsonb);
+
+UPDATE customer_packages cp SET purchase_config=COALESCE(cp.purchase_config,'{}'::jsonb)||
+  jsonb_build_object('addressSnapshot',to_jsonb(a)) FROM customer_addresses a
+WHERE a.id=cp.address_id AND (cp.purchase_config->'addressSnapshot' IS NULL OR cp.purchase_config->'addressSnapshot'='null'::jsonb);

@@ -8,6 +8,8 @@ Map<String, dynamic> mapAdminCustomer(Map<String, dynamic> row) {
   return {
     ...row,
     'name': row['full_name'] ?? row['name'],
+    'residentialComplex': row['residential_complex'] ?? row['residentialComplex'],
+    'houseTitle': row['residential_complex'] ?? row['house'],
     'phone':
         '${row['phone'] ?? ''}'.startsWith('deleted-') ? null : row['phone'],
     'fullName': row['full_name'] ?? row['fullName'],
@@ -16,6 +18,7 @@ Map<String, dynamic> mapAdminCustomer(Map<String, dynamic> row) {
     'bonusPoints': number(row['bonus_balance'] ?? row['bonusPoints']),
     'deletedAt': deleted,
     'restoreUntil': row['restore_until'] ?? row['restoreUntil'],
+    'packageNames': row['package_names'] ?? row['packageNames'] ?? const [],
     'paidPackageCount': paidPackages,
     'paidTotal': paidTotal,
     'remainingPaidCleanings': number(

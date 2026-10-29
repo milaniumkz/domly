@@ -1750,6 +1750,11 @@ class FirestoreDataService {
     });
   }
 
+  Future<List<Map<String,dynamic>>> adminCustomerPurchases(String customerId) async {
+    final result=await BackendApiService.instance.getMap('/admin/users/${Uri.encodeComponent(customerId)}/purchases');
+    return (result['purchases'] as List? ?? const []).whereType<Map>().map((row)=>Map<String,dynamic>.from(row)).toList();
+  }
+
   Future<Map<String, dynamic>> adminOrderDetails(String orderId,
       {bool packagePurchase = false}) async {
     final details = await BackendApiService.instance.getMap(

@@ -588,9 +588,25 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal((await request('/admin/orders/'+orders[0],'PATCH',{status:'cancelled'})).status,200);
         const ownerToken=signAccessToken({id:owner,role:'customer',phone});
         assert.equal((await fetch(base+'/me',{method:'DELETE',headers:{Authorization:'Bearer '+ownerToken}})).status,200);
+        await db.query('UPDATE service_orders SET customer_package_id=$2 WHERE id=ANY($1::uuid[])',[orders,purchase]);
         const deleted=(await request('/admin/users?search='+phone)).json.data.find((u:any)=>u.id===owner);
         assert.ok(deleted.deleted_at);assert.ok(deleted.restore_until);assert.equal(deleted.paid_package_count,1);
         assert.equal(Number(deleted.remaining_paid_cleanings),4);assert.equal(Number(deleted.paid_total),1000);
+        assert.equal(deleted.house,'1');assert.equal(Number(deleted.area),100);assert.ok(deleted.address.includes('Тестовая'));
+        assert.ok(deleted.package_names.includes('Пакет заказа'));
+        await db.query("UPDATE catalog_packages SET name_ru='Изменённый тариф' WHERE id=$1",[pkg]);
+        await db.query("UPDATE customer_addresses SET house='2',area=200 WHERE id=$1",[address]);
+        const purchaseHistory=await request('/admin/users/'+owner+'/purchases');
+        assert.equal(purchaseHistory.status,200);
+        assert.ok(purchaseHistory.json.data.customer.deleted_at);
+        const saved=purchaseHistory.json.data.purchases.find((p:any)=>p.id===purchase);
+        assert.equal(saved.package_name,'Пакет заказа');
+        assert.equal(saved.purchased_address.street,'Тестовая');assert.equal(saved.purchased_address.house,'1');
+        assert.equal(Number(saved.purchased_address.area),100);assert.equal(saved.available_cleanings,4);
+        assert.equal(saved.payments.length,2);assert.equal(saved.orders.length,2);
+        assert.ok(saved.payments.some((p:any)=>p.status==='paid'&&Number(p.amount)===800));
+        assert.equal((await request('/admin/users/'+owner+'/purchases','GET',undefined,true)).status,403);
+
         assert.equal((await request('/admin/users/'+owner+'/restore','POST',{})).status,200);
         const active=(await request('/admin/users?search='+phone)).json.data.find((u:any)=>u.id===owner);
         assert.equal(active.deleted_at,null);assert.equal(Number(active.remaining_paid_cleanings),4);

@@ -13,9 +13,18 @@ void main() {
       'restore_until': '2030-01-31T00:00:00Z',
       'paid_package_count': 1,
       'paid_total': '129600.00',
-      'remaining_paid_cleanings': '8'
+      'remaining_paid_cleanings': '8',
+      'package_names': ['Квартальный пакет'],
+      'residential_complex': 'ЖК Тест',
+      'house': '39',
+      'area': '67.00',
+      'address': 'Астана, Тестовая, 39'
     });
     expect(customer['name'], 'Клиент');
+    expect(customer['packageNames'], ['Квартальный пакет']);
+    expect(customer['residentialComplex'], 'ЖК Тест');
+    expect(customer['area'], '67.00');
+    expect(customer['address'], contains('39'));
     expect(customer['phone'], '+77000000000');
     expect(customer['deletedWithPayments'], isTrue);
     expect(customer['remainingPaidCleanings'], 8);

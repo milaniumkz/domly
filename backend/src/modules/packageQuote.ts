@@ -40,7 +40,7 @@ export async function packageQuote(db: Queryable, input: Record<string, any>) {
   const discountAmount = Math.round(base * discountRate);
   const referralPercent = input.customerId ? await referralDiscount(db, input.customerId) : 0;
   const referralAmount = Math.round((base + addonTotal - discountAmount) * referralPercent / 100);
-  return {area, pricingSnapshot:{basePrice:Number(pkg.base_price),pricePerM2:rate,cleaningCount,discountRate,referralDiscountPercent:referralPercent,addons},referralDiscountPercent: referralPercent, referralDiscountAmount: referralAmount, packageId: pkg.id, perCleaningPrice: Math.round(base / cleaningCount), cleaningCount,
+  return {area, packageSnapshot:pkg, packageSnapshotSource:'purchase', pricingSnapshot:{basePrice:Number(pkg.base_price),pricePerM2:rate,cleaningCount,discountRate,referralDiscountPercent:referralPercent,addons},referralDiscountPercent: referralPercent, referralDiscountAmount: referralAmount, packageId: pkg.id, perCleaningPrice: Math.round(base / cleaningCount), cleaningCount,
     cleaningsPerMonth: visits, billingPeriodMonths: Number(pkg.months), subtotal: base + addonTotal, monthlyPrice: base + addonTotal - discountAmount - referralAmount,
     discountRate, discountAmount, addonTotalPrice: addonTotal, addonsBillableTotal: addonTotal,
     addonsSeparatePaymentTotal: 0, separatePaymentAddons: [], addons};
