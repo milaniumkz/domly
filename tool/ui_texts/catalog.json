@@ -1088,6 +1088,13 @@
     ]
   },
   {
+    "key": "t_967b8bedbe1d4414",
+    "source": "Бонусов на балансе: {amount} ₸",
+    "locations": [
+      "lib/screens/common/kaspi_invoice_request_dialog.dart"
+    ]
+  },
+  {
     "key": "t_f037d1e55203124f",
     "source": "Бонусов останется после оплаты: {amount} ₸",
     "locations": [

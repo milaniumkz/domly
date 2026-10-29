@@ -173,10 +173,13 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
                     style: const TextStyle(
                         fontSize: 17, fontWeight: FontWeight.w800)),
               ],
-              if (bonusBalance > 0) ...[
+              if (bonusBalance > 0 || paymentAmount > 0) ...[
                 const SizedBox(height: 6),
+                Text('Бонусов на балансе: {amount} ₸'
+                    .tr(params: {'amount': '$bonusBalance'})),
                 Text('Бонусов останется после оплаты: {amount} ₸'.tr(params: {
-                  'amount': '${(bonusBalance - (useBonus ? availableBonus : 0)).clamp(0, 1 << 62)}',
+                  'amount':
+                      '${(bonusBalance - (useBonus ? availableBonus : 0)).clamp(0, bonusBalance > 0 ? bonusBalance : 0)}',
                 })),
               ],
               if (availableBonus > 0) ...[
@@ -352,10 +355,14 @@ Future<KaspiInvoiceRequestResult?> showKaspiInvoiceRequestOptionsDialog(
                         );
                       }),
                     ],
-                    if (bonusBalance > 0) ...[
+                    if (bonusBalance > 0 || paymentAmount > 0) ...[
                       const SizedBox(height: 6),
-                      Text('Бонусов останется после оплаты: {amount} ₸'.tr(params: {
-                        'amount': '${(bonusBalance - (useBonus ? availableBonus : 0)).clamp(0, 1 << 62)}',
+                      Text('Бонусов на балансе: {amount} ₸'
+                          .tr(params: {'amount': '$bonusBalance'})),
+                      Text('Бонусов останется после оплаты: {amount} ₸'
+                          .tr(params: {
+                        'amount':
+                            '${(bonusBalance - (useBonus ? availableBonus : 0)).clamp(0, bonusBalance > 0 ? bonusBalance : 0)}',
                       })),
                     ],
                     const SizedBox(height: 14),

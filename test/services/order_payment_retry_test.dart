@@ -13,6 +13,7 @@ void main() {
     )))));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
+    expect(find.text('Бонусов на балансе: 65500 ₸'), findsOneWidget);
     expect(find.text('Бонусов останется после оплаты: 0 ₸'), findsOneWidget);
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
@@ -73,6 +74,7 @@ void main() {
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
     expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+    expect(find.text('Бонусов на балансе: 10000 ₸'), findsOneWidget);
     expect(find.text('Бонусов останется после оплаты: 6000 ₸'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

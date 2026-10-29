@@ -667,7 +667,7 @@ class PriceCalculation {
   static int calculateDurationMinutes(double area) {
     if (area <= 0) return 120; // minimum 2 hours
     final minutes = (area * 1.6).round();
-    return minutes.clamp(1, 1 << 31);
+    return minutes < 1 ? 1 : minutes;
   }
 
   /// Calculate duration in hours (for backward compatibility)
