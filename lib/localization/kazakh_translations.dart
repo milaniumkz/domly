@@ -1,5 +1,6 @@
 // Bundled Kazakh UI catalog; source strings and parameter names stay stable.
 const Map<String,String> kKazakhTranslations = {
+  "Бонусов останется после оплаты: {amount} ₸": "Төлемнен кейін қалатын бонустар: {amount} ₸",
   "Онлайн": "Онлайн",
   "Офлайн": "Офлайн",
   "Новые заказы приходят, даже когда приложение свёрнуто.": "Қолданба жабық тұрса да, жаңа тапсырыстар келеді.",

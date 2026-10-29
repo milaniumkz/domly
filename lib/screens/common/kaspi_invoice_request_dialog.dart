@@ -173,6 +173,12 @@ Future<DomlyPaymentSelection?> showPaymentMethodOptionsDialog(
                     style: const TextStyle(
                         fontSize: 17, fontWeight: FontWeight.w800)),
               ],
+              if (bonusBalance > 0) ...[
+                const SizedBox(height: 6),
+                Text('Бонусов останется после оплаты: {amount} ₸'.tr(params: {
+                  'amount': '${(bonusBalance - (useBonus ? availableBonus : 0)).clamp(0, 1 << 62)}',
+                })),
+              ],
               if (availableBonus > 0) ...[
                 const SizedBox(height: 12),
                 InkWell(
@@ -345,6 +351,12 @@ Future<KaspiInvoiceRequestResult?> showKaspiInvoiceRequestOptionsDialog(
                           ),
                         );
                       }),
+                    ],
+                    if (bonusBalance > 0) ...[
+                      const SizedBox(height: 6),
+                      Text('Бонусов останется после оплаты: {amount} ₸'.tr(params: {
+                        'amount': '${(bonusBalance - (useBonus ? availableBonus : 0)).clamp(0, 1 << 62)}',
+                      })),
                     ],
                     const SizedBox(height: 14),
                     TextField(

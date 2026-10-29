@@ -1088,6 +1088,13 @@
     ]
   },
   {
+    "key": "t_f037d1e55203124f",
+    "source": "Бонусов останется после оплаты: {amount} ₸",
+    "locations": [
+      "lib/screens/common/kaspi_invoice_request_dialog.dart"
+    ]
+  },
+  {
     "key": "t_ee41a8cda86f9921",
     "source": "Бонусов получено",
     "locations": [

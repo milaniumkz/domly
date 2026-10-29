@@ -186,6 +186,7 @@ Email: milaniumkz@yandex.kz','1. Модель работы DomLY принима�
 ('t_f09d3f3713ab4625','Бонус: {p0}','Бонус: {p0}','Бонус: {p0}','["lib/screens/client/client_home_screen.dart"]'::jsonb),
 ('t_fa2c4e4f2c589716','Бонусный баланс','Бонус балансы','Бонусный баланс','["lib/screens/cleaner/cleaner_bonus_screen.dart"]'::jsonb),
 ('t_93d913cfc01ced97','Бонусов','Бонустар','Бонусов','["lib/screens/client/profile_screen.dart"]'::jsonb),
+('t_f037d1e55203124f','Бонусов останется после оплаты: {amount} ₸','Төлемнен кейін қалатын бонустар: {amount} ₸','Бонусов останется после оплаты: {amount} ₸','["lib/screens/common/kaspi_invoice_request_dialog.dart"]'::jsonb),
 ('t_ee41a8cda86f9921','Бонусов получено','Алынған бонустар','Бонусов получено','["lib/screens/client/referral_stats_screen.dart"]'::jsonb),
 ('t_32b3818be1510428','Бонусы','Бонустар','Бонусы','["lib/screens/cleaner/cleaner_bonus_screen.dart","lib/screens/cleaner/cleaner_earnings_screen.dart","lib/screens/cleaner/cleaner_profile_screen.dart","lib/screens/client/bonus_screen.dart","lib/services/firestore_data_service.dart"]'::jsonb),
 ('t_eb00b8d2d5011a06','Бонусы доступны через 7 дней','Бонустар 7 күннен кейін қол жетімді','Бонусы доступны через 7 дней','["lib/screens/cleaner/cleaner_earnings_screen.dart"]'::jsonb),
