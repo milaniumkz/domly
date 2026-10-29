@@ -1,3 +1,4 @@
+import '../../ui/cleaner_availability_switch.dart';
 import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
@@ -265,6 +266,15 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
                             constraints: const BoxConstraints(maxWidth: 430),
                             child: CustomScrollView(
                               slivers: [
+                                SliverToBoxAdapter(
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                    child: CleanerAvailabilitySwitch(
+                                      online: profile['isOnline'] != false,
+                                      onChanged: (value) => _data.updateCleanerProfile({'isOnline': value}),
+                                    ),
+                                  ),
+                                ),
                                 SliverToBoxAdapter(
                                   child: DomlyHeader(
                                     padding: const EdgeInsets.fromLTRB(

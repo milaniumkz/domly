@@ -190,7 +190,7 @@ export const openApiSpec = {
       get: secured('Профиль уборщицы'),
       patch: {
         ...secured('Обновить профиль, районы и настройки звука уборщицы'),
-        requestBody: jsonBody({ fullName: 'Анна', soundVolume: 80, alarmSound: 'system' }),
+        requestBody: jsonBody({ fullName: 'Анна', soundVolume: 80, alarmSound: 'system', isOnline: true }),
       },
     },
     '/cleaner/documents': {

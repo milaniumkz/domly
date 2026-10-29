@@ -23,6 +23,10 @@ test('batched calendar preserves overlap boundaries, zones and approved verifica
    await db.query('UPDATE service_orders SET status=$2 WHERE id=$1',[order,status]);
    assert.deepEqual((await service.availableSlotCounts('2039-02-03',slots,zone)).map(s=>s.cleanersCount),[1,1,1,1]);
   }
+  await db.query('UPDATE cleaner_profiles SET is_online=FALSE WHERE user_id=$1',[cleaner]);
+  assert.deepEqual((await service.availableSlotCounts('2039-02-03',slots,zone)).map(s=>s.cleanersCount),[0,0,0,0]);
+  assert.deepEqual(await service.availableCleaners('2039-02-03','08:00','10:00',zone),[]);
+  await db.query('UPDATE cleaner_profiles SET is_online=TRUE WHERE user_id=$1',[cleaner]);
   const all=await service.availableSlotCounts('2039-02-03',slots);
   for(let i=0;i<slots.length;i++)assert.equal(all[i].cleanersCount,(await service.availableCleaners('2039-02-03',slots[i].startTime,slots[i].endTime)).length);
  }finally{

@@ -815,6 +815,7 @@ class FirestoreDataService {
       'dailyWorkLimitMinutes': _num(
         profile['daily_work_limit_minutes'],
       ).round(),
+      'isOnline': profile['is_online'] != false,
       'soundEnabled': profile['sound_enabled'],
       'soundVolume': _num(profile['sound_volume']).round(),
       'soundKey': profile['sound_key'],
@@ -3657,6 +3658,7 @@ class FirestoreDataService {
           'monthlyAreaLimit': data['monthlyAreaLimit'],
         if (data['dailyWorkLimitMinutes'] != null)
           'dailyWorkLimitMinutes': data['dailyWorkLimitMinutes'],
+        if (data['isOnline'] != null) 'isOnline': data['isOnline'],
         if (data['soundEnabled'] != null) 'soundEnabled': data['soundEnabled'],
         if (data['soundVolume'] != null) 'soundVolume': data['soundVolume'],
         if (data['soundKey'] != null) 'soundKey': data['soundKey'],
