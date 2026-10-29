@@ -36,8 +36,8 @@ import sys
 
 path = Path(sys.argv[1])
 content = path.read_text()
-content = content.replace("<title>domly</title>", "<title>DOMLY</title>")
-content = content.replace('content="domly"', 'content="DOMLY"')
+content = content.replace("<title>DomLY</title>", "<title>DomLY</title>")
+content = content.replace('content="DomLY"', 'content="DomLY"')
 cache_bust = """  <script>
     (function () {
       function normalizeBootRoute(value) {
@@ -173,13 +173,13 @@ import sys
 
 path = Path(sys.argv[1])
 manifest = {
-    "name": "DOMLY",
-    "short_name": "DOMLY",
+    "name": "DomLY",
+    "short_name": "DomLY",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#F0F7F2",
     "theme_color": "#439F73",
-    "description": "DOMLY — забота о вашем доме.",
+    "description": "DomLY — забота о вашем доме.",
     "orientation": "portrait-primary",
     "prefer_related_applications": False,
     "icons": [

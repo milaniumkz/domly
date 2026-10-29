@@ -52,7 +52,7 @@ class NotificationService {
       _foregroundIds.remove(_foregroundIds.first);
     _foregroundMessages.add({
       ...message.data,
-      'title': message.notification?.title ?? 'Помощник Domly',
+      'title': message.notification?.title ?? 'Помощник DomLY',
       'body': message.notification?.body ?? 'Новое сообщение от помощника'
     });
   }
@@ -176,7 +176,7 @@ class NotificationService {
           ? 'Order Offers Alarm'
           : isScheduledOrderOffer
               ? 'Scheduled Offers Alarm'
-              : 'Domly Notifications';
+              : 'DomLY Notifications';
 
       final androidDetails = AndroidNotificationDetails(
         channelId,
@@ -262,7 +262,7 @@ class NotificationService {
     await androidPlatform?.createNotificationChannel(
       const AndroidNotificationChannel(
         'domly_main',
-        'Domly Notifications',
+        'DomLY Notifications',
         importance: Importance.high,
       ),
     );

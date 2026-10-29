@@ -62,7 +62,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Как вы хотите использовать Domly?'.tr(),
+                'Как вы хотите использовать DomLY?'.tr(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,

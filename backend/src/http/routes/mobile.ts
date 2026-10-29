@@ -1,3 +1,4 @@
+import {requestAccountDeletion,restoreDeletedAccount} from '../../modules/accountDeletion';
 import {freezePackage} from '../../modules/packageFreeze';
 import {idempotent,idempotentTransaction} from '../../common/idempotency';
 import { updateOrderAddons } from '../../modules/orderAddons';
@@ -26,23 +27,11 @@ export function mobileRouter(db: Database) {
     next();
   }));
 
-  router.delete('/me', auth(['customer', 'cleaner']), asyncHandler(async (req, res) => {
-    await db.transaction(async tx => {
-      const busy = first((await tx.query(`SELECT id FROM service_orders WHERE (customer_id=$1 OR cleaner_id=$1)
-        AND status NOT IN ('completed','cancelled','canceled') LIMIT 1`, [req.user!.id])).rows);
-      if (busy) throw new ApiError(409, 'active_orders', 'Завершите или отмените текущие заказы перед удалением аккаунта.');
-      await tx.query('DELETE FROM device_tokens WHERE user_id=$1', [req.user!.id]);
-      await tx.query('UPDATE refresh_sessions SET revoked_at=NOW() WHERE user_id=$1', [req.user!.id]);
-
-      await tx.query(`UPDATE customer_addresses SET city='Удалено',settlement=NULL,street='Удалено',house='-',apartment=NULL,entrance=NULL,floor=NULL,intercom=NULL,access_comment=NULL,area=NULL,latitude=NULL,longitude=NULL
-        WHERE user_id=$1`, [req.user!.id]);
-      await tx.query("UPDATE cleaner_profiles SET registration_status='blocked',verification_status='blocked',updated_at=NOW() WHERE user_id=$1",[req.user!.id]);
-      await tx.query('DELETE FROM house_waitlist WHERE user_id=$1',[req.user!.id]);
-      await tx.query(`UPDATE app_users SET phone=$2, full_name=NULL, email=NULL, password_hash=NULL,
-        firebase_uid=NULL, status='blocked', deleted_at=NOW(), updated_at=NOW() WHERE id=$1`,
-        [req.user!.id, `deleted-${randomUUID()}`]);
-    });
-    ok(res, { deleted: true });
+  router.delete('/me', auth(['customer','cleaner']), asyncHandler(async(req,res)=>{
+    ok(res,await requestAccountDeletion(db,req.user!.id));
+  }));
+  router.post('/admin/users/:id/restore',auth(['admin','superadmin']),asyncHandler(async(req,res)=>{
+    ok(res,await restoreDeletedAccount(db,String(req.params.id),req.user!.id));
   }));
 
   router.post('/orders/:id/addons', auth(['customer']), asyncHandler(async (req,res) => {

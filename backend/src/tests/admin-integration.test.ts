@@ -39,6 +39,23 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('evening slots include 18:00 and preserve the 21:00 finish limit',async()=>{
+      await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
+      await db.query("UPDATE cleaner_profiles SET verification_status='approved' WHERE user_id=$1",[cleaner]);
+      try {
+        const evening=await request('/scheduling/available-slots?date=2039-02-03&durationMinutes=180');
+        assert.equal(evening.status,200);
+        assert.ok(evening.json.data.some((slot:any)=>slot.startTime==='18:00'&&slot.endTime==='21:00'&&slot.durationMinutes===180));
+        const longer=await request('/scheduling/available-slots?date=2039-02-03&durationMinutes=240');
+        assert.equal(longer.status,200);
+        assert.ok(longer.json.data.some((slot:any)=>slot.startTime==='16:00'&&slot.endTime==='20:00'));
+        assert.ok(longer.json.data.every((slot:any)=>slot.startTime<='18:00'&&slot.endTime<='21:00'));
+        assert.ok(!longer.json.data.some((slot:any)=>slot.startTime==='18:00'));
+      } finally {
+        await db.query("UPDATE app_users SET status='pending' WHERE id=$1",[cleaner]);
+        await db.query("UPDATE cleaner_profiles SET verification_status='pending' WHERE user_id=$1",[cleaner]);
+      }
+    });
     await t.test('home exposes only the assigned cleaner approved standalone selfie', async()=>{
       const selfie=randomUUID(),identity=randomUUID(),order=randomUUID(),banner=randomUUID();
       try{
@@ -137,6 +154,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM order_addons WHERE order_id=$1',[orderId]);
         await db.query('DELETE FROM service_orders WHERE id=$1',[orderId]);
         await db.query('DELETE FROM catalog_addons WHERE id=$1',[addonId]);
+        await db.query('DELETE FROM audit_logs WHERE actor_id=$1 OR entity_id=$1::text',[owner]);
         await db.query('DELETE FROM app_users WHERE id=$1',[owner]);
       }
     });
@@ -448,6 +466,33 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
       }
     });
+    await t.test('cancelled package purchase disappears from orders after reload but its invoice stays in history',async()=>{
+      const owner=randomUUID(),pkg=randomUUID(),purchase=randomUUID(),invoice=randomUUID();
+      const send=async(path:string,method='GET')=>{
+        const response=await fetch(base+path,{method,headers:{Authorization:'Bearer '+signAccessToken({id:owner,role:'customer',phone:'fixture'}),'Content-Type':'application/json'},body:method==='POST'?'{}':undefined});
+        return {status:response.status,json:await response.json() as any};
+      };
+      try {
+        await db.query("INSERT INTO app_users(id,phone,role) VALUES($1,$2,'customer')",[owner,'cancel-package-'+owner]);
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Квартальный пакет',4,100)",[pkg]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,4,0,'pending_payment')",[purchase,owner,pkg]);
+        await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,status,amount) VALUES($1,$2,$3,'kaspi','invoice_requested',100)",[invoice,owner,purchase]);
+        assert.ok((await send('/orders')).json.data.some((o:any)=>o.id===invoice && o.view_kind==='package_purchase'));
+        assert.equal((await request('/payments/'+invoice+'/cancel-purchase','POST',{},true)).status,404);
+        const cancelled=await send('/payments/'+invoice+'/cancel-purchase','POST');
+        assert.equal(cancelled.status,200);assert.equal(cancelled.json.data.cancelled,true);
+        for(let reload=0;reload<2;reload++)assert.ok(!(await send('/orders')).json.data.some((o:any)=>o.customer_package_id===purchase));
+        const history=(await send('/payments/my')).json.data.find((p:any)=>p.id===invoice);
+        assert.ok(history);assert.equal(history.status,'cancelled');
+        assert.equal((await send('/payments/'+invoice+'/cancel-purchase','POST')).status,200);
+      } finally {
+        await db.query('DELETE FROM payments WHERE customer_id=$1',[owner]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+        await db.query('DELETE FROM audit_logs WHERE actor_id=$1 OR entity_id=$1::text',[owner]);
+        await db.query('DELETE FROM app_users WHERE id=$1',[owner]);
+      }
+    });
     await t.test('admin lists every visit with details and can assign or cancel unassigned orders',async()=>{
       const owner=randomUUID(),worker=randomUUID(),address=randomUUID(),pkg=randomUUID(),purchase=randomUUID(),addon=randomUUID();
       const orders=[randomUUID(),randomUUID()],payments=[randomUUID(),randomUUID()];
@@ -487,6 +532,16 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal(details.json.data.history.at(-1).new_status,'assigned');
         assert.equal((await request('/admin/orders/'+orders[1],'PATCH',{status:'cancelled'})).status,200);
         assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[orders[1]])).rows[0].status,'cancelled');
+        assert.equal((await request('/admin/orders/'+orders[0],'PATCH',{status:'cancelled'})).status,200);
+        const ownerToken=signAccessToken({id:owner,role:'customer',phone});
+        assert.equal((await fetch(base+'/me',{method:'DELETE',headers:{Authorization:'Bearer '+ownerToken}})).status,200);
+        const deleted=(await request('/admin/users?search='+phone)).json.data.find((u:any)=>u.id===owner);
+        assert.ok(deleted.deleted_at);assert.ok(deleted.restore_until);assert.equal(deleted.paid_package_count,1);
+        assert.equal(Number(deleted.remaining_paid_cleanings),4);assert.equal(Number(deleted.paid_total),1000);
+        assert.equal((await request('/admin/users/'+owner+'/restore','POST',{})).status,200);
+        const active=(await request('/admin/users?search='+phone)).json.data.find((u:any)=>u.id===owner);
+        assert.equal(active.deleted_at,null);assert.equal(Number(active.remaining_paid_cleanings),4);
+
       } finally {
         await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[]) OR user_id=ANY($2::uuid[])',[orders,[owner,worker]]);
         await db.query('DELETE FROM payments WHERE id=ANY($1::uuid[])',[payments]);
@@ -496,6 +551,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
         await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
         await db.query('DELETE FROM cleaner_profiles WHERE user_id=$1',[worker]);
+        await db.query('DELETE FROM audit_logs WHERE actor_id=ANY($1::uuid[]) OR entity_id=$2::text',[[owner,worker],owner]);
         await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[owner,worker]]);
       }
     });
@@ -520,6 +576,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       } finally {
         await db.query('DELETE FROM notifications WHERE user_id=$1 OR target_id=$2',[owner,order]);
         await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
+        await db.query('DELETE FROM audit_logs WHERE actor_id=$1 OR entity_id=$1::text',[owner]);
         await db.query('DELETE FROM app_users WHERE id=$1',[owner]);
       }
     });

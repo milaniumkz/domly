@@ -7,7 +7,7 @@ import { customerMonthlyProgress } from '../../modules/customerProgress';
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
 import {idempotent,idempotentTransaction} from '../../common/idempotency';
 import {ensureChecklistReport,saveChecklist} from '../../modules/checklists';
-import {validateBookingStart} from '../../modules/bookingValidation';
+import {validateBookingStart, fitsBookingHours, validateBookingHours} from '../../modules/bookingValidation';
 import {revokeRealtimeSessions} from '../../realtime/sse';
 import {inspectUpload,registerUploadedFile} from '../../technical/files';
 import {ensureGuestSession, guestSession, bindGuestSession, matchMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
@@ -1392,7 +1392,7 @@ export function buildV1Router(deps: {
     if (payment.payableAmount === 0) {
       await applyPaidPayment(payment.payment);
     } else {
-      const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Покупка пакета DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Покупка пакета DomLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
     }
     if (!address.verified_area) {
@@ -1435,6 +1435,7 @@ export function buildV1Router(deps: {
     }).filter(addon=>!prepaidIds.has(addon.id));
     const addonAmount = addons.reduce((sum: number, row) => sum + Number(row.price)*row.quantity, 0);
     const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes ?? 0),0);
+    validateBookingHours(String(req.body.startTime), duration);
     const end = addMinutes(String(req.body.startTime), duration);
     if (end <= String(req.body.startTime).slice(0,5)) throw new ApiError(400,'invalid_order_time','Уборка должна завершиться в выбранный день.');
     const initialStatus = addonAmount > 0 ? 'pending_payment' : 'pending_assignment';
@@ -1533,7 +1534,7 @@ export function buildV1Router(deps: {
     if (result.payableAmount === 0) {
       await applyPaidPayment(result.payment);
     } else {
-      const provider = await initConfiguredPayment(deps.paymentGateway, result, req, 'Оплата заказа DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, result, req, 'Оплата заказа DomLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (result.payment as any).id, provider);
     }
     return result;
@@ -1951,6 +1952,7 @@ export function buildV1Router(deps: {
         if (pkg?.freeze_until && String(date).slice(0,10)<pkg.freeze_until) throw new ApiError(409,'package_frozen','Пакет заморожен на выбранную дату.');
       }
       const duration = Number(current.estimated_duration_minutes) > 0 ? Number(current.estimated_duration_minutes) : await estimateCleaningDurationMinutes(tx,current.address_id,[]);
+      validateBookingHours(String(startTime),duration);
       const endTime = addMinutes(String(startTime),duration);
       if (current.cleaner_id) {
         const overlap = first((await tx.query(`SELECT id FROM service_orders
@@ -2074,7 +2076,7 @@ export function buildV1Router(deps: {
       await applyPaidPayment(payment.payment);
     } else {
       const invoiceReq = {...req, body: {...req.body, invoicePhone: req.body.kaspiPhone}};
-      const provider = await initConfiguredPayment(deps.paymentGateway, payment, invoiceReq, 'Оплата допуслуг DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, payment, invoiceReq, 'Оплата допуслуг DomLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
     }
     ok(res, { requestId: req.params.id, paymentId: (payment as any).payment.id, ...payment });
@@ -2128,7 +2130,7 @@ export function buildV1Router(deps: {
   router.get('/scheduling/available-slots', auth(), asyncHandler(async (req, res) => {
     const date = String(req.query.date);
     const settings = await readAppSettings(deps.db);
-    const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['08:00', '10:00', '12:00', '14:00', '16:00'];
+    const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
     const addonIds = String(req.query.addonIds ?? '').split(',').map((id) => id.trim()).filter(Boolean);
     const addons = addonIds.length
       ? (await deps.db.query<{ duration_minutes: number }>(`SELECT duration_minutes FROM catalog_addons WHERE id = ANY($1::uuid[])`, [addonIds])).rows
@@ -2136,7 +2138,7 @@ export function buildV1Router(deps: {
     const duration = Number(req.query.durationMinutes ?? 0) > 0
       ? Number(req.query.durationMinutes)
       : await estimateCleaningDurationMinutes(deps.db, req.query.addressId ? String(req.query.addressId) : undefined, addons);
-    const intervals = slots.map((start: string) => ({startTime: start, endTime: addMinutes(start, duration)}));
+    const intervals = slots.filter((start: string) => fitsBookingHours(start, duration)).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration)}));
     const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined);
     const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));
     ok(res, available);
@@ -2335,7 +2337,7 @@ export function buildV1Router(deps: {
       [req.params.id, phone, env.moonAiEnabled],
     )).rows);
     if (!updated) throw new ApiError(400, 'invalid_payment_status', 'По этому платежу нельзя выставить счёт.');
-    const provider = await initConfiguredPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DOMLY');
+    const provider = await initConfiguredPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DomLY');
     if (provider) await updatePaymentProviderPayload(deps.db, String(req.params.id), provider);
     await deps.notifications.createAdminEvent({
       event: 'new_payment',
@@ -2367,7 +2369,7 @@ export function buildV1Router(deps: {
       [req.params.id],
     )).rows);
     if (!updated) throw new ApiError(400, 'invalid_payment_status', 'По этому платежу нельзя открыть онлайн-оплату.');
-    const provider = await initConfiguredPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DOMLY');
+    const provider = await initConfiguredPayment(deps.paymentGateway, { payment: updated, payableAmount: Number((updated as any).amount) }, req, 'Оплата DomLY');
     if (provider) await updatePaymentProviderPayload(deps.db, String(req.params.id), provider);
     ok(res, { payment: updated, ...provider });
   }));
@@ -3358,7 +3360,7 @@ export function buildV1Router(deps: {
       [req.params.id, req.user!.id],
     );
     ok(res, (await deps.db.query(
-      `SELECT cm.*, COALESCE(u.full_name,'Помощник Domly') AS sender_name, u.phone AS sender_phone, COALESCE(u.role::text,cm.sender_kind) AS sender_role,
+      `SELECT cm.*, COALESCE(u.full_name,'Помощник DomLY') AS sender_name, u.phone AS sender_phone, COALESCE(u.role::text,cm.sender_kind) AS sender_role,
               f.public_url AS file_url, f.mime_type AS file_mime_type, f.size_bytes AS file_size_bytes
        FROM chat_messages cm
        LEFT JOIN app_users u ON u.id=cm.sender_id
@@ -3692,7 +3694,7 @@ export function buildV1Router(deps: {
     if (payment.payableAmount === 0) {
       await applyPaidPayment(payment.payment);
     } else {
-      const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Оплата предварительной записи DOMLY');
+      const provider = await initConfiguredPayment(deps.paymentGateway, payment, req, 'Оплата предварительной записи DomLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
     }
     ok(res, { preorderId: preorder.id, customerPackage, ...payment });
@@ -3726,7 +3728,7 @@ export function buildV1Router(deps: {
     for (const preorder of rows) {
       await deps.notifications.create({
         userId: preorder.customer_id,
-        titleRu: 'DOMLY запущен',
+        titleRu: 'DomLY запущен',
         bodyRu: `Старт уборок назначен на ${req.body.startDate}. Оплатите предварительную запись в приложении.`,
         targetType: 'preorder',
         targetId: preorder.id,
@@ -4570,7 +4572,13 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
               SELECT u.id, u.created_at FROM app_users u ${where}
               ORDER BY u.created_at DESC,u.id DESC LIMIT $${values.length - 1} OFFSET $${values.length}
             )
-            SELECT u.id, u.numeric_id, u.full_name, u.phone, u.email, u.status, u.rating, u.bonus_balance, u.created_at,
+            SELECT u.id, u.numeric_id, u.full_name, u.phone, u.email, u.status, u.rating, u.bonus_balance, u.created_at,u.deleted_at,
+                   (SELECT MAX(d.restore_until) FROM account_deletion_requests d WHERE d.user_id=u.id AND d.restored_at IS NULL AND d.anonymized_at IS NULL) AS restore_until,
+                   (SELECT COUNT(*)::int FROM customer_packages cp WHERE cp.customer_id=u.id AND EXISTS
+                     (SELECT 1 FROM payments p WHERE p.customer_package_id=cp.id AND p.status IN ('paid','refunded'))) AS paid_package_count,
+                   (SELECT COALESCE(SUM(p.amount),0) FROM payments p WHERE p.customer_id=u.id AND p.status IN ('paid','refunded')) AS paid_total,
+                   (SELECT COALESCE(SUM(cp.available_cleanings),0) FROM customer_packages cp WHERE cp.customer_id=u.id
+                     AND cp.status IN ('active','frozen') AND EXISTS(SELECT 1 FROM payments p WHERE p.customer_package_id=cp.id AND p.status='paid')) AS remaining_paid_cleanings,
                    (SELECT COUNT(*)::int FROM service_orders o WHERE o.customer_id=u.id) AS orders_count,
                    (SELECT COUNT(*)::int FROM payments pay WHERE pay.customer_id=u.id) AS payments_count
             FROM page JOIN app_users u ON u.id=page.id
@@ -4817,7 +4825,7 @@ export function buildRuntimeConfig(settings: Record<string, any>) {
       localization,
       booking: {
         minBookingDate: settings.minBookingDate ?? null,
-        slotStartTimes: settings.slotStartTimes ?? ['08:00', '10:00', '12:00', '14:00', '16:00'],
+        slotStartTimes: settings.slotStartTimes ?? ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
         requireAvailableCleaner: settings.requireAvailableCleaner ?? true,
         allowCustomTime: settings.allowCustomTime ?? false,
         scrollToPendingAfterAddonSelection: settings.scrollToPendingAfterAddonSelection ?? true,
@@ -5050,11 +5058,11 @@ function formatPaymentAddress(address?: {
   house?: string | null;
   apartment?: string | null;
 } | null): string {
-  if (!address) return 'DOMLY service payment';
+  if (!address) return 'DomLY service payment';
   const parts = [address.city, address.settlement, address.street, address.house, address.apartment ? `apt ${address.apartment}` : null]
     .filter(Boolean)
     .join(', ');
-  return toLatin(parts || 'DOMLY service payment');
+  return toLatin(parts || 'DomLY service payment');
 }
 
 export async function updatePaymentProviderPayload(db: Database, paymentId: string, provider: unknown) {

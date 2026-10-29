@@ -27,7 +27,7 @@ class AdminDashboardScreen extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Админка DOMLY'.tr(),
+                      'Админка DomLY'.tr(),
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,

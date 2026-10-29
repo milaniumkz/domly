@@ -1,7 +1,7 @@
 export const openApiSpec = {
   openapi: '3.0.0',
   info: {
-    title: 'DOMLY Backend API',
+    title: 'DomLY Backend API',
     version: '1.0.0',
     description: 'REST API для backend без Firebase. Firebase используется только для FCM push.',
   },
@@ -119,7 +119,7 @@ export const openApiSpec = {
       },
     },
     '/me': {
-      delete: { ...secured('Удалить и обезличить свой аккаунт'), responses: okError() },
+      delete: { ...secured('Закрыть доступ к своему аккаунту; поддержка может восстановить его 30 дней, затем контакты обезличиваются'), responses: okError() },
       get: secured('Текущий пользователь'),
       patch: {
         ...secured('Обновить профиль пользователя'),
@@ -443,7 +443,7 @@ export const openApiSpec = {
     '/payments/moon-ai/kaspi-status': {
       post: {
         summary: 'Webhook Moon AI: статус выставленного счёта Kaspi',
-        description: 'Moon AI передаёт status, amount, phone, dateTime и paymentId из запроса счёта DOMLY. Для старых интеграций paymentId необязателен. ID проверяется вместе с телефоном, суммой и временем; неверный ID не допускает подбора другого счёта. Единственное совпадение телефона/суммы/времени обрабатывается автоматически, неоднозначное — вручную. Статусы invoice_sent, paid, rejected, cancelled. Защита: Authorization: Bearer <MOON_AI_WEBHOOK_TOKEN> или X-MoonAI-Token.',
+        description: 'Moon AI передаёт status, amount, phone, dateTime и paymentId из запроса счёта DomLY. Для старых интеграций paymentId необязателен. ID проверяется вместе с телефоном, суммой и временем; неверный ID не допускает подбора другого счёта. Единственное совпадение телефона/суммы/времени обрабатывается автоматически, неоднозначное — вручную. Статусы invoice_sent, paid, rejected, cancelled. Защита: Authorization: Bearer <MOON_AI_WEBHOOK_TOKEN> или X-MoonAI-Token.',
         requestBody: jsonBody({
           status: 'paid',
           amount: 11500,
@@ -610,6 +610,7 @@ export const openApiSpec = {
       },
     },
     '/admin/packagePurchases/{id}/details': { get: { ...secured('Админ: детали покупки пакета и история платежей'), parameters: [path('id')] } },
+    '/admin/users/{id}/restore': { post: { ...secured('Админ: восстановить удалённый аккаунт в течение 30 дней без изменения пакетов и платежей'), parameters: [path('id')] } },
     '/admin/orders/{id}/details': { get: { ...secured('Админ: детали заказа, клиент, уборщица, допы, платежи'), parameters: [path('id')] } },
     '/admin/orders/{id}': {
       patch: {
@@ -798,6 +799,6 @@ for (const [route, methods] of Object.entries({
   '/integrations/moon-ai/messages': ['post'],
 })) {
   const entry:Record<string,unknown>={};
-  for(const method of methods)entry[method]={tags:['Assistant'],summary:'Domly assistant / Moon AI integration',responses:{'200':{description:'Accepted'},'401':{description:'Unauthorized'},'503':{description:'Integration not configured'}}};
+  for(const method of methods)entry[method]={tags:['Assistant'],summary:'DomLY assistant / Moon AI integration',responses:{'200':{description:'Accepted'},'401':{description:'Unauthorized'},'503':{description:'Integration not configured'}}};
   (openApiSpec.paths as Record<string,unknown>)[route]=entry;
 }

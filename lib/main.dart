@@ -18,7 +18,7 @@ Future<void> proMain() async {
 
 const _customerConfig = AppConfig(
   flavor: AppFlavor.customer,
-  title: 'DOMLY',
+  title: 'DomLY',
   initialRoute: '/auth',
   postAuthRoute: '/client/home',
   deferAuthForCustomerActions: false,
@@ -27,7 +27,7 @@ const _customerConfig = AppConfig(
 
 const _proConfig = AppConfig(
   flavor: AppFlavor.pro,
-  title: 'Domly Pro',
+  title: 'DomLY Pro',
   initialRoute: '/welcome',
   postAuthRoute: '/cleaner/dashboard',
   deferAuthForCustomerActions: false,

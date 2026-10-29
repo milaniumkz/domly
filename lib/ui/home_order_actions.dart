@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../localization/translation_controller.dart';
 import '../services/backend_api_service.dart';
+import '../services/package_purchase_service.dart';
 import '../services/firestore_data_service.dart';
 import '../services/payment_link_service.dart';
 import '../screens/common/kaspi_invoice_request_dialog.dart';
@@ -88,8 +89,8 @@ Future<void> cancelHomePurchase(
   if (yes != true || !context.mounted) return;
   try {
     await PaymentLinkService.runBlocking(context,
-        task: () => BackendApiService.instance
-            .postMap('/payments/${order['id']}/cancel-purchase'));
+        task: () => cancelUnpaidPackage(
+            BackendApiService.instance, (order['id'] ?? '').toString()));
     if (context.mounted)
       showDomlySnackBar(context,
           title: 'Покупка отменена',

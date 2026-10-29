@@ -419,7 +419,7 @@ class BackendApiService {
       throw const BackendApiException(
           code: 'wrong_application',
           message:
-              'Этот аккаунт относится к другой версии DOMLY. Войдите в соответствующее приложение.',
+              'Этот аккаунт относится к другой версии DomLY. Войдите в соответствующее приложение.',
           statusCode: 403);
     }
     await _sessionStore.saveBackendSession(

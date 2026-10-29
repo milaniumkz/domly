@@ -1,11 +1,11 @@
 {
-    "name": "DOMLY",
-    "short_name": "DOMLY",
+    "name": "DomLY",
+    "short_name": "DomLY",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#F0F7F2",
     "theme_color": "#439F73",
-    "description": "DOMLY — забота о вашем доме.",
+    "description": "DomLY — забота о вашем доме.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

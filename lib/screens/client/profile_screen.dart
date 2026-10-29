@@ -213,7 +213,7 @@ class ProfileScreen extends StatelessWidget {
                             _ProfileActionBanner(
                               icon: Icons.description_outlined,
                               title: 'Оферта',
-                              subtitle: 'Условия оказания услуг DOMLY',
+                              subtitle: 'Условия оказания услуг DomLY',
                               onTap: () => Navigator.pushNamed(
                                 context,
                                 LegalDocumentScreen.offerRoute,
@@ -223,7 +223,7 @@ class ProfileScreen extends StatelessWidget {
                             _ProfileActionBanner(
                               icon: Icons.privacy_tip_outlined,
                               title: 'Политика конфиденциальности',
-                              subtitle: 'Как DOMLY обрабатывает ваши данные',
+                              subtitle: 'Как DomLY обрабатывает ваши данные',
                               onTap: () => Navigator.pushNamed(
                                 context,
                                 LegalDocumentScreen.privacyRoute,

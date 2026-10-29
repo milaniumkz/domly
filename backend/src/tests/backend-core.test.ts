@@ -1,3 +1,4 @@
+import {fitsBookingHours,validateBookingHours} from '../modules/bookingValidation';
 import { formatAddonRecord, formatServiceDescription } from '../modules/serviceDescription';
 import {gunzipSync} from 'node:zlib';
 import {PublicTextCatalog} from '../modules/publicTextCatalog';
@@ -340,7 +341,7 @@ test('Green API sends only a fixed OTP message and requires a message receipt',a
     globalThis.fetch=(async(url:any,init:any)=>{if(String(url).includes('/getStateInstance/'))return {ok:true,json:async()=>({stateInstance:'authorized'})};calls.push({url,body:JSON.parse(init.body)});return {ok:true,json:async()=>({idMessage:'receipt'})};}) as any;
     await new WapiOtpService().sendOtp('+77052597368','123456');
     assert.equal(calls[0].url,'https://7700.api.greenapi.com/waInstance770012345678/sendMessage/fixture-secret');
-    assert.deepEqual(calls[0].body,{chatId:'77052597368@c.us',message:'DOMLY код подтверждения: 123456'});
+    assert.deepEqual(calls[0].body,{chatId:'77052597368@c.us',message:'DomLY код подтверждения: 123456'});
     for(const code of ['hello','12345','1234567'])await assert.rejects(()=>new WapiOtpService().sendOtp('+77052597368',code),(e:any)=>e.code==='invalid_otp_payload');
     assert.equal(calls.length,1);
     for(const mock of [async()=>({ok:false}),async()=>({ok:true,json:async()=>({})}),async()=>({ok:true,json:async()=>({idMessage:''})}),async()=>{throw Error('secret URL must not escape');}]) {
@@ -425,7 +426,7 @@ test('PaymentGatewayService builds BCC payload with required fields', async () =
   const result = await gateway.createBccPayment({
     paymentId: '12345678-1234-1234-1234-123456789012',
     amount: 7500,
-    description: 'Оплата заказа DOMLY',
+    description: 'Оплата заказа DomLY',
     clientIp: '127.0.0.1',
     language: 'ru',
     mInfo: 'Астана, Тәуелсіздік 39',
@@ -436,7 +437,7 @@ test('PaymentGatewayService builds BCC payload with required fields', async () =
   assert.equal(payload.CURRENCY, '398');
   assert.equal(payload.CLIENT_IP, '127.0.0.1');
   assert.equal(payload.LANG, 'ru');
-  assert.equal(payload.DESC, 'Оплата заказа DOMLY');
+  assert.equal(payload.DESC, 'Оплата заказа DomLY');
   assert.equal(JSON.parse(Buffer.from(String(payload.M_INFO),'base64').toString()).billAddrLine1, 'Kazakhstan');
   assert.match(String(payload.ORDER),/^\d{7,32}$/);
   assert.match(String(payload.P_SIGN),/^[A-F0-9]{40}$/);
@@ -1112,4 +1113,25 @@ test('cleaner offer pushes request background priority, audible channels and ret
     assert.deepEqual(message.notification,{title:'Заказ',body:'Подтвердите заказ'});
   }
   assert.equal(buildFcmMessage(['device'],'Сообщение','Текст',{targetType:'chat'}).android,undefined);
+});
+
+
+test('deleted accounts cannot request a login code during the support recovery period',async()=>{
+  let sent=0;
+  const db={query:async()=>({rows:[{role:'customer',status:'blocked',deleted_at:new Date()}]})};
+  const service=new AuthService(db as any,{sendOtp:async()=>{sent++;}} as any);
+  await assert.rejects(service.requestOtp('+77000000000','customer'),(error:any)=>error.code==='account_deleted');
+  assert.equal(sent,0);
+});
+
+test('evening booking preserves duration and finishes by 21:00', () => {
+  assert.equal(fitsBookingHours('18:00',180),true);
+  assert.equal(fitsBookingHours('18:00:00',180),true);
+  assert.equal(fitsBookingHours('18:00',181),false);
+  assert.equal(fitsBookingHours('18:30',120),false);
+  assert.equal(fitsBookingHours('16:00',240),true);
+  assert.equal(fitsBookingHours('08:00',180),true);
+  assert.equal(fitsBookingHours('07:59',180),false);
+  assert.equal(fitsBookingHours('18:00',NaN),false);
+  assert.throws(()=>validateBookingHours('18:00',240));
 });

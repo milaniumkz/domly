@@ -27,19 +27,19 @@ check_url() {
     exit 1
   fi
 
-  if grep -q "Domly Admin Web" "$tmp" && [[ "$label" != "admin" ]]; then
+  if grep -q "DomLY Admin Web" "$tmp" && [[ "$label" != "admin" ]]; then
     echo "[ERROR] $label appears to contain admin build markers"
     rm -f "$tmp"
     exit 1
   fi
 
-  if grep -q ">DOMLY<" "$tmp" && [[ "$label" == "admin" ]]; then
+  if grep -q ">DomLY<" "$tmp" && [[ "$label" == "admin" ]]; then
     echo "[ERROR] admin appears to contain customer build markers"
     rm -f "$tmp"
     exit 1
   fi
 
-  if grep -q "Domly Pro" "$tmp" && [[ "$label" == "admin" ]]; then
+  if grep -q "DomLY Pro" "$tmp" && [[ "$label" == "admin" ]]; then
     echo "[ERROR] admin appears to contain pro build markers"
     rm -f "$tmp"
     exit 1
@@ -49,8 +49,8 @@ check_url() {
   rm -f "$tmp"
 }
 
-check_url "customer" "$CUSTOMER_URL" "<title>DOMLY</title>"
-check_url "pro" "$PRO_URL" "<title>Domly Pro</title>"
-check_url "admin" "$ADMIN_URL" "<title>Domly Admin Web</title>"
+check_url "customer" "$CUSTOMER_URL" "<title>DomLY</title>"
+check_url "pro" "$PRO_URL" "<title>DomLY Pro</title>"
+check_url "admin" "$ADMIN_URL" "<title>DomLY Admin Web</title>"
 
 echo "[OK] Post-deploy web smoke passed for customer, pro, and admin"

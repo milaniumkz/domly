@@ -1,5 +1,6 @@
 import '../../utils/admin_addon_text.dart';
 import '../../utils/admin_order_data.dart';
+import '../../utils/admin_customer_data.dart';
 import '../../services/backend_api_service.dart';
 import '../../utils/admin_date_time.dart';
 import '../../utils/payment_approval_data.dart';
@@ -297,7 +298,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1F2937),
         title: Text(
-          'DOMLY Админ-панель'.tr(),
+          'DomLY Админ-панель'.tr(),
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
@@ -663,7 +664,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'DOMLY',
+                    'DomLY',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
@@ -959,7 +960,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         _AdminSection(
           key: 'dictionaries',
           title: 'Тексты и переводы',
-          subtitle: 'Тексты интерфейса, описания и подсказки на русском и казахском.',
+          subtitle:
+              'Тексты интерфейса, описания и подсказки на русском и казахском.',
           icon: Icons.translate_outlined,
           builder: _translationDictionaries,
         ),
@@ -986,6 +988,37 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _data.adminCustomersStream(),
+            builder: (context, snapshot) {
+              final flagged = (snapshot.data ?? const <Map<String, dynamic>>[])
+                  .where((customer) => customer['deletedWithPayments'] == true)
+                  .length;
+              if (flagged == 0) return const SizedBox.shrink();
+              return Card(
+                  color: const Color(0xFFFEE2E2),
+                  child: ListTile(
+                    leading: const Icon(Icons.warning_amber_rounded,
+                        color: Color(0xFFB91C1C)),
+                    title: Text('Удалённые аккаунты с оплатами: $flagged'.tr(),
+                        style: const TextStyle(
+                            color: Color(0xFFB91C1C),
+                            fontWeight: FontWeight.w700)),
+                    subtitle: Text(
+                        'Проверьте пакеты и возможность восстановления клиента.'
+                            .tr()),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => setState(() {
+                      _selectedIndex = _sectionIndexByKey('customers');
+                      _customerStatusFilter = 'Удалён с оплатами';
+                      _searchQuery = '';
+                      _filterStartDate = null;
+                      _filterEndDate = null;
+                      _customerHouseFilter = 'Все';
+                    }),
+                  ));
+            },
+          ),
           Wrap(
             spacing: 16,
             runSpacing: 16,
@@ -1352,7 +1385,13 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 selected: _customerStatusFilter == 'Все',
                 onTap: () => setState(() => _customerStatusFilter = 'Все'),
               ),
-              for (final status in const ['Заполнен', 'Без адреса', 'Новый'])
+              for (final status in const [
+                'Заполнен',
+                'Без адреса',
+                'Новый',
+                'Удалён с оплатами',
+                'Удалён'
+              ])
                 _filterChip(
                   label:
                       '$status: ${allCustomers.where((item) => _customerProfileStatus(item) == status).length}',
@@ -1439,11 +1478,13 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       badges: [
         _statusBadge(
           status,
-          color: status == 'Заполнен'
-              ? const Color(0xFF047857)
-              : status == 'Без адреса'
-                  ? const Color(0xFFD97706)
-                  : const Color(0xFF64748B),
+          color: status.startsWith('Удалён')
+              ? const Color(0xFFB91C1C)
+              : status == 'Заполнен'
+                  ? const Color(0xFF047857)
+                  : status == 'Без адреса'
+                      ? const Color(0xFFD97706)
+                      : const Color(0xFF64748B),
         ),
       ],
       body: Wrap(
@@ -1456,9 +1497,30 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           _miniInfo('Дом', house),
           _miniInfo('Площадь', area == '—' ? '—' : '$area м²'),
           _miniInfo('Бонусы', '$bonuses ₸'),
+          if ((customer['paidPackageCount'] as num? ?? 0) > 0) ...[
+            _miniInfo('Куплено пакетов', '${customer['paidPackageCount']}'),
+            _miniInfo(
+                'Сумма оплат в истории', '${customer['paidTotal'] ?? 0} ₸'),
+            _miniInfo('Осталось оплаченных уборок',
+                '${customer['remainingPaidCleanings'] ?? 0}'),
+          ],
+          if (customer['deletedAt'] != null) ...[
+            _miniInfo('Удалён', _formatAdminDateTime(customer['deletedAt'])),
+            _miniInfo('Восстановление до',
+                _formatAdminDateTime(customer['restoreUntil'])),
+          ],
         ],
       ),
       actions: [
+        if (canRestoreCustomer(customer))
+          TextButton.icon(
+              onPressed: () => _restoreCustomer(customer),
+              icon: const Icon(Icons.restore),
+              label: Text('Восстановить аккаунт'.tr())),
+        TextButton.icon(
+            onPressed: () => _showCustomerPurchases(customer),
+            icon: const Icon(Icons.receipt_long_outlined),
+            label: Text('Пакеты и оплаты'.tr())),
         TextButton.icon(
           onPressed: phone == '—'
               ? null
@@ -1473,6 +1535,52 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         ),
       ],
     );
+  }
+
+  void _showCustomerPurchases(Map<String, dynamic> customer) {
+    setState(() {
+      _selectedIndex = _sectionIndexByKey('orders');
+      _searchQuery = (customer['phone'] ?? customer['id'] ?? '').toString();
+      _ordersTabFilter = 'Все заказы';
+      _statusFilter = 'Все';
+      _clusterFilter = 'Все';
+      _cleanerFilter = 'Все';
+      _serviceAreaFilter = 'Все';
+      _assignmentStatusFilter = 'Все';
+      _filterStartDate = null;
+      _filterEndDate = null;
+    });
+  }
+
+  Future<void> _restoreCustomer(Map<String, dynamic> customer) async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+              title: Text('Восстановить аккаунт?'.tr()),
+              content: Text(
+                  'Подтвердите, что обращается владелец аккаунта. Его пакеты, оплаты и остаток уборок сохранятся.'
+                      .tr()),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: Text('Отмена'.tr())),
+                TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: Text('Восстановить'.tr()))
+              ],
+            ));
+    if (confirmed != true) return;
+    try {
+      await _data.restoreDeletedCustomer(customer['id'].toString());
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text('Аккаунт восстановлен. Клиент может войти по SMS.'.tr())));
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(UserErrorMessage.message(error))));
+    }
   }
 
   String _customerSearchText(Map<String, dynamic> customer) {
@@ -1501,6 +1609,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   }
 
   String _customerProfileStatus(Map<String, dynamic> customer) {
+    if (customer['deletedWithPayments'] == true) return 'Удалён с оплатами';
+    if (customer['deletedAt'] != null) return 'Удалён';
     final hasAddress = _customerPrimaryAddress(customer) != '—' ||
         _firstText([customer['houseId'], customer['residentialComplex']]) !=
             '—';
@@ -1744,6 +1854,15 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           'Последний вход': _formatAdminDateTime(customer['lastLoginAt']),
           'Обновлен': _formatAdminDateTime(customer['updatedAt']),
         }),
+        _detailSection('Покупки и удаление аккаунта', {
+          'ID клиента': '${customer['id']}',
+          'Куплено пакетов': '${customer['paidPackageCount'] ?? 0}',
+          'Сумма оплат в истории': '${customer['paidTotal'] ?? 0} ₸',
+          'Осталось оплаченных уборок':
+              '${customer['remainingPaidCleanings'] ?? 0}',
+          'Удалён': _formatAdminDateTime(customer['deletedAt']),
+          'Восстановление до': _formatAdminDateTime(customer['restoreUntil']),
+        }),
         _detailSection('Адрес', {
           'Город': _firstText([customer['city']]),
           'Дом / ЖК': _firstText([
@@ -1922,6 +2041,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               }
               final haystack = [
                 data['id'],
+                data['customerId'],
                 data['customerName'],
                 data['customerId'],
                 data['cleanerId'],
@@ -2806,7 +2926,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   Stream<Map<String, dynamic>>? _paymentHistoryStream;
 
   Widget _payments() {
-    final filterKey = '$_paymentTab|$_searchQuery|$_filterStartDate|$_filterEndDate|$_dateSortOrder';
+    final filterKey =
+        '$_paymentTab|$_searchQuery|$_filterStartDate|$_filterEndDate|$_dateSortOrder';
     if (_paymentHistoryFilterKey != filterKey) {
       _paymentHistoryFilterKey = filterKey;
       _paymentHistoryLimit = 50;
@@ -2828,7 +2949,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       stream: _paymentHistoryStream,
       builder: (context, snapshot) {
         final page = snapshot.data ?? const <String, dynamic>{};
-        final docs = (page['items'] as List? ?? []).cast<Map<String, dynamic>>();
+        final docs =
+            (page['items'] as List? ?? []).cast<Map<String, dynamic>>();
         final counts = page['counts'] as Map? ?? const {};
         final total = (page['total'] as num?)?.toInt() ?? 0;
         final invoiceRequests =
@@ -2847,93 +2969,100 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   'errors': 'Ошибки'
                 }.entries)
                   ChoiceChip(
-                      label: Text(
-                          '${tab.value.tr()} (${counts[tab.key] ?? 0})'),
+                      label:
+                          Text('${tab.value.tr()} (${counts[tab.key] ?? 0})'),
                       selected: _paymentTab == tab.key,
                       onSelected: (_) => setState(() => _paymentTab = tab.key)),
               ])),
           Expanded(
               child: _sectionScaffold(
-            child: !snapshot.hasData && snapshot.connectionState == ConnectionState.waiting
+            child: !snapshot.hasData &&
+                    snapshot.connectionState == ConnectionState.waiting
                 ? const Center(child: CircularProgressIndicator())
                 : snapshot.hasError && !snapshot.hasData
-                ? _emptyState('Не удалось загрузить платежи', 'Обновите экран и попробуйте снова.')
-                : docs.isEmpty
-                ? _emptyState(
-                    'Платежи не найдены',
-                    'Проверьте строку поиска или период в данных.',
-                  )
-                : ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE5E7EB)),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _metricTile(
-                                'Заявки на оплату',
-                                '${invoiceRequests.length}',
-                                Icons.payments_outlined,
+                    ? _emptyState('Не удалось загрузить платежи',
+                        'Обновите экран и попробуйте снова.')
+                    : docs.isEmpty
+                        ? _emptyState(
+                            'Платежи не найдены',
+                            'Проверьте строку поиска или период в данных.',
+                          )
+                        : ListView(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                      color: const Color(0xFFE5E7EB)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: _metricTile(
+                                        'Заявки на оплату',
+                                        '${invoiceRequests.length}',
+                                        Icons.payments_outlined,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _metricTile(
+                                        'Всего платежей',
+                                        '$total',
+                                        Icons.receipt_long_outlined,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _metricTile(
-                                'Всего платежей',
-                                '$total',
-                                Icons.receipt_long_outlined,
+                              const SizedBox(height: 20),
+                              Text(
+                                'Заявки на подтверждение'.tr(),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF111827),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Заявки на подтверждение'.tr(),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF111827),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (invoiceRequests.isEmpty)
-                        _emptyInlineCard(
-                          'Сейчас нет заявок на подтверждение оплаты.',
-                        )
-                      else
-                        ...invoiceRequests.map(_paymentRequestCard),
-                      const SizedBox(height: 24),
-                      Text(
-                        'Остальные платежи'.tr(),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF111827),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (otherPayments.isEmpty)
-                        _emptyInlineCard(
-                          'Других платежей по текущему фильтру нет.',
-                        )
-                      else
-                        ...otherPayments.map(_paymentHistoryCard),
-                      if (docs.length < total)
-                        TextButton(
-                          onPressed: snapshot.connectionState == ConnectionState.waiting ? null : () {
-                            setState(() => _paymentHistoryLimit += 50);
-                          },
-                          child: Text('Показать ещё'.tr()),
-                        ),
-                    ],
-                  ),
+                              const SizedBox(height: 12),
+                              if (invoiceRequests.isEmpty)
+                                _emptyInlineCard(
+                                  'Сейчас нет заявок на подтверждение оплаты.',
+                                )
+                              else
+                                ...invoiceRequests.map(_paymentRequestCard),
+                              const SizedBox(height: 24),
+                              Text(
+                                'Остальные платежи'.tr(),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF111827),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              if (otherPayments.isEmpty)
+                                _emptyInlineCard(
+                                  'Других платежей по текущему фильтру нет.',
+                                )
+                              else
+                                ...otherPayments.map(_paymentHistoryCard),
+                              if (docs.length < total)
+                                TextButton(
+                                  onPressed: snapshot.connectionState ==
+                                          ConnectionState.waiting
+                                      ? null
+                                      : () {
+                                          setState(
+                                              () => _paymentHistoryLimit += 50);
+                                        },
+                                  child: Text('Показать ещё'.tr()),
+                                ),
+                            ],
+                          ),
           )),
         ]);
       },
@@ -9536,8 +9665,10 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                             style: const TextStyle(color: Color(0xFF6B7280)),
                           ),
                           if ((data['locations'] as List?)?.isNotEmpty == true)
-                            Text('Где используется: ${((data['locations'] as List).map((path) => path.toString().contains('/client/') ? 'Заказчик' : path.toString().contains('/cleaner/') ? 'Pro' : 'Общие экраны').toSet().toList()..sort()).join(', ')}',
-                              style: const TextStyle(color: Color(0xFF6B7280))),
+                            Text(
+                                'Где используется: ${((data['locations'] as List).map((path) => path.toString().contains('/client/') ? 'Заказчик' : path.toString().contains('/cleaner/') ? 'Pro' : 'Общие экраны').toSet().toList()..sort()).join(', ')}',
+                                style:
+                                    const TextStyle(color: Color(0xFF6B7280))),
                           const SizedBox(height: 12),
                           Row(
                             children: [
@@ -13246,9 +13377,12 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final fullInfoController = TextEditingController(
       text: (existing?['fullInfo'] ?? '').toString(),
     );
-    final titleKkController = TextEditingController(text: (existing?['titleKk'] ?? '').toString());
-    final shortKkController = TextEditingController(text: (existing?['shortInfoKk'] ?? '').toString());
-    final fullKkController = TextEditingController(text: (existing?['fullInfoKk'] ?? '').toString());
+    final titleKkController =
+        TextEditingController(text: (existing?['titleKk'] ?? '').toString());
+    final shortKkController = TextEditingController(
+        text: (existing?['shortInfoKk'] ?? '').toString());
+    final fullKkController =
+        TextEditingController(text: (existing?['fullInfoKk'] ?? '').toString());
     final priceController = TextEditingController(
       text: existing?['price'] != null ? '${existing?['price']}' : '',
     );
@@ -13292,9 +13426,20 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     maxLines: 8,
                     decoration: InputDecoration(labelText: 'Полная информация'),
                   ),
-                  TextField(controller: titleKkController, decoration: const InputDecoration(labelText: 'Заголовок (Қазақша)')),
-                  TextField(controller: shortKkController, decoration: const InputDecoration(labelText: 'Короткая информация (Қазақша)')),
-                  TextField(controller: fullKkController, minLines: 4, maxLines: 8, decoration: const InputDecoration(labelText: 'Полная информация (Қазақша)')),
+                  TextField(
+                      controller: titleKkController,
+                      decoration: const InputDecoration(
+                          labelText: 'Заголовок (Қазақша)')),
+                  TextField(
+                      controller: shortKkController,
+                      decoration: const InputDecoration(
+                          labelText: 'Короткая информация (Қазақша)')),
+                  TextField(
+                      controller: fullKkController,
+                      minLines: 4,
+                      maxLines: 8,
+                      decoration: const InputDecoration(
+                          labelText: 'Полная информация (Қазақша)')),
                   TextField(
                     controller: priceController,
                     keyboardType: TextInputType.number,
@@ -14253,10 +14398,10 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               final key = existing != null
                   ? adminAddonIdentity(existing)
                   : _adminSlug(
-                keyController.text,
-                fallbackText: labelController.text,
-                prefix: 'addon',
-              );
+                      keyController.text,
+                      fallbackText: labelController.text,
+                      prefix: 'addon',
+                    );
               final durationMinutes =
                   int.tryParse(durationController.text.trim()) ?? 0;
               if (durationMinutes <= 0) {
@@ -14560,10 +14705,16 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 );
                 return;
               }
-              if (!TranslationController.validParameters(normalizedSource, ruValue) ||
-                  (kkController.text.trim().isNotEmpty && !TranslationController.validParameters(normalizedSource, kkController.text))) {
-                showDomlySnackBar(context, title: 'Сохраните параметры текста',
-                  subtitle: 'Параметры в фигурных скобках должны совпадать с исходным текстом.', type: DomlySnackBarType.error);
+              if (!TranslationController.validParameters(
+                      normalizedSource, ruValue) ||
+                  (kkController.text.trim().isNotEmpty &&
+                      !TranslationController.validParameters(
+                          normalizedSource, kkController.text))) {
+                showDomlySnackBar(context,
+                    title: 'Сохраните параметры текста',
+                    subtitle:
+                        'Параметры в фигурных скобках должны совпадать с исходным текстом.',
+                    type: DomlySnackBarType.error);
                 return;
               }
               final key = docId ??
@@ -14574,10 +14725,14 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   'kk': kkController.text.trim(),
               };
               try {
-                await _data.saveAdminTranslation(key: key, source: normalizedSource, locales: locales);
+                await _data.saveAdminTranslation(
+                    key: key, source: normalizedSource, locales: locales);
               } catch (error) {
-                if (context.mounted) showDomlySnackBar(context, title: 'Не удалось сохранить текст',
-                  subtitle: error.toString(), type: DomlySnackBarType.error);
+                if (context.mounted)
+                  showDomlySnackBar(context,
+                      title: 'Не удалось сохранить текст',
+                      subtitle: error.toString(),
+                      type: DomlySnackBarType.error);
                 return;
               }
               if (!mounted) {

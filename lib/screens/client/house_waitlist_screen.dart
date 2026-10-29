@@ -341,7 +341,7 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  'Поделитесь ссылкой на веб-версию DOMLY. После регистрации и оплаты соседей прогресс обновится здесь.'
+                                  'Поделитесь ссылкой на веб-версию DomLY. После регистрации и оплаты соседей прогресс обновится здесь.'
                                       .tr(),
                                   style: TextStyle(
                                     fontSize: 12,
@@ -446,14 +446,14 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
       final invite = await _data.ensureReferralLink();
       final referralCode = (invite['referralCode'] ?? '').toString().trim();
       final referralLink = (invite['referralLink'] ?? '').toString().trim();
-      final shareText = StringBuffer('Подключай DOMLY в наш дом. ')
+      final shareText = StringBuffer('Подключай DomLY в наш дом. ')
         ..write('Открой веб-версию приложения: $referralLink');
       if (referralCode.isNotEmpty) {
         shareText.write(' Используй мой код: $referralCode');
       }
       await Share.share(
         shareText.toString(),
-        subject: 'Приглашение в DOMLY',
+        subject: 'Приглашение в DomLY',
       );
       await _refreshStats();
     } finally {

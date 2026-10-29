@@ -199,7 +199,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           height: 120,
                           children: [
                             _SettingsOptionTile(
-                              title: 'Помощник Domly',
+                              title: 'Помощник DomLY',
                               subtitle: 'Открыть чат',
                               indicator: _SettingsTileIndicator.chevron,
                               onTap: _openAssistant,
@@ -360,7 +360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (dialogContext) => AlertDialog(
             title: Text('Удалить аккаунт?'.tr()),
             content: Text(
-              'Аккаунт будет удалён с этого устройства. Это действие нельзя отменить.'
+              'Доступ к аккаунту будет закрыт. В течение 30 дней поддержка сможет восстановить аккаунт вместе с пакетами и оплатами. После этого контактные данные будут обезличены.'
                   .tr(),
             ),
             actions: [
@@ -673,7 +673,7 @@ class _AboutAppCard extends StatelessWidget {
           ),
           SizedBox(height: 3),
           Text(
-            "Domly 1.0.0".tr(),
+            "DomLY 1.0.0".tr(),
             style: TextStyle(
               color: DomlyPalette.foreground(_SettingsScreenState._foreground),
               fontSize: 14,

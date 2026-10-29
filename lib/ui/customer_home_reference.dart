@@ -503,8 +503,8 @@ class HomeReferenceShortcuts extends StatelessWidget {
   const HomeReferenceShortcuts({super.key, required this.onAction});
   final void Function(HomeAction) onAction;
   @override
-  Widget build(BuildContext context) =>
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget build(BuildContext context) => IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(
             child: _tile(
                 'Дополнительные услуги',
@@ -515,7 +515,7 @@ class HomeReferenceShortcuts extends StatelessWidget {
         Expanded(
             child: _tile('Пригласить друга', 'Подарите друзьям чистый дом',
                 Icons.card_giftcard, HomeAction.referral))
-      ]);
+      ]));
   Widget _tile(
           String title, String subtitle, IconData icon, HomeAction action) =>
       Material(
@@ -535,6 +535,7 @@ class HomeReferenceShortcuts extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                         child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                           Text(title.tr(),

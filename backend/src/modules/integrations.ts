@@ -21,7 +21,7 @@ export class WapiOtpService {
         if(state.stateInstance!=='authorized')throw new Error('delivery_unavailable');
         const response=await fetch(`https://7700.api.greenapi.com/waInstance${env.greenApiInstanceId}/sendMessage/${env.greenApiToken}`,{
           method:'POST',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({chatId:phone.replace(/^\+/,'')+'@c.us',message:`DOMLY код подтверждения: ${code}`}),
+          body:JSON.stringify({chatId:phone.replace(/^\+/,'')+'@c.us',message:`DomLY код подтверждения: ${code}`}),
         });
         if(!response.ok)throw new Error('delivery_failed');
         const result=await response.json() as {idMessage?:unknown};
@@ -32,7 +32,7 @@ export class WapiOtpService {
         method: 'POST',
         signal: AbortSignal.timeout(10000),
         headers: { Authorization: env.wapiToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({recipient: phone.replace(/^\+/, ''), body: `DOMLY код подтверждения: ${code}`}),
+        body: JSON.stringify({recipient: phone.replace(/^\+/, ''), body: `DomLY код подтверждения: ${code}`}),
       });
       if (!response.ok) throw new Error('delivery_failed');
       const result = await response.json() as {status?: string; error?: unknown};
