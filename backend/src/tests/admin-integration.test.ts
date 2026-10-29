@@ -56,7 +56,8 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal((await profile({isOnline:false})).status,200);
         assert.equal((await profile()).json.data.profile.is_online,false);
         assert.deepEqual(await scheduling.cleanerOffers(worker),[]);
-        await assert.rejects(()=>scheduling.acceptOfferById(offer.id,worker),(error:any)=>error.code==='cleaner_offline');
+        await assert.rejects(()=>scheduling.acceptOfferById(offer.id,worker),(error:any)=>error.code==='offer_not_found');
+        await assert.rejects(()=>scheduling.acceptOffer(order,worker),(error:any)=>error.code==='cleaner_offline');
         assert.equal(await scheduling.offerNextCleaner(order),null);
         assert.equal((await profile({isOnline:true})).status,200);
         assert.equal((await profile()).json.data.profile.is_online,true);
