@@ -9,7 +9,9 @@ Map<String, dynamic> mapAdminCustomer(Map<String, dynamic> row) {
     ...row,
     'name': row['full_name'] ?? row['name'],
     'residentialComplex': row['residential_complex'] ?? row['residentialComplex'],
-    'houseTitle': row['residential_complex'] ?? row['house'],
+    'houseTitle': [row['residential_complex'], row['house']]
+        .where((value) => value != null && '$value'.trim().isNotEmpty)
+        .join(', '),
     'phone':
         '${row['phone'] ?? ''}'.startsWith('deleted-') ? null : row['phone'],
     'fullName': row['full_name'] ?? row['fullName'],

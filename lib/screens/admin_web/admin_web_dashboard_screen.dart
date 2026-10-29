@@ -1585,7 +1585,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         }),
         _detailSection('Объект · $name',{
           'Адрес':address['anonymized']==true?'Данные обезличены':[address['city'],address['settlement'],address['street'],address['house']].where((v)=>v!=null&&'$v'.isNotEmpty).join(', '),
-          'Дом / ЖК':'${address['residential_complex'] ?? address['house'] ?? '—'}',
+          'Дом':'${address['house'] ?? '—'}',
+          'ЖК':_firstText([address['residential_complex']]),
           'Квартира':'${address['apartment'] ?? '—'}',
           'Подъезд':'${address['entrance'] ?? '—'}',
           'Этаж':'${address['floor'] ?? '—'}',

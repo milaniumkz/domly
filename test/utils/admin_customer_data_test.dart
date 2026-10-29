@@ -23,6 +23,8 @@ void main() {
     expect(customer['name'], 'Клиент');
     expect(customer['packageNames'], ['Квартальный пакет']);
     expect(customer['residentialComplex'], 'ЖК Тест');
+    expect(customer['houseTitle'], 'ЖК Тест, 39');
+    expect(mapAdminCustomer({'residential_complex':'','house':'39'})['houseTitle'], '39');
     expect(customer['area'], '67.00');
     expect(customer['address'], contains('39'));
     expect(customer['phone'], '+77000000000');
