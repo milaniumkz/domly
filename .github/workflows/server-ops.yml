@@ -108,7 +108,7 @@ jobs:
           fi
           if [ "$ACTION" = "status" ]; then
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
-              "docker ps --format '{{.Names}} {{.Image}} {{.Status}}'; ps -eo pid,ppid,comm,etime,pcpu,pmem --sort=-pcpu | head -25; free -m; df -h '$DEPLOY_PATH'; cat '$DEPLOY_PATH/REVISION'"
+              "ps -C apk -o pid,ppid,comm,etime,args; docker exec domly-backend-api-1 cat /etc/apk/repositories; curl -I --connect-timeout 5 --max-time 12 https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/x86_64/APKINDEX.tar.gz; docker exec domly-backend-api-1 curl -I --connect-timeout 5 --max-time 12 https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/x86_64/APKINDEX.tar.gz"
             exit 0
           fi
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
