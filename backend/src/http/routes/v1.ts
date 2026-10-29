@@ -7,7 +7,7 @@ import { customerMonthlyProgress } from '../../modules/customerProgress';
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
 import {idempotent,idempotentTransaction} from '../../common/idempotency';
 import {ensureChecklistReport,saveChecklist} from '../../modules/checklists';
-import {validateBookingStart} from '../../modules/bookingValidation';
+import {validateBookingStart, fitsBookingHours, validateBookingHours} from '../../modules/bookingValidation';
 import {revokeRealtimeSessions} from '../../realtime/sse';
 import {inspectUpload,registerUploadedFile} from '../../technical/files';
 import {ensureGuestSession, guestSession, bindGuestSession, matchMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
@@ -1435,6 +1435,7 @@ export function buildV1Router(deps: {
     }).filter(addon=>!prepaidIds.has(addon.id));
     const addonAmount = addons.reduce((sum: number, row) => sum + Number(row.price)*row.quantity, 0);
     const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes ?? 0),0);
+    validateBookingHours(String(req.body.startTime), duration);
     const end = addMinutes(String(req.body.startTime), duration);
     if (end <= String(req.body.startTime).slice(0,5)) throw new ApiError(400,'invalid_order_time','Уборка должна завершиться в выбранный день.');
     const initialStatus = addonAmount > 0 ? 'pending_payment' : 'pending_assignment';
@@ -1951,6 +1952,7 @@ export function buildV1Router(deps: {
         if (pkg?.freeze_until && String(date).slice(0,10)<pkg.freeze_until) throw new ApiError(409,'package_frozen','Пакет заморожен на выбранную дату.');
       }
       const duration = Number(current.estimated_duration_minutes) > 0 ? Number(current.estimated_duration_minutes) : await estimateCleaningDurationMinutes(tx,current.address_id,[]);
+      validateBookingHours(String(startTime),duration);
       const endTime = addMinutes(String(startTime),duration);
       if (current.cleaner_id) {
         const overlap = first((await tx.query(`SELECT id FROM service_orders
@@ -2128,7 +2130,7 @@ export function buildV1Router(deps: {
   router.get('/scheduling/available-slots', auth(), asyncHandler(async (req, res) => {
     const date = String(req.query.date);
     const settings = await readAppSettings(deps.db);
-    const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['08:00', '10:00', '12:00', '14:00', '16:00'];
+    const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
     const addonIds = String(req.query.addonIds ?? '').split(',').map((id) => id.trim()).filter(Boolean);
     const addons = addonIds.length
       ? (await deps.db.query<{ duration_minutes: number }>(`SELECT duration_minutes FROM catalog_addons WHERE id = ANY($1::uuid[])`, [addonIds])).rows
@@ -2136,7 +2138,7 @@ export function buildV1Router(deps: {
     const duration = Number(req.query.durationMinutes ?? 0) > 0
       ? Number(req.query.durationMinutes)
       : await estimateCleaningDurationMinutes(deps.db, req.query.addressId ? String(req.query.addressId) : undefined, addons);
-    const intervals = slots.map((start: string) => ({startTime: start, endTime: addMinutes(start, duration)}));
+    const intervals = slots.filter((start: string) => fitsBookingHours(start, duration)).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration)}));
     const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined);
     const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));
     ok(res, available);
@@ -4823,7 +4825,7 @@ export function buildRuntimeConfig(settings: Record<string, any>) {
       localization,
       booking: {
         minBookingDate: settings.minBookingDate ?? null,
-        slotStartTimes: settings.slotStartTimes ?? ['08:00', '10:00', '12:00', '14:00', '16:00'],
+        slotStartTimes: settings.slotStartTimes ?? ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
         requireAvailableCleaner: settings.requireAvailableCleaner ?? true,
         allowCustomTime: settings.allowCustomTime ?? false,
         scrollToPendingAfterAddonSelection: settings.scrollToPendingAfterAddonSelection ?? true,

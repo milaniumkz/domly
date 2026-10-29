@@ -1,3 +1,4 @@
+import {fitsBookingHours,validateBookingHours} from '../modules/bookingValidation';
 import { formatAddonRecord, formatServiceDescription } from '../modules/serviceDescription';
 import {gunzipSync} from 'node:zlib';
 import {PublicTextCatalog} from '../modules/publicTextCatalog';
@@ -1121,4 +1122,16 @@ test('deleted accounts cannot request a login code during the support recovery p
   const service=new AuthService(db as any,{sendOtp:async()=>{sent++;}} as any);
   await assert.rejects(service.requestOtp('+77000000000','customer'),(error:any)=>error.code==='account_deleted');
   assert.equal(sent,0);
+});
+
+test('evening booking preserves duration and finishes by 21:00', () => {
+  assert.equal(fitsBookingHours('18:00',180),true);
+  assert.equal(fitsBookingHours('18:00:00',180),true);
+  assert.equal(fitsBookingHours('18:00',181),false);
+  assert.equal(fitsBookingHours('18:30',120),false);
+  assert.equal(fitsBookingHours('16:00',240),true);
+  assert.equal(fitsBookingHours('08:00',180),true);
+  assert.equal(fitsBookingHours('07:59',180),false);
+  assert.equal(fitsBookingHours('18:00',NaN),false);
+  assert.throws(()=>validateBookingHours('18:00',240));
 });

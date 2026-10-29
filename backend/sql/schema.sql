@@ -562,7 +562,7 @@ INSERT INTO app_settings (key, value)
 VALUES
   ('baseCleaningMinutes', '120'::jsonb),
   ('minutesPerM2', '1.2'::jsonb),
-  ('slotStartTimes', '["08:00","10:00","12:00","14:00","16:00"]'::jsonb),
+  ('slotStartTimes', '["08:00","10:00","12:00","14:00","16:00","18:00"]'::jsonb),
   ('qualityCheckHours', '48'::jsonb),
   ('bonusPaymentEnabled', 'true'::jsonb),
   ('defaultBonusMaxPercent', '50'::jsonb),
@@ -1552,3 +1552,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS account_deletion_active_user ON account_deleti
   WHERE restored_at IS NULL AND anonymized_at IS NULL;
 CREATE INDEX IF NOT EXISTS account_deletion_expiry ON account_deletion_requests(restore_until)
   WHERE restored_at IS NULL AND anonymized_at IS NULL;
+
+-- Extend the former default schedule without overwriting a customized schedule.
+UPDATE app_settings SET value='["08:00","10:00","12:00","14:00","16:00","18:00"]'::jsonb, updated_at=NOW()
+WHERE key='slotStartTimes' AND value='["08:00","10:00","12:00","14:00","16:00"]'::jsonb;

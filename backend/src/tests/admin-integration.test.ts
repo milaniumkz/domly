@@ -39,6 +39,23 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('evening slots include 18:00 and preserve the 21:00 finish limit',async()=>{
+      await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
+      await db.query("UPDATE cleaner_profiles SET verification_status='approved' WHERE user_id=$1",[cleaner]);
+      try {
+        const evening=await request('/scheduling/available-slots?date=2039-02-03&durationMinutes=180');
+        assert.equal(evening.status,200);
+        assert.ok(evening.json.data.some((slot:any)=>slot.startTime==='18:00'&&slot.endTime==='21:00'&&slot.durationMinutes===180));
+        const longer=await request('/scheduling/available-slots?date=2039-02-03&durationMinutes=240');
+        assert.equal(longer.status,200);
+        assert.ok(longer.json.data.some((slot:any)=>slot.startTime==='16:00'&&slot.endTime==='20:00'));
+        assert.ok(longer.json.data.every((slot:any)=>slot.startTime<='18:00'&&slot.endTime<='21:00'));
+        assert.ok(!longer.json.data.some((slot:any)=>slot.startTime==='18:00'));
+      } finally {
+        await db.query("UPDATE app_users SET status='pending' WHERE id=$1",[cleaner]);
+        await db.query("UPDATE cleaner_profiles SET verification_status='pending' WHERE user_id=$1",[cleaner]);
+      }
+    });
     await t.test('home exposes only the assigned cleaner approved standalone selfie', async()=>{
       const selfie=randomUUID(),identity=randomUUID(),order=randomUUID(),banner=randomUUID();
       try{
