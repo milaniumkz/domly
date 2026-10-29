@@ -58,7 +58,10 @@ class CustomerHomeReference extends StatelessWidget {
       this.startedAt = '',
       this.cleanerName = '',
       this.cleanerPhotoUrl,
-      this.primaryKey, this.cardKey, this.bookingKey, this.navigation});
+      this.primaryKey,
+      this.cardKey,
+      this.bookingKey,
+      this.navigation});
   final HomeScene scene;
   final void Function(HomeAction) onAction;
   final String area, amount, date, time, freezeDate, startedAt, cleanerName;
@@ -198,6 +201,8 @@ class CustomerHomeReference extends StatelessWidget {
       decoration: BoxDecoration(
           color: DomlyPalette.surface(Colors.white),
           borderRadius: BorderRadius.circular(16),
+          border:
+              Border.all(color: DomlyPalette.border(const Color(0xFFE1E6E9))),
           boxShadow: const [
             BoxShadow(
                 color: Color(0x06235B44), blurRadius: 20, offset: Offset(0, 5))
@@ -432,17 +437,20 @@ class CustomerHomeReference extends StatelessWidget {
       if ([HomeScene.searching, HomeScene.assigned, HomeScene.cleaning]
           .contains(scene)) ...[
         gap(10),
-        KeyedSubtree(key: bookingKey, child: panel([
-          info(Icons.calendar_today_outlined,
-              '${'Осталось'.tr()} $remaining ${'уборки'.tr()}'),
-          text('Доступно для записи на другую дату', size: 13, secondary: true),
-          button(
-              remaining > 0 ? 'Заказать уборку' : 'Выбрать новый пакет',
-              remaining > 0 ? HomeAction.schedule : HomeAction.packages,
-              Icons.add_task_outlined,
-              primary: false),
-          gap(6),
-        ])),
+        KeyedSubtree(
+            key: bookingKey,
+            child: panel([
+              info(Icons.calendar_today_outlined,
+                  '${'Осталось'.tr()} $remaining ${'уборки'.tr()}'),
+              text('Доступно для записи на другую дату',
+                  size: 13, secondary: true),
+              button(
+                  remaining > 0 ? 'Заказать уборку' : 'Выбрать новый пакет',
+                  remaining > 0 ? HomeAction.schedule : HomeAction.packages,
+                  Icons.add_task_outlined,
+                  primary: false),
+              gap(6),
+            ])),
       ],
       if (scene == HomeScene.completed) ...[
         gap(10),
@@ -582,7 +590,8 @@ class HomeReferenceNavigation extends StatelessWidget {
                     5,
                     (i) => Expanded(
                         child: InkWell(
-                            key: DomlyTutorialTargets.navigationKeys(context)[i],
+                            key:
+                                DomlyTutorialTargets.navigationKeys(context)[i],
                             onTap: () => onNavigate(routes[i]),
                             borderRadius: BorderRadius.circular(12),
                             child: Container(

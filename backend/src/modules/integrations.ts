@@ -43,6 +43,25 @@ export class WapiOtpService {
   }
 }
 
+export function buildFcmMessage(tokens: string[], title: string, body: string, data: Record<string,string>): admin.messaging.MulticastMessage {
+  const offer = ['order_offer','new_order_offer','scheduled_order_offer'].includes(data.targetType || data.type);
+  return {
+    tokens, notification: {title, body}, data,
+    ...(offer ? {
+      android: {priority: 'high' as const, notification: {
+        channelId: 'domly_order_offer_alarm_v2', sound: 'domly_order_alarm',
+        priority: 'max' as const, defaultVibrateTimings: true,
+      }},
+      apns: {headers: {'apns-priority': '10'}, payload: {aps: {sound: 'default'}}},
+      webpush: {
+        headers: {Urgency: 'high'},
+        notification: {requireInteraction: true},
+        fcmOptions: {link: `${env.publicApiUrl.replace(/\/$/, '')}/pro/#/cleaner/orders?focusOrderId=${encodeURIComponent(data.targetId || data.orderId || '')}`},
+      },
+    } : {}),
+  };
+}
+
 export class FcmService {
   private initialized = false;
 
@@ -64,7 +83,7 @@ export class FcmService {
     this.init();
     if (!this.initialized || tokens.length === 0) return { sent: 0, failed: 0, skipped: true };
     try {
-      const result = await admin.messaging().sendEachForMulticast({ tokens, notification: { title, body }, data });
+      const result = await admin.messaging().sendEachForMulticast(buildFcmMessage(tokens, title, body, data));
       const invalidTokens = result.responses.flatMap((response,index) =>
         ['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(response.error?.code ?? '') ? [tokens[index]] : []);
       return { sent: result.successCount, failed: result.failureCount, skipped: false, invalidTokens,

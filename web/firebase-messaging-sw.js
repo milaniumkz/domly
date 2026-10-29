@@ -13,6 +13,9 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
+  // Firebase displays notification payloads itself and preserves fcmOptions.link
+  // for notification clicks. A second manual notification loses that link.
+  if (payload.notification) return;
   const notification = payload.notification || {};
   const data = payload.data || {};
   const title = notification.title || 'DOMLY';

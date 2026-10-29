@@ -1101,7 +1101,9 @@ class _OrdersScreenState extends State<OrdersScreen>
             const SizedBox(height: 18),
             Row(
               children: [
-                _OrdersAvatar(name: cleaner),
+                _OrdersAvatar(
+                    name: cleaner,
+                    photoUrl: slot['cleanerPhotoUrl']?.toString()),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -4150,9 +4152,10 @@ class _CleaningStartConfirmationPanel extends StatelessWidget {
 }
 
 class _OrdersAvatar extends StatelessWidget {
-  const _OrdersAvatar({required this.name});
+  const _OrdersAvatar({required this.name, this.photoUrl});
 
   final String name;
+  final String? photoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -4172,15 +4175,22 @@ class _OrdersAvatar extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(28),
       ),
-      child: Text(
-        initial.toUpperCase(),
-        style: TextStyle(
-          color: DomlyPalette.foreground(Colors.white),
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          height: 27 / 20,
-        ),
-      ),
+      child: photoUrl?.trim().isNotEmpty == true
+          ? ClipOval(
+              child: Image.network(photoUrl!,
+                  width: 55,
+                  height: 55,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Text(initial.toUpperCase())))
+          : Text(
+              initial.toUpperCase(),
+              style: TextStyle(
+                color: DomlyPalette.foreground(Colors.white),
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                height: 27 / 20,
+              ),
+            ),
     );
   }
 }

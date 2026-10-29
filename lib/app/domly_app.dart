@@ -121,6 +121,9 @@ class _DomlyAppState extends State<DomlyApp> {
     authController.addListener(_handleAuthStateChanged);
     _notificationTapSubscription =
         NotificationService.notificationTaps.listen(_handleNotificationTap);
+    for (final tap in NotificationService.takePendingTaps()) {
+      _handleNotificationTap(tap);
+    }
     _foregroundNotificationSubscription =
         NotificationService.foregroundMessages.listen((message) {
       if (!mounted || ['/chat', '/assistant'].contains(_currentObservedRoute()))
@@ -1062,15 +1065,16 @@ class _DomlyAppState extends State<DomlyApp> {
     if (requestedRoute != null && requestedRoute != '/') {
       final requestedAccess = _routeAccess(requestedRoute);
       if (requestedAccess != _RouteAccess.public) {
-        final canonicalRequestedRoute = _canonicalRouteWithArguments(requestedRoute);
+        final canonicalRequestedRoute =
+            _canonicalRouteWithArguments(requestedRoute);
         if (canonicalRequestedRoute != null) {
           syncAppUrlRoute(canonicalRequestedRoute);
         }
         return _guarded(
           child: _buildProtectedPage(restoreBootRouteArguments(
-            RouteSettings(name: requestedRoute), _bootRequestedSettings)),
+              RouteSettings(name: requestedRoute), _bootRequestedSettings)),
           settings: restoreBootRouteArguments(
-            RouteSettings(name: requestedRoute), _bootRequestedSettings),
+              RouteSettings(name: requestedRoute), _bootRequestedSettings),
           access: requestedAccess,
         );
       }

@@ -524,7 +524,7 @@ export class SchedulingService {
          AND o.status NOT IN ('cancelled','completed')
          AND o.start_time < $3::time AND o.end_time > $2::time
        )
-       ORDER BY u.created_at ASC`,
+       ORDER BY u.created_at ASC, u.id ASC`,
       params,
     )).rows;
   }
@@ -562,8 +562,21 @@ export class SchedulingService {
       if (!order?.scheduled_date || !order.start_time || !order.end_time) {
         throw new ApiError(400, 'invalid_order_time', 'У заказа не указаны дата и время.');
       }
+      const active = first((await client.query(
+        "SELECT * FROM order_offers WHERE order_id=$1 AND status='offered' AND expires_at>NOW()",
+        [orderId],
+      )).rows);
+      if (active) return active;
       const cleaners = await this.availableCleaners(order.scheduled_date, order.start_time, order.end_time, undefined, client);
-      const next = cleaners.find((cleaner: any) => !excludeCleanerIds.includes(cleaner.id));
+      const history = (await client.query<{cleaner_id: string}>(
+        'SELECT cleaner_id FROM order_offers WHERE order_id=$1 ORDER BY created_at ASC, id ASC',
+        [orderId],
+      )).rows;
+      // Prefer cleaners who have not had a turn. Once everyone has, offer to
+      // the least recently contacted available cleaner, including a sole cleaner.
+      const next = cleaners.find((cleaner: any) => !excludeCleanerIds.includes(cleaner.id))
+        ?? history.map(row => cleaners.find((cleaner: any) => cleaner.id === row.cleaner_id)).find(Boolean)
+        ?? cleaners[0];
       if (!next) {
         await client.query(`UPDATE service_orders SET status='waiting_cleaner', updated_at=NOW() WHERE id=$1`, [orderId]);
         return null;
