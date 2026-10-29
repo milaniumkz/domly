@@ -1637,3 +1637,47 @@ CREATE TABLE IF NOT EXISTS cleaner_working_days (
  PRIMARY KEY(cleaner_id,work_date),
  CHECK(end_time>start_time)
 );
+
+-- Resolve an overnight visit using its duration, with a clock fallback for legacy rows.
+CREATE OR REPLACE FUNCTION cleaning_end_at(service_day DATE,start_clock TIME,end_clock TIME,duration_minutes INTEGER)
+RETURNS TIMESTAMP LANGUAGE SQL IMMUTABLE AS $$
+ SELECT service_day+start_clock+CASE WHEN duration_minutes>0 THEN duration_minutes*INTERVAL '1 minute'
+ ELSE (end_clock-start_clock)+CASE WHEN end_clock<start_clock THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END END
+$$;
+
+-- Correct future estimates to the services actually attached to each visit.
+DO $$
+DECLARE changed_count INTEGER;
+BEGIN
+  INSERT INTO app_settings(key,value) VALUES('futureCleaningDurationRecalculatedV2','true'::jsonb)
+  ON CONFLICT(key) DO NOTHING;
+  IF FOUND THEN
+    WITH candidates AS MATERIALIZED (
+      SELECT o.id,o.cleaner_id,o.scheduled_date,o.start_time,o.end_time AS old_end,
+        o.estimated_duration_minutes AS old_minutes,
+        GREATEST(1,ROUND(COALESCE(NULLIF(a.verified_area,0),NULLIF(a.area,0),NULLIF(o.area,0),50)*1.6+
+          COALESCE((SELECT SUM(oa.duration_minutes) FROM order_addons oa WHERE oa.order_id=o.id
+            AND oa.payment_status NOT IN ('cancelled','rejected','refunded')),0)))::int AS minutes
+      FROM service_orders o LEFT JOIN customer_addresses a ON a.id=o.address_id
+      WHERE o.status IN ('draft','pending_payment','pending_assignment','waiting_cleaner','assigned','confirmed')
+        AND o.scheduled_date+o.start_time>(NOW() AT TIME ZONE 'Asia/Almaty')
+    ), changed AS (
+      UPDATE service_orders o SET estimated_duration_minutes=c.minutes,
+        end_time=c.start_time+c.minutes*INTERVAL '1 minute',updated_at=NOW()
+      FROM candidates c WHERE o.id=c.id
+        AND (o.estimated_duration_minutes IS DISTINCT FROM c.minutes OR o.end_time IS DISTINCT FROM (c.start_time+c.minutes*INTERVAL '1 minute')::time)
+        AND NOT EXISTS(SELECT 1 FROM service_orders other WHERE other.cleaner_id=c.cleaner_id
+          AND other.id<>c.id
+          AND other.status NOT IN ('cancelled','canceled','completed')
+          AND other.scheduled_date+other.start_time<c.scheduled_date+c.start_time+c.minutes*INTERVAL '1 minute'
+          AND cleaning_end_at(other.scheduled_date,other.start_time,other.end_time,other.estimated_duration_minutes)>c.scheduled_date+c.start_time)
+      RETURNING o.id,c.old_minutes,c.old_end,o.estimated_duration_minutes,o.end_time
+    )
+    INSERT INTO audit_logs(action,entity_type,entity_id,payload)
+      SELECT 'cleaning.duration_recalculated','order',id::text,
+        jsonb_build_object('oldMinutes',old_minutes,'newMinutes',estimated_duration_minutes,
+          'oldEnd',old_end,'newEnd',end_time,'minutesPerM2',1.6) FROM changed;
+    GET DIAGNOSTICS changed_count = ROW_COUNT;
+    RAISE NOTICE 'Future cleaning durations recalculated: %',changed_count;
+  END IF;
+END $$;

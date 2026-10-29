@@ -68,6 +68,25 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         throw rollback;
       }),error=>error===rollback);
     });
+    await t.test('visit correction removes repeated prepaid minutes and permits overnight finishes',async()=>{
+      const rollback=new Error('rollback visit correction');
+      const corrected=randomUUID(),night=randomUUID();
+      await assert.rejects(()=>db.transaction(async tx=>{
+        await tx.query("DELETE FROM app_settings WHERE key='futureCleaningDurationRecalculatedV2'");
+        await tx.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,estimated_duration_minutes,area,status) VALUES($1,$3,CURRENT_DATE+2,'18:00','21:42',222,88.7,'assigned'),($2,$3,CURRENT_DATE+3,'18:00','21:00',180,250,'waiting_cleaner')",[corrected,night,customer]);
+        const schema=readFileSync('sql/schema.sql','utf8');
+        const migration=schema.slice(schema.indexOf('-- Correct future estimates to the services actually attached'));
+        await tx.query(migration);
+        const rows=(await tx.query('SELECT id,estimated_duration_minutes,end_time FROM service_orders WHERE id=ANY($1::uuid[])',[[corrected,night]])).rows;
+        assert.equal(rows.find((r:any)=>r.id===corrected).estimated_duration_minutes,142);
+        assert.equal(rows.find((r:any)=>r.id===corrected).end_time,'20:22:00');
+        assert.equal(rows.find((r:any)=>r.id===night).estimated_duration_minutes,400);
+        assert.equal(rows.find((r:any)=>r.id===night).end_time,'00:40:00');
+        await tx.query(migration);
+        assert.equal((await tx.query("SELECT COUNT(*)::int AS n FROM audit_logs WHERE entity_id=$1 AND action='cleaning.duration_recalculated'",[corrected])).rows[0].n,1);
+        throw rollback;
+      }),error=>error===rollback);
+    });
     await t.test('work schedule approval gates offers by start time and suspends revised weeks',async()=>{
       const worker=randomUUID(),order=randomUUID();
       const service=new SchedulingService(db),week=workingScheduleWeeks().nextWeekStart;
@@ -112,7 +131,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM app_users WHERE id=$1',[worker]);
       }
     });
-    await t.test('evening slots include 18:00 and preserve the 21:00 finish limit',async()=>{
+    await t.test('evening slots allow late finishes and fixed extras are consumed only once',async()=>{
       await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
       await db.query("UPDATE cleaner_profiles SET verification_status='approved' WHERE user_id=$1",[cleaner]);
       try {
@@ -122,25 +141,35 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const longer=await request('/scheduling/available-slots?date=2039-02-03&durationMinutes=240');
         assert.equal(longer.status,200);
         assert.ok(longer.json.data.some((slot:any)=>slot.startTime==='16:00'&&slot.endTime==='20:00'));
-        assert.ok(longer.json.data.every((slot:any)=>slot.startTime<='18:00'&&slot.endTime<='21:00'));
-        assert.ok(!longer.json.data.some((slot:any)=>slot.startTime==='18:00'));
+        assert.ok(longer.json.data.every((slot:any)=>slot.startTime<='18:00'));
+        assert.ok(longer.json.data.some((slot:any)=>slot.startTime==='18:00'&&slot.endTime==='22:00'));
+        const overnight=await request('/scheduling/available-slots?date=2039-02-03&durationMinutes=401');
+        assert.ok(overnight.json.data.some((slot:any)=>slot.startTime==='18:00'&&slot.endTime==='00:41'&&slot.durationMinutes===401));
         const pkg=randomUUID(),address=randomUUID(),purchase=randomUUID(),addon=randomUUID();
         const key='late-preview-'+purchase;
         try{
           await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Preview',4,100)",[pkg]);
           await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Тестовая','1',100)",[address,customer]);
           await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes) VALUES($1,'Окна',100,60)",[addon]);
-          await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status,purchase_config) VALUES($1,$2,$3,$4,4,4,'active',$5)",[purchase,customer,pkg,address,{addons:[{id:addon,pricingType:'per_visit',durationMinutes:60}]}]);
+          await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status,purchase_config) VALUES($1,$2,$3,$4,4,4,'active',$5)",[purchase,customer,pkg,address,{addons:[{id:addon,pricingType:'fixed',durationMinutes:60,price:100,quantity:1}]}]);
           const preview=await request('/scheduling/available-slots?date=2039-02-03&customerPackageId='+purchase+'&durationMinutes=1','GET',undefined,true);
           assert.equal(preview.status,200);
           assert.ok(preview.json.data.some((slot:any)=>slot.startTime==='16:00'&&slot.endTime==='19:40'&&slot.durationMinutes===220));
-          assert.ok(!preview.json.data.some((slot:any)=>slot.startTime==='18:00'));
+          assert.ok(preview.json.data.some((slot:any)=>slot.startTime==='18:00'&&slot.endTime==='21:40'));
           assert.equal((await request('/scheduling/available-slots?date=2039-02-03&customerPackageId='+purchase)).status,404);
-          const blocked=await request('/orders','POST',{customerPackageId:purchase,date:'2039-02-03',startTime:'18:00',idempotencyKey:key},true);
-          assert.equal(blocked.status,400);assert.match(JSON.stringify(blocked.json),/21:00/);
-          assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,4);
+          const booked=await request('/orders','POST',{customerPackageId:purchase,date:'2039-02-03',startTime:'18:00',idempotencyKey:key},true);
+          assert.equal(booked.status,201,JSON.stringify(booked.json));
+          const next=await request('/scheduling/available-slots?date=2039-02-04&customerPackageId='+purchase+'&addonIds='+addon,'GET',undefined,true);
+          assert.ok(next.json.data.some((slot:any)=>slot.startTime==='18:00'&&slot.endTime==='20:40'&&slot.durationMinutes===160));
+          const second=await request('/orders','POST',{customerPackageId:purchase,date:'2039-02-04',startTime:'18:00',addonIds:[addon],idempotencyKey:key+'-second'},true);
+          assert.equal(second.status,201,JSON.stringify(second.json));
+          const visits=(await db.query('SELECT estimated_duration_minutes,payable_amount FROM service_orders WHERE customer_package_id=$1 ORDER BY scheduled_date',[purchase])).rows;
+          assert.deepEqual(visits.map((r:any)=>r.estimated_duration_minutes),[220,160]);
+          assert.ok(visits.every((r:any)=>Number(r.payable_amount)===0));
+          assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,2);
         }finally{
-          await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND key=$2',[customer,key]);
+          await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND key=ANY($2::text[])',[customer,[key,key+'-second']]);
+          await db.query('DELETE FROM service_orders WHERE customer_package_id=$1',[purchase]);
           await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
           await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
           await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);

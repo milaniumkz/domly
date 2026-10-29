@@ -1,3 +1,4 @@
+import '../utils/cleaning_time_range.dart';
 import '../models/domly_models.dart';
 import '../utils/admin_addon_text.dart';
 import '../utils/legal_document_sections.dart';
@@ -591,7 +592,8 @@ class FirestoreDataService {
     final date = (item['scheduled_date'] ?? '').toString();
     final start = (item['start_time'] ?? '').toString();
     final end = (item['end_time'] ?? '').toString();
-    final time = end.isEmpty ? start : '$start - $end';
+    final time = cleaningTimeRange(start, end,
+        date: date, durationMinutes: item['estimated_duration_minutes']);
     final address = [
       item['settlement'],
       item['street'],
@@ -767,17 +769,31 @@ class FirestoreDataService {
     return num.tryParse(value.toString());
   }
 
-  Future<Map<String,dynamic>> cleanerWorkingSchedule()=>BackendApiService.instance.getMap('/cleaner/work-schedule');
-  Future<Map<String,dynamic>> submitWorkingSchedule(Map<String,dynamic> body)=>BackendApiService.instance.postMap('/cleaner/work-schedule',body:body);
-  Stream<List<Map<String,dynamic>>> adminWorkingSchedulesStream({String? status})=>_backendPollingStream(() async {
-    final result=<Map<String,dynamic>>[];
-    for(var offset=0;;offset+=200){
-      final rows=await BackendApiService.instance.getList('/admin/work-schedules',query:{'limit':'200','offset':'$offset',if(status!=null)'status':status});
-      result.addAll(rows);if(rows.length<200)break;
-    }
-    return result;
-  },interval:const Duration(seconds:10));
-  Future<Map<String,dynamic>> reviewWorkingSchedule(String id,String decision,String comment)=>BackendApiService.instance.postMap('/admin/work-schedules/$id/review',body:{'decision':decision,'comment':comment});
+  Future<Map<String, dynamic>> cleanerWorkingSchedule() =>
+      BackendApiService.instance.getMap('/cleaner/work-schedule');
+  Future<Map<String, dynamic>> submitWorkingSchedule(
+          Map<String, dynamic> body) =>
+      BackendApiService.instance.postMap('/cleaner/work-schedule', body: body);
+  Stream<List<Map<String, dynamic>>> adminWorkingSchedulesStream(
+          {String? status}) =>
+      _backendPollingStream(() async {
+        final result = <Map<String, dynamic>>[];
+        for (var offset = 0;; offset += 200) {
+          final rows = await BackendApiService.instance
+              .getList('/admin/work-schedules', query: {
+            'limit': '200',
+            'offset': '$offset',
+            if (status != null) 'status': status
+          });
+          result.addAll(rows);
+          if (rows.length < 200) break;
+        }
+        return result;
+      }, interval: const Duration(seconds: 10));
+  Future<Map<String, dynamic>> reviewWorkingSchedule(
+          String id, String decision, String comment) =>
+      BackendApiService.instance.postMap('/admin/work-schedules/$id/review',
+          body: {'decision': decision, 'comment': comment});
 
   Stream<Map<String, dynamic>?> cleanerProfileStream() {
     if (_isDebugCleaner) {
@@ -1762,9 +1778,14 @@ class FirestoreDataService {
     });
   }
 
-  Future<List<Map<String,dynamic>>> adminCustomerPurchases(String customerId) async {
-    final result=await BackendApiService.instance.getMap('/admin/users/${Uri.encodeComponent(customerId)}/purchases');
-    return (result['purchases'] as List? ?? const []).whereType<Map>().map((row)=>Map<String,dynamic>.from(row)).toList();
+  Future<List<Map<String, dynamic>>> adminCustomerPurchases(
+      String customerId) async {
+    final result = await BackendApiService.instance
+        .getMap('/admin/users/${Uri.encodeComponent(customerId)}/purchases');
+    return (result['purchases'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
   }
 
   Future<Map<String, dynamic>> adminOrderDetails(String orderId,
@@ -1977,7 +1998,10 @@ class FirestoreDataService {
       return _debugSnapshotStream(() => const <Map<String, dynamic>>[]);
     }
     return _backendPollingStream(
-        () async => (await BackendApiService.instance.getList('/admin/notifications')).map(_mapBackendNotification).toList(),
+        () async =>
+            (await BackendApiService.instance.getList('/admin/notifications'))
+                .map(_mapBackendNotification)
+                .toList(),
         interval: const Duration(seconds: 2));
   }
 
@@ -10388,7 +10412,7 @@ class FirestoreDataService {
       '/scheduling/available-slots',
       query: {
         'date': dateKey,
-        if(customerPackageId!=null)'customerPackageId':customerPackageId,
+        if (customerPackageId != null) 'customerPackageId': customerPackageId,
         if (addressId != null && addressId.trim().isNotEmpty)
           'addressId': addressId.trim(),
         if (addonIds.isNotEmpty) 'addonIds': addonIds.join(','),
@@ -10399,7 +10423,8 @@ class FirestoreDataService {
       final end = (slot['endTime'] ?? '').toString();
       return {
         ...slot,
-        'time': end.isEmpty ? start : '$start - $end',
+        'time': cleaningTimeRange(start, end,
+            date: dateKey, durationMinutes: slot['durationMinutes']),
         'availableCleaners': _num(slot['cleanersCount']).toInt(),
         'totalDurationMinutes': _num(slot['durationMinutes']).toInt(),
         'backend': true,

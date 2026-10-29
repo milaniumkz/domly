@@ -1126,17 +1126,18 @@ test('deleted accounts cannot request a login code during the support recovery p
   assert.equal(sent,0);
 });
 
-test('evening booking preserves duration and finishes by 21:00', () => {
+test('evening booking limits only the start, preserving late and overnight durations', () => {
   assert.equal(fitsBookingHours('18:00',180),true);
   assert.equal(fitsBookingHours('18:00:00',180),true);
-  assert.equal(fitsBookingHours('18:00',181),false);
+  assert.equal(fitsBookingHours('18:00',181),true);
   assert.equal(fitsBookingHours('18:30',120),false);
   assert.equal(fitsBookingHours('18:05',120),false);
   assert.equal(fitsBookingHours('16:00',240),true);
   assert.equal(fitsBookingHours('08:00',180),true);
   assert.equal(fitsBookingHours('07:59',180),false);
   assert.equal(fitsBookingHours('18:00',NaN),false);
-  assert.throws(()=>validateBookingHours('18:00',240));
+  assert.doesNotThrow(()=>validateBookingHours('18:00',240));
+  assert.doesNotThrow(()=>validateBookingHours('18:00',401));
 });
 
 test('standard cleaning uses 1.6 min per m2 and add-ons remain additive',()=>{

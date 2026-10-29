@@ -17,16 +17,16 @@ export function validateBookingStart(date: unknown, time: unknown, now = Date.no
   }
 }
 
-/** Preserve the estimated duration; evening appointments must finish by 21:00. */
+/** Preserve the estimated duration; only the start is restricted to 08:00–18:00. */
 export function fitsBookingHours(start: string, durationMinutes: number): boolean {
   if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(start)) return false;
   const [hour, minute] = start.split(':').map(Number);
   const minutes = hour * 60 + minute;
   return Number.isFinite(durationMinutes) && durationMinutes > 0 &&
-    minutes >= 8 * 60 && minutes <= 18 * 60 && minutes + durationMinutes <= 21 * 60;
+    minutes >= 8 * 60 && minutes <= 18 * 60;
 }
 export function validateBookingHours(start: string, durationMinutes: number) {
   if (!fitsBookingHours(start, durationMinutes)) {
-    throw new ApiError(400, 'invalid_order_time', 'Начало уборки — с 08:00 до 18:00, окончание — не позднее 21:00. Выберите более раннее время.');
+    throw new ApiError(400, 'invalid_order_time', 'Начало уборки — с 08:00 до 18:00 включительно. Выберите другое время начала.');
   }
 }

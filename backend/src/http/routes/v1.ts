@@ -1,3 +1,4 @@
+import {prepaidBookingAddons} from '../../modules/prepaidBookingAddons';
 import {readWorkingSchedule,submitWorkingSchedule,reviewWorkingSchedule} from '../../modules/workingSchedule';
 import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
 import {cancelHomePurchase,resumeHomePurchase} from '../../modules/homePurchase';
@@ -1451,8 +1452,8 @@ export function buildV1Router(deps: {
     if (!customerPackage || customerPackage.status !== 'active') throw new ApiError(402, 'payment_required', 'Сначала подтвердите оплату пакета.');
     if (customerPackage.freeze_until && String(req.body.date) < String(customerPackage.freeze_until).slice(0,10)) throw new ApiError(409,'package_frozen','Пакет заморожен на выбранную дату.');
     if (customerPackage.available_cleanings <= 0) throw new ApiError(400, 'no_cleanings_left', 'В пакете не осталось доступных уборок.');
-    const prepaid = (customerPackage.purchase_config?.addons ?? []) as any[];
-    const prepaidIds = new Set(prepaid.map(item=>item.id));
+    const prepaid = await prepaidBookingAddons(deps.db,customerPackage);
+    const prepaidIds = new Set((Array.isArray(req.body.addonsDetailed) && req.body.addonsDetailed.length ? prepaid : (customerPackage.purchase_config?.addons ?? [])).map((item:any)=>item.id));
     const requestedAddons = Array.isArray(req.body.addonsDetailed) && req.body.addonsDetailed.length
       ? req.body.addonsDetailed : (Array.isArray(req.body.addonIds) ? req.body.addonIds.map((id: string)=>({id})) : []);
     const catalogAddons = requestedAddons.length
@@ -1472,7 +1473,6 @@ export function buildV1Router(deps: {
     const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes ?? 0),0);
     validateBookingHours(String(req.body.startTime), duration);
     const end = addMinutes(String(req.body.startTime), duration);
-    if (end <= String(req.body.startTime).slice(0,5)) throw new ApiError(400,'invalid_order_time','Уборка должна завершиться в выбранный день.');
     const initialStatus = addonAmount > 0 ? 'pending_payment' : 'pending_assignment';
     const row = await deps.db.transaction(async (tx) => {
       const reserved = first((await tx.query(
@@ -1496,7 +1496,6 @@ export function buildV1Router(deps: {
         );
       }
       for (const addon of prepaid) {
-        if (addon.pricingType !== 'per_visit' && (reserved as any).available_cleanings !== (reserved as any).total_cleanings - 1) continue;
         await tx.query(`INSERT INTO order_addons (order_id,addon_id,price,duration_minutes,quantity,payment_status)
           VALUES ($1,$2,$3,$4,$5,'paid')`, [created!.id,addon.id,Number(addon.price),addon.durationMinutes ?? 0,addon.quantity]);
       }
@@ -1991,8 +1990,9 @@ export function buildV1Router(deps: {
       const endTime = addMinutes(String(startTime),duration);
       if (current.cleaner_id) {
         const overlap = first((await tx.query(`SELECT id FROM service_orders
-          WHERE cleaner_id=$1 AND scheduled_date=$2 AND status NOT IN ('cancelled','completed')
-          AND start_time < $4::time AND end_time > $3::time AND id<>$5 LIMIT 1`,
+          WHERE cleaner_id=$1 AND status NOT IN ('cancelled','completed')
+          AND scheduled_date+start_time<cleaning_end_at($2::date,$3::time,$4::time,(SELECT estimated_duration_minutes FROM service_orders WHERE id=$5))
+          AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$2::date+$3::time AND id<>$5 LIMIT 1`,
           [current.cleaner_id,date,startTime,endTime,current.id])).rows);
         if (overlap) throw new ApiError(400,'cleaner_unavailable','Уборщица занята на это время. Выберите другое время.');
       }
@@ -2174,15 +2174,15 @@ export function buildV1Router(deps: {
       ? Number(req.query.durationMinutes)
       : await estimateCleaningDurationMinutes(deps.db, req.query.addressId ? String(req.query.addressId) : undefined, addons);
     if(req.query.customerPackageId){
-      const purchase=first<any>((await deps.db.query('SELECT address_id,purchase_config FROM customer_packages WHERE id=$1 AND customer_id=$2',[String(req.query.customerPackageId),req.user!.id])).rows);
+      const purchase=first<any>((await deps.db.query('SELECT id,address_id,purchase_config FROM customer_packages WHERE id=$1 AND customer_id=$2',[String(req.query.customerPackageId),req.user!.id])).rows);
       if(!purchase)throw new ApiError(404,'not_found','Пакет не найден.');
-      const prepaid=(purchase.purchase_config?.addons??[]) as any[];
-      const prepaidIds=new Set(prepaid.map(item=>item.id));
+      const prepaid=await prepaidBookingAddons(deps.db,purchase);
+      const prepaidIds=new Set((purchase.purchase_config?.addons ?? []).map((item:any)=>item.id));
       const extraIds=addonIds.filter(id=>!prepaidIds.has(id));
       const extra=extraIds.length?(await deps.db.query<{duration_minutes:number}>('SELECT duration_minutes FROM catalog_addons WHERE id=ANY($1::uuid[])',[extraIds])).rows:[];
       duration=await estimateCleaningDurationMinutes(deps.db,purchase.address_id,extra)+prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes??0),0);
     }
-    const intervals = slots.filter((start: string) => fitsBookingHours(start, duration)).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration)}));
+    const intervals = slots.filter((start: string) => fitsBookingHours(start, duration)).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration), durationMinutes: duration}));
     const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined);
     const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));
     ok(res, available);
@@ -4686,7 +4686,7 @@ function extensionFromMime(mime: string): string {
 
 function addMinutes(time: string, minutes: number): string {
   const [h, m] = time.split(':').map(Number);
-  const total = h * 60 + m + minutes;
+  const total = (h * 60 + m + minutes) % (24 * 60);
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 

@@ -1,3 +1,5 @@
+import 'cleaning_time_range.dart';
+
 Map<String, dynamic> mapAdminOrder(Map<String, dynamic> row) {
   num amount(dynamic value) =>
       value is num ? value : num.tryParse('$value') ?? 0;
@@ -55,9 +57,8 @@ Map<String, dynamic> mapAdminOrder(Map<String, dynamic> row) {
     'endTime': end,
     'time': start.isEmpty
         ? ''
-        : end.isEmpty
-            ? start
-            : '$start - $end',
+        : cleaningTimeRange(start, end,
+            date: date, durationMinutes: row['estimated_duration_minutes']),
     'address': address.isEmpty ? row['address'] ?? '' : address,
     'area': amount(row['area'] ?? row['profile_area']),
     'price': amount(row['total_amount'] ?? row['price']),

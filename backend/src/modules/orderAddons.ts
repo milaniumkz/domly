@@ -37,9 +37,9 @@ export async function updateOrderAddons(db: Database, orderId: string, customerI
     const oldDuration = existing.reduce((sum,row)=>sum+Number(row.duration_minutes),0);
     const duration = Math.max(1,Number(order.estimated_duration_minutes)-oldDuration+Number(totals.duration));
     if (order.cleaner_id) {
-      const overlap=first((await tx.query(`SELECT id FROM service_orders WHERE cleaner_id=$1 AND scheduled_date=$2
-        AND id<>$3 AND status NOT IN ('cancelled','completed') AND start_time<($4::time+$5::int*INTERVAL '1 minute')
-        AND end_time>$4::time LIMIT 1`,[order.cleaner_id,order.scheduled_date,order.id,order.start_time,duration])).rows);
+      const overlap=first((await tx.query(`SELECT id FROM service_orders WHERE cleaner_id=$1
+        AND id<>$3 AND status NOT IN ('cancelled','completed') AND scheduled_date+start_time<($2::date+$4::time+$5::int*INTERVAL '1 minute')
+        AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$2::date+$4::time LIMIT 1`,[order.cleaner_id,order.scheduled_date,order.id,order.start_time,duration])).rows);
       if (overlap) throw new ApiError(409,'cleaner_unavailable','Дополнительные услуги пересекаются со следующим заказом уборщицы.');
     }
     const updated = first((await tx.query(`UPDATE service_orders SET addon_amount=$2,total_amount=$2,payable_amount=$3,
