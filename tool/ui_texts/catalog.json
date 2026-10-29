@@ -2345,8 +2345,8 @@
     "key": "t_4ca6c3f62b99fd23",
     "source": "Вымыть пол",
     "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart",
-      "lib/services/app_config_service.dart"
+      "lib/services/app_config_service.dart",
+      "lib/utils/cleaner_checklist_data.dart"
     ]
   },
   {
@@ -3167,7 +3167,6 @@
     "key": "t_dc5c00795d26ff27",
     "source": "Доп. услуга:",
     "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart",
       "lib/utils/cleaner_checklist_data.dart"
     ]
   },
@@ -4858,7 +4857,8 @@
     "source": "Ищем уборщицу",
     "locations": [
       "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/orders_screen.dart"
+      "lib/screens/client/orders_screen.dart",
+      "lib/utils/order_display.dart"
     ]
   },
   {
@@ -8448,16 +8448,16 @@
     "key": "t_9f6b9b1229c0126f",
     "source": "Очистить кухню",
     "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart",
-      "lib/services/app_config_service.dart"
+      "lib/services/app_config_service.dart",
+      "lib/utils/cleaner_checklist_data.dart"
     ]
   },
   {
     "key": "t_56e243a6c6b05591",
     "source": "Очистить санузел",
     "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart",
-      "lib/services/app_config_service.dart"
+      "lib/services/app_config_service.dart",
+      "lib/utils/cleaner_checklist_data.dart"
     ]
   },
   {
@@ -10141,8 +10141,8 @@
     "key": "t_2774de89b9608c68",
     "source": "Пропылесосить",
     "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart",
-      "lib/services/app_config_service.dart"
+      "lib/services/app_config_service.dart",
+      "lib/utils/cleaner_checklist_data.dart"
     ]
   },
   {
@@ -10156,8 +10156,8 @@
     "key": "t_120576857828d883",
     "source": "Протереть пыль",
     "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart",
-      "lib/services/app_config_service.dart"
+      "lib/services/app_config_service.dart",
+      "lib/utils/cleaner_checklist_data.dart"
     ]
   },
   {
@@ -13468,13 +13468,6 @@
     ]
   },
   {
-    "key": "t_15bbb018914cdcd5",
-    "source": "оплата отдельно",
-    "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart"
-    ]
-  },
-  {
     "key": "t_3983d9e3eb7a7b81",
     "source": "оплачено",
     "locations": [
@@ -13532,13 +13525,6 @@
     "source": "переулок",
     "locations": [
       "lib/screens/client/profile_screen.dart"
-    ]
-  },
-  {
-    "key": "t_858560b44028b97d",
-    "source": "площад",
-    "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart"
     ]
   },
   {
@@ -13684,24 +13670,10 @@
     ]
   },
   {
-    "key": "t_840ee02d4312d6db",
-    "source": "скидк",
-    "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart"
-    ]
-  },
-  {
     "key": "t_c0d2b830794c471f",
     "source": "скидка {p0}",
     "locations": [
       "lib/screens/client/calculator_screen.dart"
-    ]
-  },
-  {
-    "key": "t_8eff4301548b850c",
-    "source": "стоимость зависит",
-    "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart"
     ]
   },
   {
@@ -13803,13 +13775,6 @@
       "lib/screens/cleaner/cleaner_calendar_screen.dart",
       "lib/screens/cleaner/cleaner_dashboard_screen.dart",
       "lib/ui/domly_ui.dart"
-    ]
-  },
-  {
-    "key": "t_831a6d92f8325c0f",
-    "source": "цена",
-    "locations": [
-      "lib/screens/cleaner/cleaner_checklist_screen.dart"
     ]
   },
   {

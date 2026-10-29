@@ -16,6 +16,7 @@ import '../../ui/domly_ui.dart';
 import '../../ui/info_dialog.dart';
 import '../../utils/bonus_policy_utils.dart';
 import '../../utils/order_display.dart';
+import '../../utils/schedule_order.dart';
 import '../../utils/user_error_message.dart';
 import '../../localization/translation_controller.dart';
 
@@ -2219,6 +2220,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         return DomlyColors.primary;
       case 'pending':
       case 'pending_assignment':
+      case 'waiting_cleaner':
         return const Color(0xFFFF9800);
       case 'invoice_requested':
       case 'initiated':
@@ -2289,17 +2291,12 @@ class _OrdersScreenState extends State<OrdersScreen>
     return hasActiveOffer ? 'Ждем ответ уборщицы' : 'Ищем уборщицу';
   }
 
-  bool _canCancelSlot(String status) {
-    final normalized = status.trim().toLowerCase();
-    return normalized == 'pending_payment' ||
-        normalized == 'pending_assignment' ||
-        normalized == 'assigned' ||
-        normalized == 'confirmed';
-  }
+  bool _canCancelSlot(String status) => canCancelScheduledCleaning(status);
 
   bool _canEditSlot(String status) {
     final normalized = status.trim().toLowerCase();
-    return normalized == 'pending_assignment' ||
+    return normalized == 'waiting_cleaner' ||
+        normalized == 'pending_assignment' ||
         normalized == 'assigned' ||
         normalized == 'confirmed' ||
         _isActiveCleaningStatus(normalized);

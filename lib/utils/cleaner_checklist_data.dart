@@ -25,3 +25,29 @@ Map<String, dynamic>? mapCleanerChecklist(
         .toList(),
   };
 }
+
+/// Cleaning work comes from the report/template, never subscription features.
+List<String> cleanerBaseChecklistTasks({
+  List<String>? requiredTasks,
+  List<Map<String, dynamic>> templateGroups = const [],
+}) {
+  const standardTasks = [
+    'Протереть пыль',
+    'Пропылесосить',
+    'Вымыть пол',
+    'Очистить кухню',
+    'Очистить санузел',
+  ];
+  final template = templateGroups
+      .where(
+          (group) => group['key'] == 'base_tasks' && group['isActive'] != false)
+      .firstOrNull;
+  final source =
+      requiredTasks ?? (template?['items'] as List? ?? standardTasks);
+  final tasks = source
+      .map((item) => item.toString().trim())
+      .where((task) => task.isNotEmpty && !task.startsWith('Доп. услуга: '))
+      .toSet()
+      .toList();
+  return tasks.isEmpty ? standardTasks : tasks;
+}
