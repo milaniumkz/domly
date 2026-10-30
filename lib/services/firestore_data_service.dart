@@ -11034,15 +11034,7 @@ class FirestoreDataService {
         (selection['bonusToSpend'] as num?)?.toInt() ?? 0,
       );
       final kaspiPhone = (selection['kaspiPhone'] ?? '').toString().trim();
-      final quotedAddons = addonDetails.fold<int>(
-          0,
-          (total, item) =>
-              total +
-              (_num(item['price']) *
-                      (item['quantity'] is num
-                          ? (item['quantity'] as num).toInt()
-                          : 1))
-                  .round());
+      final quotedAddons = billableBookingAddonsAmount(addonDetails);
       if (addonDetails.isNotEmpty &&
           kaspiPhone.isEmpty &&
           bonusToSpend < quotedAddons) {

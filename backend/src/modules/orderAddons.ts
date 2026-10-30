@@ -1,10 +1,12 @@
+import {notifySpecialistAddons} from './specialistAddons';
+import type {NotificationService} from './domainServices';
 import { Database } from '../infrastructure/db/Database';
 import { first } from '../common/sql';
 import { ApiError } from '../common/api';
 
-export async function updateOrderAddons(db: Database, orderId: string, customerId: string, desired: any[]) {
+export async function updateOrderAddons(db: Database, orderId: string, customerId: string, desired: any[],notifications?:NotificationService) {
   if (!Array.isArray(desired) || desired.length>100) throw new ApiError(400,'invalid_addons','Проверьте список услуг.');
-  return db.transaction(async tx => {
+  return db.atomic(()=>db.transaction(async tx => {
     const order = first<any>((await tx.query('SELECT * FROM service_orders WHERE id=$1 AND customer_id=$2 FOR UPDATE',[orderId,customerId])).rows);
     if (!order) throw new ApiError(404,'order_not_found','Заказ не найден.');
     if (['completed','cancelled','in_progress'].includes(order.status)) throw new ApiError(409,'order_not_editable','Этот заказ нельзя изменить.');
@@ -29,10 +31,10 @@ export async function updateOrderAddons(db: Database, orderId: string, customerI
       if (!addon) throw new ApiError(400,'invalid_addons','Услуга недоступна.');
       const address = first<any>((await tx.query('SELECT area FROM customer_addresses WHERE id=$1',[order.address_id])).rows);
       const price = Number(addon.price) * (['per_m2','per_sqm'].includes(addon.pricing_type)?Number(address?.area ?? order.area):1);
-      await tx.query("INSERT INTO order_addons (order_id,addon_id,quantity,price,duration_minutes,payment_status) VALUES ($1,$2,$3,$4,$5,'pending')",[orderId,id,quantity,price,Number(addon.duration_minutes)*quantity]);
+      await tx.query("INSERT INTO order_addons (order_id,addon_id,quantity,price,duration_minutes,payment_status,paid_separately) VALUES ($1,$2,$3,$4,$5,$6,$7)",[orderId,id,quantity,price,addon.paid_separately?0:Number(addon.duration_minutes)*quantity,addon.paid_separately?'draft':'pending',addon.paid_separately]);
     }
-    const totals = first<any>((await tx.query(`SELECT COALESCE(SUM(price*quantity),0) AS total,
-      COALESCE(SUM(price*quantity) FILTER (WHERE payment_status<>'paid'),0) AS pending,
+    const totals = first<any>((await tx.query(`SELECT COALESCE(SUM(price*quantity) FILTER (WHERE paid_separately=FALSE),0) AS total,
+      COALESCE(SUM(price*quantity) FILTER (WHERE payment_status<>'paid' AND paid_separately=FALSE),0) AS pending,
       COALESCE(SUM(duration_minutes),0) AS duration FROM order_addons WHERE order_id=$1`,[orderId])).rows);
     const oldDuration = existing.reduce((sum,row)=>sum+Number(row.duration_minutes),0);
     const duration = Math.max(1,Number(order.estimated_duration_minutes)-oldDuration+Number(totals.duration));
@@ -45,6 +47,7 @@ export async function updateOrderAddons(db: Database, orderId: string, customerI
     const updated = first((await tx.query(`UPDATE service_orders SET addon_amount=$2,total_amount=$2,payable_amount=$3,
       estimated_duration_minutes=$4,end_time=start_time+($4::int*INTERVAL '1 minute'),updated_at=NOW()
       WHERE id=$1 RETURNING *`,[orderId,totals.total,totals.pending,duration])).rows);
+    if(notifications)await notifySpecialistAddons(tx,notifications,orderId);
     return {order: updated,payableAmount:Number(totals.pending)};
-  });
+  }));
 }

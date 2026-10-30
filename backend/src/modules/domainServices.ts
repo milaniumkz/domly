@@ -269,7 +269,7 @@ export class NotificationService {
     )).rows)?.value ?? {};
     if (settings.enabled === false) return [];
     const events = Array.isArray(settings.events) ? settings.events.map(String) : [];
-    if (events.length && !events.includes(input.event)) return [];
+    if (events.length && !events.includes(input.event) && !(input.event==='specialist_addons' && events.includes('new_order'))) return [];
     const created = [];
     for (const role of ['admin', 'superadmin'] as const) {
       const row = await this.create({

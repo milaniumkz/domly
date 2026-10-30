@@ -1,3 +1,4 @@
+import {notifySpecialistAddons} from '../../modules/specialistAddons';
 import {prepaidBookingAddons} from '../../modules/prepaidBookingAddons';
 import {readWorkingSchedule,submitWorkingSchedule,reviewWorkingSchedule} from '../../modules/workingSchedule';
 import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
@@ -60,7 +61,7 @@ export function buildV1Router(deps: {
   });
   router.use('/payments/bcc', urlencoded({extended:false,limit:'32kb'}));
   router.use(mediaLinksMiddleware(deps.db));
-  router.use(mobileRouter(deps.db));
+  router.use(mobileRouter(deps.db,deps.notifications));
   router.use(botRouter(deps.db,deps.notifications));
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
   const initConfiguredPayment = async (gateway: PaymentGatewayService, result: {payment: unknown; payableAmount: number}, req: any, description: string) => {
@@ -372,7 +373,7 @@ export function buildV1Router(deps: {
     }
     if (payment.order_id) {
       await deps.db.query(`UPDATE service_orders SET status=CASE WHEN status='pending_payment' THEN CASE WHEN cleaner_id IS NULL THEN 'pending_assignment' ELSE 'assigned' END ELSE status END, payable_amount=0, updated_at=NOW() WHERE id=$1 AND status<>'cancelled'`, [payment.order_id]);
-      await deps.db.query(`UPDATE order_addons SET payment_status='paid' WHERE order_id=$1 AND payment_status='pending'`, [payment.order_id]);
+      await deps.db.query(`UPDATE order_addons SET payment_status='paid' WHERE order_id=$1 AND payment_status='pending' AND paid_separately=FALSE`, [payment.order_id]);
       const assigned = first<any>((await deps.db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[payment.order_id])).rows);
       if (!assigned?.cleaner_id) await offerNextCleanerAndNotify(payment.order_id);
     }
@@ -1457,8 +1458,8 @@ export function buildV1Router(deps: {
     const requestedAddons = Array.isArray(req.body.addonsDetailed) && req.body.addonsDetailed.length
       ? req.body.addonsDetailed : (Array.isArray(req.body.addonIds) ? req.body.addonIds.map((id: string)=>({id})) : []);
     const catalogAddons = requestedAddons.length
-      ? (await deps.db.query<{ id: string; title_ru: string; title_kk: string | null; price: string; duration_minutes: number }>(
-        'SELECT id,title_ru,title_kk,price,duration_minutes FROM catalog_addons WHERE active=TRUE')).rows : [];
+      ? (await deps.db.query<{ id: string; title_ru: string; title_kk: string | null; price: string; duration_minutes: number; paid_separately:boolean }>(
+        'SELECT id,title_ru,title_kk,price,duration_minutes,paid_separately FROM catalog_addons WHERE active=TRUE')).rows : [];
     const addons = requestedAddons.map((item: any) => {
       const requestedId = String(item.id ?? item.addonId ?? item.key ?? '').trim();
       const label = normalizeText(String(item.label ?? item.title ?? '').trim());
@@ -1469,8 +1470,8 @@ export function buildV1Router(deps: {
       if (!Number.isInteger(quantity) || quantity<1 || quantity>50) throw new ApiError(400,'invalid_quantity','Проверьте количество доп. услуг.');
       return {...addon,quantity};
     }).filter(addon=>!prepaidIds.has(addon.id));
-    const addonAmount = addons.reduce((sum: number, row) => sum + Number(row.price)*row.quantity, 0);
-    const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes ?? 0),0);
+    const addonAmount = addons.reduce((sum: number, row) => sum + (row.paid_separately ? 0 : Number(row.price)*row.quantity), 0);
+    const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes ?? 0)),0);
     validateBookingHours(String(req.body.startTime), duration);
     const end = addMinutes(String(req.body.startTime), duration);
     const initialStatus = addonAmount > 0 ? 'pending_payment' : 'pending_assignment';
@@ -1491,13 +1492,13 @@ export function buildV1Router(deps: {
       )).rows);
       for (const addon of addons) {
         await tx.query(
-          `INSERT INTO order_addons (order_id, addon_id, quantity, price, duration_minutes, payment_status) VALUES ($1,$2,$3,$4,$5,'pending')`,
-          [created!.id, addon.id, addon.quantity, addon.price, Number(addon.duration_minutes ?? 0)*addon.quantity],
+          `INSERT INTO order_addons (order_id, addon_id, quantity, price, duration_minutes, payment_status,paid_separately) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [created!.id, addon.id, addon.quantity, addon.price, addon.paid_separately?0:Number(addon.duration_minutes ?? 0)*addon.quantity,addon.paid_separately?'draft':'pending',addon.paid_separately],
         );
       }
       for (const addon of prepaid) {
-        await tx.query(`INSERT INTO order_addons (order_id,addon_id,price,duration_minutes,quantity,payment_status)
-          VALUES ($1,$2,$3,$4,$5,'paid')`, [created!.id,addon.id,Number(addon.price),addon.durationMinutes ?? 0,addon.quantity]);
+        await tx.query(`INSERT INTO order_addons (order_id,addon_id,price,duration_minutes,quantity,payment_status,paid_separately)
+          VALUES ($1,$2,$3,$4,$5,$6,$7)`, [created!.id,addon.id,Number(addon.price),addon.separate?0:addon.durationMinutes ?? 0,addon.quantity,addon.separate?'draft':'paid',addon.separate===true]);
       }
       return created;
     });
@@ -1509,6 +1510,7 @@ export function buildV1Router(deps: {
       targetId: row!.id,
       dedupeKey: `order-${row!.id}`,
     });
+    await notifySpecialistAddons(deps.db,deps.notifications,row!.id);
     const offer = addonAmount > 0 ? null : await offerNextCleanerAndNotify(row!.id);
     return { order: row, offer };
     }, 201);
@@ -1690,7 +1692,7 @@ export function buildV1Router(deps: {
                 AND NOT EXISTS (SELECT 1 FROM promotions pr WHERE pr.banner_file_id=f.id)
                 ORDER BY d.created_at DESC LIMIT 1) AS cleaner_photo_url,
               COALESCE((SELECT json_agg(json_build_object('id',a.id,'key',a.id,'label',a.title_ru,'quantity',oa.quantity,
-                'price',oa.price,'durationMinutes',oa.duration_minutes,'paymentStatus',oa.payment_status))
+                'price',oa.price,'durationMinutes',oa.duration_minutes,'paymentStatus',oa.payment_status,'separatePayment',oa.paid_separately))
                 FROM order_addons oa JOIN catalog_addons a ON a.id=oa.addon_id WHERE oa.order_id=o.id),'[]'::json) AS addons
        FROM service_orders o
        LEFT JOIN catalog_packages p ON p.id=o.package_id
@@ -1735,7 +1737,7 @@ export function buildV1Router(deps: {
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
     const addons = (await deps.db.query(
-      `SELECT oa.*, a.title_ru, a.title_kk, a.description_ru, a.description_kk, a.paid_separately
+      `SELECT oa.*, a.title_ru, a.title_kk, a.description_ru, a.description_kk, oa.paid_separately
        FROM order_addons oa
        JOIN catalog_addons a ON a.id=oa.addon_id
        WHERE oa.order_id=$1
@@ -2053,15 +2055,15 @@ export function buildV1Router(deps: {
     for (const item of addons) {
       const addonId = String(item.addonId ?? item.id ?? '').trim();
       if (!addonId) continue;
-      const addon = first<{ id: string; price: string; duration_minutes: number }>((await deps.db.query(
-        `SELECT id, price, duration_minutes FROM catalog_addons WHERE id=$1`,
+      const addon = first<{ id: string; price: string; duration_minutes: number;paid_separately:boolean }>((await deps.db.query(
+        `SELECT id, price, duration_minutes,paid_separately FROM catalog_addons WHERE id=$1`,
         [addonId],
       )).rows);
       if (!addon) continue;
       const row = first((await deps.db.query(
-        `INSERT INTO order_addons (order_id, addon_id, quantity, price, duration_minutes, payment_status)
-         VALUES ($1,$2,$3,$4,$5,'pending') RETURNING *`,
-        [order.id, addon.id, Number(item.quantity ?? 1), Number(item.price ?? addon.price ?? 0), Number(item.durationMinutes ?? addon.duration_minutes ?? 0)],
+        `INSERT INTO order_addons (order_id, addon_id, quantity, price, duration_minutes, payment_status,paid_separately)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [order.id, addon.id, Number(item.quantity ?? 1), Number(item.price ?? addon.price ?? 0), addon.paid_separately?0:Number(item.durationMinutes ?? addon.duration_minutes ?? 0),addon.paid_separately?'draft':'pending',addon.paid_separately],
       )).rows);
       saved.push(row);
     }
@@ -2073,6 +2075,7 @@ export function buildV1Router(deps: {
       targetId: order.id,
       dedupeKey: `addon-request-${order.id}-${Date.now()}`,
     });
+    await notifySpecialistAddons(deps.db,deps.notifications,order.id);
     ok(res, { requestId: order.id, orderId: order.id, addons: saved }, 201);
   }));
 
@@ -2084,7 +2087,7 @@ export function buildV1Router(deps: {
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
     const addonTotal = first<{ amount: string }>((await deps.db.query(
-      `SELECT COALESCE(SUM(price * quantity),0)::text AS amount FROM order_addons WHERE order_id=$1 AND payment_status='pending'`,
+      `SELECT COALESCE(SUM(price * quantity),0)::text AS amount FROM order_addons WHERE order_id=$1 AND payment_status='pending' AND paid_separately=FALSE`,
       [order.id],
     )).rows);
     const amount = Number(addonTotal?.amount ?? 0);
@@ -2168,7 +2171,7 @@ export function buildV1Router(deps: {
     const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
     const addonIds = String(req.query.addonIds ?? '').split(',').map((id) => id.trim()).filter(Boolean);
     const addons = addonIds.length
-      ? (await deps.db.query<{ duration_minutes: number }>(`SELECT duration_minutes FROM catalog_addons WHERE id = ANY($1::uuid[])`, [addonIds])).rows
+      ? (await deps.db.query<{ duration_minutes: number;paid_separately:boolean }>(`SELECT duration_minutes,paid_separately FROM catalog_addons WHERE id = ANY($1::uuid[])`, [addonIds])).rows
       : [];
     let duration = Number(req.query.durationMinutes ?? 0) > 0
       ? Number(req.query.durationMinutes)
@@ -2179,8 +2182,8 @@ export function buildV1Router(deps: {
       const prepaid=await prepaidBookingAddons(deps.db,purchase);
       const prepaidIds=new Set((purchase.purchase_config?.addons ?? []).map((item:any)=>item.id));
       const extraIds=addonIds.filter(id=>!prepaidIds.has(id));
-      const extra=extraIds.length?(await deps.db.query<{duration_minutes:number}>('SELECT duration_minutes FROM catalog_addons WHERE id=ANY($1::uuid[])',[extraIds])).rows:[];
-      duration=await estimateCleaningDurationMinutes(deps.db,purchase.address_id,extra)+prepaid.reduce((sum,item)=>sum+Number(item.durationMinutes??0),0);
+      const extra=extraIds.length?(await deps.db.query<{duration_minutes:number;paid_separately:boolean}>('SELECT duration_minutes,paid_separately FROM catalog_addons WHERE id=ANY($1::uuid[])',[extraIds])).rows:[];
+      duration=await estimateCleaningDurationMinutes(deps.db,purchase.address_id,extra)+prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes??0)),0);
     }
     const intervals = slots.filter((start: string) => fitsBookingHours(start, duration)).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration), durationMinutes: duration}));
     const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined);
@@ -2696,7 +2699,7 @@ export function buildV1Router(deps: {
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
     const addons = (await deps.db.query(
-      `SELECT oa.*, a.title_ru, a.title_kk, a.description_ru, a.description_kk, a.paid_separately
+      `SELECT oa.*, a.title_ru, a.title_kk, a.description_ru, a.description_kk, oa.paid_separately
        FROM order_addons oa
        JOIN catalog_addons a ON a.id=oa.addon_id
        WHERE oa.order_id=$1
@@ -3043,7 +3046,7 @@ export function buildV1Router(deps: {
       [req.params.id],
     )).rows;
     const orderAddons = (await deps.db.query(
-      `SELECT oa.*, a.title_ru, a.title_kk, a.paid_separately
+      `SELECT oa.*, a.title_ru, a.title_kk, oa.paid_separately
        FROM order_addons oa
        JOIN catalog_addons a ON a.id=oa.addon_id
        WHERE oa.order_id=$1
@@ -4502,7 +4505,7 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
               COALESCE((SELECT p.status FROM payments p WHERE p.order_id=o.id ORDER BY p.created_at DESC LIMIT 1),
                 (SELECT p.status FROM payments p WHERE p.id=cp.purchase_payment_id)) AS latest_payment_status,
               COALESCE((SELECT json_agg(json_build_object('id',oa.id,'key',a.id,'label',a.title_ru,'quantity',oa.quantity,
-                'price',oa.price,'durationMinutes',oa.duration_minutes,'paymentStatus',oa.payment_status))
+                'price',oa.price,'durationMinutes',oa.duration_minutes,'paymentStatus',oa.payment_status,'separatePayment',oa.paid_separately))
                 FROM order_addons oa JOIN catalog_addons a ON a.id=oa.addon_id WHERE oa.order_id=o.id),'[]'::json) AS addons
        FROM service_orders o
        JOIN app_users cu ON cu.id=o.customer_id
@@ -5072,7 +5075,7 @@ async function ensurePackageQualityCheck(db: Database, notifications: Notificati
 async function estimateCleaningDurationMinutes(
   db: Pick<Database, 'query'>,
   addressId?: string,
-  addons: Array<{ duration_minutes?: number; quantity?: number }> = [],
+  addons: Array<{ duration_minutes?: number; quantity?: number; paid_separately?:boolean }> = [],
 ): Promise<number> {
   const settings = await readAppSettings(db);
   const baseMinutes = Number(settings.baseCleaningMinutes ?? 0);
@@ -5084,7 +5087,7 @@ async function estimateCleaningDurationMinutes(
     )).rows[0]
     : null;
   const area = Number(address?.verified_area ?? address?.area ?? 50);
-  const addonMinutes = addons.reduce((sum, addon) => sum + Number(addon.duration_minutes ?? 0) * Number(addon.quantity ?? 1), 0);
+  const addonMinutes = addons.reduce((sum, addon) => sum + (addon.paid_separately ? 0 : Number(addon.duration_minutes ?? 0) * Number(addon.quantity ?? 1)), 0);
   return cleaningDurationMinutes(area, addonMinutes, baseMinutes, minutesPerM2);
 }
 

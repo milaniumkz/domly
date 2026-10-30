@@ -1,3 +1,4 @@
+import {packageQuote} from '../modules/packageQuote';
 import {workingScheduleWeeks,workWeekDates} from '../modules/workingSchedule';
 import {readFileSync} from 'node:fs';
 import {defaultRequiredTasks} from '../modules/checklists';
@@ -129,6 +130,51 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM order_status_history WHERE order_id=$1',[order]);
         await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
         await db.query('DELETE FROM app_users WHERE id=$1',[worker]);
+      }
+    });
+    await t.test('specialist selections create admin requests without charging or blocking cleaning',async()=>{
+      const pkg=randomUUID(),address=randomUUID(),purchase=randomUUID(),special=randomUUID(),ordinary=randomUUID();
+      const key='specialist-'+purchase;
+      try{
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Specialist fixture',4,100)",[pkg]);
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Тестовая','1',100)",[address,customer]);
+        await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes,paid_separately) VALUES($1,'Химчистка дивана',50000,90,TRUE),($2,'Духовка',3000,25,FALSE)",[special,ordinary]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,$4,4,4,'active')",[purchase,customer,pkg,address]);
+        const quote=await packageQuote(db,{packageId:pkg,area:100,addonsDetailed:[{id:special,quantity:2},{id:ordinary,quantity:2}]});
+        assert.equal(quote.addonsBillableTotal,6000);
+        assert.equal(quote.addonsSeparatePaymentTotal,100000);
+        assert.equal(quote.monthlyPrice,6400);
+        assert.equal(quote.addons.find(a=>a.id===special)!.durationMinutes,0);
+        const body={customerPackageId:purchase,date:'2039-04-02',startTime:'18:00',addonsDetailed:[{id:special,quantity:2,price:1,separate:false}],idempotencyKey:key};
+        const booked=await request('/orders','POST',body,true);
+        assert.equal(booked.status,201,JSON.stringify(booked.json));
+        const order=booked.json.data.order;
+        assert.equal(Number(order.payable_amount),0);assert.equal(Number(order.addon_amount),0);
+        assert.notEqual(order.status,'pending_payment');assert.equal(order.estimated_duration_minutes,160);
+        const addons=(await db.query('SELECT * FROM order_addons WHERE order_id=$1',[order.id])).rows;
+        assert.equal(addons[0].paid_separately,true);assert.equal(addons[0].payment_status,'draft');assert.equal(Number(addons[0].quantity),2);
+        assert.equal((await request('/orders/'+order.id+'/pay','POST',{provider:'kaspi'},true)).status,409);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM payments WHERE order_id=$1',[order.id])).rows[0].n,0);
+        const notices=(await db.query("SELECT * FROM notifications WHERE target_id=$1 AND title_ru='Допуслуги с оплатой по факту'",[order.id])).rows;
+        assert.equal(notices.length,2);assert.deepEqual(notices.map((n:any)=>n.role).sort(),['admin','superadmin']);
+        assert.ok(notices.every((n:any)=>n.body_ru.includes('Химчистка дивана × 2')&&n.body_ru.includes('счёт не выставлен')));
+        assert.equal((await request('/orders','POST',body,true)).status,201);
+        assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM notifications WHERE target_id=$1 AND title_ru='Допуслуги с оплатой по факту'",[order.id])).rows[0].n,2);
+        const preview=await request('/scheduling/available-slots?date=2039-04-03&addressId='+address+'&addonIds='+special,'GET',undefined,true);
+        assert.ok(preview.json.data.every((r:any)=>r.durationMinutes===160));
+        const changed=await request('/orders/'+order.id+'/addons','POST',{addonsDetailed:[{id:special,quantity:3},{id:ordinary,quantity:2}]},true);
+        assert.equal(changed.status,200,JSON.stringify(changed.json));assert.equal(changed.json.data.payableAmount,6000);
+        assert.equal(changed.json.data.order.estimated_duration_minutes,210);
+        const onlySpecial=await request('/orders/'+order.id+'/addons','POST',{addonsDetailed:[{id:special,quantity:3}]},true);
+        assert.equal(onlySpecial.status,200);assert.equal(onlySpecial.json.data.payableAmount,0);assert.equal(onlySpecial.json.data.order.estimated_duration_minutes,160);
+      }finally{
+        await db.query('DELETE FROM notifications WHERE target_id IN (SELECT id::text FROM service_orders WHERE customer_package_id=$1)',[purchase]);
+        await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND key=$2',[customer,key]);
+        await db.query('DELETE FROM service_orders WHERE customer_package_id=$1',[purchase]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+        await db.query('DELETE FROM catalog_addons WHERE id=ANY($1::uuid[])',[[special,ordinary]]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
       }
     });
     await t.test('evening slots allow late finishes and fixed extras are consumed only once',async()=>{
