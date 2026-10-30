@@ -10304,6 +10304,7 @@ class FirestoreDataService {
   Future<Map<String, dynamic>> getAvailableSlots({
     required String subscriptionId,
     required DateTime date,
+    List<Map<String, dynamic>> newAddonsDetailed = const [],
   }) async {
     if (_isDebugCustomer) {
       if (!await _debugOwnsSubscription(subscriptionId)) {
@@ -10329,7 +10330,10 @@ class FirestoreDataService {
       }
       return _debugAvailableSlots(date);
     }
-    return _getAvailableSlotsDirect(subscriptionId: subscriptionId, date: date);
+    return _getAvailableSlotsDirect(
+        subscriptionId: subscriptionId,
+        date: date,
+        newAddonsDetailed: newAddonsDetailed);
   }
 
   Future<Map<String, dynamic>> _getAvailableDatesDirect({
@@ -10381,6 +10385,7 @@ class FirestoreDataService {
   Future<Map<String, dynamic>> _getAvailableSlotsDirect({
     required String subscriptionId,
     required DateTime date,
+    List<Map<String, dynamic>> newAddonsDetailed = const [],
   }) async {
     final dateKey = _isoDate(date);
     final subscription = await _loadOwnedSubscription(subscriptionId);
@@ -10397,6 +10402,7 @@ class FirestoreDataService {
     final slots = await _loadBackendAvailableSlots(
       dateKey: dateKey,
       customerPackageId: subscriptionId,
+      newAddonsDetailed: newAddonsDetailed,
       addressId: (subscription['addressId'] ?? '').toString(),
     );
     return {'ok': true, 'date': dateKey, 'slots': slots, 'backend': true};
@@ -10407,11 +10413,14 @@ class FirestoreDataService {
     String? addressId,
     String? customerPackageId,
     List<String> addonIds = const [],
+    List<Map<String, dynamic>> newAddonsDetailed = const [],
   }) async {
     final rows = await BackendApiService.instance.getList(
       '/scheduling/available-slots',
       query: {
         'date': dateKey,
+        if (newAddonsDetailed.isNotEmpty)
+          'addonsDetailed': jsonEncode(newAddonsDetailed),
         if (customerPackageId != null) 'customerPackageId': customerPackageId,
         if (addressId != null && addressId.trim().isNotEmpty)
           'addressId': addressId.trim(),

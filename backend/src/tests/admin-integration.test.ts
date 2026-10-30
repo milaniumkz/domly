@@ -39,6 +39,11 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
   try {
     for(const [id,role] of [[admin,'superadmin'],[cleaner,'cleaner'],[customer,'customer']])await db.query("INSERT INTO app_users(id,phone,role,status,full_name) VALUES($1,$2,$3,'pending','Тестовая анкета')",[id,'admin-test-'+id,role]);
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
+    for(const date of ['2039-02-03','2039-02-04','2039-04-02','2039-04-03']){
+      const schedule=(await db.query("INSERT INTO cleaner_work_schedule_requests(cleaner_id,week_start,days,status) VALUES($1,date_trunc('week',$2::date)::date,'[]','approved') RETURNING id",[cleaner,date])).rows[0];
+      await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,$2,'08:00','18:00',$3)",[cleaner,date,schedule.id]);
+    }
+
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
     await t.test('customer info receives the configured tier descriptions and thresholds',async()=>{
@@ -183,6 +188,35 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
       }
     });
+    await t.test('time selection includes extra quantities before filtering conflicting cleaners',async()=>{
+      const pkg=randomUUID(),address=randomUUID(),purchase=randomUUID(),addon=randomUUID(),special=randomUUID(),busy=randomUUID();
+      await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
+      await db.query("UPDATE cleaner_profiles SET verification_status='approved' WHERE user_id=$1",[cleaner]);
+      try{
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Slot extras',4,100)",[pkg]);
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Тестовая','1',100)",[address,customer]);
+        await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes,paid_separately) VALUES($1,'Духовка',3000,25,FALSE),($2,'Химчистка',50000,90,TRUE)",[addon,special]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,$4,4,4,'active')",[purchase,customer,pkg,address]);
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status) VALUES($1,$2,$3,'2039-04-02','13:00','14:00',60,'assigned')",[busy,customer,cleaner]);
+        const path='/scheduling/available-slots?date=2039-04-02&customerPackageId='+purchase;
+        const baseSlots=await request(path,'GET',undefined,true);
+        assert.ok(baseSlots.json.data.some((slot:any)=>slot.startTime==='10:00'&&slot.durationMinutes===160));
+        const details=[{key:addon,quantity:2},{key:special,quantity:2}];
+        const withExtras=await request(path+'&addonsDetailed='+encodeURIComponent(JSON.stringify(details)),'GET',undefined,true);
+        assert.equal(withExtras.status,200,JSON.stringify(withExtras.json));
+        assert.ok(withExtras.json.data.some((slot:any)=>slot.startTime==='08:00'&&slot.endTime==='11:30'&&slot.durationMinutes===210));
+        assert.ok(!withExtras.json.data.some((slot:any)=>slot.startTime==='10:00'));
+        for(const quantity of [0,51])assert.equal((await request(path+'&addonsDetailed='+encodeURIComponent(JSON.stringify([{id:addon,quantity}])),'GET',undefined,true)).status,400);
+      }finally{
+        await db.query('DELETE FROM service_orders WHERE id=$1',[busy]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+        await db.query('DELETE FROM catalog_addons WHERE id=ANY($1::uuid[])',[[addon,special]]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+        await db.query("UPDATE app_users SET status='pending' WHERE id=$1",[cleaner]);
+        await db.query("UPDATE cleaner_profiles SET verification_status='pending' WHERE user_id=$1",[cleaner]);
+      }
+    });
     await t.test('evening slots allow late finishes and fixed extras are consumed only once',async()=>{
       await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
       await db.query("UPDATE cleaner_profiles SET verification_status='approved' WHERE user_id=$1",[cleaner]);
@@ -221,6 +255,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
           assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,2);
         }finally{
           await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND key=ANY($2::text[])',[customer,[key,key+'-second']]);
+          await db.query('DELETE FROM notifications WHERE target_id IN (SELECT id::text FROM service_orders WHERE customer_package_id=$1)',[purchase]);
           await db.query('DELETE FROM service_orders WHERE customer_package_id=$1',[purchase]);
           await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
           await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);

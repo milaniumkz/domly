@@ -1,3 +1,4 @@
+import '../../ui/order_addon_price.dart';
 import '../../models/order_addon_item.dart';
 import '../../theme/domly_palette.dart';
 import '../common/order_payment_retry.dart';
@@ -3054,6 +3055,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                             }
                           });
                         },
+                        area: num.tryParse(
+                                '${slot['area'] ?? slot['apartmentArea'] ?? 0}') ??
+                            0,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -3509,12 +3513,12 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Widget _buildAddonEditorGroup(
-    _OrderAddonGroupDef group,
-    Map<String, int> addonQuantities,
-    bool expanded,
-    VoidCallback onToggle,
-    void Function(OrderAddonItem item, int quantity) onItemChanged,
-  ) {
+      _OrderAddonGroupDef group,
+      Map<String, int> addonQuantities,
+      bool expanded,
+      VoidCallback onToggle,
+      void Function(OrderAddonItem item, int quantity) onItemChanged,
+      {num area = 0}) {
     final selectedCount = _selectedCountForGroup(group, addonQuantities);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -3589,6 +3593,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                         item,
                         addonQuantities,
                         (next) => onItemChanged(item, next),
+                        area: area,
                       ),
                     )
                     .toList(),
@@ -3599,13 +3604,11 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
-  Widget _buildAddonEditorRow(
-    OrderAddonItem item,
-    Map<String, int> addonQuantities,
-    ValueChanged<int> onChanged,
-  ) {
+  Widget _buildAddonEditorRow(OrderAddonItem item,
+      Map<String, int> addonQuantities, ValueChanged<int> onChanged,
+      {num area = 0}) {
     final quantity = addonQuantities[item.key] ?? 0;
-    final unitPrice = _addonUnitPrices[item.key] ?? 0;
+    final unitPrice = _addonUnitPrices[item.key];
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -3623,7 +3626,7 @@ class _OrdersScreenState extends State<OrdersScreen>
               color: DomlyPalette.surface(DomlyColors.backgroundSoft),
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
-                onTap: () => _showAddonInfo(item, unitPrice: unitPrice),
+                onTap: () => _showAddonInfo(item, unitPrice: unitPrice ?? 0),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding: EdgeInsets.all(6),
@@ -3648,25 +3651,19 @@ class _OrdersScreenState extends State<OrdersScreen>
                     color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
-                if (item.separatePayment) ...[
+                const SizedBox(height: 4),
+                OrderAddonPrice(
+                    unitPrice: unitPrice,
+                    quantity: quantity,
+                    pricingType: item.pricingType,
+                    area: area,
+                    separatePayment: item.separatePayment),
+                if (!item.separatePayment && item.note != null) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    'Оплачивается отдельно при оценке специалиста'.tr(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ] else if (item.note != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    (item.note!).tr(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: DomlyPalette.foreground(DomlyColors.muted),
-                    ),
-                  ),
+                  Text(item.note!.tr(),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: DomlyPalette.foreground(DomlyColors.muted))),
                 ],
               ],
             ),

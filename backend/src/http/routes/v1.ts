@@ -2170,9 +2170,24 @@ export function buildV1Router(deps: {
     const settings = await readAppSettings(deps.db);
     const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
     const addonIds = String(req.query.addonIds ?? '').split(',').map((id) => id.trim()).filter(Boolean);
-    const addons = addonIds.length
-      ? (await deps.db.query<{ duration_minutes: number;paid_separately:boolean }>(`SELECT duration_minutes,paid_separately FROM catalog_addons WHERE id = ANY($1::uuid[])`, [addonIds])).rows
-      : [];
+    let detailed:any[]|null=null;
+    if(req.query.addonsDetailed!==undefined){
+      try { detailed=JSON.parse(String(req.query.addonsDetailed)); }
+      catch {throw new ApiError(400,'invalid_addons','Проверьте список доп. услуг.');}
+      if(!Array.isArray(detailed)||detailed.length>100)throw new ApiError(400,'invalid_addons','Проверьте список доп. услуг.');
+    }
+    const requested=detailed??addonIds.map(id=>({id}));
+    const catalog=requested.length?(await deps.db.query<any>('SELECT id,title_ru,title_kk,duration_minutes,paid_separately FROM catalog_addons WHERE active=TRUE')).rows:[];
+    const seen=new Set<string>();
+    const addons=requested.map(item=>{
+      if(!item||typeof item!=='object')throw new ApiError(400,'invalid_addons','Проверьте список доп. услуг.');
+      const id=String(item.id??item.addonId??item.key??'');
+      const label=normalizeText(String(item.label??item.title??'').trim());
+      const addon=catalog.find(a=>a.id===id||(label&&[a.title_ru,a.title_kk].some((title:any)=>title&&normalizeText(title)===label)));
+      const quantity=Number(item.quantity??1);
+      if(!addon||!Number.isInteger(quantity)||quantity<1||quantity>50||seen.has(addon.id))throw new ApiError(400,'invalid_addons','Проверьте выбранные доп. услуги и количество.');
+      seen.add(addon.id);return {...addon,quantity};
+    });
     let duration = Number(req.query.durationMinutes ?? 0) > 0
       ? Number(req.query.durationMinutes)
       : await estimateCleaningDurationMinutes(deps.db, req.query.addressId ? String(req.query.addressId) : undefined, addons);
@@ -2180,9 +2195,8 @@ export function buildV1Router(deps: {
       const purchase=first<any>((await deps.db.query('SELECT id,address_id,purchase_config FROM customer_packages WHERE id=$1 AND customer_id=$2',[String(req.query.customerPackageId),req.user!.id])).rows);
       if(!purchase)throw new ApiError(404,'not_found','Пакет не найден.');
       const prepaid=await prepaidBookingAddons(deps.db,purchase);
-      const prepaidIds=new Set((purchase.purchase_config?.addons ?? []).map((item:any)=>item.id));
-      const extraIds=addonIds.filter(id=>!prepaidIds.has(id));
-      const extra=extraIds.length?(await deps.db.query<{duration_minutes:number;paid_separately:boolean}>('SELECT duration_minutes,paid_separately FROM catalog_addons WHERE id=ANY($1::uuid[])',[extraIds])).rows:[];
+      const prepaidIds=new Set((detailed===null?(purchase.purchase_config?.addons??[]):prepaid).map((item:any)=>item.id));
+      const extra=addons.filter(item=>!prepaidIds.has(item.id));
       duration=await estimateCleaningDurationMinutes(deps.db,purchase.address_id,extra)+prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes??0)),0);
     }
     const intervals = slots.filter((start: string) => fitsBookingHours(start, duration)).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration), durationMinutes: duration}));

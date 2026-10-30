@@ -402,7 +402,7 @@ export const openApiSpec = {
     '/scheduling/available-slots': {
       get: {
         ...secured('Свободные слоты только при наличии доступной уборщицы'),
-        parameters: [query('date', '2026-09-25'), query('addressId', 'uuid'), query('addons', 'uuid,uuid')],
+        parameters: [query('date', '2026-09-25'), query('customerPackageId','uuid'), query('addressId', 'uuid'), query('addonIds', 'uuid,uuid'), query('addonsDetailed','[{"id":"uuid","quantity":2}]')],
       },
     },
     '/cleaner/offers': { get: secured('Активные предложения уборщицы') },

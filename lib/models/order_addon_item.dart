@@ -9,6 +9,7 @@ class OrderAddonItem {
     this.features = const <String>[],
     this.separatePayment = false,
     this.durationMinutes = 15,
+    this.pricingType = 'fixed',
   });
 
   final String key;
@@ -20,26 +21,35 @@ class OrderAddonItem {
   final List<String> features;
   final bool separatePayment;
   final int durationMinutes;
+  final String pricingType;
 
   factory OrderAddonItem.fromConfig(Map<String, dynamic> item) {
-    String? text(dynamic value) => (value ?? '').toString().trim().isEmpty
-        ? null : value.toString();
+    String? text(dynamic value) =>
+        (value ?? '').toString().trim().isEmpty ? null : value.toString();
     final key = (item['key'] ?? '').toString();
     return OrderAddonItem(
       key: key,
       label: (item['label'] ?? key).toString(),
       supportsQuantity: item['supportsQuantity'] == true,
       note: text(item['note']),
-      shortInfo: text(item['shortInfo'] ?? item['description'] ?? item['note'] ?? item['hint'] ?? item['prompt']),
+      shortInfo: text(item['shortInfo'] ??
+          item['description'] ??
+          item['note'] ??
+          item['hint'] ??
+          item['prompt']),
       fullInfo: text(item['fullInfo'] ?? item['longDescription']),
       features: item['features'] is List
-          ? (item['features'] as List).map((v) => v.toString()).where((v) => v.trim().isNotEmpty).toList()
+          ? (item['features'] as List)
+              .map((v) => v.toString())
+              .where((v) => v.trim().isNotEmpty)
+              .toList()
           : const [],
       separatePayment: (item['separatePayment'] ?? item['separate']) == true,
       durationMinutes: (item['durationMinutes'] as num?)?.toInt() ?? 15,
+      pricingType:
+          (item['pricingType'] ?? item['pricing_type'] ?? 'fixed').toString(),
     );
   }
 
   String? get infoText => shortInfo ?? note;
 }
-
