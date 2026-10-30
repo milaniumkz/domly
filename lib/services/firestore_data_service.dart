@@ -862,6 +862,11 @@ class FirestoreDataService {
       'verifiedAt': profile['verified_at'],
       'workStartDate': profile['work_start_date'],
       'documents': documents,
+      'photoUrl': profile['profile_photo_url'],
+      'photoReviewStatus': documents
+          .where((d) => d['type'] == 'profile_photo')
+          .map((d) => d['status'])
+          .firstOrNull,
       'zones': zones,
       'serviceAreaIds': zones.map((zone) => zone['id'].toString()).toList(),
       'serviceAreas':
@@ -2639,6 +2644,15 @@ class FirestoreDataService {
       return Map<String, dynamic>.from((profile['profile'] as Map?) ?? profile);
     });
   }
+
+  Future<void> submitCleanerProfilePhoto(String url) async {
+    await BackendApiService.instance
+        .postMap('/cleaner/profile-photo', body: {'url': url});
+  }
+
+  Stream<List<Map<String, dynamic>>> cleanerPhotoRequestsStream() =>
+      _backendPollingStream(
+          () => BackendApiService.instance.getList('/admin/cleaner-photos'));
 
   Stream<List<Map<String, dynamic>>> allCleanerVerificationsStream() {
     if (_isDebugAdmin) {
@@ -7996,7 +8010,9 @@ class FirestoreDataService {
       });
     }
     return _backendPollingStream(() async {
-      return (await BackendApiService.instance.getList('/reviews')).map((item) {
+      return (await BackendApiService.instance.getList('/reviews'))
+          .where((item) => (item['author_role'] ?? 'customer') == 'customer')
+          .map((item) {
         return {
           'id': item['id'],
           'orderId': item['order_id'],
@@ -10292,6 +10308,7 @@ class FirestoreDataService {
     required String subscriptionId,
     required DateTime date,
     List<Map<String, dynamic>> newAddonsDetailed = const [],
+    String? orderId,
   }) async {
     if (_isDebugCustomer) {
       if (!await _debugOwnsSubscription(subscriptionId)) {
@@ -10320,6 +10337,7 @@ class FirestoreDataService {
     return _getAvailableSlotsDirect(
         subscriptionId: subscriptionId,
         date: date,
+        orderId: orderId,
         newAddonsDetailed: newAddonsDetailed);
   }
 
@@ -10373,6 +10391,7 @@ class FirestoreDataService {
     required String subscriptionId,
     required DateTime date,
     List<Map<String, dynamic>> newAddonsDetailed = const [],
+    String? orderId,
   }) async {
     final dateKey = _isoDate(date);
     final subscription = await _loadOwnedSubscription(subscriptionId);
@@ -10389,6 +10408,7 @@ class FirestoreDataService {
     final slots = await _loadBackendAvailableSlots(
       dateKey: dateKey,
       customerPackageId: subscriptionId,
+      orderId: orderId,
       newAddonsDetailed: newAddonsDetailed,
       addressId: (subscription['addressId'] ?? '').toString(),
     );
@@ -10401,12 +10421,14 @@ class FirestoreDataService {
     String? customerPackageId,
     List<String> addonIds = const [],
     List<Map<String, dynamic>> newAddonsDetailed = const [],
+    String? orderId,
   }) async {
     final rows = await BackendApiService.instance.getList(
       '/scheduling/available-slots',
       query: {
         'date': dateKey,
-        if (newAddonsDetailed.isNotEmpty)
+        if (orderId != null) 'orderId': orderId,
+        if (orderId != null || newAddonsDetailed.isNotEmpty)
           'addonsDetailed': jsonEncode(newAddonsDetailed),
         if (customerPackageId != null) 'customerPackageId': customerPackageId,
         if (addressId != null && addressId.trim().isNotEmpty)
@@ -11326,9 +11348,10 @@ class FirestoreDataService {
           .postMap('/orders/$slotId/reschedule', body: {
         if (date != null) 'date': _dateOnlyText(date),
         if (time != null) 'time': time.split(' - ').first,
+        if (addonsDetailed != null) 'addonsDetailed': addonsDetailed,
       });
     }
-    if (addonsDetailed != null) {
+    if (addonsDetailed != null && date == null && time == null) {
       result = await BackendApiService.instance.postMap(
           '/orders/$slotId/addons',
           body: {'addonsDetailed': addonsDetailed});

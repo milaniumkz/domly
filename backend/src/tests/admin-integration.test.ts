@@ -1,3 +1,4 @@
+import {updateOrderAddons} from '../modules/orderAddons';
 import {packageQuote} from '../modules/packageQuote';
 import {workingScheduleWeeks,workWeekDates} from '../modules/workingSchedule';
 import {readFileSync} from 'node:fs';
@@ -206,6 +207,74 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
       }
     });
+    await t.test('admin uploads a video file and publishes it to cleaner training',async()=>{
+      let fileId:string|undefined;
+      const id='training-'+randomUUID();
+      const originalApiUrl=env.publicApiUrl;env.publicApiUrl=env.publicApiUrl.replace(/^http:/,'https:');
+      try{
+        const form=new FormData();form.append('file',new Blob([Buffer.from([0,0,0,24,...Buffer.from('ftypisom'),0,0,0,0])],{type:'video/mp4'}),'lesson.mp4');
+        const res=await fetch(base+'/admin/videos/upload',{method:'POST',headers:{Authorization:'Bearer '+signAccessToken({id:admin,role:'superadmin',phone:'fixture'})},body:form});
+        const result=await res.json() as any;assert.equal(res.status,201,JSON.stringify(result));fileId=result.data.id;assert.equal(result.data.mime_type,'video/mp4');
+        const saved=await request('/admin/videos','POST',{id,title:'Lesson',videoUrl:result.data.public_url,audienceType:'cleaner',isActive:true});assert.equal(saved.status,200,JSON.stringify(saved.json));
+        const list=await request('/training/videos?audience=cleaner');assert.ok(list.json.data.some((v:any)=>v.id===id));
+        const bad=new FormData();bad.append('file',new Blob(['not a video'],{type:'video/mp4'}),'lesson.mp4');
+        assert.equal((await fetch(base+'/admin/videos/upload',{method:'POST',headers:{Authorization:'Bearer '+signAccessToken({id:admin,role:'superadmin',phone:'fixture'})},body:bad})).status,400);
+      }finally{env.publicApiUrl=originalApiUrl;await db.query('DELETE FROM training_videos WHERE id=$1',[id]);if(fileId)await db.query('DELETE FROM files WHERE id=$1',[fileId]);}
+    });
+    await t.test('photo changes await separate moderation and always notify both admin roles',async()=>{
+      const photo=randomUUID(),next=randomUUID(),requestIds:string[]=[];
+      const settings=(await db.query("SELECT value FROM app_settings WHERE key='adminNotificationRules'")).rows[0];
+      const before=(await db.query('SELECT verification_status FROM cleaner_profiles WHERE user_id=$1',[cleaner])).rows[0];
+      const send=async(url:string)=>{const res=await fetch(base+'/cleaner/profile-photo',{method:'POST',headers:{Authorization:'Bearer '+signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'}),'Content-Type':'application/json'},body:JSON.stringify({url})});return {status:res.status,json:await res.json() as any};};
+      try{
+        await db.query("INSERT INTO app_settings(key,value) VALUES('adminNotificationRules',$1) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[{enabled:false}]);
+        for(const id of [photo,next])await db.query("INSERT INTO files(id,owner_id,bucket,object_key,mime_type,public_url) VALUES($1,$2,$3,$4,'image/jpeg',$5)",[id,cleaner,env.minioBucket,id+'.jpg',env.minioPublicUrl.replace(/\/$/,'')+'/'+id+'.jpg']);
+        const url=env.minioPublicUrl.replace(/\/$/,'')+'/'+photo+'.jpg';
+        const sent=await send(url);assert.equal(sent.status,201,JSON.stringify(sent.json));requestIds.push(sent.json.data.id);
+        assert.equal(sent.json.data.status,'pending');
+        assert.equal((await send(url)).json.data.id,sent.json.data.id);
+        assert.equal(Number((await db.query("SELECT COUNT(*) FROM notifications WHERE target_id=$1 AND target_type='profile_photo'",[sent.json.data.id])).rows[0].count),2);
+        assert.equal((await db.query('SELECT verification_status FROM cleaner_profiles WHERE user_id=$1',[cleaner])).rows[0].verification_status,before.verification_status);
+        const queue=await request('/admin/cleaner-photos');assert.ok(queue.json.data.some((p:any)=>p.id===sent.json.data.id));
+        assert.equal((await request('/admin/cleaner-photos/'+sent.json.data.id+'/review','POST',{status:'approved'})).status,200);
+        const updated=await send(env.minioPublicUrl.replace(/\/$/,'')+'/'+next+'.jpg');requestIds.push(updated.json.data.id);
+        assert.equal((await db.query('SELECT status FROM cleaner_documents WHERE id=$1',[sent.json.data.id])).rows[0].status,'approved');
+        assert.equal((await request('/admin/cleaner-photos/'+updated.json.data.id+'/review','POST',{status:'rejected'})).status,200);
+        assert.equal((await request('/admin/cleaner-photos/'+updated.json.data.id+'/review','POST',{status:'approved'})).status,409);
+        const outsider=await fetch(base+'/cleaner/profile-photo',{method:'POST',headers:{Authorization:'Bearer '+signAccessToken({id:customer,role:'customer',phone:'fixture'}),'Content-Type':'application/json'},body:JSON.stringify({url})});assert.equal(outsider.status,403);
+      }finally{
+        if(settings)await db.query("UPDATE app_settings SET value=$1 WHERE key='adminNotificationRules'",[settings.value]);else await db.query("DELETE FROM app_settings WHERE key='adminNotificationRules'");
+        await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[requestIds]);
+        await db.query("DELETE FROM notifications WHERE user_id=$1 AND dedupe_key LIKE 'profile-photo-reviewed-%'",[cleaner]);
+        await db.query("DELETE FROM audit_logs WHERE entity_id=ANY($1::text[])",[requestIds]);
+        await db.query('DELETE FROM cleaner_documents WHERE file_id=ANY($1::uuid[])',[[photo,next]]);
+        await db.query('DELETE FROM files WHERE id=ANY($1::uuid[])',[[photo,next]]);
+      }
+    });
+    await t.test('Guru discount is identical in authenticated quote, package and ordinary order extras',async()=>{
+      const user=randomUUID(),pkg=randomUUID(),ordinary=randomUUID(),special=randomUUID(),address=randomUUID(),order=randomUUID(),payment=randomUUID();
+      const token=signAccessToken({id:user,role:'customer',phone:'guru'});
+      const old=(await db.query("SELECT value FROM app_settings WHERE key='customerTierRules'")).rows[0];
+      try{
+        await db.query("DELETE FROM app_settings WHERE key='customerTierRules'");
+        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'customer','approved')",[user,'guru-'+user]);
+        await db.query("INSERT INTO payments(id,customer_id,provider,status,amount,paid_at) VALUES($1,$2,'kaspi','paid',600000,NOW())",[payment,user]);
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Guru package',2,1,0,100)",[pkg]);
+        await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes,paid_separately) VALUES($1,'Ordinary',1000,30,FALSE),($2,'Specialist',9000,120,TRUE)",[ordinary,special]);
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Test','1',100)",[address,user]);
+        const input={packageId:pkg,area:100,addonsDetailed:[{id:ordinary,quantity:2},{id:special,quantity:1}]};
+        const response=await fetch(base+'/packages/quote',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(input)});
+        const quote=(await response.json() as any).data;assert.equal(response.status,200);assert.equal(quote.tierDiscountPercent,10);assert.equal(quote.tierDiscountAmount,2200);assert.equal(quote.monthlyPrice,19800);
+        const anonymous=await fetch(base+'/packages/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...input,customerId:user,tierDiscountPercent:100})});
+        assert.equal((await anonymous.json() as any).data.monthlyPrice,22000);
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,address_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status) VALUES($1,$2,$3,$4,'2039-04-02','08:00','10:40',160,'assigned')",[order,user,cleaner,address]);
+        const changed=await updateOrderAddons(db,order,user,[{id:ordinary,quantity:2},{id:special,quantity:1}]);assert.equal(changed.payableAmount,1800);
+        assert.equal(Number((await db.query('SELECT price FROM order_addons WHERE order_id=$1 AND addon_id=$2',[order,special])).rows[0].price),9000);
+      }finally{
+        if(old)await db.query("INSERT INTO app_settings(key,value) VALUES('customerTierRules',$1) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[JSON.stringify(old.value)]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);await db.query('DELETE FROM catalog_addons WHERE id=ANY($1::uuid[])',[[ordinary,special]]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);await db.query('DELETE FROM app_users WHERE id=$1',[user]);
+      }
+    });
     await t.test('time selection includes extra quantities before filtering conflicting cleaners',async()=>{
       const pkg=randomUUID(),address=randomUUID(),purchase=randomUUID(),addon=randomUUID(),special=randomUUID(),busy=randomUUID();
       await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
@@ -224,8 +293,20 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal(withExtras.status,200,JSON.stringify(withExtras.json));
         assert.ok(withExtras.json.data.some((slot:any)=>slot.startTime==='08:00'&&slot.endTime==='11:30'&&slot.durationMinutes===210));
         assert.ok(!withExtras.json.data.some((slot:any)=>slot.startTime==='10:00'));
+        await db.query("UPDATE service_orders SET estimated_duration_minutes=552,start_time='08:00',end_time='17:12' WHERE id=$1",[busy]);
+        const edited=await request(path+'&orderId='+busy,'GET',undefined,true);
+        assert.equal(edited.status,200,JSON.stringify(edited.json));
+        assert.ok(edited.json.data.some((slot:any)=>slot.startTime==='08:00'&&slot.endTime==='17:12'&&slot.durationMinutes===552&&slot.cleanersCount===1));
+        await db.query("INSERT INTO order_addons(order_id,addon_id,quantity,price,duration_minutes,payment_status,requires_customer_approval) VALUES($1,$2,2,1000,392,'paid',FALSE)",[busy,addon]);
+        const preserved=await request(path+'&orderId='+busy+'&addonsDetailed='+encodeURIComponent(JSON.stringify([{id:addon,quantity:2}])),'GET',undefined,true);
+        assert.ok(preserved.json.data.some((slot:any)=>slot.startTime==='08:00'&&slot.endTime==='17:12'&&slot.durationMinutes===552));
+        const moved=await request('/orders/'+busy+'/reschedule','POST',{date:'2039-04-03',time:'14:00',addonsDetailed:[{id:addon,quantity:2}]},true);
+        assert.equal(moved.status,200,JSON.stringify(moved.json));assert.equal(moved.json.data.order.end_time,'23:12:00');assert.equal(Number(moved.json.data.order.estimated_duration_minutes),552);
+        const other=await request('/scheduling/available-slots?date=2039-04-02&orderId='+busy);assert.equal(other.status,404);
+        const unavailable=await request('/scheduling/available-slots?date=2039-04-05&orderId='+busy,'GET',undefined,true);assert.deepEqual(unavailable.json.data,[]);
         for(const quantity of [0,51])assert.equal((await request(path+'&addonsDetailed='+encodeURIComponent(JSON.stringify([{id:addon,quantity}])),'GET',undefined,true)).status,400);
       }finally{
+        await db.query('DELETE FROM notifications WHERE target_id=$1',[busy]);
         await db.query('DELETE FROM service_orders WHERE id=$1',[busy]);
         await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
         await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);

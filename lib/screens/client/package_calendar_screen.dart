@@ -1193,7 +1193,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       addUsed(_normalizedAddonItems(slot['addonsDetailed']));
     }
     for (final entry in _selectedAddonsByDate.entries) {
-      if (entry.key == excludeDateKey || !_selectedTimes.containsKey(entry.key)) {
+      if (entry.key == excludeDateKey ||
+          !_selectedTimes.containsKey(entry.key)) {
         continue;
       }
       addUsed(entry.value);
@@ -1389,7 +1390,14 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     required List<_ScheduleAddonGroupDef> addonGroups,
     required List<Map<String, dynamic>> initialPaidSelection,
     required List<Map<String, dynamic>> initialNewSelection,
-  }) {
+  }) async {
+    final profile = await _data.customerProfileStream().first;
+    if (!mounted) return null;
+    final tierPercent =
+        (profile?['tier_discount_percent'] as num?)?.toInt() ?? 0;
+    int priceFor(_ScheduleAddonItemDef item) => item.separatePayment
+        ? item.price
+        : (item.price * (1 - tierPercent.clamp(0, 100) / 100)).round();
     final paidQuantities = <String, int>{};
     for (final item in initialPaidSelection) {
       final key = (item['key'] ?? item['label'] ?? '').toString();
@@ -1441,7 +1449,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                     'key': item.key,
                     'label': item.label,
                     'quantity': quantity,
-                    'price': item.price,
+                    'price': priceFor(item),
                     'separatePayment': item.separatePayment,
                     'separate': item.separatePayment,
                     'purchaseType': 'new',
@@ -1809,15 +1817,16 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                                                   .center,
                                                           children: [
                                                             Text(
-                                                              item.price > 0
+                                                              priceFor(item) > 0
                                                                   ? item
                                                                           .supportsQuantity
                                                                       ? "{p0} за 1 шт.".tr(
                                                                           params: {
-                                                                              'p0': (_formatMoney(item.price)).toString()
+                                                                              'p0': (_formatMoney(priceFor(item))).toString()
                                                                             })
                                                                       : _formatMoney(
-                                                                          item.price,
+                                                                          priceFor(
+                                                                              item),
                                                                         )
                                                                   : "Цена уточняется"
                                                                       .tr(),

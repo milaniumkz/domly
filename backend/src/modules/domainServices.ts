@@ -533,7 +533,7 @@ export class SchedulingService {
     )).rows;
   }
 
-  async availableSlotCounts(date: string, slots: Array<{ startTime: string; endTime: string; durationMinutes?:number }>, zoneId?: string) {
+  async availableSlotCounts(date: string, slots: Array<{ startTime: string; endTime: string; durationMinutes?:number }>, zoneId?: string, options: {excludeOrderId?:string;cleanerId?:string} = {}) {
     if (!slots.length) return [];
     // Count all requested intervals in one round trip. Do not transfer every
     // cleaner's name/phone five times just to calculate array lengths.
@@ -541,19 +541,20 @@ export class SchedulingService {
       SELECT s.ordinal, (
         SELECT COUNT(*)::int FROM app_users u
         JOIN cleaner_profiles cp ON cp.user_id=u.id
-        ${zoneId ? 'JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$5' : ''}
+        ${zoneId ? 'JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$7' : ''}
         WHERE u.role='cleaner' AND u.status='approved' AND cp.verification_status='approved'
+          AND ($6::uuid IS NULL OR u.id=$6)
           AND ${approvedWorkStartSql('u.id','$1','s.starts')}
           AND NOT EXISTS (
             SELECT 1 FROM service_orders o WHERE o.cleaner_id=u.id
+              AND ($5::uuid IS NULL OR o.id<>$5)
               AND o.status NOT IN ('cancelled','completed')
               AND o.scheduled_date+o.start_time<cleaning_end_at($1::date,s.starts,s.ends,s.minutes) AND cleaning_end_at(o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes)>$1::date+s.starts
           )
       ) AS count
       FROM unnest($2::time[], $3::time[], $4::int[]) WITH ORDINALITY AS s(starts,ends,minutes,ordinal)
       ORDER BY s.ordinal`,
-    zoneId ? [date,slots.map(s=>s.startTime),slots.map(s=>s.endTime),slots.map(s=>s.durationMinutes??null),zoneId]
-      : [date,slots.map(s=>s.startTime),slots.map(s=>s.endTime),slots.map(s=>s.durationMinutes??null)])).rows;
+    [date,slots.map(s=>s.startTime),slots.map(s=>s.endTime),slots.map(s=>s.durationMinutes??null),options.excludeOrderId??null,options.cleanerId??null,...(zoneId?[zoneId]:[])])).rows;
     return rows.map(row=>({...slots[Number(row.ordinal)-1],cleanersCount:row.count}));
   }
 

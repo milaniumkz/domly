@@ -4,6 +4,7 @@ import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/widgets.dart';
+import '../../../utils/video_source.dart';
 
 Widget buildVideoEmbedPlayer({
   required String videoUrl,
@@ -13,7 +14,7 @@ Widget buildVideoEmbedPlayer({
   final viewType = 'domly-video-${sourceUrl.hashCode}';
 
   ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
-    if (_isDirectVideo(sourceUrl)) {
+    if (isDirectVideoSource(sourceUrl)) {
       final video = html.VideoElement()
         ..src = sourceUrl
         ..controls = true
@@ -40,19 +41,6 @@ Widget buildVideoEmbedPlayer({
     borderRadius: borderRadius,
     child: HtmlElementView(viewType: viewType),
   );
-}
-
-bool _isDirectVideo(String rawUrl) {
-  final uri = Uri.tryParse(rawUrl);
-  if (uri == null) {
-    return false;
-  }
-  final path = uri.path.toLowerCase();
-  return path.endsWith('.mp4') ||
-      path.endsWith('.webm') ||
-      path.endsWith('.ogg') ||
-      path.endsWith('.mov') ||
-      path.endsWith('.m3u8');
 }
 
 String _resolvedPlayerUrl(String rawUrl) {

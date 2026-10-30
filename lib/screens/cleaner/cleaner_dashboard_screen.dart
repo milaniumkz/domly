@@ -1155,12 +1155,14 @@ class _CleanerDashboardScreenState extends State<CleanerDashboardScreen> {
             final unseenCount = videos
                 .where((video) => !viewedIds.contains(video['id']))
                 .length;
-            return domlyTopBadgeIconButton(
-              icon: Icons.ondemand_video_outlined,
-              badgeCount: unseenCount,
-              onPressed: () =>
-                  Navigator.pushNamed(context, '/cleaner/training'),
-            );
+            return Tooltip(
+                message: 'Обучение'.tr(),
+                child: domlyTopBadgeIconButton(
+                  icon: Icons.school_outlined,
+                  badgeCount: unseenCount,
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/cleaner/training'),
+                ));
           },
         );
       },

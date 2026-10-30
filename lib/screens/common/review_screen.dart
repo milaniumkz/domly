@@ -10,9 +10,10 @@ import '../../ui/domly_ui.dart';
 import '../../localization/translation_controller.dart';
 
 class ReviewScreen extends StatefulWidget {
-  const ReviewScreen({super.key, required this.orderId});
+  const ReviewScreen({super.key, required this.orderId, this.reviews});
 
   final String orderId;
+  final Stream<List<Map<String, dynamic>>>? reviews;
 
   @override
   State<ReviewScreen> createState() => _ReviewScreenState();
@@ -38,6 +39,16 @@ class _ReviewScreenState extends State<ReviewScreen> {
   final _photoService = PhotoUploadService();
   final _textController = TextEditingController();
   final Set<String> _selectedTraits = <String>{};
+  late final Stream<List<Map<String, dynamic>>> _customerReviews =
+      (widget.reviews ?? _data.reviewsStream())
+          .map((reviews) => reviews
+              .where((review) =>
+                  (review['authorRole'] ??
+                      review['author_role'] ??
+                      'customer') ==
+                  'customer')
+              .toList())
+          .asBroadcastStream(onCancel: (subscription) => subscription.cancel());
   int _rating = 5;
   bool _loading = false;
   String? _photoUrl;
@@ -82,7 +93,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
             DomlyHeader(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
               child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: _data.reviewsStream(),
+                stream: _customerReviews,
                 builder: (context, snapshot) {
                   TranslationScope.watch(context);
                   final reviews =
@@ -135,7 +146,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
             ),
             Expanded(
               child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: _data.reviewsStream(),
+                stream: _customerReviews,
                 builder: (context, snapshot) {
                   TranslationScope.watch(context);
                   final reviews =
@@ -368,7 +379,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                 child: StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: _data.reviewsStream(),
+                  stream: _customerReviews,
                   builder: (context, snapshot) {
                     TranslationScope.watch(context);
                     final reviews =

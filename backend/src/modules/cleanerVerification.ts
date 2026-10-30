@@ -25,7 +25,7 @@ export async function verifyCleaner(db: Database, notifications: NotificationSer
       work_start_date=CASE WHEN EXCLUDED.verification_status='approved' THEN COALESCE(cleaner_profiles.work_start_date,CURRENT_DATE) ELSE cleaner_profiles.work_start_date END,
       verified_at=CASE WHEN EXCLUDED.verification_status='approved' THEN COALESCE(cleaner_profiles.verified_at,NOW()) ELSE NULL END,updated_at=NOW()
       RETURNING *`,[cleanerId,status])).rows);
-    const documents=await tx.query('UPDATE cleaner_documents SET status=$2::profile_status WHERE cleaner_id=$1 AND status<>$2::profile_status',[cleanerId,status]);
+    const documents=await tx.query(`UPDATE cleaner_documents SET status=$2::profile_status WHERE cleaner_id=$1 AND type<>'profile_photo' AND status<>$2::profile_status`,[cleanerId,status]);
     const changed=previous.status!==status || previous.registration_status!==status || previous.verification_status!==status || Boolean(documents.rowCount);
     let saved;
     if (changed) {

@@ -4743,6 +4743,13 @@
     ]
   },
   {
+    "key": "t_b02fa5e2936c3e41",
+    "source": "Исполнителей: {p0}",
+    "locations": [
+      "lib/screens/client/orders_screen.dart"
+    ]
+  },
+  {
     "key": "t_2c5e7a631b569a12",
     "source": "Исполнитель",
     "locations": [
@@ -6020,10 +6027,16 @@
     ]
   },
   {
+    "key": "t_da55f3d3a0603cb0",
+    "source": "На выбранную дату нет свободных уборщиц. Выберите другую дату.",
+    "locations": [
+      "lib/screens/client/orders_screen.dart"
+    ]
+  },
+  {
     "key": "t_619094fdddf48c8d",
     "source": "На выбранную дату свободных окон нет. Выберите другую дату.",
     "locations": [
-      "lib/screens/client/orders_screen.dart",
       "lib/screens/client/package_calendar_screen.dart"
     ]
   },
@@ -6479,6 +6492,13 @@
     ]
   },
   {
+    "key": "t_0be0bbe3eb904eb3",
+    "source": "Не удалось загрузить время. Попробуйте снова.",
+    "locations": [
+      "lib/screens/client/orders_screen.dart"
+    ]
+  },
+  {
     "key": "t_5431c3fdd666c700",
     "source": "Не удалось загрузить выплаты",
     "locations": [
@@ -6874,6 +6894,13 @@
     "source": "Не удалось отправить отзыв",
     "locations": [
       "lib/screens/common/review_screen.dart"
+    ]
+  },
+  {
+    "key": "t_3ed6e7a07c4c997a",
+    "source": "Не удалось отправить фото",
+    "locations": [
+      "lib/ui/cleaner_profile_photo.dart"
     ]
   },
   {
@@ -7487,6 +7514,7 @@
     "source": "Обучение",
     "locations": [
       "lib/app/domly_app.dart",
+      "lib/screens/cleaner/cleaner_dashboard_screen.dart",
       "lib/screens/client/settings_screen.dart"
     ]
   },
@@ -8511,6 +8539,7 @@
       "lib/screens/common/photo_report_screen.dart",
       "lib/screens/common/review_screen.dart",
       "lib/screens/phone_auth_screen.dart",
+      "lib/ui/cleaner_profile_photo.dart",
       "lib/ui/cleaner_work_schedule.dart"
     ]
   },
@@ -9737,6 +9766,13 @@
     ]
   },
   {
+    "key": "t_07207d09a17eb28b",
+    "source": "Попробуйте снова.",
+    "locations": [
+      "lib/ui/cleaner_profile_photo.dart"
+    ]
+  },
+  {
     "key": "t_9831b4bd8b2bec42",
     "source": "Популярно",
     "locations": [
@@ -9776,6 +9812,13 @@
     "source": "После завершения уборок здесь появятся предыдущие заказы.",
     "locations": [
       "lib/screens/cleaner/cleaner_orders_screen.dart"
+    ]
+  },
+  {
+    "key": "t_36d4c9486bca03a8",
+    "source": "После одобрения администратором фото появится в профиле.",
+    "locations": [
+      "lib/ui/cleaner_profile_photo.dart"
     ]
   },
   {
@@ -10521,6 +10564,13 @@
     ]
   },
   {
+    "key": "t_dad136b620ecb987",
+    "source": "Размер видео не должен превышать 50 МБ.",
+    "locations": [
+      "lib/services/photo_upload_service.dart"
+    ]
+  },
+  {
     "key": "t_29f24cbd990bee75",
     "source": "Размер скидки зависит от количества квартир в одном адресном сценарии обслуживания. Финальная скидка применяется при подтверждении заказа.",
     "locations": [
@@ -11110,6 +11160,13 @@
     "source": "Сменить рабочие районы",
     "locations": [
       "lib/screens/cleaner/cleaner_profile_screen.dart"
+    ]
+  },
+  {
+    "key": "t_845eddf900976389",
+    "source": "Сменить фото",
+    "locations": [
+      "lib/ui/cleaner_profile_photo.dart"
     ]
   },
   {
@@ -12559,6 +12616,13 @@
     ]
   },
   {
+    "key": "t_749e2c51a0f08d44",
+    "source": "Фото на проверке",
+    "locations": [
+      "lib/ui/cleaner_profile_photo.dart"
+    ]
+  },
+  {
     "key": "t_c7c575c4e4239845",
     "source": "Фото не добавлено",
     "locations": [
@@ -12570,6 +12634,20 @@
     "source": "Фото не добавлены",
     "locations": [
       "lib/screens/common/complaint_screen.dart"
+    ]
+  },
+  {
+    "key": "t_22932c960f043706",
+    "source": "Фото отклонено. Загрузите другое селфи.",
+    "locations": [
+      "lib/ui/cleaner_profile_photo.dart"
+    ]
+  },
+  {
+    "key": "t_fe2914433f55c3f2",
+    "source": "Фото отправлено на проверку",
+    "locations": [
+      "lib/ui/cleaner_profile_photo.dart"
     ]
   },
   {

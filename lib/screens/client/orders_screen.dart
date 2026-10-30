@@ -2681,6 +2681,9 @@ class _OrdersScreenState extends State<OrdersScreen>
     DateTime? selectedDate;
     String? selectedTime;
     final addonQuantities = _loadAddonQuantities(slot);
+    final profile = await _data.customerProfileStream().first;
+    final tierPercent =
+        (profile?['tier_discount_percent'] as num?)?.toInt() ?? 0;
     final relatedAddonRequests = await _customerAddonRequestsForSlot(slot);
     if (!mounted) {
       return;
@@ -2693,6 +2696,8 @@ class _OrdersScreenState extends State<OrdersScreen>
     var datesRequested = false;
     var loadingDates = false;
     var loadingSlots = false;
+    var slotsRequestId = 0;
+    String? slotsError;
     var availableDates = <Map<String, dynamic>>[];
     var availableSlots = <Map<String, dynamic>>[];
     var showDatePicker = true;
@@ -2783,14 +2788,6 @@ class _OrdersScreenState extends State<OrdersScreen>
               }
               setModalState(() {
                 availableDates = editableDatesForMonth(dates);
-                final currentKey =
-                    '${currentDate.year.toString().padLeft(4, '0')}-${currentDate.month.toString().padLeft(2, '0')}-${currentDate.day.toString().padLeft(2, '0')}';
-                if (selectedDate == null &&
-                    availableDates.any(
-                      (item) => (item['date'] ?? '').toString() == currentKey,
-                    )) {
-                  selectedDate = currentDate;
-                }
                 loadingDates = false;
               });
             }
@@ -2799,27 +2796,41 @@ class _OrdersScreenState extends State<OrdersScreen>
               if (subscriptionId.isEmpty) {
                 return;
               }
+              final requestId = ++slotsRequestId;
               setModalState(() {
+                slotsError = null;
                 loadingSlots = true;
                 selectedDate = date;
                 selectedTime = null;
                 availableSlots = <Map<String, dynamic>>[];
                 showDatePicker = false;
               });
-              final result = await _data.getAvailableSlots(
-                subscriptionId: subscriptionId,
-                date: date,
-              );
-              final slots = (result['slots'] as List? ?? const [])
-                  .map((item) => Map<String, dynamic>.from(item as Map))
-                  .toList();
-              if (!context.mounted) {
-                return;
+              try {
+                final details = await _selectedAddonsDetailed(addonQuantities);
+                final result = await _data.getAvailableSlots(
+                  subscriptionId: subscriptionId,
+                  date: date,
+                  orderId: (slot['orderId'] ?? slot['id']).toString(),
+                  newAddonsDetailed: details,
+                );
+                final slots = (result['slots'] as List? ?? const [])
+                    .map((item) => Map<String, dynamic>.from(item as Map))
+                    .toList();
+                if (!context.mounted || requestId != slotsRequestId) {
+                  return;
+                }
+                setModalState(() {
+                  availableSlots = slots;
+                  loadingSlots = false;
+                });
+              } catch (_) {
+                if (context.mounted && requestId == slotsRequestId)
+                  setModalState(() {
+                    loadingSlots = false;
+                    slotsError =
+                        'Не удалось загрузить время. Попробуйте снова.';
+                  });
               }
-              setModalState(() {
-                availableSlots = slots;
-                loadingSlots = false;
-              });
             }
 
             if (!addonsOnly && !datesRequested) {
@@ -3000,9 +3011,11 @@ class _OrdersScreenState extends State<OrdersScreen>
                         const SizedBox(height: 10),
                         if (loadingSlots)
                           const Center(child: CircularProgressIndicator())
+                        else if (slotsError != null)
+                          Text(slotsError!.tr())
                         else if (availableSlots.isEmpty)
                           Text(
-                            'На выбранную дату свободных окон нет. Выберите другую дату.'
+                            'На выбранную дату нет свободных уборщиц. Выберите другую дату.'
                                 .tr(),
                             style: TextStyle(
                                 color:
@@ -3041,6 +3054,11 @@ class _OrdersScreenState extends State<OrdersScreen>
                                             ),
                                           ),
                                         ),
+                                        Text('Исполнителей: {p0}'.tr(params: {
+                                          'p0':
+                                              '${item['availableCleaners'] ?? 0}'
+                                        })),
+                                        const SizedBox(width: 8),
                                         if (isSelected)
                                           Text(
                                             'Выбрано'.tr(),
@@ -3115,7 +3133,11 @@ class _OrdersScreenState extends State<OrdersScreen>
                               addonQuantities[item.key] = next;
                             }
                           });
+                          if (!addonsOnly && selectedDate != null) {
+                            loadSlots(selectedDate!);
+                          }
                         },
+                        discountPercent: tierPercent,
                         area: num.tryParse(
                                 '${slot['area'] ?? slot['apartmentArea'] ?? 0}') ??
                             0,
@@ -3125,7 +3147,12 @@ class _OrdersScreenState extends State<OrdersScreen>
                     DomlyPrimaryButton(
                       label:
                           addonsOnly ? 'Заказать допы' : 'Сохранить изменения',
-                      onPressed: () => Navigator.pop(context, true),
+                      onPressed: loadingSlots ||
+                              (!addonsOnly &&
+                                  selectedDate != null &&
+                                  selectedTime == null)
+                          ? null
+                          : () => Navigator.pop(context, true),
                     ),
                   ],
                 ),
@@ -3579,7 +3606,8 @@ class _OrdersScreenState extends State<OrdersScreen>
       bool expanded,
       VoidCallback onToggle,
       void Function(OrderAddonItem item, int quantity) onItemChanged,
-      {num area = 0}) {
+      {num area = 0,
+      int discountPercent = 0}) {
     final selectedCount = _selectedCountForGroup(group, addonQuantities);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -3655,6 +3683,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                         addonQuantities,
                         (next) => onItemChanged(item, next),
                         area: area,
+                        discountPercent: discountPercent,
                       ),
                     )
                     .toList(),
@@ -3667,9 +3696,14 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   Widget _buildAddonEditorRow(OrderAddonItem item,
       Map<String, int> addonQuantities, ValueChanged<int> onChanged,
-      {num area = 0}) {
+      {num area = 0, int discountPercent = 0}) {
     final quantity = addonQuantities[item.key] ?? 0;
-    final unitPrice = _addonUnitPrices[item.key];
+    final rawPrice = _addonUnitPrices[item.key];
+    final unitPrice = rawPrice == null
+        ? null
+        : item.separatePayment
+            ? rawPrice
+            : (rawPrice * (1 - discountPercent.clamp(0, 100) / 100)).round();
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

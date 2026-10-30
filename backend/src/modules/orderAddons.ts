@@ -1,3 +1,4 @@
+import {customerTierDiscount,discountedServicePrice} from './customerProgress';
 import {durationAfterAddonChange} from './cleaningDuration';
 import {notifySpecialistAddons} from './specialistAddons';
 import type {NotificationService} from './domainServices';
@@ -25,13 +26,15 @@ export async function updateOrderAddons(db: Database, orderId: string, customerI
     for (const row of existing.filter(row=>row.payment_status==='paid')) paid.set(row.addon_id,(paid.get(row.addon_id) ?? 0)+Number(row.quantity));
     for (const [id,quantity] of paid) if ((selected.get(id) ?? 0)<quantity) throw new ApiError(409,'paid_addon','Оплаченные услуги нельзя удалить без возврата.');
     await tx.query("DELETE FROM order_addons WHERE order_id=$1 AND payment_status<>'paid' AND requires_customer_approval IS DISTINCT FROM TRUE",[orderId]);
+    const tierPercent=await customerTierDiscount(tx,customerId);
     for (const [id,totalQuantity] of selected) {
       const quantity = totalQuantity-(paid.get(id) ?? 0);
       if (quantity<=0) continue;
       const addon = first<any>((await tx.query('SELECT * FROM catalog_addons WHERE id=$1 AND active=TRUE',[id])).rows);
       if (!addon) throw new ApiError(400,'invalid_addons','Услуга недоступна.');
       const address = first<any>((await tx.query('SELECT area FROM customer_addresses WHERE id=$1',[order.address_id])).rows);
-      const price = Number(addon.price) * (['per_m2','per_sqm'].includes(addon.pricing_type)?Number(address?.area ?? order.area):1);
+      const unit = Number(addon.price) * (['per_m2','per_sqm'].includes(addon.pricing_type)?Number(address?.area ?? order.area):1);
+      const price=addon.paid_separately?unit:discountedServicePrice(unit,tierPercent);
       await tx.query("INSERT INTO order_addons (order_id,addon_id,quantity,price,duration_minutes,payment_status,paid_separately,requires_customer_approval) VALUES ($1,$2,$3,$4,$5,$6,$7,FALSE)",[orderId,id,quantity,price,addon.paid_separately?0:Number(addon.duration_minutes)*quantity,addon.paid_separately?'draft':'pending',addon.paid_separately]);
     }
     const totals = first<any>((await tx.query(`SELECT COALESCE(SUM(price*quantity) FILTER (WHERE paid_separately=FALSE AND requires_customer_approval IS DISTINCT FROM TRUE),0) AS total,

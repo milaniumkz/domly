@@ -199,6 +199,10 @@ export const openApiSpec = {
         requestBody: jsonBody({ fullName: 'Анна', soundVolume: 80, alarmSound: 'system' }),
       },
     },
+    '/cleaner/profile-photo': {post:{...secured('Отправить собственное селфи на отдельное одобрение'),requestBody:jsonBody({url:'https://domly.kz/api/v1/files/media?key=...'})}},
+    '/admin/cleaner-photos': {get:secured('Новые фото уборщиц на проверку')},
+    '/admin/cleaner-photos/{id}/review': {post:{...secured('Одобрить или отклонить фото без смены верификации'),parameters:[path('id')],requestBody:jsonBody({status:'approved'})}},
+    '/admin/videos/upload': {post:{...secured('Загрузить обучающее видео MP4 или WebM до 50 МБ'),requestBody:multipartBody({file:'binary'})}},
     '/cleaner/documents': {
       post: {
         ...secured('Загрузить документ уборщицы'),
@@ -402,7 +406,7 @@ export const openApiSpec = {
     '/scheduling/available-slots': {
       get: {
         ...secured('Свободные слоты только при наличии доступной уборщицы'),
-        parameters: [query('date', '2026-09-25'), query('customerPackageId','uuid'), query('addressId', 'uuid'), query('addonIds', 'uuid,uuid'), query('addonsDetailed','[{"id":"uuid","quantity":2}]')],
+        parameters: [query('date', '2026-09-25'), query('customerPackageId','uuid'),query('orderId','uuid'), query('addressId', 'uuid'), query('addonIds', 'uuid,uuid'), query('addonsDetailed','[{"id":"uuid","quantity":2}]')],
       },
     },
     '/cleaner/offers': { get: secured('Активные предложения уборщицы') },

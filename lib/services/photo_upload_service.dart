@@ -33,6 +33,21 @@ class PhotoUploadService {
     );
   }
 
+  Future<String?> pickAndUploadVideo() async {
+    final file = await _picker.pickVideo(source: ImageSource.gallery);
+    if (file == null) return null;
+    if (await file.length() > 50 * 1024 * 1024)
+      throw StateError('Размер видео не должен превышать 50 МБ.');
+    final result = await BackendApiService.instance.uploadFile(
+        path: '/admin/videos/upload',
+        bytes: await file.readAsBytes(),
+        filename: file.name,
+        contentType: file.name.toLowerCase().endsWith('.webm')
+            ? 'video/webm'
+            : 'video/mp4');
+    return (result['public_url'] ?? '').toString();
+  }
+
   Future<List<String>> pickMultipleAndUpload({
     required String folder,
     required String filePrefix,
@@ -87,9 +102,8 @@ class PhotoUploadService {
       contentType: 'image/jpeg',
       fields: {'folder': folder},
     );
-    final url = (data['public_url'] ?? data['publicUrl'] ?? '')
-        .toString()
-        .trim();
+    final url =
+        (data['public_url'] ?? data['publicUrl'] ?? '').toString().trim();
     if (url.isEmpty) {
       throw StateError('Сервис не вернул ссылку на фото.');
     }

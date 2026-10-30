@@ -1,3 +1,5 @@
+import {updateOrderAddons} from '../../modules/orderAddons';
+import {submitCleanerPhoto,reviewCleanerPhoto} from '../../modules/cleanerProfilePhoto';
 import {notifySpecialistAddons} from '../../modules/specialistAddons';
 import {prepaidBookingAddons} from '../../modules/prepaidBookingAddons';
 import {readWorkingSchedule,submitWorkingSchedule,reviewWorkingSchedule} from '../../modules/workingSchedule';
@@ -7,7 +9,7 @@ import { formatAddonRecord, formatServiceDescription } from '../../modules/servi
 import {PublicTextCatalog} from '../../modules/publicTextCatalog';
 import {freezePackage} from '../../modules/packageFreeze';
 import {adminPaymentHistory} from '../../modules/adminPaymentHistory';
-import { customerMonthlyProgress } from '../../modules/customerProgress';
+import { customerMonthlyProgress,normalizeCustomerTierRules,customerTierDiscount,discountedServicePrice } from '../../modules/customerProgress';
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
 import {idempotent,idempotentTransaction} from '../../common/idempotency';
 import {ensureChecklistReport,saveChecklist} from '../../modules/checklists';
@@ -537,6 +539,18 @@ export function buildV1Router(deps: {
     ok(res, { disabled: Boolean(row) });
   }));
 
+  router.post('/admin/videos/upload',auth(['admin','superadmin']),upload.single('file'),asyncHandler(async(req,res)=>{
+    if(!req.file)throw new ApiError(400,'file_required','Выберите видео.');
+    const bytes=req.file.buffer;
+    const mp4=bytes.length>12&&bytes.subarray(4,8).toString()==='ftyp';
+    const webm=bytes.length>4&&bytes.subarray(0,4).equals(Buffer.from([0x1a,0x45,0xdf,0xa3]));
+    if(!mp4&&!webm)throw new ApiError(400,'invalid_video','Загрузите видео MP4 или WebM.');
+    const mime=mp4?'video/mp4':'video/webm';
+    const objectKey=`training/${req.user!.id}/${randomUUID()}.${mp4?'mp4':'webm'}`;
+    const url=await deps.storage.uploadBuffer(objectKey,bytes,mime);
+    ok(res,(await deps.db.query(`INSERT INTO files(owner_id,bucket,object_key,mime_type,size_bytes,public_url) VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,[req.user!.id,env.minioBucket,objectKey,mime,req.file.size,url])).rows[0],201);
+  }));
+
   router.post('/files', auth(), upload.single('file'), technicalUpload, asyncHandler(async (req, res) => {
     if (!req.file) throw new ApiError(400, 'file_required', 'Выберите файл для загрузки.');
     const ext = extensionFromMime(req.file.mimetype);
@@ -875,7 +889,12 @@ export function buildV1Router(deps: {
   router.get('/cleaner/profile', auth(['cleaner']), asyncHandler(async (req, res) => {
     const profile = first((await deps.db.query(
       `SELECT u.id, u.numeric_id, u.phone, u.full_name, u.email, u.status, u.rating, u.created_at AS registered_at,
-              cp.*
+              cp.*,
+              (SELECT f.public_url FROM cleaner_documents d JOIN files f ON f.id=d.file_id AND f.owner_id=d.cleaner_id
+                WHERE d.cleaner_id=u.id AND d.type IN ('selfie','selfieUrl','profile_photo') AND d.status='approved'
+                AND NOT EXISTS(SELECT 1 FROM banners b WHERE b.image_file_id=f.id OR b.image_url=f.public_url)
+                AND NOT EXISTS(SELECT 1 FROM promotions p WHERE p.banner_file_id=f.id)
+                ORDER BY d.created_at DESC LIMIT 1) AS profile_photo_url
        FROM app_users u
        LEFT JOIN cleaner_profiles cp ON cp.user_id=u.id
        WHERE u.id=$1`,
@@ -939,6 +958,18 @@ export function buildV1Router(deps: {
     return profile;
     });
     ok(res, profile);
+  }));
+
+  router.post('/cleaner/profile-photo',auth(['cleaner']),asyncHandler(async(req,res)=>{
+    ok(res,await submitCleanerPhoto(deps.db,deps.notifications,req.user!.id,String(req.body.url??'')),201);
+  }));
+  router.get('/admin/cleaner-photos',auth(['admin','superadmin']),asyncHandler(async(_req,res)=>{
+    ok(res,(await deps.db.query(`SELECT d.*,f.public_url,u.full_name,u.phone FROM cleaner_documents d
+      JOIN files f ON f.id=d.file_id JOIN app_users u ON u.id=d.cleaner_id
+      WHERE d.type='profile_photo' AND d.status='pending' AND u.deleted_at IS NULL ORDER BY d.created_at DESC`)).rows);
+  }));
+  router.post('/admin/cleaner-photos/:id/review',auth(['admin','superadmin']),asyncHandler(async(req,res)=>{
+    ok(res,await reviewCleanerPhoto(deps.db,deps.notifications,String(req.params.id),String(req.body.status??''),req.user!.id));
   }));
 
   router.post('/cleaner/documents', auth(['cleaner']), upload.single('file'), technicalUpload, asyncHandler(async (req, res) => {
@@ -1382,7 +1413,7 @@ export function buildV1Router(deps: {
     ok(res, payload);
   }));
 
-  router.post('/packages/quote', asyncHandler(async (req, res) => {
+  router.post('/packages/quote', (req,res,next)=>req.header('authorization')?auth()(req,res,next):next(), asyncHandler(async (req, res) => {
     ok(res, await packageQuote(deps.db, {...req.body, customerId: req.user?.id}));
   }));
 
@@ -1459,9 +1490,11 @@ export function buildV1Router(deps: {
     const prepaidIds = new Set((Array.isArray(req.body.addonsDetailed) && req.body.addonsDetailed.length ? prepaid : (customerPackage.purchase_config?.addons ?? [])).map((item:any)=>item.id));
     const requestedAddons = Array.isArray(req.body.addonsDetailed) && req.body.addonsDetailed.length
       ? req.body.addonsDetailed : (Array.isArray(req.body.addonIds) ? req.body.addonIds.map((id: string)=>({id})) : []);
+    const tierPercent=await customerTierDiscount(deps.db,req.user!.id);
+    const serviceAddress=(await deps.db.query('SELECT COALESCE(verified_area,area) AS area FROM customer_addresses WHERE id=$1',[customerPackage.address_id])).rows[0];
     const catalogAddons = requestedAddons.length
-      ? (await deps.db.query<{ id: string; title_ru: string; title_kk: string | null; price: string; duration_minutes: number; paid_separately:boolean }>(
-        'SELECT id,title_ru,title_kk,price,duration_minutes,paid_separately FROM catalog_addons WHERE active=TRUE')).rows : [];
+      ? (await deps.db.query<{ id: string; title_ru: string; title_kk: string | null; price: string; pricing_type:string; duration_minutes: number; paid_separately:boolean }>(
+        'SELECT id,title_ru,title_kk,price,pricing_type,duration_minutes,paid_separately FROM catalog_addons WHERE active=TRUE')).rows : [];
     const addons = requestedAddons.map((item: any) => {
       const requestedId = String(item.id ?? item.addonId ?? item.key ?? '').trim();
       const label = normalizeText(String(item.label ?? item.title ?? '').trim());
@@ -1470,7 +1503,8 @@ export function buildV1Router(deps: {
       if (!addon) throw new ApiError(400,'unknown_addon','Доп. услуга не найдена в каталоге. Обновите страницу и выберите её снова.');
       const quantity = Number(item.quantity ?? 1);
       if (!Number.isInteger(quantity) || quantity<1 || quantity>50) throw new ApiError(400,'invalid_quantity','Проверьте количество доп. услуг.');
-      return {...addon,quantity};
+      const unit=Number(addon.price)*(['per_m2','per_sqm'].includes(addon.pricing_type)?Number(serviceAddress?.area??0):1);
+      return {...addon,quantity,price:addon.paid_separately?unit:discountedServicePrice(unit,tierPercent)};
     }).filter(addon=>!prepaidIds.has(addon.id));
     const addonAmount = addons.reduce((sum: number, row) => sum + (row.paid_separately ? 0 : Number(row.price)*row.quantity), 0);
     const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes ?? 0)),0);
@@ -1695,7 +1729,7 @@ export function buildV1Router(deps: {
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.area,
               cu.full_name AS customer_name, cu.phone AS customer_phone,
               cl.full_name AS cleaner_name, cl.phone AS cleaner_phone,
-              (SELECT f.public_url FROM cleaner_documents d JOIN files f ON f.id=d.file_id AND f.owner_id=d.cleaner_id WHERE d.cleaner_id=o.cleaner_id AND d.type IN ('selfie','selfieUrl') AND d.status='approved'
+              (SELECT f.public_url FROM cleaner_documents d JOIN files f ON f.id=d.file_id AND f.owner_id=d.cleaner_id WHERE d.cleaner_id=o.cleaner_id AND d.type IN ('selfie','selfieUrl','profile_photo') AND d.status='approved'
                 AND NOT EXISTS (SELECT 1 FROM banners b WHERE b.image_file_id=f.id OR b.image_url=f.public_url)
                 AND NOT EXISTS (SELECT 1 FROM promotions pr WHERE pr.banner_file_id=f.id)
                 ORDER BY d.created_at DESC LIMIT 1) AS cleaner_photo_url,
@@ -1982,7 +2016,7 @@ export function buildV1Router(deps: {
       [req.params.id, admin, req.user!.id],
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
-    const row = await deps.db.transaction(async tx => {
+    const row = await deps.db.atomic(()=>deps.db.transaction(async tx => {
       // Use the same lock order as assignment and offer acceptance.
       if (order.cleaner_id) await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[order.cleaner_id]);
       const current = first<any>((await tx.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[order.id])).rows);
@@ -1994,6 +2028,12 @@ export function buildV1Router(deps: {
       if (current.customer_package_id) {
         const pkg = (await tx.query('SELECT freeze_until::text AS freeze_until FROM customer_packages WHERE id=$1 FOR UPDATE',[current.customer_package_id])).rows[0];
         if (pkg?.freeze_until && String(date).slice(0,10)<pkg.freeze_until) throw new ApiError(409,'package_frozen','Пакет заморожен на выбранную дату.');
+      }
+      let addonsResult:any;
+      if(req.body.addonsDetailed!==undefined){
+        await tx.query('UPDATE service_orders SET scheduled_date=$2,start_time=$3 WHERE id=$1',[current.id,date,startTime]);
+        addonsResult=await updateOrderAddons(deps.db,current.id,current.customer_id,req.body.addonsDetailed,deps.notifications);
+        Object.assign(current,addonsResult.order);
       }
       const duration = Number(current.estimated_duration_minutes) > 0 ? Number(current.estimated_duration_minutes) : await estimateCleaningDurationMinutes(tx,current.address_id,[]);
       validateBookingHours(String(startTime),duration);
@@ -2008,8 +2048,8 @@ export function buildV1Router(deps: {
       }
       const updated = first((await tx.query(`UPDATE service_orders SET scheduled_date=$2,start_time=$3,end_time=$4,updated_at=NOW() WHERE id=$1 RETURNING *`,[current.id,date,startTime,endTime])).rows);
       await tx.query(`INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,$2,$3,$4)`,[current.id,current.status,req.user!.id,req.body.comment ?? 'Дата и время уборки изменены']);
-      return updated;
-    });
+      return req.body.addonsDetailed!==undefined?{order:updated,payableAmount:addonsResult.payableAmount}:updated;
+    }));
     await deps.notifications.create({userId:order.customer_id,titleRu:'Время уборки изменено',bodyRu:'Дата или время вашего заказа изменены.',targetType:'order',targetId:String(req.params.id)});
     if (order.cleaner_id) {
       await deps.notifications.create({
@@ -2059,6 +2099,7 @@ export function buildV1Router(deps: {
       const selected=req.body.addonsDetailed;
       if(!Array.isArray(selected)||!selected.length||selected.length>100)throw new ApiError(400,'invalid_addons','Выберите доп. услуги.');
       const catalog=(await deps.db.query<any>('SELECT * FROM catalog_addons WHERE active=TRUE')).rows;
+      const tierPercent=await customerTierDiscount(deps.db,order.customer_id);
       const seen=new Set<string>(),rows=[];
       for(const item of selected){
         const id=String(item?.id??item?.addonId??item?.key??'');
@@ -2067,7 +2108,8 @@ export function buildV1Router(deps: {
         const quantity=Number(item?.quantity??1);
         if(!addon||!Number.isInteger(quantity)||quantity<1||quantity>50||seen.has(addon.id))throw new ApiError(400,'invalid_addons','Проверьте выбранные услуги и количество.');
         seen.add(addon.id);
-        const price=Number(addon.price)*(['per_m2','per_sqm'].includes(addon.pricing_type)?Number(order.service_area??0):1);
+        const unit=Number(addon.price)*(['per_m2','per_sqm'].includes(addon.pricing_type)?Number(order.service_area??0):1);
+        const price=addon.paid_separately?unit:discountedServicePrice(unit,tierPercent);
         const existing=(await deps.db.query(`SELECT * FROM order_addons WHERE order_id=$1 AND addon_id=$2 AND quantity=$3 AND requires_customer_approval=TRUE AND payment_status IN ('pending','draft')`,[order.id,addon.id,quantity])).rows[0];
         const row=existing??(await deps.db.query(`INSERT INTO order_addons(order_id,addon_id,quantity,price,duration_minutes,payment_status,paid_separately,requires_customer_approval)
           VALUES($1,$2,$3,$4,$5,$6,$7,TRUE) RETURNING *`,[order.id,addon.id,quantity,price,addon.paid_separately?0:Number(addon.duration_minutes)*quantity,addon.paid_separately?'draft':'pending',addon.paid_separately])).rows[0];
@@ -2224,7 +2266,26 @@ export function buildV1Router(deps: {
     let duration = Number(req.query.durationMinutes ?? 0) > 0
       ? Number(req.query.durationMinutes)
       : await estimateCleaningDurationMinutes(deps.db, req.query.addressId ? String(req.query.addressId) : undefined, addons);
-    if(req.query.customerPackageId){
+    let editedOrder:any;
+    if(req.query.orderId){
+      editedOrder=first<any>((await deps.db.query('SELECT * FROM service_orders WHERE id=$1 AND customer_id=$2',[String(req.query.orderId),req.user!.id])).rows);
+      if(!editedOrder)throw new ApiError(404,'not_found','Заказ не найден.');
+      if(!['assigned','waiting_cleaner','pending_assignment','pending_payment'].includes(editedOrder.status))throw new ApiError(409,'order_not_editable','Этот заказ нельзя перенести.');
+      duration=Number(editedOrder.estimated_duration_minutes)||await estimateCleaningDurationMinutes(deps.db,editedOrder.address_id,[]);
+      if(detailed!==null){
+        const previous=(await deps.db.query<any>(`SELECT * FROM order_addons WHERE order_id=$1 AND requires_customer_approval IS DISTINCT FROM TRUE AND payment_status::text NOT IN ('cancelled','refunded','rejected')`,[editedOrder.id])).rows;
+        const oldMinutes=previous.reduce((sum,row)=>sum+Number(row.duration_minutes),0);
+        let nextMinutes=0;
+        for(const addon of addons){
+          const paid=previous.filter(row=>row.addon_id===addon.id&&row.payment_status==='paid');
+          const paidQuantity=paid.reduce((sum,row)=>sum+Number(row.quantity),0);
+          if(addon.quantity<paidQuantity)throw new ApiError(409,'paid_addon','Оплаченные услуги нельзя удалить без возврата.');
+          nextMinutes+=paid.reduce((sum,row)=>sum+Number(row.duration_minutes),0)+(addon.paid_separately?0:Number(addon.duration_minutes)*(addon.quantity-paidQuantity));
+        }
+        if(previous.some(row=>row.payment_status==='paid'&&!addons.some(a=>a.id===row.addon_id)))throw new ApiError(409,'paid_addon','Оплаченные услуги нельзя удалить без возврата.');
+        duration=Math.max(1,duration-oldMinutes+nextMinutes);
+      }
+    }else if(req.query.customerPackageId){
       const purchase=first<any>((await deps.db.query('SELECT id,address_id,purchase_config FROM customer_packages WHERE id=$1 AND customer_id=$2',[String(req.query.customerPackageId),req.user!.id])).rows);
       if(!purchase)throw new ApiError(404,'not_found','Пакет не найден.');
       const prepaid=await prepaidBookingAddons(deps.db,purchase);
@@ -2233,7 +2294,7 @@ export function buildV1Router(deps: {
       duration=await estimateCleaningDurationMinutes(deps.db,purchase.address_id,extra)+prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes??0)),0);
     }
     const intervals = slots.filter((start: string) => fitsBookingHours(start, duration)).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration), durationMinutes: duration}));
-    const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined);
+    const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined,{excludeOrderId:editedOrder?.id,cleanerId:editedOrder?.cleaner_id});
     const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));
     ok(res, available);
   }));
@@ -4789,34 +4850,6 @@ export function buildRuntimeConfig(settings: Record<string, any>) {
         : value;
     }
     return out as T;
-  };
-  const defaultCustomerTierRules = [
-    { tier: 'NEWBIE', labelRu: 'Наш любимый Новичок', labelKk: 'Біздің сүйікті Жаңадан бастаушы', minMonthlySpent: 0, maxMonthlySpent: 100000, discountPercent: 0, sortOrder: 0 },
-    { tier: 'CLEANSTER', labelRu: 'Наш любимый Чистюля', labelKk: 'Біздің сүйікті Тазалық жанашыры', minMonthlySpent: 100000, maxMonthlySpent: 500000, discountPercent: 5, sortOrder: 1 },
-    { tier: 'GURU', labelRu: 'Гуру чистоты', labelKk: 'Тазалық гуруы', minMonthlySpent: 500000, maxMonthlySpent: 1500000, discountPercent: 10, sortOrder: 2 },
-    { tier: 'GOD', labelRu: 'Бог чистоты', labelKk: 'Тазалық құдайы', minMonthlySpent: 1500000, maxMonthlySpent: null, discountPercent: 10, sortOrder: 3 },
-  ];
-  const normalizeCustomerTierRules = (raw: unknown) => {
-    const source = Array.isArray(raw) ? raw : defaultCustomerTierRules;
-    const normalized = source
-      .map((item: any, index: number) => {
-        const fallback = defaultCustomerTierRules[index] ?? defaultCustomerTierRules.at(-1)!;
-        const minMonthlySpent = Number(item?.minMonthlySpent ?? item?.minSpent ?? fallback.minMonthlySpent);
-        const maxRaw = item?.maxMonthlySpent ?? item?.maxSpent ?? fallback.maxMonthlySpent;
-        const maxMonthlySpent = maxRaw === null || maxRaw === undefined || maxRaw === '' ? null : Number(maxRaw);
-        return {
-          tier: String(item?.tier ?? fallback.tier).trim().toUpperCase(),
-          labelRu: String(item?.labelRu ?? item?.label ?? fallback.labelRu),
-          labelKk: String(item?.labelKk ?? fallback.labelKk),
-          minMonthlySpent: Number.isFinite(minMonthlySpent) ? Math.max(0, minMonthlySpent) : fallback.minMonthlySpent,
-          maxMonthlySpent: maxMonthlySpent !== null && Number.isFinite(maxMonthlySpent) ? Math.max(0, maxMonthlySpent) : null,
-          discountPercent: Math.min(100, Math.max(0, Number(item?.discountPercent ?? fallback.discountPercent) || 0)),
-          sortOrder: Number(item?.sortOrder ?? index),
-        };
-      })
-      .filter((item) => item.tier && item.labelRu)
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.minMonthlySpent - b.minMonthlySpent);
-    return normalized.length ? normalized : defaultCustomerTierRules;
   };
   const featureFlags = deepMerge({
     preordersEnabled: true,
