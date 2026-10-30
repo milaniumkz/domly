@@ -1,3 +1,4 @@
+import '../../ui/cleaner_profile_photo.dart';
 import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -132,25 +133,7 @@ class CleanerProfileScreen extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                Container(
-                                  width: 72,
-                                  height: 72,
-                                  decoration: BoxDecoration(
-                                    color: DomlyPalette.surface(Colors.white),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    _initials((profile['name'] ?? 'Исполнитель')
-                                        .toString()),
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: DomlyPalette.foreground(
-                                          DomlyColors.foreground),
-                                    ),
-                                  ),
-                                ),
+                                CleanerProfilePhoto(profile: profile),
                                 const SizedBox(height: 10),
                                 Text(
                                   (profile['name'] ?? "Исполнитель".tr())
@@ -1580,14 +1563,5 @@ class CleanerProfileScreen extends StatelessWidget {
       return 'Специалист';
     }
     return 'Новичок';
-  }
-
-  String _initials(String name) {
-    final parts =
-        name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
-    if (parts.isEmpty) {
-      return 'DP';
-    }
-    return parts.take(2).map((e) => e.substring(0, 1).toUpperCase()).join();
   }
 }

@@ -1,3 +1,4 @@
+import {customerTierDiscount} from './customerProgress';
 import { referralDiscount } from './referrals';
 import { ApiError } from '../common/api';
 import { first } from '../common/sql';
@@ -39,10 +40,12 @@ export async function packageQuote(db: Queryable, input: Record<string, any>) {
   const separateAddons=addons.filter(item=>item.separate);
   const discountRate = Math.max(0, Math.min(100, Number(pkg.features?.discountPercent ?? 0))) / 100;
   const discountAmount = Math.round(base * discountRate);
+  const tierDiscountPercent=input.customerId?await customerTierDiscount(db,input.customerId):0;
+  const tierDiscountAmount=Math.round((base+addonTotal-discountAmount)*tierDiscountPercent/100);
   const referralPercent = input.customerId ? await referralDiscount(db, input.customerId) : 0;
-  const referralAmount = Math.round((base + addonTotal - discountAmount) * referralPercent / 100);
-  return {area, packageSnapshot:pkg, packageSnapshotSource:'purchase', pricingSnapshot:{basePrice:Number(pkg.base_price),pricePerM2:rate,cleaningCount,discountRate,referralDiscountPercent:referralPercent,addons},referralDiscountPercent: referralPercent, referralDiscountAmount: referralAmount, packageId: pkg.id, perCleaningPrice: Math.round(base / cleaningCount), cleaningCount,
-    cleaningsPerMonth: visits, billingPeriodMonths: Number(pkg.months), subtotal: base + addonTotal, monthlyPrice: base + addonTotal - discountAmount - referralAmount,
-    discountRate, discountAmount, addonTotalPrice: addonTotal, addonsBillableTotal: addonTotal,
+  const referralAmount = Math.round((base + addonTotal - discountAmount-tierDiscountAmount) * referralPercent / 100);
+  return {area, packageSnapshot:pkg, packageSnapshotSource:'purchase', pricingSnapshot:{basePrice:Number(pkg.base_price),pricePerM2:rate,cleaningCount,discountRate,tierDiscountPercent,tierDiscountAmount,referralDiscountPercent:referralPercent,addons},referralDiscountPercent: referralPercent, referralDiscountAmount: referralAmount, packageId: pkg.id, perCleaningPrice: Math.round(base / cleaningCount), cleaningCount,
+    cleaningsPerMonth: visits, billingPeriodMonths: Number(pkg.months), subtotal: base + addonTotal, monthlyPrice: base + addonTotal - discountAmount - tierDiscountAmount - referralAmount,
+    discountRate, packageDiscountAmount:discountAmount,tierDiscountPercent,tierDiscountAmount, discountAmount:discountAmount+tierDiscountAmount, addonTotalPrice: addonTotal, addonsBillableTotal: addonTotal,
     addonsSeparatePaymentTotal: separateAddons.reduce((sum,item)=>sum+item.total,0), separatePaymentAddons: separateAddons, addons};
 }

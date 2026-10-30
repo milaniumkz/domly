@@ -52,6 +52,8 @@ NotificationDestination? notificationDestination(Map<String, dynamic> item,
     return NotificationDestination(
         cleaner ? '/cleaner/earnings' : '/client/payment-history');
   }
+  if (type == 'profile_photo')
+    return NotificationDestination(cleaner ? '/cleaner/profile' : orders);
   if ({'cleaner', 'cleaner_profile', 'verification_status'}.contains(type)) {
     return NotificationDestination(cleaner ? '/cleaner/verification' : orders);
   }

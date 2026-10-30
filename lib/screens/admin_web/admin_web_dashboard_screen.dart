@@ -861,6 +861,12 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           builder: _clusterSchedule,
         ),
         _AdminSection(
+            key: 'cleaner_photos',
+            title: 'Фото уборщиц',
+            subtitle: 'Новые селфи на одобрение.',
+            icon: Icons.portrait_outlined,
+            builder: _cleanerPhotos),
+        _AdminSection(
           key: 'verifications',
           title: 'Верификация',
           subtitle: 'Проверка документов уборщиц и принятие решения.',
@@ -4257,6 +4263,12 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                               ),
                             ],
                           ),
+                          if (data['type'] == 'profile_photo')
+                            TextButton.icon(
+                                onPressed: () => setState(() => _selectedIndex =
+                                    _sectionIndexByKey('cleaner_photos')),
+                                icon: const Icon(Icons.portrait_outlined),
+                                label: Text('Открыть фото уборщиц'.tr())),
                           if(data['type']=='work_schedule')TextButton.icon(
                             onPressed:()=>setState(()=>_selectedIndex=_sectionIndexByKey('work_schedules')),
                             icon:const Icon(Icons.event_available),label:Text('Открыть графики работы'.tr())),
@@ -6914,6 +6926,79 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       return '$cleanerId (score $scoreText, дорога $travelText, день $fillText)';
     }).join(' | ');
   }
+
+  Widget _cleanerPhotos() => StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _data.cleanerPhotoRequestsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError)
+          return _sectionScaffold(
+              child: _emptyState('Не удалось загрузить фото',
+                  'Обновите экран и попробуйте снова.'));
+        if (!snapshot.hasData)
+          return const Center(child: CircularProgressIndicator());
+        final photos = snapshot.data!;
+        return _sectionScaffold(
+            child: photos.isEmpty
+                ? _emptyState(
+                    'Нет новых фото', 'Новые селфи уборщиц появятся здесь.')
+                : ListView(
+                    children: photos
+                        .map((photo) => Card(
+                            child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                          '${photo['full_name'] ?? 'Уборщица'} · ${photo['phone'] ?? ''}'),
+                                      const SizedBox(height: 12),
+                                      InkWell(
+                                          onTap: () => _openVerificationImage(
+                                              context,
+                                              title: 'Фото профиля',
+                                              url: '${photo['public_url']}'),
+                                          child: SizedBox(
+                                              width: 172,
+                                              height: 172,
+                                              child: buildVerificationDocumentPreview(
+                                                  url: '${photo['public_url']}',
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          16)))),
+                                      Wrap(
+                                          children: ['approved', 'rejected']
+                                              .map((status) => TextButton(
+                                                  onPressed: () async {
+                                                    try {
+                                                      await BackendApiService
+                                                          .instance
+                                                          .postMap(
+                                                              '/admin/cleaner-photos/${photo['id']}/review',
+                                                              body: {
+                                                            'status': status
+                                                          });
+                                                      if (mounted)
+                                                        setState(() {});
+                                                    } catch (e) {
+                                                      if (context.mounted)
+                                                        ScaffoldMessenger.of(
+                                                                context)
+                                                            .showSnackBar(
+                                                                SnackBar(
+                                                                    content: Text(
+                                                                        '$e')));
+                                                    }
+                                                  },
+                                                  child: Text(
+                                                      (status == 'approved'
+                                                              ? 'Одобрить'
+                                                              : 'Отклонить')
+                                                          .tr())))
+                                              .toList()),
+                                    ]))))
+                        .toList()));
+      });
 
   Widget _verifications() {
     return StreamBuilder<List<Map<String, dynamic>>>(
@@ -12231,142 +12316,180 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     bool isActive = existing?['isActive'] != false;
     bool isRequired = existing?['isRequired'] == true;
     bool isNew = existing?['isNew'] != false;
+    bool uploadingVideo = false;
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(docId == null ? 'Новое видео' : 'Редактировать видео'),
-        content: StatefulBuilder(
-          builder: (context, setModalState) => SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Заголовок'),
-                ),
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(labelText: 'Описание'),
-                ),
-                TextField(
-                  controller: categoryController,
-                  decoration: const InputDecoration(labelText: 'Категория'),
-                ),
-                TextField(
-                  controller: thumbnailController,
-                  decoration: const InputDecoration(
-                    labelText: 'Ссылка на превью',
+      builder: (context) => StatefulBuilder(
+          builder: (context, setModalState) => AlertDialog(
+                title:
+                    Text(docId == null ? 'Новое видео' : 'Редактировать видео'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: titleController,
+                        decoration:
+                            const InputDecoration(labelText: 'Заголовок'),
+                      ),
+                      TextField(
+                        controller: descriptionController,
+                        decoration:
+                            const InputDecoration(labelText: 'Описание'),
+                      ),
+                      TextField(
+                        controller: categoryController,
+                        decoration:
+                            const InputDecoration(labelText: 'Категория'),
+                      ),
+                      TextField(
+                        controller: thumbnailController,
+                        decoration: const InputDecoration(
+                          labelText: 'Ссылка на превью',
+                        ),
+                      ),
+                      TextField(
+                        controller: videoController,
+                        decoration:
+                            InputDecoration(labelText: 'Ссылка на видео'),
+                      ),
+                      TextButton.icon(
+                        onPressed: uploadingVideo
+                            ? null
+                            : () async {
+                                setModalState(() => uploadingVideo = true);
+                                try {
+                                  final url = await _photoUploadService
+                                      .pickAndUploadVideo();
+                                  if (url != null && context.mounted)
+                                    videoController.text = url;
+                                } catch (e) {
+                                  if (context.mounted)
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('$e')));
+                                } finally {
+                                  if (context.mounted)
+                                    setModalState(() => uploadingVideo = false);
+                                }
+                              },
+                        icon: const Icon(Icons.upload_file),
+                        label: Text((uploadingVideo
+                                ? 'Загружаем видео...'
+                                : 'Загрузить видео')
+                            .tr()),
+                      ),
+                      Text('MP4 или WebM, до 50 МБ'.tr()),
+                      SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: audienceType,
+                        items: [
+                          DropdownMenuItem(
+                            value: 'client',
+                            child: Text('Клиенты'.tr()),
+                          ),
+                          DropdownMenuItem(
+                            value: 'cleaner',
+                            child: Text('Уборщицы'.tr()),
+                          ),
+                          DropdownMenuItem(
+                            value: 'both',
+                            child: Text('Обе роли'.tr()),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setModalState(() => audienceType = value);
+                          }
+                        },
+                        decoration:
+                            const InputDecoration(labelText: 'Аудитория'),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                        ),
+                        child: Text(
+                          switch (audienceType) {
+                            'client' =>
+                              'Это видео увидят только клиенты. Уборщицы его не увидят.',
+                            'cleaner' =>
+                              'Это видео увидят только уборщицы. Клиенты его не увидят.',
+                            _ => 'Это видео увидят и клиенты, и уборщицы.',
+                          },
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF475569),
+                          ),
+                        ),
+                      ),
+                      SwitchListTile(
+                        value: isActive,
+                        onChanged: (value) =>
+                            setModalState(() => isActive = value),
+                        title: Text('Активно'.tr()),
+                      ),
+                      SwitchListTile(
+                        value: isRequired,
+                        onChanged: (value) =>
+                            setModalState(() => isRequired = value),
+                        title: Text('Обязательное'.tr()),
+                      ),
+                      SwitchListTile(
+                        value: isNew,
+                        onChanged: (value) =>
+                            setModalState(() => isNew = value),
+                        title: Text('Новое'.tr()),
+                      ),
+                    ],
                   ),
                 ),
-                TextField(
-                  controller: videoController,
-                  decoration: InputDecoration(labelText: 'Ссылка на видео'),
-                ),
-                SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: audienceType,
-                  items: [
-                    DropdownMenuItem(
-                      value: 'client',
-                      child: Text('Клиенты'.tr()),
-                    ),
-                    DropdownMenuItem(
-                      value: 'cleaner',
-                      child: Text('Уборщицы'.tr()),
-                    ),
-                    DropdownMenuItem(
-                      value: 'both',
-                      child: Text('Обе роли'.tr()),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setModalState(() => audienceType = value);
-                    }
-                  },
-                  decoration: const InputDecoration(labelText: 'Аудитория'),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Отмена'.tr()),
                   ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ElevatedButton(
+                    onPressed: uploadingVideo
+                        ? null
+                        : () async {
+                            final navigator = Navigator.of(context);
+                            final resolvedId = (docId ??
+                                    'video_${DateTime.now().millisecondsSinceEpoch}')
+                                .toString();
+                            await _data.saveAdminVideo({
+                              'id': resolvedId,
+                              'audienceType': audienceType,
+                              'category': categoryController.text.trim(),
+                              'title': titleController.text.trim(),
+                              'description': descriptionController.text.trim(),
+                              'thumbnailUrl': thumbnailController.text.trim(),
+                              'videoUrl': videoController.text.trim(),
+                              'isActive': isActive,
+                              'isRequired': isRequired,
+                              'isNew': isNew,
+                              'version': existing?['version'] ?? 1,
+                              'publishedAt': FieldValue.serverTimestamp(),
+                              'createdAt': existing == null
+                                  ? FieldValue.serverTimestamp()
+                                  : (existing['createdAt'] ??
+                                      FieldValue.serverTimestamp()),
+                            });
+                            if (!mounted) return;
+                            navigator.pop();
+                          },
+                    child: Text('Сохранить'.tr()),
                   ),
-                  child: Text(
-                    switch (audienceType) {
-                      'client' =>
-                        'Это видео увидят только клиенты. Уборщицы его не увидят.',
-                      'cleaner' =>
-                        'Это видео увидят только уборщицы. Клиенты его не увидят.',
-                      _ => 'Это видео увидят и клиенты, и уборщицы.',
-                    },
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF475569),
-                    ),
-                  ),
-                ),
-                SwitchListTile(
-                  value: isActive,
-                  onChanged: (value) => setModalState(() => isActive = value),
-                  title: Text('Активно'.tr()),
-                ),
-                SwitchListTile(
-                  value: isRequired,
-                  onChanged: (value) => setModalState(() => isRequired = value),
-                  title: Text('Обязательное'.tr()),
-                ),
-                SwitchListTile(
-                  value: isNew,
-                  onChanged: (value) => setModalState(() => isNew = value),
-                  title: Text('Новое'.tr()),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Отмена'.tr()),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final navigator = Navigator.of(context);
-              final resolvedId =
-                  (docId ?? 'video_${DateTime.now().millisecondsSinceEpoch}')
-                      .toString();
-              await _data.saveAdminVideo({
-                'id': resolvedId,
-                'audienceType': audienceType,
-                'category': categoryController.text.trim(),
-                'title': titleController.text.trim(),
-                'description': descriptionController.text.trim(),
-                'thumbnailUrl': thumbnailController.text.trim(),
-                'videoUrl': videoController.text.trim(),
-                'isActive': isActive,
-                'isRequired': isRequired,
-                'isNew': isNew,
-                'version': existing?['version'] ?? 1,
-                'publishedAt': FieldValue.serverTimestamp(),
-                'createdAt': existing == null
-                    ? FieldValue.serverTimestamp()
-                    : (existing['createdAt'] ?? FieldValue.serverTimestamp()),
-              });
-              if (!mounted) return;
-              navigator.pop();
-            },
-            child: Text('Сохранить'.tr()),
-          ),
-        ],
-      ),
+                ],
+              )),
     );
   }
 

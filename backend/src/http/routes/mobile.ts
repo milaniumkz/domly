@@ -129,7 +129,8 @@ export function mobileRouter(db: Database,notifications?:NotificationService) {
     const url = String(req.body.url ?? req.body.videoUrl ?? '').trim();
     let parsed;
     try { parsed = new URL(url); } catch { throw new ApiError(400, 'invalid_video', 'Укажите HTTPS-ссылку на видео.'); }
-    if (parsed.protocol !== 'https:' || !String(req.body.title ?? '').trim()) throw new ApiError(400, 'invalid_video', 'Укажите название и HTTPS-ссылку.');
+    const uploaded=parsed.protocol==='https:'?false:Boolean((await db.query(`SELECT f.id FROM files f JOIN app_users u ON u.id=f.owner_id WHERE f.public_url=$1 AND f.mime_type IN ('video/mp4','video/webm') AND u.role IN ('admin','superadmin')`,[url])).rows[0]);
+    if ((!uploaded && parsed.protocol !== 'https:') || !String(req.body.title ?? '').trim()) throw new ApiError(400, 'invalid_video', 'Укажите название и HTTPS-ссылку.');
     const row = first((await db.query(`INSERT INTO training_videos (id,title,description,url,audience_type,active,category)
       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title,
       description=EXCLUDED.description,url=EXCLUDED.url,audience_type=EXCLUDED.audience_type,active=EXCLUDED.active,category=EXCLUDED.category RETURNING *`,

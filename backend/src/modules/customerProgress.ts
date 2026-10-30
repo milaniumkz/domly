@@ -27,3 +27,43 @@ export async function customerMonthlyProgress(db: Queryable, customerId: string,
   `, [customerId, now]);
   return progressForSpent(Number(result.rows[0].total), rules);
 }
+
+export const defaultCustomerTierRules = [
+    { tier: 'NEWBIE', labelRu: 'Наш любимый Новичок', labelKk: 'Біздің сүйікті Жаңадан бастаушы', minMonthlySpent: 0, maxMonthlySpent: 100000, discountPercent: 0, sortOrder: 0 },
+    { tier: 'CLEANSTER', labelRu: 'Наш любимый Чистюля', labelKk: 'Біздің сүйікті Тазалық жанашыры', minMonthlySpent: 100000, maxMonthlySpent: 500000, discountPercent: 5, sortOrder: 1 },
+    { tier: 'GURU', labelRu: 'Гуру чистоты', labelKk: 'Тазалық гуруы', minMonthlySpent: 500000, maxMonthlySpent: 1500000, discountPercent: 10, sortOrder: 2 },
+    { tier: 'GOD', labelRu: 'Бог чистоты', labelKk: 'Тазалық құдайы', minMonthlySpent: 1500000, maxMonthlySpent: null, discountPercent: 10, sortOrder: 3 },
+  ];
+export const normalizeCustomerTierRules = (raw: unknown) => {
+    const source = Array.isArray(raw) ? raw : defaultCustomerTierRules;
+    const normalized = source
+      .map((item: any, index: number) => {
+        const fallback = defaultCustomerTierRules[index] ?? defaultCustomerTierRules.at(-1)!;
+        const minMonthlySpent = Number(item?.minMonthlySpent ?? item?.minSpent ?? fallback.minMonthlySpent);
+        const maxRaw = item?.maxMonthlySpent ?? item?.maxSpent ?? fallback.maxMonthlySpent;
+        const maxMonthlySpent = maxRaw === null || maxRaw === undefined || maxRaw === '' ? null : Number(maxRaw);
+        return {
+          tier: String(item?.tier ?? fallback.tier).trim().toUpperCase(),
+          labelRu: String(item?.labelRu ?? item?.label ?? fallback.labelRu),
+          labelKk: String(item?.labelKk ?? fallback.labelKk),
+          minMonthlySpent: Number.isFinite(minMonthlySpent) ? Math.max(0, minMonthlySpent) : fallback.minMonthlySpent,
+          maxMonthlySpent: maxMonthlySpent !== null && Number.isFinite(maxMonthlySpent) ? Math.max(0, maxMonthlySpent) : null,
+          discountPercent: Math.min(100, Math.max(0, Number(item?.discountPercent ?? fallback.discountPercent) || 0)),
+          sortOrder: Number(item?.sortOrder ?? index),
+        };
+      })
+      .filter((item) => item.tier && item.labelRu)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.minMonthlySpent - b.minMonthlySpent);
+    return normalized.length ? normalized : defaultCustomerTierRules;
+  };
+
+/** Use the same paid-month rules as the profile, never a client-supplied tier. */
+export async function customerTierDiscount(db: Queryable, customerId: string) {
+  const settings=(await db.query<{value:unknown}>("SELECT value FROM app_settings WHERE key='customerTierRules'")).rows[0];
+  const progress=await customerMonthlyProgress(db,customerId,normalizeCustomerTierRules(settings?.value));
+  return Math.min(100,Math.max(0,Number(progress.tier_discount_percent)||0));
+}
+
+export function discountedServicePrice(price:number,percent:number) {
+  return Math.round(price*(1-Math.min(100,Math.max(0,percent))/100));
+}
