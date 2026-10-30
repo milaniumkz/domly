@@ -29,4 +29,14 @@ void main() {
     expect(workScheduleStatus('pending'), 'На одобрении');
     expect(workScheduleStatus('approved'), 'Одобрен');
   });
+  test('pending submission is unchanged across ordering and days-off clocks',
+      () {
+    final saved = workScheduleDays('2026-10-26', []);
+    final draft =
+        saved.reversed.map((day) => {...day, 'startTime': '09:00'}).toList();
+    expect(workScheduleMatches(draft, saved), isTrue);
+    draft.first['working'] = true;
+    expect(workScheduleMatches(draft, saved), isFalse);
+    expect(workScheduleMatches(saved, saved), isTrue);
+  });
 }

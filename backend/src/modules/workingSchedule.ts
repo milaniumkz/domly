@@ -52,6 +52,11 @@ export async function submitWorkingSchedule(db:Database,cleanerId:string,input:a
   return db.atomic(async()=>{
     await db.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[cleanerId]);
     if(key){const previous=(await db.query('SELECT * FROM cleaner_work_schedule_requests WHERE cleaner_id=$1 AND client_request_id=$2',[cleanerId,key])).rows[0];if(previous)return previous;}
+    // Different request keys and concurrent devices must not duplicate an unchanged week.
+    const unchanged=(await db.query(`SELECT * FROM cleaner_work_schedule_requests
+      WHERE cleaner_id=$1 AND week_start=$2 AND status IN ('pending','approved') AND days=$3::jsonb
+      ORDER BY created_at DESC,id DESC LIMIT 1`,[cleanerId,week,JSON.stringify(days)])).rows[0];
+    if(unchanged)return unchanged;
     // A revised week waits for approval; its previous version no longer sends offers.
     await db.query("UPDATE cleaner_work_schedule_requests SET status='superseded' WHERE cleaner_id=$1 AND week_start=$2 AND status IN ('pending','approved')",[cleanerId,week]);
     const saved=(await db.query(`INSERT INTO cleaner_work_schedule_requests(cleaner_id,week_start,days,client_request_id)
