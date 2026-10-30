@@ -567,6 +567,15 @@ class FirestoreDataService {
       'package': packageName,
       'packageName': packageName,
       'name': packageName,
+      'address': [
+        item['city'],
+        item['street'],
+        item['house'],
+        if (item['apartment'] != null) 'кв. ${item['apartment']}'
+      ]
+          .where((value) => value != null && '$value'.trim().isNotEmpty)
+          .join(', '),
+      'area': _num(item['address_area']),
       'status': item['status'],
       'price': storedPackagePrice(item),
       'paymentStatus':
@@ -8649,38 +8658,15 @@ class FirestoreDataService {
     );
   }
 
-  Future<Map<String, dynamic>> _calculateDailyScheduleDirect({
-    required String cleanerId,
-    required DateTime date,
-  }) async {
-    final sources = <Map<String, dynamic>>[];
-    Future<void> addQuery(String collection) async {
-      try {
-        final snap = await _db
-            .collection(collection)
-            .where('cleanerId', isEqualTo: cleanerId)
-            .get();
-        sources.addAll(
-          snap.docs.map(
-            (doc) => {
-              'id': doc.id,
-              ...doc.data(),
-              'sourceCollection': collection,
-            },
-          ),
-        );
-      } catch (_) {
-        // A missing collection or denied optional source should not break calendar.
-      }
-    }
-
-    await Future.wait([
-      addQuery('schedule_slots'),
-      addQuery('cleaner_orders'),
-      addQuery('cleaner_shifts'),
-    ]);
-    return _buildDailyScheduleSummary(sources, date);
+  Future<Map<String, dynamic>> _calculateDailyScheduleDirect(
+      {required String cleanerId, required DateTime date}) async {
+    final slots = await cleanerScheduleSlotsStream().first;
+    return _buildDailyScheduleSummary(slots, date);
   }
+
+  Map<String, dynamic> cleanerScheduleSummary(
+          List<Map<String, dynamic>> slots, DateTime date) =>
+      _buildDailyScheduleSummary(slots, date);
 
   Map<String, dynamic> _buildDailyScheduleSummary(
     List<Map<String, dynamic>> sourceSlots,
@@ -8728,15 +8714,16 @@ class FirestoreDataService {
       0,
       (totalMinutes, slot) => totalMinutes + _scheduleSlotDurationMinutes(slot),
     );
-    final totalArea = slots.fold<int>(
+    final totalArea = slots.fold<num>(
       0,
-      (total, slot) => total + ((slot['area'] as num?)?.toInt() ?? 0),
+      (total, slot) => total + ((slot['area'] as num?) ?? 0),
     );
     final totalAddonCount = slots.fold<int>(
       0,
       (total, slot) =>
           total +
-          (((slot['addonsDetailed'] as List?)?.length) ??
+          ((slot['addonCount'] as num?)?.toInt() ??
+              ((slot['addonsDetailed'] as List?)?.length) ??
               ((slot['addons'] as List?)?.length) ??
               0),
     );
@@ -8747,7 +8734,7 @@ class FirestoreDataService {
         'remainingMinutes': (510 - occupiedMinutes).clamp(0, 510),
         'totalArea': totalArea,
         'limitArea': 220,
-        'remainingArea': (220 - totalArea).clamp(0, 220),
+        'remainingArea': ((220 - totalArea).clamp(0, 220) * 10).round() / 10,
         'totalAddonCount': totalAddonCount,
         'overbooked': occupiedMinutes > 510,
       },
@@ -10304,6 +10291,7 @@ class FirestoreDataService {
   Future<Map<String, dynamic>> getAvailableSlots({
     required String subscriptionId,
     required DateTime date,
+    List<Map<String, dynamic>> newAddonsDetailed = const [],
   }) async {
     if (_isDebugCustomer) {
       if (!await _debugOwnsSubscription(subscriptionId)) {
@@ -10329,7 +10317,10 @@ class FirestoreDataService {
       }
       return _debugAvailableSlots(date);
     }
-    return _getAvailableSlotsDirect(subscriptionId: subscriptionId, date: date);
+    return _getAvailableSlotsDirect(
+        subscriptionId: subscriptionId,
+        date: date,
+        newAddonsDetailed: newAddonsDetailed);
   }
 
   Future<Map<String, dynamic>> _getAvailableDatesDirect({
@@ -10381,6 +10372,7 @@ class FirestoreDataService {
   Future<Map<String, dynamic>> _getAvailableSlotsDirect({
     required String subscriptionId,
     required DateTime date,
+    List<Map<String, dynamic>> newAddonsDetailed = const [],
   }) async {
     final dateKey = _isoDate(date);
     final subscription = await _loadOwnedSubscription(subscriptionId);
@@ -10397,6 +10389,7 @@ class FirestoreDataService {
     final slots = await _loadBackendAvailableSlots(
       dateKey: dateKey,
       customerPackageId: subscriptionId,
+      newAddonsDetailed: newAddonsDetailed,
       addressId: (subscription['addressId'] ?? '').toString(),
     );
     return {'ok': true, 'date': dateKey, 'slots': slots, 'backend': true};
@@ -10407,11 +10400,14 @@ class FirestoreDataService {
     String? addressId,
     String? customerPackageId,
     List<String> addonIds = const [],
+    List<Map<String, dynamic>> newAddonsDetailed = const [],
   }) async {
     final rows = await BackendApiService.instance.getList(
       '/scheduling/available-slots',
       query: {
         'date': dateKey,
+        if (newAddonsDetailed.isNotEmpty)
+          'addonsDetailed': jsonEncode(newAddonsDetailed),
         if (customerPackageId != null) 'customerPackageId': customerPackageId,
         if (addressId != null && addressId.trim().isNotEmpty)
           'addressId': addressId.trim(),
@@ -11034,15 +11030,7 @@ class FirestoreDataService {
         (selection['bonusToSpend'] as num?)?.toInt() ?? 0,
       );
       final kaspiPhone = (selection['kaspiPhone'] ?? '').toString().trim();
-      final quotedAddons = addonDetails.fold<int>(
-          0,
-          (total, item) =>
-              total +
-              (_num(item['price']) *
-                      (item['quantity'] is num
-                          ? (item['quantity'] as num).toInt()
-                          : 1))
-                  .round());
+      final quotedAddons = billableBookingAddonsAmount(addonDetails);
       if (addonDetails.isNotEmpty &&
           kaspiPhone.isEmpty &&
           bonusToSpend < quotedAddons) {

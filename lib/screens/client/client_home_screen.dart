@@ -1,3 +1,4 @@
+import '../../ui/customer_package_balances.dart';
 import '../../utils/package_availability.dart';
 import '../../ui/home_cleaning_pager.dart';
 import '../../utils/home_cleaning_orders.dart';
@@ -2066,22 +2067,30 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         .where((p) =>
             p['id'] == (item?['subscriptionId'] ?? item?['customerPackageId']))
         .firstOrNull;
-    final balancePackage = currentPackage ?? pkg;
-    final total = balancePackage != null
+    final pendingPurchase = const {HomeScene.invoice,HomeScene.unpaid,HomeScene.failed}.contains(scene);
+    final balancePackage = pendingPurchase ? pkg : (currentPackage ?? pkg);
+    final packageTotal = balancePackage != null
         ? (balancePackage['totalCleanings'] as num?)?.toInt() ?? _includedVisits(balancePackage)
         : (item?['totalVisits'] as num?)?.toInt() ??
             _aggregateIncludedVisits(subscriptions);
-    final used = scene == HomeScene.exhausted
-        ? total
+    final packageUsed = scene == HomeScene.exhausted
+        ? packageTotal
         : balancePackage != null
             ? math.max(_usedVisits(balancePackage, slots), orders.where((o) =>
                 o['subscriptionId'] == balancePackage!['id'] &&
                 _isCompletedSlotStatus(o)).length)
             : _aggregateUsedVisits(subscriptions, slots);
-    final left = balancePackage != null
+    final packageLeft = balancePackage != null
         ? (balancePackage['remainingCleanings'] as num?)?.toInt() ??
             _availableSelections(balancePackage, slots)
         : _aggregateAvailableSelections(subscriptions, slots);
+    final wallets = _activePaidPackageSubscriptions(subscriptions);
+    final showAggregate = wallets.isNotEmpty && !pendingPurchase;
+    final total = showAggregate ? _aggregateIncludedVisits(subscriptions) : packageTotal;
+    final used = showAggregate ? wallets.fold<int>(0,(sum,wallet)=>sum+math.max(
+      _usedVisits(wallet,slots),orders.where((order)=>order['type']!='package_purchase' &&
+        (order['subscriptionId']??order['customerPackageId'])==wallet['id'] && _isCompletedSlotStatus(order)).length)) : packageUsed;
+    final left = showAggregate ? _aggregateAvailableSelections(subscriptions,slots) : packageLeft;
     final target = item ?? <String, dynamic>{};
     final freeze = DateTime.tryParse((pkg?['freezeUntil'] ?? '').toString());
     final started =
@@ -2147,6 +2156,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                           .toString(),
                                       cleanerPhotoUrl: target['cleanerPhotoUrl']
                                           ?.toString())),
+                                  const SizedBox(height: 12),
+                                  CustomerPackageBalances(packages: subscriptions,
+                                    onOpen: (package) => _runProtectedAction(() => Navigator.pushNamed(context, '/client/package-calendar',arguments:{'subscriptionId':package['id']})),
+                                    onBuy: () => _runProtectedAction(() => Navigator.pushNamed(context,'/client/calculator'))),
                                   const SizedBox(height: 12),
                                   KeyedSubtree(
                                       key: DomlyTutorialTargets
@@ -2257,8 +2270,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       case HomeAction.cancellation:
         orders(history: true);
       case HomeAction.details:
+        orders(action: 'details');
       case HomeAction.request:
-              orders();
+        orders();
       case HomeAction.cleaner:
         showModalBottomSheet<void>(context: context, builder: (context) => SafeArea(
           child: Padding(padding: const EdgeInsets.all(24), child: Column(
@@ -3637,7 +3651,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   int _aggregateIncludedVisits(List<Map<String, dynamic>> subscriptions) {
     return _activePaidPackageSubscriptions(subscriptions).fold<int>(
       0,
-      (total, subscription) => total + _includedVisits(subscription),
+      (total, subscription) => total + ((subscription['totalCleanings'] as num?)?.toInt() ?? _includedVisits(subscription)),
     );
   }
 

@@ -269,7 +269,7 @@ export class NotificationService {
     )).rows)?.value ?? {};
     if (settings.enabled === false) return [];
     const events = Array.isArray(settings.events) ? settings.events.map(String) : [];
-    if (events.length && !events.includes(input.event)) return [];
+    if (events.length && !events.includes(input.event) && !(input.event==='specialist_addons' && events.includes('new_order'))) return [];
     const created = [];
     for (const role of ['admin', 'superadmin'] as const) {
       const row = await this.create({
@@ -543,6 +543,7 @@ export class SchedulingService {
         JOIN cleaner_profiles cp ON cp.user_id=u.id
         ${zoneId ? 'JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$5' : ''}
         WHERE u.role='cleaner' AND u.status='approved' AND cp.verification_status='approved'
+          AND ${approvedWorkStartSql('u.id','$1','s.starts')}
           AND NOT EXISTS (
             SELECT 1 FROM service_orders o WHERE o.cleaner_id=u.id
               AND o.status NOT IN ('cancelled','completed')

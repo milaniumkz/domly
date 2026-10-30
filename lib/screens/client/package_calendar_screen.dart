@@ -1,3 +1,4 @@
+import '../../utils/booking_addon_data.dart';
 import '../../utils/booking_error_message.dart';
 import '../../utils/package_availability.dart';
 import '../common/package_freeze_dialog.dart';
@@ -35,8 +36,6 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
   final Map<String, List<Map<String, dynamic>>> _selectedAddonsByDate =
       <String, List<Map<String, dynamic>>>{};
   final Map<String, List<Map<String, dynamic>>> _selectedNewAddonsByDate =
-      <String, List<Map<String, dynamic>>>{};
-  final Map<String, List<Map<String, dynamic>>> _slotsCache =
       <String, List<Map<String, dynamic>>>{};
   DateTime _visibleMonth = DateTime(
     LaunchConfig.bookingFloor(DateTime.now()).year,
@@ -335,8 +334,10 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     if (subscription == null || !_isPaidSubscription(subscription)) {
       return 0;
     }
-    return availablePackageVisits(subscription,fallback:_includedVisits(subscription)-
-      _usedVisitsForSubscription(subscription)-_scheduledVisitsForSubscription(subscription));
+    return availablePackageVisits(subscription,
+        fallback: _includedVisits(subscription) -
+            _usedVisitsForSubscription(subscription) -
+            _scheduledVisitsForSubscription(subscription));
   }
 
   int _aggregateIncludedVisits(List<Map<String, dynamic>> subscriptions) {
@@ -466,7 +467,6 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       if (saved == true && mounted) {
         setState(() {
           _selectedTimes.clear();
-          _slotsCache.clear();
         });
         await _loadAvailableDates();
         if (mounted) showDomlySnackBar(context, title: 'Пакет заморожен');
@@ -584,7 +584,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
           ..sort((a, b) => a.key.compareTo(b.key));
         final selectedAddonTotal = selectedEntries.fold<int>(0, (total, entry) {
           return total +
-              _addonItemsAmount(
+              _billableAddonItemsAmount(
                 _selectedNewAddonsByDate[entry.key] ??
                     const <Map<String, dynamic>>[],
               );
@@ -902,7 +902,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                               ),
                             const SizedBox(height: 12),
                             Text(
-                              'Можно выбрать сегодня и любой следующий день. После выбора времени система найдет свободную уборщицу по району и площади.'
+                              'Сначала выберите дату и допуслуги, затем время. Доступное время учитывает полную длительность уборки.'
                                   .tr(),
                               style: TextStyle(
                                 fontSize: 12,
@@ -1084,14 +1084,15 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     ];
   }
 
-  Future<void> _chooseAddonsForDate(String dateKey) async {
+  Future<bool> _chooseAddonsForDate(String dateKey,
+      {bool chooseTime = true}) async {
     final subscriptions = await _data.customerSubscriptionsStream().first;
     final subscription = subscriptions.cast<Map<String, dynamic>?>().firstWhere(
           (item) => item?['id'] == widget.subscriptionId,
           orElse: () => null,
         );
     if (subscription == null || !mounted) {
-      return;
+      return false;
     }
     final paidAddons = await _availablePackageAddons(
       subscription,
@@ -1101,7 +1102,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       await AppConfigService.instance.addonGroupConfigsStream().first,
     );
     if (!mounted) {
-      return;
+      return false;
     }
     if (paidAddons.isEmpty && addonGroups.isEmpty) {
       showDomlySnackBar(
@@ -1110,7 +1111,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         subtitle: 'Каталог доп. услуг пока пуст.',
         type: DomlySnackBarType.info,
       );
-      return;
+      return true;
     }
     final chosen = await _showAddonsBottomSheet(
       dateKey: dateKey,
@@ -1120,11 +1121,12 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       initialNewSelection: _selectedNewAddonsByDate[dateKey] ?? const [],
     );
     if (!mounted || chosen == null) {
-      return;
+      return false;
     }
     final paid = chosen['paid'] ?? const <Map<String, dynamic>>[];
     final fresh = chosen['new'] ?? const <Map<String, dynamic>>[];
     setState(() {
+      _selectedTimes.remove(dateKey);
       if (paid.isEmpty) {
         _selectedAddonsByDate.remove(dateKey);
       } else {
@@ -1136,7 +1138,9 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         _selectedNewAddonsByDate[dateKey] = fresh;
       }
     });
+    if (chooseTime) await _selectTimeForDate(dateKey);
     _scrollToSelectedBlock();
+    return true;
   }
 
   void _scrollToSelectedBlock() {
@@ -1189,7 +1193,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       addUsed(_normalizedAddonItems(slot['addonsDetailed']));
     }
     for (final entry in _selectedAddonsByDate.entries) {
-      if (entry.key == excludeDateKey) {
+      if (entry.key == excludeDateKey || !_selectedTimes.containsKey(entry.key)) {
         continue;
       }
       addUsed(entry.value);
@@ -1232,15 +1236,6 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     }).toList();
   }
 
-  int _addonItemsAmount(List<Map<String, dynamic>> items) {
-    return items.fold<int>(0, (total, item) {
-      final price = _addonItemPrice(item);
-      final quantity =
-          ((item['quantity'] as num?)?.toInt() ?? 1).clamp(1, 999).toInt();
-      return total + price * quantity;
-    });
-  }
-
   int _priceFromAddonConfig(Map<dynamic, dynamic> item) {
     for (final key in const ['price', 'unitPrice', 'amount', 'cost']) {
       final value = item[key];
@@ -1268,7 +1263,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
 
   int _billableAddonItemsAmount(List<Map<String, dynamic>> items) {
     return items.fold<int>(0, (total, item) {
-      if (item['separatePayment'] == true || item['separate'] == true) {
+      if (addonPaidSeparately(item)) {
         return total;
       }
       final price = _addonItemPrice(item);
@@ -1280,7 +1275,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
 
   bool _hasSeparateAddonItems(List<Map<String, dynamic>> items) {
     return items.any(
-      (item) => item['separatePayment'] == true || item['separate'] == true,
+      (item) => addonPaidSeparately(item),
     );
   }
 
@@ -1995,9 +1990,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DomlyPrimaryButton(
-                            label: billableTotal > 0
-                                ? 'Применить · ${_formatMoney(billableTotal)}'
-                                : 'Применить',
+                            label: 'Выбрать время',
                             onPressed: () {
                               final result =
                                   <String, List<Map<String, dynamic>>>{
@@ -2024,6 +2017,34 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     );
   }
 
+  Future<void> _selectTimeForDate(String dateKey) async {
+    setState(() => _loadingSlotsDateKey = dateKey);
+    try {
+      final result = await _data.getAvailableSlots(
+        subscriptionId: widget.subscriptionId,
+        date: DateTime.parse(dateKey),
+        newAddonsDetailed: _selectedNewAddonsByDate[dateKey] ?? const [],
+      );
+      final slots = (result['slots'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      if (!mounted) return;
+      final selectedTime =
+          await _showTimePickerBottomSheet(dateKey: dateKey, slots: slots);
+      if (mounted && selectedTime != null)
+        setState(() => _selectedTimes[dateKey] = selectedTime);
+    } catch (error) {
+      if (mounted)
+        showDomlySnackBar(context,
+            title: 'Не удалось загрузить слоты',
+            subtitle: UserErrorMessage.message(error),
+            type: DomlySnackBarType.error);
+    } finally {
+      if (mounted) setState(() => _loadingSlotsDateKey = null);
+    }
+  }
+
   Future<void> _handleDateTap(DateTime date, int requiredSelections) async {
     return _handleDateKeyTap(_toDateKey(date), requiredSelections);
   }
@@ -2037,7 +2058,6 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         _selectedTimes.remove(dateKey);
         _selectedAddonsByDate.remove(dateKey);
         _selectedNewAddonsByDate.remove(dateKey);
-        _slotsCache.remove(dateKey);
       });
       showDomlySnackBar(
         context,
@@ -2060,33 +2080,9 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
 
     try {
       setState(() => _loadingSlotsDateKey = dateKey);
-      final date = DateTime.tryParse(dateKey) ?? DateTime.now();
-      final slots = _slotsCache[dateKey] ??
-          await (() async {
-            final result = await _data.getAvailableSlots(
-              subscriptionId: widget.subscriptionId,
-              date: date,
-            );
-            final parsed = (result['slots'] as List? ?? const [])
-                .map((item) => Map<String, dynamic>.from(item as Map))
-                .toList();
-            _slotsCache[dateKey] = parsed;
-            return parsed;
-          })();
-      if (!mounted) {
+      if (!await _chooseAddonsForDate(dateKey, chooseTime: false) || !mounted)
         return;
-      }
-      final selectedTime = await _showTimePickerBottomSheet(
-        dateKey: dateKey,
-        slots: slots,
-      );
-      if (!mounted || selectedTime == null) {
-        return;
-      }
-      setState(() {
-        _selectedTimes[dateKey] = selectedTime;
-      });
-      await _chooseAddonsForDate(dateKey);
+      await _selectTimeForDate(dateKey);
       _scrollToSelectedBlock();
     } catch (error) {
       if (!mounted) {
@@ -2119,7 +2115,6 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
           _selectedTimes.remove(dateKey);
           _selectedAddonsByDate.remove(dateKey);
           _selectedNewAddonsByDate.remove(dateKey);
-          _slotsCache.remove(dateKey);
         }
       });
       showDomlySnackBar(
@@ -2135,11 +2130,10 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     String? kaspiPhone;
     var useBonusForNewAddons = false;
     var selectedBonusForNewAddons = 0;
-    final hasBillableNewAddons = entriesList.any(
-      (entry) => (_selectedNewAddonsByDate[entry.key] ??
-              const <Map<String, dynamic>>[])
-          .isNotEmpty,
-    );
+    final hasBillableNewAddons = entriesList.any((entry) =>
+        _billableAddonItemsAmount(
+            _selectedNewAddonsByDate[entry.key] ?? const []) >
+        0);
     if (hasBillableNewAddons) {
       final bonusBalance =
           ((await _data.customerProfileStream().first)?['bonusPoints'] as num?)
@@ -2150,7 +2144,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       }
       final newAddonsAmount = entriesList.fold<int>(0, (total, entry) {
         return total +
-            _addonItemsAmount(
+            _billableAddonItemsAmount(
               _selectedNewAddonsByDate[entry.key] ??
                   const <Map<String, dynamic>>[],
             );
@@ -2235,7 +2229,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
           _selectedAddonsByDate[entry.key] ?? const <Map<String, dynamic>>[];
       final newAddonsDetailed =
           _selectedNewAddonsByDate[entry.key] ?? const <Map<String, dynamic>>[];
-      final newAddonAmount = _addonItemsAmount(newAddonsDetailed);
+      final newAddonAmount = _billableAddonItemsAmount(newAddonsDetailed);
       final bonusToSpend = useBonusForNewAddons
           ? remainingBonusForNewAddons.clamp(0, newAddonAmount).toInt()
           : 0;
@@ -2375,7 +2369,6 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
             _selectedTimes.remove(dateKey);
             _selectedAddonsByDate.remove(dateKey);
             _selectedNewAddonsByDate.remove(dateKey);
-            _slotsCache.remove(dateKey);
           }
         }
       });
@@ -2423,7 +2416,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     }
   }
 
-  String _scheduleErrorText(Object error)=>bookingErrorMessage(error);
+  String _scheduleErrorText(Object error) => bookingErrorMessage(error);
 
   void _schedulePastSelectionCleanup() {
     if (!_selectedTimes.keys.any(_isPastDateKey)) {
@@ -2443,7 +2436,6 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       _selectedTimes.remove(dateKey);
       _selectedAddonsByDate.remove(dateKey);
       _selectedNewAddonsByDate.remove(dateKey);
-      _slotsCache.remove(dateKey);
     }
   }
 

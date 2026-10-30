@@ -198,9 +198,8 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                         ),
                         const SizedBox(height: 12),
                         FutureBuilder<Map<String, dynamic>>(
-                          future: _data.calculateDailySchedule(
-                            date: _selectedDate,
-                          ),
+                          future: Future.value(_data.cleanerScheduleSummary(
+                              slots, _selectedDate)),
                           builder: (context, scheduleSnap) {
                             TranslationScope.watch(context);
                             final summary = Map<String, dynamic>.from(
@@ -310,113 +309,150 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                             (item) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: InkWell(
-                                borderRadius:BorderRadius.circular(22),
-                                onTap:()=>Navigator.pushNamed(context,'/cleaner/orders',arguments:{
-                                  'initialTab':'active','focusOrderId':item['orderId']??item['sourceOrderId']??item['id'],
-                                }),
+                                borderRadius: BorderRadius.circular(22),
+                                onTap: () => Navigator.pushNamed(
+                                    context, '/cleaner/orders',
+                                    arguments: {
+                                      'initialTab': 'active',
+                                      'focusOrderId': item['orderId'] ??
+                                          item['sourceOrderId'] ??
+                                          item['id'],
+                                    }),
                                 child: DomlyCard(
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: 52,
-                                      height: 52,
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            DomlyPalette.surface(
-                                                DomlyColors.primary),
-                                            DomlyPalette.surface(
-                                                DomlyColors.accent),
-                                          ],
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 52,
+                                        height: 52,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              DomlyPalette.surface(
+                                                  DomlyColors.primary),
+                                              DomlyPalette.surface(
+                                                  DomlyColors.accent),
+                                            ],
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(16),
                                         ),
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        (item['time'] ?? '—')
-                                            .toString()
-                                            .split(' ')
-                                            .first,
-                                        style: TextStyle(
-                                          color: DomlyPalette.foreground(
-                                              Colors.white),
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          (item['time'] ?? '—')
+                                              .toString()
+                                              .split(' ')
+                                              .first,
+                                          style: TextStyle(
+                                            color: DomlyPalette.foreground(
+                                                Colors.white),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  '${(item['time'] ?? '—').toString()} · ${((item['residentialComplex'] ?? item['address'] ?? 'Адрес будет уточнен'.tr()).toString())}',
-                                                  style: TextStyle(
-                                                    fontSize: 15,
-                                                    fontWeight: FontWeight.w700,
-                                                    color:
-                                                        DomlyPalette.foreground(
-                                                            DomlyColors
-                                                                .foreground),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    '${(item['time'] ?? '—').toString()} · ${((item['residentialComplex'] ?? item['address'] ?? 'Адрес будет уточнен'.tr()).toString())}',
+                                                    style: TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: DomlyPalette
+                                                          .foreground(
+                                                              DomlyColors
+                                                                  .foreground),
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Icon(
-                                                Icons.chevron_right,
+                                                const SizedBox(width: 12),
+                                                Icon(
+                                                  Icons.chevron_right,
+                                                  color:
+                                                      DomlyPalette.foreground(
+                                                          DomlyColors.muted),
+                                                  size: 18,
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              "{p0} м² · {p1}".tr(params: {
+                                                'p0': (item['area'] ?? 0)
+                                                    .toString(),
+                                                'p1': ((item['customerName'] ??
+                                                            item['client'] ??
+                                                            'Клиент')
+                                                        .toString())
+                                                    .toString()
+                                              }),
+                                              style: TextStyle(
+                                                fontSize: 12,
                                                 color: DomlyPalette.foreground(
                                                     DomlyColors.muted),
-                                                size: 18,
                                               ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            "{p0} м² · {p1}".tr(params: {
-                                              'p0': (item['area'] ?? 0)
-                                                  .toString(),
-                                              'p1': ((item['customerName'] ??
-                                                          item['client'] ??
-                                                          'Клиент')
-                                                      .toString())
-                                                  .toString()
-                                            }),
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: DomlyPalette.foreground(
-                                                  DomlyColors.muted),
                                             ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Wrap(
-                                            spacing: 8,
-                                            runSpacing: 8,
-                                            children: [
-                                              _infoChip(
-                                                '${item['totalDurationMinutes'] ?? item['estimatedDurationMinutes'] ?? 0} мин',
-                                              ),
-                                              _infoChip(
-                                                'Допы: ${item['addonCount'] ?? 0}',
-                                              ),
-                                              _infoChip(
-                                                'Дорога: ${item['travelTimeMinutes'] ?? 15} мин',
-                                              ),
+                                            if ((item['addonsDetailed']
+                                                        as List? ??
+                                                    const [])
+                                                .isNotEmpty) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                  (item['addonsDetailed']
+                                                          as List)
+                                                      .whereType<Map>()
+                                                      .map((addon) =>
+                                                          '${addon['label'] ?? addon['title_ru']} × ${addon['quantity'] ?? 1}')
+                                                      .join(', '),
+                                                  style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: DomlyPalette
+                                                          .foreground(DomlyColors
+                                                              .foreground))),
                                             ],
-                                          ),
-                                        ],
+                                            const SizedBox(height: 8),
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: [
+                                                _infoChip(
+                                                  '${item['totalDurationMinutes'] ?? item['estimatedDurationMinutes'] ?? 0} мин',
+                                                ),
+                                                _infoChip(
+                                                  'Допы: ${item['addonCount'] ?? 0}',
+                                                ),
+                                                if ((item['pendingAddonCount']
+                                                            as num? ??
+                                                        0) >
+                                                    0)
+                                                  _infoChip(
+                                                      'На согласовании: {count}'
+                                                          .tr(params: {
+                                                    'count':
+                                                        '${item['pendingAddonCount']}'
+                                                  })),
+                                                _infoChip(
+                                                  'Дорога: ${item['travelTimeMinutes'] ?? 15} мин',
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
                               ),
                             ),
                           ),

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../localization/translation_controller.dart';
 
 String workScheduleDay(dynamic value) => '$value'.split('T').first;
@@ -42,4 +43,23 @@ String workScheduleDateLabel(dynamic value) {
     'Воскресенье'
   ];
   return '${weekdays[date.weekday - 1].tr()}, ${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+}
+
+/// Ignores list ordering and irrelevant clock values on days off.
+bool workScheduleMatches(List<dynamic> draft, List<dynamic> saved) {
+  List<Map<String, dynamic>> normalized(List<dynamic> days) => days
+      .whereType<Map>()
+      .map((day) => {
+            'date': workScheduleDay(day['date']),
+            'working': day['working'] == true,
+            if (day['working'] == true) ...{
+              'startTime': '${day['startTime']}'
+                  .substring(0, '${day['startTime']}'.length.clamp(0, 5)),
+              'endTime': '${day['endTime']}'
+                  .substring(0, '${day['endTime']}'.length.clamp(0, 5)),
+            },
+          })
+      .toList()
+    ..sort((a, b) => '${a['date']}'.compareTo('${b['date']}'));
+  return jsonEncode(normalized(draft)) == jsonEncode(normalized(saved));
 }

@@ -5,6 +5,20 @@ Map<String, dynamic> mapCleanerWorkItem(Map<String, dynamic> row,
   final orderId = row['order_id'] ?? row['orderId'] ?? row['id'];
   final start = (row['start_time'] ?? row['startTime'] ?? '').toString();
   final end = (row['end_time'] ?? row['endTime'] ?? '').toString();
+  final addonRows =
+      (row['addonsDetailed'] ?? row['addons'] ?? const []) as List;
+  final detailed = addonRows
+      .whereType<Map>()
+      .where((item) => !['cancelled', 'rejected', 'refunded']
+          .contains('${item['paymentStatus'] ?? item['payment_status']}'))
+      .map((item) => Map<String, dynamic>.from(item))
+      .toList();
+  final accepted = detailed
+      .where((item) => item['requires_customer_approval'] != true)
+      .toList();
+  final proposed = detailed
+      .where((item) => item['requires_customer_approval'] == true)
+      .toList();
   final address = [
     row['settlement'],
     row['street'],
@@ -19,6 +33,14 @@ Map<String, dynamic> mapCleanerWorkItem(Map<String, dynamic> row,
     'id': orderId,
     'orderId': orderId,
     'area': _workItemArea(row['area']),
+    'addonsDetailed': accepted,
+    'addons': accepted
+        .map((item) => item['label'] ?? item['title_ru'] ?? '')
+        .where((label) => '$label'.isNotEmpty)
+        .toList(),
+    'addonCount': accepted.length,
+    'pendingAddonCount': proposed.length,
+    'proposedAddons': proposed,
     'startRequiresCustomerConfirmation':
         row['start_requires_customer_confirmation'] == true,
     'cleaningStartConfirmed': row['cleaning_start_confirmed'] == true,

@@ -1,3 +1,4 @@
+import '../../ui/customer_package_balances.dart';
 import '../../ui/customer_progress_info.dart';
 import '../../theme/domly_palette.dart';
 import '../../utils/service_coverage.dart';
@@ -293,13 +294,24 @@ class ProfileScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
+                            const SizedBox(height: 12),
+                            CustomerPackageBalances(
+                                packages: subscriptions,
+                                onOpen: (package) => Navigator.pushNamed(
+                                        context, '/client/package-calendar',
+                                        arguments: {
+                                          'subscriptionId': package['id']
+                                        }),
+                                onBuy: () => Navigator.pushNamed(
+                                    context, '/client/calculator')),
                             const SizedBox(height: 20),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Expanded(
                                   child: ProfileSummaryCard(
-                                    onTap: () => _showProgressInfo(context,profile),
+                                    onTap: () =>
+                                        _showProgressInfo(context, profile),
                                     height: 180,
                                     padding: const EdgeInsets.fromLTRB(
                                       27,
@@ -416,7 +428,8 @@ class ProfileScreen extends StatelessWidget {
                                     ).withValues(alpha: 0.75),
                                     child: InkWell(
                                       customBorder: const CircleBorder(),
-                                      onTap: () => _showProgressInfo(context,profile),
+                                      onTap: () =>
+                                          _showProgressInfo(context, profile),
                                       child: SizedBox(
                                         width: 23,
                                         height: 23,
@@ -709,11 +722,19 @@ class ProfileScreen extends StatelessWidget {
     }
   }
 
-  static void _showProgressInfo(BuildContext context,Map<String,dynamic> profile) {
-    showModalBottomSheet<void>(context:context,showDragHandle:true,isScrollControlled:true,
-      builder:(context)=>SafeArea(child:ConstrainedBox(
-        constraints:BoxConstraints(maxHeight:MediaQuery.sizeOf(context).height*.85),
-        child:SingleChildScrollView(padding:const EdgeInsets.all(24),child:CustomerProgressInfo(profile:profile)))));
+  static void _showProgressInfo(
+      BuildContext context, Map<String, dynamic> profile) {
+    showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (context) => SafeArea(
+            child: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * .85),
+                child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: CustomerProgressInfo(profile: profile)))));
   }
 
   static void _showInfo(BuildContext context, String title, String subtitle) {

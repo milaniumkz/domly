@@ -1,3 +1,4 @@
+import 'package:domly/services/firestore_data_service.dart';
 import 'package:domly/utils/cleaner_order_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -81,5 +82,58 @@ void main() {
     });
     expect(completed['completedAt'], 'finish');
     expect(completed['cleaningStartConfirmed'], true);
+  });
+  test('calendar retains accepted extras and separates unapproved proposals',
+      () {
+    final item = mapCleanerWorkItem({
+      'id': 'order',
+      'area': '67',
+      'scheduled_date': '2039-06-01',
+      'estimated_duration_minutes': 197,
+      'addons': [
+        {
+          'id': 'oven',
+          'label': 'Духовка',
+          'quantity': 2,
+          'paymentStatus': 'paid',
+          'requires_customer_approval': false
+        },
+        {
+          'id': 'window',
+          'label': 'Окна',
+          'quantity': 1,
+          'paymentStatus': 'pending',
+          'requires_customer_approval': false
+        },
+        {
+          'id': 'sofa',
+          'label': 'Диван',
+          'quantity': 1,
+          'paymentStatus': 'draft',
+          'requires_customer_approval': true
+        },
+        {'id': 'cancelled', 'label': 'Отменено', 'paymentStatus': 'cancelled'},
+      ]
+    });
+    expect(item['addonCount'], 2);
+    expect(item['pendingAddonCount'], 1);
+    expect((item['addonsDetailed'] as List).first['quantity'], 2);
+    expect(item['addons'], ['Духовка', 'Окна']);
+    final second = mapCleanerWorkItem({
+      'id': 'other',
+      'area': '88.7',
+      'scheduled_date': '2039-06-01',
+      'estimated_duration_minutes': 142,
+      'addons': [
+        {'id': 'hood', 'label': 'Вытяжка', 'paymentStatus': 'paid'}
+      ]
+    });
+    final summary = FirestoreDataService.instance.cleanerScheduleSummary(
+        [item, second], DateTime(2039, 6, 1))['summary'] as Map;
+    expect(summary['totalAddonCount'], 3);
+    expect(summary['occupiedHours'], '5.7');
+    expect(summary['remainingMinutes'], 171);
+    expect(summary['totalArea'], 155.7);
+    expect(summary['remainingArea'], 64.3);
   });
 }

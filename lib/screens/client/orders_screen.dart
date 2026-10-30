@@ -1,3 +1,4 @@
+import '../../ui/order_addon_price.dart';
 import '../../models/order_addon_item.dart';
 import '../../theme/domly_palette.dart';
 import '../common/order_payment_retry.dart';
@@ -29,7 +30,16 @@ class _OrderAddonGroupDef {
 }
 
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  const OrdersScreen(
+      {super.key,
+      this.scheduleSlots,
+      this.orders,
+      this.addonGroups,
+      this.addonRequests});
+  final Stream<List<Map<String, dynamic>>>? scheduleSlots;
+  final Stream<List<Map<String, dynamic>>>? orders;
+  final Stream<List<Map<String, dynamic>>>? addonGroups;
+  final Stream<List<Map<String, dynamic>>>? addonRequests;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -246,13 +256,16 @@ class _OrdersScreenState extends State<OrdersScreen>
   bool _pendingFocusHandled = false;
   String? _pendingFocusOrderId;
   String? _homeAction;
+  String? _pendingAddonRequestId;
+  bool _proposalOpened = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _addonGroupsSubscription =
-        AppConfigService.instance.addonGroupConfigsStream().listen((groups) {
+    _addonGroupsSubscription = (widget.addonGroups ??
+            AppConfigService.instance.addonGroupConfigsStream())
+        .listen((groups) {
       if (!mounted) return;
       setState(() {
         _addonGroups = _mapAddonGroupConfigs(groups);
@@ -326,6 +339,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       return;
     }
     _homeAction = args['homeAction']?.toString();
+    _pendingAddonRequestId = args['focusAddonRequestId']?.toString();
     final rawTab = args['initialTab']?.toString().trim().toLowerCase();
     if (rawTab == 'history' || rawTab == 'completed') {
       _tabController.index = 1;
@@ -382,7 +396,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     DomlyPalette.watch(context);
 
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.customerScheduleSlotsStream(),
+      stream: widget.scheduleSlots ?? _data.customerScheduleSlotsStream(),
       initialData: const <Map<String, dynamic>>[],
       builder: (context, slotsSnap) {
         TranslationScope.watch(context);
@@ -401,7 +415,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         _openPendingEditIfNeeded(active);
 
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _data.customerOrdersStream(),
+          stream: widget.orders ?? _data.customerOrdersStream(),
           initialData: const <Map<String, dynamic>>[],
           builder: (context, ordersSnap) {
             TranslationScope.watch(context);
@@ -459,7 +473,8 @@ class _OrdersScreenState extends State<OrdersScreen>
             );
 
             return StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _data.customerAddonRequestsStream(),
+              stream:
+                  widget.addonRequests ?? _data.customerAddonRequestsStream(),
               initialData: const <Map<String, dynamic>>[],
               builder: (context, addonSnap) {
                 TranslationScope.watch(context);
@@ -470,6 +485,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                           'pending_customer',
                     )
                     .toList();
+                _openAddonProposalIfNeeded(addonRequests);
                 return DomlyShell(
                   bottomNavigationBar: const DomlyClientBottomNav(
                     currentIndex: 1,
@@ -601,7 +617,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           if (mounted) {
             if (_homeAction == 'checklist') {
               _showClientChecklist(slot);
-            } else {
+            } else if (_homeAction == 'details' || _homeAction == 'cancel') {
               _showFigmaSlotActions(slot);
             }
           }
@@ -725,7 +741,30 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
-  Widget _buildAddonRequestCard(Map<String, dynamic> request) {
+  void _openAddonProposalIfNeeded(List<Map<String, dynamic>> requests) {
+    if (_proposalOpened || _pendingAddonRequestId == null) return;
+    final proposal = requests
+        .where((request) =>
+            '${request['orderId'] ?? request['id']}' == _pendingAddonRequestId)
+        .firstOrNull;
+    if (proposal == null) return;
+    _proposalOpened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          builder: (_) => SafeArea(
+              child: SingleChildScrollView(
+                  child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child:
+                          _buildAddonRequestCard(proposal, inSheet: true)))));
+    });
+  }
+
+  Widget _buildAddonRequestCard(Map<String, dynamic> request,
+      {bool inSheet = false}) {
     final labels = _formatAddonRequestLabels(request);
     final amount = ((request['amount'] ?? 0) as num?)?.toInt() ?? 0;
     final cleanerName = (request['cleanerName'] ?? 'Уборщица').toString();
@@ -781,14 +820,20 @@ class _OrdersScreenState extends State<OrdersScreen>
               Expanded(
                 child: DomlySecondaryButton(
                   label: 'Отклонить',
-                  onPressed: () => _rejectAddonRequest(request),
+                  onPressed: () async {
+                    final success = await _rejectAddonRequest(request);
+                    if (success && inSheet && mounted) Navigator.pop(context);
+                  },
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: DomlyPrimaryButton(
                   label: 'Согласовать',
-                  onPressed: () => _approveAddonRequest(request),
+                  onPressed: () async {
+                    final success = await _approveAddonRequest(request);
+                    if (success && inSheet && mounted) Navigator.pop(context);
+                  },
                 ),
               ),
             ],
@@ -819,26 +864,44 @@ class _OrdersScreenState extends State<OrdersScreen>
     return labels.where((item) => item.trim().isNotEmpty).join(', ');
   }
 
-  Future<void> _approveAddonRequest(Map<String, dynamic> request) async {
+  Future<bool> _approveAddonRequest(Map<String, dynamic> request) async {
     final requestId = (request['id'] ?? '').toString();
-    if (requestId.isEmpty) return;
+    if (requestId.isEmpty) return false;
     final amount =
         ((request['amount'] ?? request['price'] ?? 0) as num?)?.toInt() ?? 0;
+    if (amount == 0) {
+      try {
+        await _data.approveCleanerAddonRequest(
+            requestId: requestId, paymentMethod: 'separate');
+        if (mounted)
+          showDomlySnackBar(context,
+              title: 'Согласование отправлено',
+              type: DomlySnackBarType.success);
+        return true;
+      } catch (error) {
+        if (mounted)
+          showDomlySnackBar(context,
+              title: 'Не удалось согласовать допы',
+              subtitle: UserErrorMessage.message(error),
+              type: DomlySnackBarType.error);
+        return false;
+      }
+    }
     final profile = await _data.customerProfileStream().first;
-    if (!mounted) return;
+    if (!mounted) return false;
     final bonusBalance = (profile?['bonusPoints'] as num?)?.toInt() ?? 0;
     final bonusLimit = addonBonusSpendLimit(
       amount,
       await AppConfigService.instance.promotionsStream().first,
     );
-    if (!mounted) return;
+    if (!mounted) return false;
     final paymentSelection = await showPaymentMethodOptionsDialog(
       context,
       bonusBalance: bonusBalance,
       maxBonusToSpend: bonusLimit,
       paymentAmount: amount,
     );
-    if (!mounted || paymentSelection == null) return;
+    if (!mounted || paymentSelection == null) return false;
     String? kaspiPhone;
     var selectedBonusToSpend =
         paymentSelection.method == DomlyPaymentMethod.bonus
@@ -854,7 +917,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         paymentAmount: amount,
         initialUseBonus: selectedBonusToSpend > 0,
       );
-      if (!mounted || paymentRequest == null) return;
+      if (!mounted || paymentRequest == null) return false;
       kaspiPhone = paymentRequest.phone;
       selectedBonusToSpend = paymentRequest.useBonus
           ? bonusBalance.clamp(0, bonusLimit).clamp(0, amount).toInt()
@@ -871,7 +934,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         ),
         message: 'Отправляем согласование...',
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       if (paymentSelection.method == DomlyPaymentMethod.online) {
         final paymentId = (result['paymentId'] ?? '').toString();
         if (paymentId.isNotEmpty) {
@@ -880,13 +943,13 @@ class _OrdersScreenState extends State<OrdersScreen>
             task: () => _data.createBccPaymentSession(orderId: paymentId),
             message: 'Открываем онлайн-оплату...',
           );
-          if (!mounted) return;
+          if (!mounted) return false;
           Navigator.pushNamed(
             context,
             '/client/online-payment',
             arguments: paymentSession,
           );
-          return;
+          return false;
         }
       }
       showDomlySnackBar(
@@ -896,37 +959,41 @@ class _OrdersScreenState extends State<OrdersScreen>
             'Менеджер подтвердит оплату, после этого допы добавятся в уборку.',
         type: DomlySnackBarType.success,
       );
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       showDomlySnackBar(
         context,
         title: 'Не удалось согласовать допы',
         subtitle: '$error',
         type: DomlySnackBarType.error,
       );
+      return false;
     }
   }
 
-  Future<void> _rejectAddonRequest(Map<String, dynamic> request) async {
+  Future<bool> _rejectAddonRequest(Map<String, dynamic> request) async {
     final requestId = (request['id'] ?? '').toString();
-    if (requestId.isEmpty) return;
+    if (requestId.isEmpty) return false;
     try {
       await _data.rejectCleanerAddonRequest(requestId: requestId);
-      if (!mounted) return;
+      if (!mounted) return false;
       showDomlySnackBar(
         context,
         title: 'Доп. услуги отклонены',
         subtitle: 'Уборщица увидит отказ.',
         type: DomlySnackBarType.info,
       );
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       showDomlySnackBar(
         context,
         title: 'Не удалось отклонить допы',
         subtitle: '$error',
         type: DomlySnackBarType.error,
       );
+      return false;
     }
   }
 
@@ -3049,6 +3116,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                             }
                           });
                         },
+                        area: num.tryParse(
+                                '${slot['area'] ?? slot['apartmentArea'] ?? 0}') ??
+                            0,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -3504,12 +3574,12 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Widget _buildAddonEditorGroup(
-    _OrderAddonGroupDef group,
-    Map<String, int> addonQuantities,
-    bool expanded,
-    VoidCallback onToggle,
-    void Function(OrderAddonItem item, int quantity) onItemChanged,
-  ) {
+      _OrderAddonGroupDef group,
+      Map<String, int> addonQuantities,
+      bool expanded,
+      VoidCallback onToggle,
+      void Function(OrderAddonItem item, int quantity) onItemChanged,
+      {num area = 0}) {
     final selectedCount = _selectedCountForGroup(group, addonQuantities);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -3584,6 +3654,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                         item,
                         addonQuantities,
                         (next) => onItemChanged(item, next),
+                        area: area,
                       ),
                     )
                     .toList(),
@@ -3594,13 +3665,11 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
-  Widget _buildAddonEditorRow(
-    OrderAddonItem item,
-    Map<String, int> addonQuantities,
-    ValueChanged<int> onChanged,
-  ) {
+  Widget _buildAddonEditorRow(OrderAddonItem item,
+      Map<String, int> addonQuantities, ValueChanged<int> onChanged,
+      {num area = 0}) {
     final quantity = addonQuantities[item.key] ?? 0;
-    final unitPrice = _addonUnitPrices[item.key] ?? 0;
+    final unitPrice = _addonUnitPrices[item.key];
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -3618,7 +3687,7 @@ class _OrdersScreenState extends State<OrdersScreen>
               color: DomlyPalette.surface(DomlyColors.backgroundSoft),
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
-                onTap: () => _showAddonInfo(item, unitPrice: unitPrice),
+                onTap: () => _showAddonInfo(item, unitPrice: unitPrice ?? 0),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding: EdgeInsets.all(6),
@@ -3643,25 +3712,19 @@ class _OrdersScreenState extends State<OrdersScreen>
                     color: DomlyPalette.foreground(DomlyColors.foreground),
                   ),
                 ),
-                if (item.separatePayment) ...[
+                const SizedBox(height: 4),
+                OrderAddonPrice(
+                    unitPrice: unitPrice,
+                    quantity: quantity,
+                    pricingType: item.pricingType,
+                    area: area,
+                    separatePayment: item.separatePayment),
+                if (!item.separatePayment && item.note != null) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    'Оплачивается отдельно при оценке специалиста'.tr(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: DomlyPalette.foreground(DomlyColors.buttonPrimary),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ] else if (item.note != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    (item.note!).tr(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: DomlyPalette.foreground(DomlyColors.muted),
-                    ),
-                  ),
+                  Text(item.note!.tr(),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: DomlyPalette.foreground(DomlyColors.muted))),
                 ],
               ],
             ),

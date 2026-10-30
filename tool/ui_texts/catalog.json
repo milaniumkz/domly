@@ -2233,6 +2233,13 @@
     ]
   },
   {
+    "key": "t_e57aab5c64431737",
+    "source": "Выбрать время",
+    "locations": [
+      "lib/screens/client/package_calendar_screen.dart"
+    ]
+  },
+  {
     "key": "t_642d36dd1ae6b9ec",
     "source": "Выбрать дату",
     "locations": [
@@ -3589,6 +3596,13 @@
     ]
   },
   {
+    "key": "t_99bc0f1bf4281b33",
+    "source": "Доступно: {left} из {total}",
+    "locations": [
+      "lib/ui/customer_package_balances.dart"
+    ]
+  },
+  {
     "key": "t_77d46761da50e82f",
     "source": "Доступный остаток изменился. Обновите экран и выберите даты снова.",
     "locations": [
@@ -4930,6 +4944,13 @@
     ]
   },
   {
+    "key": "t_8866dd1a6a38df30",
+    "source": "Итого: {price}",
+    "locations": [
+      "lib/ui/order_addon_price.dart"
+    ]
+  },
+  {
     "key": "t_ad2cb3caa9b1a32a",
     "source": "Ищем адреса только в городе {p0}",
     "locations": [
@@ -5454,6 +5475,13 @@
     ]
   },
   {
+    "key": "t_00898ec38e0f6abf",
+    "source": "Купить ещё пакет",
+    "locations": [
+      "lib/ui/customer_package_balances.dart"
+    ]
+  },
+  {
     "key": "t_8db7dad5aa3562e3",
     "source": "Купленные допы",
     "locations": [
@@ -5731,13 +5759,6 @@
     ]
   },
   {
-    "key": "t_5274279542ed2028",
-    "source": "Можно выбрать сегодня и любой следующий день. После выбора времени система найдет свободную уборщицу по району и площади.",
-    "locations": [
-      "lib/screens/client/package_calendar_screen.dart"
-    ]
-  },
-  {
     "key": "t_03692abf32f70e71",
     "source": "Можно вывести на этой неделе",
     "locations": [
@@ -5812,6 +5833,13 @@
     "source": "Мои заказы",
     "locations": [
       "lib/screens/cleaner/cleaner_orders_screen.dart"
+    ]
+  },
+  {
+    "key": "t_1b81415a8103dada",
+    "source": "Мои пакеты",
+    "locations": [
+      "lib/ui/customer_package_balances.dart"
     ]
   },
   {
@@ -6000,6 +6028,13 @@
     ]
   },
   {
+    "key": "t_fbd42532f91b5414",
+    "source": "На заморозке",
+    "locations": [
+      "lib/ui/customer_package_balances.dart"
+    ]
+  },
+  {
     "key": "t_195c5449741a2b41",
     "source": "На одобрении",
     "locations": [
@@ -6020,6 +6055,13 @@
     "source": "На рассмотрении с {p0}",
     "locations": [
       "lib/screens/common/complaint_screen.dart"
+    ]
+  },
+  {
+    "key": "t_5535de6f34ab5710",
+    "source": "На согласовании: {count}",
+    "locations": [
+      "lib/screens/cleaner/cleaner_calendar_screen.dart"
     ]
   },
   {
@@ -7456,6 +7498,13 @@
     ]
   },
   {
+    "key": "t_5d36063740a5377b",
+    "source": "Общий остаток: {count} уборок",
+    "locations": [
+      "lib/ui/customer_package_balances.dart"
+    ]
+  },
+  {
     "key": "t_feab394919a7d435",
     "source": "Обязательно",
     "locations": [
@@ -7738,6 +7787,13 @@
     ]
   },
   {
+    "key": "t_94b83aec733da32d",
+    "source": "Оплата отдельно по факту",
+    "locations": [
+      "lib/ui/order_addon_price.dart"
+    ]
+  },
+  {
     "key": "t_e93c3d6092978a85",
     "source": "Оплата подтверждена",
     "locations": [
@@ -7845,8 +7901,7 @@
     "source": "Оплачивается отдельно при оценке специалиста",
     "locations": [
       "lib/screens/client/calculator_screen.dart",
-      "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/orders_screen.dart"
+      "lib/screens/client/client_home_screen.dart"
     ]
   },
   {
@@ -8667,6 +8722,7 @@
       "lib/screens/client/package_selection_screen.dart",
       "lib/screens/client/training_order_screen.dart",
       "lib/services/firestore_data_service.dart",
+      "lib/ui/customer_package_balances.dart",
       "lib/utils/package_catalog_utils.dart"
     ]
   },
@@ -10081,20 +10137,6 @@
     ]
   },
   {
-    "key": "t_768af677624eed27",
-    "source": "Применить",
-    "locations": [
-      "lib/screens/client/package_calendar_screen.dart"
-    ]
-  },
-  {
-    "key": "t_babac6cb305ccca4",
-    "source": "Применить · {p0}",
-    "locations": [
-      "lib/screens/client/package_calendar_screen.dart"
-    ]
-  },
-  {
     "key": "t_0d512b5ad07fceb5",
     "source": "Применить код",
     "locations": [
@@ -11082,6 +11124,13 @@
     "source": "Смотрите прямо в приложении",
     "locations": [
       "lib/screens/common/video_detail_screen.dart"
+    ]
+  },
+  {
+    "key": "t_71841c42954b7a72",
+    "source": "Сначала выберите дату и допуслуги, затем время. Доступное время учитывает полную длительность уборки.",
+    "locations": [
+      "lib/screens/client/package_calendar_screen.dart"
     ]
   },
   {
@@ -12691,7 +12740,29 @@
     "key": "t_a85b2070ffbb4eae",
     "source": "Цена уточняется",
     "locations": [
-      "lib/screens/client/package_calendar_screen.dart"
+      "lib/screens/client/package_calendar_screen.dart",
+      "lib/ui/order_addon_price.dart"
+    ]
+  },
+  {
+    "key": "t_a55dcebeb4aa8915",
+    "source": "Цена: {price} за единицу",
+    "locations": [
+      "lib/ui/order_addon_price.dart"
+    ]
+  },
+  {
+    "key": "t_ca2fddde13891568",
+    "source": "Цена: {price} за м²",
+    "locations": [
+      "lib/ui/order_addon_price.dart"
+    ]
+  },
+  {
+    "key": "t_68d6d4f5f213165c",
+    "source": "Цена: {price} за уборку",
+    "locations": [
+      "lib/ui/order_addon_price.dart"
     ]
   },
   {

@@ -49,4 +49,18 @@ void main() {
     final details = result.single['addonsDetailed'] as List;
     expect(details.map((r) => r['label']), ['Терезелер', 'Окна']);
   });
+  test(
+      'explicit origins separate customer edits from cleaner proposals and on-site payment',
+      () {
+    final own = row('own')..['requires_customer_approval'] = false;
+    final specialist = row('sofa', status: 'draft')
+      ..['requires_customer_approval'] = true
+      ..['paid_separately'] = true;
+    final result = mapBackendAddonRequests([own, specialist]);
+    expect(result.first['status'], 'pending');
+    expect(result.last['status'], 'pending_customer');
+    expect(result.last['amount'], 0);
+    expect((result.last['addonsDetailed'] as List).single['separatePayment'],
+        true);
+  });
 }

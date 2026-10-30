@@ -1,3 +1,4 @@
+import type {NotificationService} from '../../modules/domainServices';
 import {requestAccountDeletion,restoreDeletedAccount} from '../../modules/accountDeletion';
 import {freezePackage} from '../../modules/packageFreeze';
 import {idempotent,idempotentTransaction} from '../../common/idempotency';
@@ -9,7 +10,7 @@ import { ApiError, asyncHandler, ok } from '../../common/api';
 import { Database } from '../../infrastructure/db/Database';
 import { first } from '../../common/sql';
 
-export function mobileRouter(db: Database) {
+export function mobileRouter(db: Database,notifications?:NotificationService) {
   const router = Router();
   // Deleted accounts must not retain access through an unexpired JWT.
   router.use(asyncHandler(async (req, _res, next) => {
@@ -35,7 +36,7 @@ export function mobileRouter(db: Database) {
   }));
 
   router.post('/orders/:id/addons', auth(['customer']), asyncHandler(async (req,res) => {
-    ok(res, await updateOrderAddons(db,String(req.params.id),req.user!.id,req.body.addonsDetailed));
+    ok(res, await updateOrderAddons(db,String(req.params.id),req.user!.id,req.body.addonsDetailed,notifications));
   }));
 
   router.post('/packages/my/:id/freeze', auth(['customer']),

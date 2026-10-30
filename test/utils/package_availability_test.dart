@@ -39,4 +39,33 @@ void main() {
             hasActiveCleaning: false),
         isFalse);
   });
+  test('new paid wallets add to all existing credits without double counting',
+      () {
+    Map<String, dynamic> wallet(String id, int left, int total) => {
+          'id': id,
+          'status': 'active',
+          'paymentStatus': 'paid',
+          'availableCleanings': left,
+          'totalCleanings': total
+        };
+    final old = wallet('old', 20, 24), fresh = wallet('new', 4, 4);
+    expect(totalAvailablePackageVisits([old, fresh]), 24);
+    expect(
+        totalAvailablePackageVisits(
+            [wallet('two', 2, 2), wallet('eight', 8, 8)]),
+        10);
+    expect(
+        totalAvailablePackageVisits([
+          old,
+          fresh,
+          old,
+          {
+            ...wallet('pending', 8, 8),
+            'status': 'pending_payment',
+            'paymentStatus': 'pending_invoice'
+          }
+        ]),
+        24);
+    expect(paidPackageBalances([wallet('empty', 0, 2), fresh]).length, 2);
+  });
 }

@@ -22,7 +22,11 @@ class CleanerWorkScheduleButton extends StatelessWidget {
 }
 
 class CleanerWorkScheduleSheet extends StatefulWidget {
-  const CleanerWorkScheduleSheet({super.key});
+  const CleanerWorkScheduleSheet(
+      {super.key, this.loadSchedule, this.submitSchedule});
+  final Future<Map<String, dynamic>> Function()? loadSchedule;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic>)?
+      submitSchedule;
   @override
   State<CleanerWorkScheduleSheet> createState() =>
       _CleanerWorkScheduleSheetState();
@@ -43,12 +47,14 @@ class _CleanerWorkScheduleSheetState extends State<CleanerWorkScheduleSheet> {
 
   Future<void> _load() async {
     try {
-      final value = await _data.cleanerWorkingSchedule();
+      final value =
+          await (widget.loadSchedule ?? _data.cleanerWorkingSchedule)();
       if (!mounted) return;
       setState(() {
         _snapshot = value;
         _error = null;
-        if(![value['currentWeekStart'],value['nextWeekStart']].contains(_week))_week=value['nextWeekStart']?.toString();
+        if (![value['currentWeekStart'], value['nextWeekStart']]
+            .contains(_week)) _week = value['nextWeekStart']?.toString();
       });
     } catch (error) {
       if (mounted) setState(() => _error = error);
@@ -63,6 +69,15 @@ class _CleanerWorkScheduleSheetState extends State<CleanerWorkScheduleSheet> {
       week,
       () =>
           workScheduleDays(week, _request(week)?['days'] as List? ?? const []));
+  bool get _unchangedSubmitted {
+    if (_week == null) return false;
+    final request = _request(_week!);
+    return request != null &&
+        ['pending', 'approved'].contains(request['status']) &&
+        workScheduleMatches(
+            _days(_week!), request['days'] as List? ?? const []);
+  }
+
   Future<void> _time(Map<String, dynamic> day, String field) async {
     final parts = '${day[field]}'.split(':');
     final value = await showTimePicker(
@@ -82,15 +97,29 @@ class _CleanerWorkScheduleSheetState extends State<CleanerWorkScheduleSheet> {
   }
 
   Future<void> _save() async {
-    if (_week == null || _saving) return;
+    if (_week == null || _saving || _unchangedSubmitted) return;
     setState(() => _saving = true);
     try {
       _requestKey ??= 'work-$_week-${DateTime.now().microsecondsSinceEpoch}';
-      await _data.submitWorkingSchedule({
+      final saved =
+          await (widget.submitSchedule ?? _data.submitWorkingSchedule)({
         'weekStart': _week,
         'days': _days(_week!),
         'clientRequestId': _requestKey
       });
+      if (mounted)
+        setState(() {
+          _snapshot = {
+            ...?_snapshot,
+            'requests': [
+              saved,
+              ...(_snapshot?['requests'] as List? ?? const [])
+                  .whereType<Map>()
+                  .where((request) =>
+                      workScheduleDay(request['week_start']) != _week),
+            ]
+          };
+        });
       await _load();
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
@@ -224,7 +253,9 @@ class _CleanerWorkScheduleSheetState extends State<CleanerWorkScheduleSheet> {
                                               ])));
                                 }).toList())),
                                 FilledButton(
-                                    onPressed: _saving ? null : _save,
+                                    onPressed: _saving || _unchangedSubmitted
+                                        ? null
+                                        : _save,
                                     child: Text((_saving
                                             ? 'Отправляем...'
                                             : 'Отправить эту неделю на одобрение')
