@@ -1,3 +1,4 @@
+import {durationAfterAddonChange} from '../modules/cleaningDuration';
 import {workingScheduleWeeks,normalizeWorkSchedule,workWeekDates} from '../modules/workingSchedule';
 import {cleaningDurationMinutes} from '../modules/cleaningDuration';
 import {fitsBookingHours,validateBookingHours} from '../modules/bookingValidation';
@@ -1156,4 +1157,11 @@ test('working weeks use Kazakhstan dates and enforce seven explicit daily interv
   assert.throws(()=>normalizeWorkSchedule({weekStart:weeks.nextWeekStart,days:days.slice(1)},now));
   assert.throws(()=>normalizeWorkSchedule({weekStart:'2026-12-01',days},now));
   assert.throws(()=>normalizeWorkSchedule({weekStart:weeks.nextWeekStart,days:days.map(d=>({...d,endTime:'11:00'}))},now));
+});
+
+test('running cleaning reserves added minutes from now when the original end has passed',()=>{
+  const order={status:'in_progress',scheduled_date:'2039-06-01',start_time:'10:00:00',estimated_duration_minutes:120};
+  assert.equal(durationAfterAddonChange(order,0,25,Date.parse('2039-06-01T12:30:00+05:00')),175);
+  assert.equal(durationAfterAddonChange(order,0,25,Date.parse('2039-06-01T11:30:00+05:00')),145);
+  assert.equal(durationAfterAddonChange({...order,status:'assigned'},0,25,Date.parse('2039-06-01T12:30:00+05:00')),145);
 });

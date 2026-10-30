@@ -3596,6 +3596,13 @@
     ]
   },
   {
+    "key": "t_99bc0f1bf4281b33",
+    "source": "Доступно: {left} из {total}",
+    "locations": [
+      "lib/ui/customer_package_balances.dart"
+    ]
+  },
+  {
     "key": "t_77d46761da50e82f",
     "source": "Доступный остаток изменился. Обновите экран и выберите даты снова.",
     "locations": [
@@ -5468,6 +5475,13 @@
     ]
   },
   {
+    "key": "t_00898ec38e0f6abf",
+    "source": "Купить ещё пакет",
+    "locations": [
+      "lib/ui/customer_package_balances.dart"
+    ]
+  },
+  {
     "key": "t_8db7dad5aa3562e3",
     "source": "Купленные допы",
     "locations": [
@@ -5822,6 +5836,13 @@
     ]
   },
   {
+    "key": "t_1b81415a8103dada",
+    "source": "Мои пакеты",
+    "locations": [
+      "lib/ui/customer_package_balances.dart"
+    ]
+  },
+  {
     "key": "t_54ead786e5a7cfaf",
     "source": "Мой адрес",
     "locations": [
@@ -6007,6 +6028,13 @@
     ]
   },
   {
+    "key": "t_fbd42532f91b5414",
+    "source": "На заморозке",
+    "locations": [
+      "lib/ui/customer_package_balances.dart"
+    ]
+  },
+  {
     "key": "t_195c5449741a2b41",
     "source": "На одобрении",
     "locations": [
@@ -6027,6 +6055,13 @@
     "source": "На рассмотрении с {p0}",
     "locations": [
       "lib/screens/common/complaint_screen.dart"
+    ]
+  },
+  {
+    "key": "t_5535de6f34ab5710",
+    "source": "На согласовании: {count}",
+    "locations": [
+      "lib/screens/cleaner/cleaner_calendar_screen.dart"
     ]
   },
   {
@@ -7463,6 +7498,13 @@
     ]
   },
   {
+    "key": "t_5d36063740a5377b",
+    "source": "Общий остаток: {count} уборок",
+    "locations": [
+      "lib/ui/customer_package_balances.dart"
+    ]
+  },
+  {
     "key": "t_feab394919a7d435",
     "source": "Обязательно",
     "locations": [
@@ -8680,6 +8722,7 @@
       "lib/screens/client/package_selection_screen.dart",
       "lib/screens/client/training_order_screen.dart",
       "lib/services/firestore_data_service.dart",
+      "lib/ui/customer_package_balances.dart",
       "lib/utils/package_catalog_utils.dart"
     ]
   },

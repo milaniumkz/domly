@@ -10,6 +10,17 @@ void main() {
     expect(link.arguments, {'chatId': 'chat-1'});
   });
 
+  test(
+      'cleaner proposal notification opens approval details rather than order actions',
+      () {
+    final link = notificationDestination(
+        {'target_type': 'addon_request', 'target_id': 'order-1'},
+        cleaner: false)!;
+    expect(link.route, '/client/orders');
+    expect(link.arguments?['focusAddonRequestId'], 'order-1');
+    expect(link.arguments?.containsKey('focusOrderId'), false);
+  });
+
   test('backend order notification opens and focuses its customer order', () {
     final link = notificationDestination(
         {'type': 'order', 'targetId': 'order-1'},

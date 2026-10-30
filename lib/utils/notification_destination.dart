@@ -23,7 +23,8 @@ NotificationDestination? notificationDestination(Map<String, dynamic> item,
           .firstOrNull ??
       '';
   final orders = cleaner ? '/cleaner/orders' : '/client/orders';
-  if(type=='work_schedule'&&cleaner)return const NotificationDestination('/cleaner/home');
+  if (type == 'work_schedule' && cleaner)
+    return const NotificationDestination('/cleaner/home');
   if (type.contains('bonus') || type == 'referral_bonus') {
     return NotificationDestination(
         cleaner ? '/cleaner/bonus' : '/client/bonus');
@@ -57,6 +58,10 @@ NotificationDestination? notificationDestination(Map<String, dynamic> item,
   if ({'user', 'address_request', 'tier_change'}.contains(type)) {
     return NotificationDestination(
         cleaner ? '/cleaner/profile' : '/client/profile');
+  }
+  if (type == 'addon_request' && !cleaner && id.isNotEmpty) {
+    return NotificationDestination(
+        orders, {'focusAddonRequestId': id, 'initialTab': 'active'});
   }
   if ({
     'order',

@@ -499,12 +499,17 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
         try {
           await db.query("INSERT INTO service_orders(id,customer_id,status,payable_amount) VALUES($1,$2,'pending_payment',1234)",[addonOrder,stranger]);
           await db.query("INSERT INTO catalog_addons(id,title_ru,price) VALUES($1,'Fixture extra',1234)",[addon]);
-          await db.query("INSERT INTO order_addons(order_id,addon_id,price,payment_status) VALUES($1,$2,1234,'pending')",[addonOrder,addon]);
+          await db.query("INSERT INTO order_addons(order_id,addon_id,price,payment_status,requires_customer_approval) VALUES($1,$2,1234,'pending',TRUE)",[addonOrder,addon]);
           const response=await fetch(base+`/orders/${addonOrder}/addon-requests/approve`,{method:'POST',headers:{Authorization:'Bearer '+other,'Content-Type':'application/json'},body:JSON.stringify({kaspiPhone:'+77000000000',paymentMethod:'kaspi'})});
           assert.equal(response.status,200);
           const result=(await response.json() as any).data;
           const saved=(await db.query('SELECT * FROM payments WHERE id=$1',[result.paymentId])).rows[0];
           assert.equal(saved.status,'invoice_requested');assert.equal(Number(saved.amount),1234);
+          assert.equal(Number((await db.query('SELECT total_amount FROM service_orders WHERE id=$1',[addonOrder])).rows[0].total_amount),1234);
+          assert.equal((await db.query('SELECT requires_customer_approval FROM order_addons WHERE order_id=$1',[addonOrder])).rows[0].requires_customer_approval,false);
+          const repeated=await fetch(base+`/orders/${addonOrder}/addon-requests/approve`,{method:'POST',headers:{Authorization:'Bearer '+other,'Content-Type':'application/json'},body:JSON.stringify({kaspiPhone:'+77000000000',paymentMethod:'kaspi'})});
+          assert.equal(repeated.status,200);assert.equal(((await repeated.json()) as any).data.paymentId,result.paymentId);
+
           assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM moon_ai_outbox WHERE payment_id=$1 AND kind='invoice'",[result.paymentId])).rows[0].n,1);
           assert.equal((await db.query('SELECT status FROM service_orders WHERE id=$1',[addonOrder])).rows[0].status,'pending_payment');
           await db.query("UPDATE payments SET status='cancelled' WHERE id=$1",[result.paymentId]);

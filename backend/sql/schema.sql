@@ -751,6 +751,8 @@ CREATE TABLE IF NOT EXISTS order_addons (
 
 -- Snapshot the payment arrangement; catalog edits must not change existing invoices.
 ALTER TABLE order_addons ADD COLUMN IF NOT EXISTS paid_separately BOOLEAN NOT NULL DEFAULT FALSE;
+-- NULL preserves the interpretation of legacy proposals; new writes declare their origin.
+ALTER TABLE order_addons ADD COLUMN IF NOT EXISTS requires_customer_approval BOOLEAN;
 
 CREATE TABLE IF NOT EXISTS order_status_history (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

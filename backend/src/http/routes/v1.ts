@@ -1,7 +1,7 @@
 import {notifySpecialistAddons} from '../../modules/specialistAddons';
 import {prepaidBookingAddons} from '../../modules/prepaidBookingAddons';
 import {readWorkingSchedule,submitWorkingSchedule,reviewWorkingSchedule} from '../../modules/workingSchedule';
-import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
+import {cleaningDurationMinutes,durationAfterAddonChange} from '../../modules/cleaningDuration';
 import {cancelHomePurchase,resumeHomePurchase} from '../../modules/homePurchase';
 import { formatAddonRecord, formatServiceDescription } from '../../modules/serviceDescription';
 import {PublicTextCatalog} from '../../modules/publicTextCatalog';
@@ -373,7 +373,8 @@ export function buildV1Router(deps: {
     }
     if (payment.order_id) {
       await deps.db.query(`UPDATE service_orders SET status=CASE WHEN status='pending_payment' THEN CASE WHEN cleaner_id IS NULL THEN 'pending_assignment' ELSE 'assigned' END ELSE status END, payable_amount=0, updated_at=NOW() WHERE id=$1 AND status<>'cancelled'`, [payment.order_id]);
-      await deps.db.query(`UPDATE order_addons SET payment_status='paid' WHERE order_id=$1 AND payment_status='pending' AND paid_separately=FALSE`, [payment.order_id]);
+      await deps.db.query('UPDATE checklist_reports SET requirements_initialized=FALSE WHERE order_id=$1',[payment.order_id]);
+      await deps.db.query(`UPDATE order_addons SET payment_status='paid' WHERE order_id=$1 AND payment_status='pending' AND paid_separately=FALSE AND requires_customer_approval IS DISTINCT FROM TRUE`, [payment.order_id]);
       const assigned = first<any>((await deps.db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[payment.order_id])).rows);
       if (!assigned?.cleaner_id) await offerNextCleanerAndNotify(payment.order_id);
     }
@@ -807,9 +808,10 @@ export function buildV1Router(deps: {
 
   router.get('/packages/my', auth(['customer']), asyncHandler(async (req, res) => {
     ok(res, (await deps.db.query(
-      `SELECT cp.*, p.name_ru, p.name_kk, p.description_ru, p.description_kk, p.cleaning_count, p.months
+      `SELECT cp.*, p.name_ru, p.name_kk, p.description_ru, p.description_kk, p.cleaning_count, p.months, a.city, a.street, a.house, a.apartment, COALESCE(a.verified_area,a.area) AS address_area
        FROM customer_packages cp
        JOIN catalog_packages p ON p.id=cp.package_id
+       LEFT JOIN customer_addresses a ON a.id=cp.address_id
        WHERE cp.customer_id=$1
        ORDER BY cp.created_at DESC`,
       [req.user!.id],
@@ -1492,13 +1494,13 @@ export function buildV1Router(deps: {
       )).rows);
       for (const addon of addons) {
         await tx.query(
-          `INSERT INTO order_addons (order_id, addon_id, quantity, price, duration_minutes, payment_status,paid_separately) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          `INSERT INTO order_addons (order_id, addon_id, quantity, price, duration_minutes, payment_status,paid_separately,requires_customer_approval) VALUES ($1,$2,$3,$4,$5,$6,$7,FALSE)`,
           [created!.id, addon.id, addon.quantity, addon.price, addon.paid_separately?0:Number(addon.duration_minutes ?? 0)*addon.quantity,addon.paid_separately?'draft':'pending',addon.paid_separately],
         );
       }
       for (const addon of prepaid) {
-        await tx.query(`INSERT INTO order_addons (order_id,addon_id,price,duration_minutes,quantity,payment_status,paid_separately)
-          VALUES ($1,$2,$3,$4,$5,$6,$7)`, [created!.id,addon.id,Number(addon.price),addon.separate?0:addon.durationMinutes ?? 0,addon.quantity,addon.separate?'draft':'paid',addon.separate===true]);
+        await tx.query(`INSERT INTO order_addons (order_id,addon_id,price,duration_minutes,quantity,payment_status,paid_separately,requires_customer_approval)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,FALSE)`, [created!.id,addon.id,Number(addon.price),addon.separate?0:addon.durationMinutes ?? 0,addon.quantity,addon.separate?'draft':'paid',addon.separate===true]);
       }
       return created;
     });
@@ -1591,8 +1593,14 @@ export function buildV1Router(deps: {
     const rows = (await deps.db.query(
       `SELECT o.*, o.id AS order_id, o.numeric_id AS order_number,
               cu.full_name AS customer_name, cu.phone AS customer_phone,
-              ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.access_comment, ca.area, ca.verified_area,
-              pkg.name_ru AS package_name_ru, pkg.name_kk AS package_name_kk
+              ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.access_comment, COALESCE(ca.verified_area,ca.area,o.area) AS area, ca.verified_area,
+              pkg.name_ru AS package_name_ru, pkg.name_kk AS package_name_kk,
+              COALESCE((SELECT json_agg(json_build_object('id',a.id,'key',a.id,'label',a.title_ru,
+                'quantity',oa.quantity,'price',oa.price,'durationMinutes',oa.duration_minutes,
+                'paymentStatus',oa.payment_status,'separatePayment',oa.paid_separately,
+                'requires_customer_approval',oa.requires_customer_approval) ORDER BY oa.created_at,oa.id)
+                FROM order_addons oa JOIN catalog_addons a ON a.id=oa.addon_id WHERE oa.order_id=o.id
+                AND oa.payment_status NOT IN ('rejected','cancelled','refunded')),'[]'::json) AS addons
        FROM service_orders o
        JOIN app_users cu ON cu.id=o.customer_id
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
@@ -1693,7 +1701,7 @@ export function buildV1Router(deps: {
                 ORDER BY d.created_at DESC LIMIT 1) AS cleaner_photo_url,
               COALESCE((SELECT json_agg(json_build_object('id',a.id,'key',a.id,'label',a.title_ru,'quantity',oa.quantity,
                 'price',oa.price,'durationMinutes',oa.duration_minutes,'paymentStatus',oa.payment_status,'separatePayment',oa.paid_separately))
-                FROM order_addons oa JOIN catalog_addons a ON a.id=oa.addon_id WHERE oa.order_id=o.id),'[]'::json) AS addons
+                FROM order_addons oa JOIN catalog_addons a ON a.id=oa.addon_id WHERE oa.order_id=o.id AND oa.requires_customer_approval IS DISTINCT FROM TRUE),'[]'::json) AS addons
        FROM service_orders o
        LEFT JOIN catalog_packages p ON p.id=o.package_id
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
@@ -2042,55 +2050,74 @@ export function buildV1Router(deps: {
     ok(res, { orderId: order.id, notification });
   }));
 
-  router.post('/orders/:id/addon-requests', auth(['cleaner', 'admin', 'superadmin']), asyncHandler(async (req, res) => {
-    const order = first<{ id: string; cleaner_id: string | null; customer_id: string; numeric_id: number }>((await deps.db.query(
-      `SELECT id, cleaner_id, customer_id, numeric_id FROM service_orders WHERE id=$1`,
-      [req.params.id],
-    )).rows);
-    if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
-    if (req.user!.role === 'cleaner' && order.cleaner_id !== req.user!.id) throw new ApiError(403, 'forbidden', 'Нет доступа к заказу.');
-    const addons = Array.isArray(req.body.addonsDetailed) ? req.body.addonsDetailed : [];
-    if (!addons.length) throw new ApiError(400, 'invalid_request', 'Выберите доп. услуги.');
-    const saved = [];
-    for (const item of addons) {
-      const addonId = String(item.addonId ?? item.id ?? '').trim();
-      if (!addonId) continue;
-      const addon = first<{ id: string; price: string; duration_minutes: number;paid_separately:boolean }>((await deps.db.query(
-        `SELECT id, price, duration_minutes,paid_separately FROM catalog_addons WHERE id=$1`,
-        [addonId],
-      )).rows);
-      if (!addon) continue;
-      const row = first((await deps.db.query(
-        `INSERT INTO order_addons (order_id, addon_id, quantity, price, duration_minutes, payment_status,paid_separately)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [order.id, addon.id, Number(item.quantity ?? 1), Number(item.price ?? addon.price ?? 0), addon.paid_separately?0:Number(item.durationMinutes ?? addon.duration_minutes ?? 0),addon.paid_separately?'draft':'pending',addon.paid_separately],
-      )).rows);
-      saved.push(row);
-    }
-    await deps.notifications.create({
-      userId: order.customer_id,
-      titleRu: 'Уборщица предложила доп. услуги',
-      bodyRu: `По заказу №${order.numeric_id} добавлены доп. услуги на подтверждение.`,
-      targetType: 'addon_request',
-      targetId: order.id,
-      dedupeKey: `addon-request-${order.id}-${Date.now()}`,
+  router.post('/orders/:id/addon-requests', auth(['cleaner','admin','superadmin']), asyncHandler(async(req,res)=>{
+    const saved=await deps.db.atomic(async()=>{
+      const order=first<any>((await deps.db.query('SELECT o.*,COALESCE(a.verified_area,a.area,o.area) AS service_area FROM service_orders o LEFT JOIN customer_addresses a ON a.id=o.address_id WHERE o.id=$1 FOR UPDATE OF o',[req.params.id])).rows);
+      if(!order)throw new ApiError(404,'not_found','Заказ не найден.');
+      if(req.user!.role==='cleaner'&&order.cleaner_id!==req.user!.id)throw new ApiError(403,'forbidden','Нет доступа к заказу.');
+      if(['completed','cancelled'].includes(order.status))throw new ApiError(409,'order_not_editable','Этот заказ нельзя изменить.');
+      const selected=req.body.addonsDetailed;
+      if(!Array.isArray(selected)||!selected.length||selected.length>100)throw new ApiError(400,'invalid_addons','Выберите доп. услуги.');
+      const catalog=(await deps.db.query<any>('SELECT * FROM catalog_addons WHERE active=TRUE')).rows;
+      const seen=new Set<string>(),rows=[];
+      for(const item of selected){
+        const id=String(item?.id??item?.addonId??item?.key??'');
+        const label=normalizeText(String(item?.label??'').trim());
+        const addon=catalog.find(a=>a.id===id||(label&&[a.title_ru,a.title_kk].some((t:any)=>t&&normalizeText(t)===label)));
+        const quantity=Number(item?.quantity??1);
+        if(!addon||!Number.isInteger(quantity)||quantity<1||quantity>50||seen.has(addon.id))throw new ApiError(400,'invalid_addons','Проверьте выбранные услуги и количество.');
+        seen.add(addon.id);
+        const price=Number(addon.price)*(['per_m2','per_sqm'].includes(addon.pricing_type)?Number(order.service_area??0):1);
+        const existing=(await deps.db.query(`SELECT * FROM order_addons WHERE order_id=$1 AND addon_id=$2 AND quantity=$3 AND requires_customer_approval=TRUE AND payment_status IN ('pending','draft')`,[order.id,addon.id,quantity])).rows[0];
+        const row=existing??(await deps.db.query(`INSERT INTO order_addons(order_id,addon_id,quantity,price,duration_minutes,payment_status,paid_separately,requires_customer_approval)
+          VALUES($1,$2,$3,$4,$5,$6,$7,TRUE) RETURNING *`,[order.id,addon.id,quantity,price,addon.paid_separately?0:Number(addon.duration_minutes)*quantity,addon.paid_separately?'draft':'pending',addon.paid_separately])).rows[0];
+        rows.push(row);
+      }
+      await deps.notifications.create({userId:order.customer_id,titleRu:'Уборщица предложила доп. услуги',
+        bodyRu:`Заказ №${order.numeric_id}: ${rows.map(row=>catalog.find(a=>a.id===row.addon_id).title_ru+' × '+row.quantity).join('; ')}. Откройте предложение для согласования.`,
+        targetType:'addon_request',targetId:order.id,dedupeKey:'addon-request-'+order.id+'-'+rows.map(row=>row.id).sort().join('-')});
+      await notifySpecialistAddons(deps.db,deps.notifications,order.id);
+      return {requestId:order.id,orderId:order.id,addons:rows};
     });
-    await notifySpecialistAddons(deps.db,deps.notifications,order.id);
-    ok(res, { requestId: order.id, orderId: order.id, addons: saved }, 201);
+    ok(res,saved,201);
   }));
 
   router.post('/orders/:id/addon-requests/approve', auth(['customer', 'admin', 'superadmin']), asyncHandler(async (req, res) => {
+    const result=await deps.db.atomic(async()=>{
     const admin = ['admin', 'superadmin'].includes(req.user!.role);
-    const order = first<{ id: string; customer_id: string; payable_amount: string; total_amount: string }>((await deps.db.query(
-      `SELECT id, customer_id, payable_amount, total_amount FROM service_orders WHERE id=$1 AND ($2::boolean=TRUE OR customer_id=$3)`,
+    const order = first<any>((await deps.db.query(
+      `SELECT * FROM service_orders WHERE id=$1 AND ($2::boolean=TRUE OR customer_id=$3) FOR UPDATE`,
       [req.params.id, admin, req.user!.id],
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
+    if(['completed','cancelled'].includes(order.status))throw new ApiError(409,'order_not_editable','Этот заказ нельзя изменить.');
     const addonTotal = first<{ amount: string }>((await deps.db.query(
-      `SELECT COALESCE(SUM(price * quantity),0)::text AS amount FROM order_addons WHERE order_id=$1 AND payment_status='pending' AND paid_separately=FALSE`,
+      `SELECT COALESCE(SUM(price * quantity),0)::text AS amount FROM order_addons WHERE order_id=$1 AND payment_status='pending' AND paid_separately=FALSE AND requires_customer_approval IS DISTINCT FROM FALSE`,
       [order.id],
     )).rows);
     const amount = Number(addonTotal?.amount ?? 0);
+    const accepted=(await deps.db.query("SELECT COALESCE(SUM(duration_minutes),0) AS minutes,COALESCE(SUM(price*quantity),0) AS amount FROM order_addons WHERE order_id=$1 AND requires_customer_approval=TRUE AND payment_status='pending' AND paid_separately=FALSE",[order.id])).rows[0];
+    const minutes=Number(accepted.minutes);
+    const duration=durationAfterAddonChange(order,0,minutes);
+    if(minutes>0&&order.cleaner_id&&order.scheduled_date&&order.start_time){
+      const conflict=(await deps.db.query(`SELECT id FROM service_orders WHERE cleaner_id=$1 AND id<>$2 AND status NOT IN ('cancelled','completed')
+        AND scheduled_date+start_time<$3::date+$4::time+$5::int*INTERVAL '1 minute'
+        AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$3::date+$4::time LIMIT 1`,[order.cleaner_id,order.id,order.scheduled_date,order.start_time,duration])).rows;
+      if(conflict.length)throw new ApiError(409,'cleaner_unavailable','Для допуслуг недостаточно времени до следующего заказа уборщицы.');
+    }
+    if (amount===0) {
+      const free=(await deps.db.query(`UPDATE order_addons SET requires_customer_approval=FALSE,
+        payment_status=CASE WHEN paid_separately THEN payment_status ELSE 'paid'::payment_status END
+        WHERE order_id=$1 AND requires_customer_approval=TRUE AND payment_status IN ('draft','pending') RETURNING id`,[order.id])).rows;
+      if(free.length){
+        if(minutes>0&&order.start_time)await deps.db.query(`UPDATE service_orders SET estimated_duration_minutes=$2,end_time=start_time+$2::int*INTERVAL '1 minute',updated_at=NOW() WHERE id=$1`,[order.id,duration]);
+        await deps.db.query('UPDATE checklist_reports SET requirements_initialized=FALSE WHERE order_id=$1',[order.id]);
+        return {requestId:order.id,payableAmount:0,paymentId:null,approved:true};
+      }
+      const active=(await deps.db.query("SELECT * FROM payments WHERE order_id=$1 AND status IN ('pending','invoice_requested') AND payload->>'kind'='addon_request_payment' ORDER BY created_at DESC LIMIT 1",[order.id])).rows[0];
+      if(active)return {requestId:order.id,paymentId:active.id,payment:active,payableAmount:Number(active.amount)};
+    }
+    if((await deps.db.query("SELECT id FROM payments WHERE order_id=$1 AND status IN ('pending','invoice_requested') LIMIT 1",[order.id])).rows.length)throw new ApiError(409,'pending_invoice','Сначала оплатите или отмените выставленный счёт.');
     if (!Number.isFinite(amount) || amount <= 0) throw new ApiError(400, 'invalid_amount', 'Нет доп. услуг к оплате.');
     if (req.body.paymentMethod === 'online' && !bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
     const payment = await deps.payments.createPayment({
@@ -2110,6 +2137,10 @@ export function buildV1Router(deps: {
       targetType: 'payment', targetId: (payment.payment as any).id,
       dedupeKey: `payment-${(payment.payment as any).id}`,
     });
+    await deps.db.query(`UPDATE order_addons SET requires_customer_approval=FALSE WHERE order_id=$1 AND requires_customer_approval=TRUE AND payment_status IN ('pending','draft')`,[order.id]);
+    if(Number(accepted.amount)>0||minutes>0)await deps.db.query(`UPDATE service_orders SET addon_amount=addon_amount+$3,total_amount=total_amount+$3,
+      estimated_duration_minutes=CASE WHEN $4::int>0 THEN $2 ELSE estimated_duration_minutes END,
+      end_time=CASE WHEN $4::int>0 THEN start_time+$2::int*INTERVAL '1 minute' ELSE end_time END,updated_at=NOW() WHERE id=$1`,[order.id,duration,Number(accepted.amount),minutes]);
     if (payment.payableAmount === 0) {
       await applyPaidPayment(payment.payment);
     } else {
@@ -2117,7 +2148,9 @@ export function buildV1Router(deps: {
       const provider = await initConfiguredPayment(deps.paymentGateway, payment, invoiceReq, 'Оплата допуслуг DomLY');
       if (provider) await updatePaymentProviderPayload(deps.db, (payment.payment as any).id, provider);
     }
-    ok(res, { requestId: req.params.id, paymentId: (payment as any).payment.id, ...payment });
+    return { requestId: req.params.id, paymentId: (payment as any).payment.id, ...payment };
+    });
+    ok(res,result);
   }));
 
   router.post('/orders/:id/addon-requests/reject', auth(['customer', 'admin', 'superadmin']), asyncHandler(async (req, res) => {
@@ -2126,7 +2159,7 @@ export function buildV1Router(deps: {
       [req.params.id, ['admin', 'superadmin'].includes(req.user!.role), req.user!.id],
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
-    await deps.db.query(`DELETE FROM order_addons WHERE order_id=$1 AND payment_status='pending'`, [req.params.id]);
+    await deps.db.query(`DELETE FROM order_addons WHERE order_id=$1 AND payment_status IN ('pending','draft') AND requires_customer_approval IS DISTINCT FROM FALSE`, [req.params.id]);
     ok(res, { requestId: req.params.id, rejected: true });
   }));
 

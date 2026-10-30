@@ -12,9 +12,13 @@ List<Map<String, dynamic>> mapBackendAddonRequests(
         (row['payment_status'] ?? row['status'] ?? '').toString();
     final cleanerId = (row['cleaner_id'] ?? '').toString();
     final orderStatus = (row['order_status'] ?? '').toString();
-    final needsApproval = paymentStatus == 'pending' &&
+    final legacyApproval = paymentStatus == 'pending' &&
         cleanerId.isNotEmpty &&
-        !{'pending_payment', 'cancelled', 'completed'}.contains(orderStatus);
+        orderStatus != 'pending_payment';
+    final needsApproval = (row['requires_customer_approval'] == true ||
+            (row['requires_customer_approval'] == null && legacyApproval)) &&
+        !{'cancelled', 'completed'}.contains(orderStatus);
+    final separate = row['paid_separately'] == true;
     final status = needsApproval ? 'pending_customer' : paymentStatus;
     final group = groups.putIfAbsent(
         '$orderId:$status',
@@ -43,8 +47,10 @@ List<Map<String, dynamic>> mapBackendAddonRequests(
       'quantity': quantity,
       'price': price,
       'durationMinutes': number(row['duration_minutes']),
+      'separatePayment': separate,
     });
-    group['amount'] = (group['amount'] as num) + price * quantity;
+    group['amount'] =
+        (group['amount'] as num) + (separate ? 0 : price * quantity);
   }
   return groups.values.toList();
 }

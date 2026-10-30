@@ -15,7 +15,7 @@ import {Database} from '../infrastructure/db/Database';
 import {buildV1Router} from '../http/routes/v1';
 import {errorHandler} from '../common/api';
 import {signAccessToken,signRefreshToken,verifyAccessToken} from '../common/auth';
-import {NotificationService,SchedulingService,hashToken} from '../modules/domainServices';
+import {NotificationService,SchedulingService,PaymentService,BonusService,hashToken} from '../modules/domainServices';
 import {verifyCleaner} from '../modules/cleanerVerification';
 import {PaymentGatewayService} from '../modules/integrations';
 
@@ -27,7 +27,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
   let failPush=false;
   const notifications=new NotificationService(db,{send:async()=>{if(failPush)throw Error('Provider offline');return {sent:0};}} as any);
   const app=express();
-  app.use(express.json(),buildV1Router({db,notifications,paymentGateway:new PaymentGatewayService(),payments:{refundOrderPayments:async()=>[]},scheduling:new SchedulingService(db),addressSearch:{externalSuggestions:async()=>[]},storage:{uploadBuffer:async(key:string)=>env.minioPublicUrl.replace(/\/$/,'')+'/'+key,client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
+  app.use(express.json(),buildV1Router({db,notifications,paymentGateway:new PaymentGatewayService(),payments:{refundOrderPayments:async()=>[],markPaid:(id:string,actor:string)=>new PaymentService(db,new BonusService(db)).markPaid(id,actor)},scheduling:new SchedulingService(db),addressSearch:{externalSuggestions:async()=>[]},storage:{uploadBuffer:async(key:string)=>env.minioPublicUrl.replace(/\/$/,'')+'/'+key,client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
   const server=app.listen(0,'127.0.0.1');
   await new Promise<void>(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
@@ -46,6 +46,24 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
 
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('paid package listing keeps old and newly purchased wallets and credits separate',async()=>{
+      const pkg=randomUUID(),old=randomUUID(),fresh=randomUUID(),address=randomUUID();
+      try{
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Balance fixture',4,100)",[pkg]);
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Тестовая','10',67)",[address,customer]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$3,$4,$5,24,20,'active'),($2,$3,$4,$5,4,4,'active')",[old,fresh,customer,pkg,address]);
+        const result=await request('/packages/my','GET',undefined,true);
+        assert.equal(result.status,200);
+        const wallets=result.json.data.filter((row:any)=>[old,fresh].includes(row.id));
+        assert.equal(wallets.length,2);assert.equal(wallets.reduce((sum:number,row:any)=>sum+Number(row.available_cleanings),0),24);
+        assert.ok(wallets.every((row:any)=>row.street==='Тестовая'&&Number(row.address_area)===67));
+        assert.equal(Number(wallets.find((row:any)=>row.id===old).available_cleanings),20);
+      }finally{
+        await db.query('DELETE FROM customer_packages WHERE id=ANY($1::uuid[])',[[old,fresh]]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+      }
+    });
     await t.test('customer info receives the configured tier descriptions and thresholds',async()=>{
       const response=await request('/me','GET',undefined,true);
       assert.equal(response.status,200);
@@ -341,6 +359,67 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const row=(await request('/translations')).json.data.find((r:any)=>r.key===key);
         assert.equal(row.source,source);assert.equal(row.ru,payload.ru);
       } finally {await db.query('DELETE FROM translations WHERE key=$1',[key]);}
+    });
+    await t.test('cleaner key proposals persist before payment and active extras respect the next order',async()=>{
+      const worker=randomUUID(),order=randomUUID(),next=randomUUID(),addon=randomUUID(),special=randomUUID(),payment=randomUUID();
+      async function propose(items:any[]){const response=await fetch(base+'/orders/'+order+'/addon-requests',{method:'POST',headers:{Authorization:'Bearer '+signAccessToken({id:worker,role:'cleaner',phone:'proposal'}),'Content-Type':'application/json'},body:JSON.stringify({addonsDetailed:items})});return {status:response.status,json:await response.json() as any};}
+      try{
+        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'proposal-'+worker]);
+        await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,area,status) VALUES($1,$3,$4,'2039-06-01','10:00','12:00',120,100,'in_progress'),($2,$3,$4,'2039-06-01','13:00','14:00',60,100,'assigned')",[order,next,customer,worker]);
+        await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes,paid_separately) VALUES($1,'Духовка',3000,25,FALSE),($2,'Химчистка',50000,90,TRUE)",[addon,special]);
+        const first=await propose([{key:addon,label:'Духовка',quantity:2,price:1}]);
+        assert.equal(first.status,201,JSON.stringify(first.json));
+        assert.equal(Number(first.json.data.addons[0].price),3000);assert.equal(first.json.data.addons[0].requires_customer_approval,true);
+        const calendarResponse=await fetch(base+'/cleaner/orders',{headers:{Authorization:'Bearer '+signAccessToken({id:worker,role:'cleaner',phone:'proposal'})}});
+        assert.equal(calendarResponse.status,200);
+        const calendarRows=((await calendarResponse.json()) as any).data;
+        const calendarOrder=calendarRows.find((row:any)=>row.id===order);
+        assert.equal(Number(calendarOrder.area),100);
+        assert.ok(calendarOrder.addons.some((row:any)=>row.id===addon&&row.label==='Духовка'&&Number(row.quantity)===2&&row.requires_customer_approval===true));
+        const replay=await propose([{key:addon,quantity:2}]);assert.equal(replay.json.data.addons[0].id,first.json.data.addons[0].id);
+        const proposals=await request('/addon-requests','GET',undefined,true);
+        assert.ok(proposals.json.data.some((row:any)=>row.order_id===order&&row.addon_id===addon&&row.requires_customer_approval===true&&row.addon_title_ru==='Духовка'));
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM payments WHERE order_id=$1',[order])).rows[0].n,0);
+        assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM notifications WHERE target_id=$1 AND target_type='addon_request'",[order])).rows[0].n,1);
+        assert.equal((await propose([{key:randomUUID(),quantity:1}])).status,400);
+        const untouched=await request('/orders/'+order+'/addons','POST',{addonsDetailed:[]},true);
+        assert.equal(untouched.status,200);assert.equal(untouched.json.data.order.estimated_duration_minutes,120);
+        assert.equal((await db.query('SELECT requires_customer_approval FROM order_addons WHERE order_id=$1',[order])).rows[0].requires_customer_approval,true);
+        assert.equal((await request('/orders/'+order+'/addon-requests/reject','POST',{},true)).status,200);
+        const changed=await request('/orders/'+order+'/addons','POST',{addonsDetailed:[{id:addon,quantity:2}]},true);
+        assert.equal(changed.status,200,JSON.stringify(changed.json));assert.equal(changed.json.data.order.status,'in_progress');assert.equal(changed.json.data.order.estimated_duration_minutes,170);
+        const overlap=await request('/orders/'+order+'/addons','POST',{addonsDetailed:[{id:addon,quantity:3}]},true);
+        assert.equal(overlap.status,409);assert.match(JSON.stringify(overlap.json),/cleaner_unavailable/);
+        assert.equal((await db.query('SELECT estimated_duration_minutes FROM service_orders WHERE id=$1',[order])).rows[0].estimated_duration_minutes,170);
+        await request('/orders/'+order+'/addons','POST',{addonsDetailed:[]},true);
+        assert.equal((await propose([{key:special,quantity:1}])).status,201);
+        const approved=await request('/orders/'+order+'/addon-requests/approve','POST',{paymentMethod:'separate'},true);
+        assert.equal(approved.status,200,JSON.stringify(approved.json));assert.equal(approved.json.data.payableAmount,0);
+        assert.equal((await db.query('SELECT requires_customer_approval FROM order_addons WHERE order_id=$1',[order])).rows[0].requires_customer_approval,false);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM payments WHERE order_id=$1',[order])).rows[0].n,0);
+        const initialChecklist=await request('/orders/'+order+'/checklist','GET',undefined,true);
+        assert.equal(initialChecklist.status,200);
+        const checkedId=initialChecklist.json.data.items[0].id;
+        await db.query('UPDATE checklist_report_items SET checked=TRUE,checked_at=NOW() WHERE id=$1',[checkedId]);
+        const own=await request('/orders/'+order+'/addons','POST',{addonsDetailed:[{id:addon,quantity:2},{id:special,quantity:1}]},true);
+        assert.equal(own.status,200);
+        await db.query("INSERT INTO payments(id,customer_id,order_id,provider,status,amount) VALUES($1,$2,$3,'kaspi','invoice_requested',6000)",[payment,customer,order]);
+        const confirmed=await request('/payments/'+payment+'/confirm','POST',{});
+        assert.equal(confirmed.status,200,JSON.stringify(confirmed.json));
+        assert.equal((await db.query('SELECT payment_status FROM order_addons WHERE order_id=$1 AND addon_id=$2',[order,addon])).rows[0].payment_status,'paid');
+        const checklist=await request('/orders/'+order+'/checklist','GET',undefined,true);
+        assert.ok(checklist.json.data.items.some((item:any)=>item.title_ru==='Доп. услуга: Духовка'&&item.required));
+        assert.ok(checklist.json.data.items.some((item:any)=>item.id===checkedId&&item.checked));
+      }finally{
+        await db.query('DELETE FROM moon_ai_outbox WHERE payment_id=$1',[payment]);
+        await db.query('DELETE FROM notifications WHERE target_id=$1',[payment]);
+        await db.query('DELETE FROM payments WHERE id=$1',[payment]);
+        await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[[order,next]]);
+        await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[[order,next]]);
+        await db.query('DELETE FROM catalog_addons WHERE id=ANY($1::uuid[])',[[addon,special]]);
+        await db.query('DELETE FROM app_users WHERE id=$1',[worker]);
+      }
     });
     await t.test('addon rejection protects other customers and preserves paid addons', async () => {
       const owner=randomUUID(),orderId=randomUUID(),addonId=randomUUID();

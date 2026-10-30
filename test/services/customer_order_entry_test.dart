@@ -44,4 +44,48 @@ void main() {
       await slots.close();
     });
   }
+  testWidgets(
+      'proposal notification opens offered services and approval instead of the editor',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final proposal = <String, dynamic>{
+      'id': 'cleaning-1',
+      'orderId': 'cleaning-1',
+      'status': 'pending_customer',
+      'cleanerName': 'Анара',
+      'amount': 6000,
+      'addonsDetailed': [
+        {'label': 'Духовка', 'quantity': 2, 'price': 3000}
+      ]
+    };
+    await tester.pumpWidget(MaterialApp(
+        onGenerateRoute: (_) => MaterialPageRoute<void>(
+              settings: const RouteSettings(
+                  arguments: {'focusAddonRequestId': 'cleaning-1'}),
+              builder: (_) => OrdersScreen(
+                  scheduleSlots: Stream.value([]),
+                  orders: Stream.value([]),
+                  addonGroups: Stream.value([]),
+                  addonRequests: Stream.value([proposal])),
+            )));
+    await tester.pumpAndSettle();
+    final sheet = find.byType(BottomSheet);
+    expect(sheet, findsOneWidget);
+    expect(
+        find.descendant(
+            of: sheet, matching: find.text('Согласование доп. услуг')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: sheet, matching: find.textContaining('Духовка × 2')),
+        findsOneWidget);
+    expect(find.descendant(of: sheet, matching: find.text('6000 ₸')),
+        findsOneWidget);
+    expect(find.descendant(of: sheet, matching: find.text('Согласовать')),
+        findsOneWidget);
+    expect(find.descendant(of: sheet, matching: find.text('Отклонить')),
+        findsOneWidget);
+    expect(find.text('Действия по уборке'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
 }
