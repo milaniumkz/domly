@@ -2257,8 +2257,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       case HomeAction.cancellation:
         orders(history: true);
       case HomeAction.details:
+        orders(action: 'details');
       case HomeAction.request:
-              orders();
+        orders();
       case HomeAction.cleaner:
         showModalBottomSheet<void>(context: context, builder: (context) => SafeArea(
           child: Padding(padding: const EdgeInsets.all(24), child: Column(

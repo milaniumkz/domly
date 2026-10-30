@@ -29,7 +29,11 @@ class _OrderAddonGroupDef {
 }
 
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  const OrdersScreen(
+      {super.key, this.scheduleSlots, this.orders, this.addonGroups});
+  final Stream<List<Map<String, dynamic>>>? scheduleSlots;
+  final Stream<List<Map<String, dynamic>>>? orders;
+  final Stream<List<Map<String, dynamic>>>? addonGroups;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -251,8 +255,9 @@ class _OrdersScreenState extends State<OrdersScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _addonGroupsSubscription =
-        AppConfigService.instance.addonGroupConfigsStream().listen((groups) {
+    _addonGroupsSubscription = (widget.addonGroups ??
+            AppConfigService.instance.addonGroupConfigsStream())
+        .listen((groups) {
       if (!mounted) return;
       setState(() {
         _addonGroups = _mapAddonGroupConfigs(groups);
@@ -382,7 +387,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     DomlyPalette.watch(context);
 
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.customerScheduleSlotsStream(),
+      stream: widget.scheduleSlots ?? _data.customerScheduleSlotsStream(),
       initialData: const <Map<String, dynamic>>[],
       builder: (context, slotsSnap) {
         TranslationScope.watch(context);
@@ -401,7 +406,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         _openPendingEditIfNeeded(active);
 
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _data.customerOrdersStream(),
+          stream: widget.orders ?? _data.customerOrdersStream(),
           initialData: const <Map<String, dynamic>>[],
           builder: (context, ordersSnap) {
             TranslationScope.watch(context);
@@ -601,7 +606,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           if (mounted) {
             if (_homeAction == 'checklist') {
               _showClientChecklist(slot);
-            } else {
+            } else if (_homeAction == 'details' || _homeAction == 'cancel') {
               _showFigmaSlotActions(slot);
             }
           }
