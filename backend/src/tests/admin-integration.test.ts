@@ -665,6 +665,50 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM service_orders WHERE id=$1',[orderId]);
       }
     });
+    await t.test('live BCC callbacks require auth and bank confirmation, fulfill once and record paid date',async()=>{
+      const pkg=randomUUID(),purchase=randomUUID(),payment=randomUUID(),reference='98'+Date.now();
+      const previous=Object.fromEntries(['bccMode','bccGatewayUrl','bccMerchantId','bccTerminalId','bccPrivateKey','bccNotifyUrl','bccReturnUrl','publicApiUrl','bccNotifyUser','bccNotifyPassword'].map(key=>[key,(env as any)[key]]));
+      const originalFetch=global.fetch;
+      Object.assign(env,{bccMode:'live',bccGatewayUrl:'https://3dsecure.bcc.kz/webview',bccMerchantId:'FIXTURE',bccTerminalId:'90040001',bccPrivateKey:'1234567890ABCDEF1234567890ABCDEF',bccNotifyUrl:'https://domly.kz:443/api/v1/payments/bcc/webhook',bccReturnUrl:'https://domly.kz/customer/',publicApiUrl:'https://domly.kz',bccNotifyUser:'fixture-user',bccNotifyPassword:'fixture-pass'});
+      let response:any={ORDER:reference,TERMINAL:'90040001',AMOUNT:'350.00',CURRENCY:'398',ACTION:'3',RC:'-33'},calls=0;
+      global.fetch=(async(input:any,init:any)=>{
+        if(String(input)==='https://3dsecure.bcc.kz/webview'){
+          calls++;assert.equal(init.method,'POST');const fields=new URLSearchParams(init.body);assert.equal(fields.get('TRTYPE'),'90');assert.equal(fields.get('ORDER'),reference);assert.ok(fields.get('P_SIGN'));
+          return new Response(JSON.stringify(response),{status:200,headers:{'Content-Type':'application/json'}});
+        }return originalFetch(input,init);
+      }) as typeof fetch;
+      const callback=async(auth=true)=>{
+        const headers:any={'Content-Type':'application/x-www-form-urlencoded'};
+        if(auth)headers.Authorization='Basic '+Buffer.from('fixture-user:fixture-pass').toString('base64');
+        const res=await originalFetch(base+'/payments/bcc/webhook',{method:'POST',headers,body:new URLSearchParams({ORDER:reference,ACTION:'0',RC:'00'})});
+        return {status:res.status,json:await res.json() as any};
+      };
+      try{
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'BCC live fixture',4,1,0,0)",[pkg]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,4,4,'pending_payment')",[purchase,customer,pkg]);
+        await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,status,amount,external_id,payload) VALUES($1,$2,$3,'bcc','pending',350,$4,$5)",[payment,customer,purchase,reference,{bccTestMode:false,providerPayload:{ORDER:reference,TERMINAL:'90040001'}}]);
+        assert.equal((await callback(false)).status,401);assert.equal(calls,0);
+        assert.equal((await callback()).status,200);assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[payment])).rows[0].status,'pending');
+        response={...response,ACTION:'0',RC:'00',AMOUNT:'999.00'};assert.equal((await callback()).status,502);
+        response.AMOUNT='350.00';
+        const paid=await callback();assert.equal(paid.status,200,JSON.stringify(paid.json));
+        let saved=(await db.query('SELECT * FROM payments WHERE id=$1',[payment])).rows[0];assert.equal(saved.status,'paid');assert.ok(saved.paid_at);assert.ok(saved.applied_at);assert.equal(saved.approval_source,'bcc');
+        const originalPaidAt=new Date(saved.paid_at).getTime();
+        const wallet=(await db.query('SELECT * FROM customer_packages WHERE id=$1',[purchase])).rows[0];assert.equal(wallet.status,'active');assert.equal(wallet.purchase_payment_id,payment);assert.equal(wallet.available_cleanings,4);
+        assert.equal((await callback()).status,200);
+        saved=(await db.query('SELECT * FROM payments WHERE id=$1',[payment])).rows[0];assert.equal(new Date(saved.paid_at).getTime(),originalPaidAt);
+        assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,4);
+        assert.equal(Number((await db.query("SELECT COUNT(*) FROM audit_logs WHERE action='payment.applied' AND entity_id=$1",[payment])).rows[0].count),1);
+      }finally{
+        global.fetch=originalFetch;Object.assign(env,previous);
+        await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[[purchase,payment]]);
+        await db.query('DELETE FROM audit_logs WHERE entity_id=$1',[payment]);
+        await db.query('DELETE FROM payment_events WHERE payment_id=$1',[payment]);
+        await db.query('DELETE FROM notifications WHERE target_id IN (SELECT id::text FROM quality_check_requests WHERE customer_package_id=$1)',[purchase]);
+        await db.query('DELETE FROM quality_check_requests WHERE customer_package_id=$1',[purchase]);
+        await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+      }
+    });
     await t.test('unbooked package purchase appears in customer orders while awaiting payment and after approval', async () => {
       const pkgId=randomUUID(), purchaseId=randomUUID(), payId=randomUUID();
       await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Пакет проверки',4,1,4000,100)",[pkgId]);

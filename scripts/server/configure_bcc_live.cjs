@@ -46,7 +46,7 @@ async function run(base,action,inputFile,reportKeyFile,services){
  Object.assign(env,{bccMode:'live',bccGatewayUrl:GATEWAY,bccMerchantId:values.BCC_MERCHANT_ID,bccTerminalId:values.BCC_TERMINAL_ID,bccPrivateKey:values.BCC_PRIVATE_KEY,bccMerchantName:values.BCC_MERCHANT_NAME,bccNotifyUrl:values.BCC_NOTIFY_URL,bccNotifyUser:values.BCC_NOTIFY_USER,bccNotifyPassword:values.BCC_NOTIFY_PASSWORD});
  const {bccSign,bccTimestamp,bccNonce,postBccFields}=services||require(path.join(apiRoot,'modules/bcc.js'));
  const reference='98'+Date.now();
- const query={ORDER:reference,TERMINAL:values.BCC_TERMINAL_ID,TIMESTAMP:bccTimestamp(),TRTYPE:'90',NONCE:bccNonce()};
+ const query={ORDER:reference,TERMINAL:values.BCC_TERMINAL_ID,TIMESTAMP:bccTimestamp(),TRTYPE:'90',TRAN_TRTYPE:'1',LANG:'ru',MERCH_GMT:'0',NONCE:bccNonce()};
  const result=await postBccFields({...query,P_SIGN:bccSign(query,values.BCC_PRIVATE_KEY)});
  console.log(JSON.stringify({bankReached:true,operation:'status-of-nonexistent-payment',rc:String(result.RC).replace(/[^0-9-]/g,''),charged:false}));
  const allowedMissing=['-15','-23','-24','78'];
