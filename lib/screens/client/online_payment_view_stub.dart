@@ -6,10 +6,12 @@ class OnlinePaymentView extends StatelessWidget {
     super.key,
     required this.html,
     this.baseUrl,
+    this.onReturned,
   });
 
   final String html;
   final String? baseUrl;
+  final VoidCallback? onReturned;
 
   @override
   Widget build(BuildContext context) {

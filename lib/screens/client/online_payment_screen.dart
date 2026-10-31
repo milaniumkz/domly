@@ -55,6 +55,13 @@ class OnlinePaymentScreen extends StatelessWidget {
           : OnlinePaymentView(
               html: paymentHtml,
               baseUrl: actionUrl,
+              onReturned: () {
+                if (!context.mounted) return;
+                Navigator.of(context).pushNamedAndRemoveUntil(
+                  '/client/orders',
+                  (route) => false,
+                );
+              },
             ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
