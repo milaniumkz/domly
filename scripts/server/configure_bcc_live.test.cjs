@@ -1,12 +1,14 @@
 const test=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {parseEnv,liveValues,replaceEnv,decrypt,seal}=require('./configure_bcc_live.cjs');
-const fixture={BCC_TERMINAL_ID:'90040001',BCC_MERCHANT_ID:'FIXTURE',BCC_PRIVATE_KEY:'1234567890ABCDEF1234567890ABCDEF'};
+const fixture={BCC_TERMINAL_ID:'90040001',BCC_MERCHANT_ID:'FIXTURE',BCC_PRIVATE_KEY:'1234567890ABCDEF1234567890ABCDEF',BCC_NOTIFY_USER:'fixture-user',BCC_NOTIFY_PASSWORD:'fixture-password-123456',callbackRegistered:true};
 test('live configuration rejects sandbox keys, terminal and newline injection',()=>{
  for(const changed of [{BCC_TERMINAL_ID:'88888881'},{BCC_PRIVATE_KEY:'6BB0AC02E47BDF73D98FEB777F3B5294'},{BCC_MERCHANT_ID:'bad\nSECRET=value'}])assert.throws(()=>liveValues({...fixture,...changed},{}));
- const values=liveValues(fixture,{BCC_NOTIFY_USER:'existing-user',BCC_NOTIFY_PASSWORD:'existing-password'});
+ const values=liveValues({...fixture,BCC_NOTIFY_USER:undefined,BCC_NOTIFY_PASSWORD:undefined},{BCC_NOTIFY_USER:'existing-user',BCC_NOTIFY_PASSWORD:'existing-password'});
  assert.equal(values.BCC_MODE,'live');assert.equal(values.BCC_GATEWAY_URL,'https://3dsecure.bcc.kz/webview');
  assert.equal(values.BCC_NOTIFY_PASSWORD,'existing-password');assert.ok(values.BCC_NOTIFY_URL.includes(':443/'));
  assert.throws(()=>liveValues(fixture,{PUBLIC_API_URL:'http://domly.kz'}));
+ assert.throws(()=>liveValues({...fixture,BCC_NOTIFY_USER:undefined,BCC_NOTIFY_PASSWORD:undefined},{}));
+ assert.throws(()=>liveValues({...fixture,BCC_NOTIFY_PASSWORD:undefined},{}));
 });
 test('only BCC fields change and unrelated provider configuration survives',()=>{
  const before='MOON_AI_TOKEN=preserve-me\nBCC_MODE=test\n# keep comment\n';
@@ -37,6 +39,10 @@ test('bank rejection preserves configuration; activation backs up and rollback p
   await assert.rejects(()=>run(root,'apply',path.join(root,'envelope'),path.join(root,'report-key'),services));
   assert.equal(fs.readFileSync(path.join(root,'shared/backend.env'),'utf8'),old);
   services.postBccFields=async()=>({ACTION:'3',RC:'78'});
+  fs.writeFileSync(path.join(root,'envelope'),seal(pub,{...fixture,callbackRegistered:false}));
+  await assert.rejects(()=>run(root,'apply',path.join(root,'envelope'),path.join(root,'report-key'),services));
+  assert.equal(fs.readFileSync(path.join(root,'shared/backend.env'),'utf8'),old);
+  fs.writeFileSync(path.join(root,'envelope'),seal(pub,fixture));
   await run(root,'apply',path.join(root,'envelope'),path.join(root,'report-key'),services);
   assert.equal(parseEnv(fs.readFileSync(path.join(root,'shared/backend.env'),'utf8')).BCC_MODE,'live');
   assert.equal(fs.statSync(path.join(root,'shared/backend.env')).mode&0o777,0o600);

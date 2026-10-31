@@ -9,13 +9,19 @@ function liveValues(input,previous){
  if(!/^\d{8}$/.test(input.BCC_TERMINAL_ID)||['88888881','88888888'].includes(input.BCC_TERMINAL_ID))throw Error('A live terminal is required');
  if(!/^[0-9A-Fa-f]{32}$/.test(input.BCC_PRIVATE_KEY)||input.BCC_PRIVATE_KEY.toUpperCase()==='6BB0AC02E47BDF73D98FEB777F3B5294')throw Error('A live MAC key is required');
  if(!/^[A-Za-z0-9_-]{1,64}$/.test(input.BCC_MERCHANT_ID))throw Error('Invalid merchant identifier');
+ if(Boolean(input.BCC_NOTIFY_USER)!==Boolean(input.BCC_NOTIFY_PASSWORD))throw Error('Both callback credentials are required');
+ const notifyUser=input.BCC_NOTIFY_USER||previous.BCC_NOTIFY_USER;
+ const notifyPassword=input.BCC_NOTIFY_PASSWORD||previous.BCC_NOTIFY_PASSWORD;
+ if(!notifyUser||!notifyPassword)throw Error('Configure bank callback credentials before activation');
+ if(input.BCC_NOTIFY_USER&&!/^[A-Za-z0-9._-]{1,64}$/.test(notifyUser))throw Error('Invalid callback username');
+ if(input.BCC_NOTIFY_PASSWORD&&!/^[A-Za-z0-9._~-]{16,128}$/.test(notifyPassword))throw Error('Invalid callback password format');
  const origin=new URL(previous.PUBLIC_API_URL||'https://domly.kz');
  if(origin.protocol!=='https:'||origin.hostname!=='domly.kz')throw Error('Unexpected application origin');
  const name=input.BCC_MERCHANT_NAME||'DOMLY';if(!/^[A-Za-z0-9 ._-]{1,64}$/.test(name))throw Error('Invalid merchant name');
- return {BCC_MODE:'live',BCC_GATEWAY_URL:GATEWAY,BCC_MERCHANT_ID:input.BCC_MERCHANT_ID,BCC_TERMINAL_ID:input.BCC_TERMINAL_ID,BCC_MERCHANT_NAME:name,BCC_PRIVATE_KEY:input.BCC_PRIVATE_KEY.toUpperCase(),BCC_NOTIFY_URL:'https://domly.kz:443/api/v1/payments/bcc/webhook',BCC_RETURN_URL:'https://domly.kz/customer/#/client/payment-history',BCC_NOTIFY_USER:previous.BCC_NOTIFY_USER||'domly-bcc',BCC_NOTIFY_PASSWORD:previous.BCC_NOTIFY_PASSWORD||crypto.randomBytes(32).toString('hex')};
+ return {BCC_MODE:'live',BCC_GATEWAY_URL:GATEWAY,BCC_MERCHANT_ID:input.BCC_MERCHANT_ID,BCC_TERMINAL_ID:input.BCC_TERMINAL_ID,BCC_MERCHANT_NAME:name,BCC_PRIVATE_KEY:input.BCC_PRIVATE_KEY.toUpperCase(),BCC_NOTIFY_URL:'https://domly.kz:443/api/v1/payments/bcc/webhook',BCC_RETURN_URL:'https://domly.kz/customer/#/client/payment-history',BCC_NOTIFY_USER:notifyUser,BCC_NOTIFY_PASSWORD:notifyPassword};
 }
 function replaceEnv(text,values){return text.split(/\r?\n/).filter(line=>!Object.hasOwn(values,line.split('=')[0])).join('\n').replace(/\n*$/,'\n')+Object.entries(values).map(([k,v])=>{if(/[\r\n]/.test(v))throw Error('Invalid multiline configuration');return k+'='+v;}).join('\n')+'\n';}
-function atomicWrite(file,text){fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});const temp=file+'.bcc-live.tmp';fs.writeFileSync(temp,text,{mode:0o600});fs.renameSync(temp,file);fs.chmodSync(file,0o600);}
+function atomicWrite(file,text){fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});const temp=file+'.bcc-live.tmp';fs.writeFileSync(temp,text,{mode:0o600});if(fs.existsSync(file)){const owner=fs.statSync(file);fs.chownSync(temp,owner.uid,owner.gid);}fs.renameSync(temp,file);fs.chmodSync(file,0o600);}
 function decrypt(privateKey,envelope){return JSON.parse(crypto.privateDecrypt({key:privateKey,oaepHash:'sha256',padding:crypto.constants.RSA_PKCS1_OAEP_PADDING},Buffer.from(envelope.trim(),'base64')).toString());}
 function seal(publicKey,value){return crypto.publicEncrypt({key:crypto.createPublicKey({key:Buffer.from(publicKey,'base64'),format:'der',type:'spki'}),oaepHash:'sha256',padding:crypto.constants.RSA_PKCS1_OAEP_PADDING},Buffer.from(JSON.stringify(value))).toString('base64');}
 async function run(base,action,inputFile,reportKeyFile,services){
@@ -39,7 +45,9 @@ async function run(base,action,inputFile,reportKeyFile,services){
   console.log('Previous configuration restored.');return;
  }
  if(!['probe','apply'].includes(action))throw Error('Unsupported BCC operation');
- const input=decrypt(fs.readFileSync(keyFile),fs.readFileSync(inputFile,'utf8')),values=liveValues(input,previous);
+ const input=decrypt(fs.readFileSync(keyFile),fs.readFileSync(inputFile,'utf8'));
+ if(action==='apply'&&input.callbackRegistered!==true)throw Error('Bank callback registration must be confirmed before activation');
+ const values=liveValues(input,previous);
  // Use the installed, tested gateway implementation, without creating payments or charging a card.
  const apiRoot='/app/dist';
  const {env}=services||require(path.join(apiRoot,'common/env.js'));
