@@ -1,3 +1,4 @@
+import 'booking_checkout_service.dart';
 import '../utils/cleaning_time_range.dart';
 import '../models/domly_models.dart';
 import '../utils/admin_addon_text.dart';
@@ -11030,79 +11031,12 @@ class FirestoreDataService {
   Future<Map<String, dynamic>> _bookScheduleDirect({
     required String subscriptionId,
     required List<Map<String, dynamic>> selections,
-  }) async {
-    var backendScheduledCount = 0;
-    final createdOrders = <Map<String, dynamic>>[];
-    final paymentResults = <Map<String, dynamic>>[];
-    for (final selection in selections) {
-      final dateKey = (selection['date'] ?? '').toString();
-      final time = (selection['time'] ?? '').toString().trim();
-      final startTime = time.split(' - ').first.trim();
-      if (dateKey.isEmpty || startTime.isEmpty) {
-        continue;
-      }
-      final addonIds = bookingAddonIds(selection);
-      final addonDetails = <Map<String, dynamic>>[
-        ...(selection['newAddonsDetailed'] as List? ?? const [])
-            .whereType<Map>()
-            .map((item) => Map<String, dynamic>.from(item)),
-      ];
-      final bonusToSpend = math.max(
-        0,
-        (selection['bonusToSpend'] as num?)?.toInt() ?? 0,
+  }) =>
+      BookingCheckoutService(BackendApiService.instance).book(
+        subscriptionId: subscriptionId,
+        selections: selections,
+        createRequestKey: _newIdempotencyKey,
       );
-      final kaspiPhone = (selection['kaspiPhone'] ?? '').toString().trim();
-      final quotedAddons = billableBookingAddonsAmount(addonDetails);
-      if (addonDetails.isNotEmpty &&
-          kaspiPhone.isEmpty &&
-          bonusToSpend < quotedAddons) {
-        throw FlutterError('Укажите номер Kaspi для оплаты доп. услуг.');
-      }
-      final created = await BackendApiService.instance.postMap(
-        '/orders',
-        body: {
-          'idempotencyKey': _newIdempotencyKey(),
-          'customerPackageId': subscriptionId,
-          'date': dateKey,
-          'startTime': startTime,
-          if (addonDetails.isNotEmpty) 'addonsDetailed': addonDetails,
-          if (addonDetails.isEmpty && addonIds.isNotEmpty) 'addonIds': addonIds,
-        },
-      );
-      createdOrders.add(created);
-      backendScheduledCount++;
-      final order = created['order'];
-      final orderId = order is Map ? (order['id'] ?? '').toString() : '';
-      final addonAmount = order is Map ? _num(order['addon_amount']) : 0;
-      if (orderId.isNotEmpty && addonAmount > 0) {
-        if (kaspiPhone.isEmpty && bonusToSpend < addonAmount) {
-          throw FlutterError('Укажите номер Kaspi для оплаты доп. услуг.');
-        }
-        final payment = await BackendApiService.instance.postMap(
-          '/orders/$orderId/pay',
-          body: {
-            'provider': 'kaspi',
-            'useBonus': bonusToSpend > 0,
-            'requestedBonus': bonusToSpend,
-            if (kaspiPhone.isNotEmpty) 'invoicePhone': kaspiPhone,
-          },
-        );
-        paymentResults.add(payment);
-      }
-    }
-    return {
-      'ok': true,
-      'scheduledCount': backendScheduledCount,
-      'orders': createdOrders,
-      'payments': paymentResults,
-      'addonPaymentIds': paymentResults
-          .map((result) => result['payment'])
-          .whereType<Map>()
-          .map((payment) => payment['id'].toString())
-          .toList(),
-      'backend': true,
-    };
-  }
 
   int _scheduleAreaMinutes(int area) {
     if (area <= 0) {

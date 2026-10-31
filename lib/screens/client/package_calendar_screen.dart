@@ -2249,6 +2249,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         'addonsDetailed': addonsDetailed,
         'newAddonsDetailed': newAddonsDetailed,
         if (newAddonsDetailed.isNotEmpty) ...{
+          'paymentProvider':
+              paymentMethod == DomlyPaymentMethod.online ? 'bcc' : 'kaspi',
           if (kaspiPhone != null) 'kaspiPhone': kaspiPhone,
           'bonusToSpend': bonusToSpend,
         },
@@ -2347,6 +2349,19 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
               .where((item) => item.isNotEmpty),
         );
       }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        for (final selection in selections) {
+          final dateKey = selection['date'];
+          if (dateKey != null) {
+            _selectedTimes.remove(dateKey);
+            _selectedAddonsByDate.remove(dateKey);
+            _selectedNewAddonsByDate.remove(dateKey);
+          }
+        }
+      });
       if (paymentMethod == DomlyPaymentMethod.online &&
           addonPaymentIds.isNotEmpty) {
         if (!mounted) {
@@ -2368,19 +2383,6 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         );
         return;
       }
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        for (final selection in selections) {
-          final dateKey = selection['date'];
-          if (dateKey != null) {
-            _selectedTimes.remove(dateKey);
-            _selectedAddonsByDate.remove(dateKey);
-            _selectedNewAddonsByDate.remove(dateKey);
-          }
-        }
-      });
       await _loadAvailableDates();
       final remainingSelections =
           (pendingSelectionsBefore - selections.length).clamp(0, 99).toInt();
