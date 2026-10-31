@@ -21,6 +21,7 @@ function encrypt(report,pub){
      payload->'bccBankResult'->>'AMOUNT' AS bank_amount,payload->'bccBankResult'->>'CURRENCY' AS bank_currency
      FROM payments WHERE customer_id=$1 AND provider='bcc' AND created_at>NOW()-INTERVAL '2 hours' ORDER BY created_at DESC LIMIT 6`,[users[0].id])).rows;
    for(const payment of payments){
+    payment.callbackEvents=(await tx.query("SELECT event_type,status,created_at FROM payment_events WHERE payment_id=$1 AND provider='bcc' AND event_type='verified_status' ORDER BY created_at DESC LIMIT 5",[payment.id])).rows;
     if(payment.order_id){
      payment.order=(await tx.query('SELECT status,payable_amount FROM service_orders WHERE id=$1 AND customer_id=$2',[payment.order_id,users[0].id])).rows[0];
      payment.addons=(await tx.query(`SELECT a.title_ru,oa.quantity,oa.price,oa.payment_status,oa.paid_separately FROM order_addons oa JOIN catalog_addons a ON a.id=oa.addon_id WHERE oa.order_id=$1`,[payment.order_id])).rows;
