@@ -1,0 +1,58 @@
+name: Configure BCC live payments
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [prepare, probe, apply, rollback]
+        default: prepare
+        required: true
+      encrypted_credentials:
+        description: RSA-OAEP-SHA256 encrypted BCC credentials; never plaintext
+        type: string
+        required: false
+      report_public_key:
+        description: Public RSA SPKI DER base64 key for encrypted bank registration details
+        type: string
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  configure:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare SSH and encrypted inputs
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          ENVELOPE: ${{ inputs.encrypted_credentials }}
+          REPORT_KEY: ${{ inputs.report_public_key }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s' "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s' "$ENVELOPE" > "$RUNNER_TEMP/bcc-envelope"
+          printf '%s' "$REPORT_KEY" > "$RUNNER_TEMP/bcc-report-key"
+      - name: Configure and verify BCC
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          case "$OPERATION" in prepare|probe|apply|rollback) ;; *) exit 1 ;; esac
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/configure_bcc_live.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/configure_bcc_live.cjs"
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$RUNNER_TEMP/bcc-envelope" "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/bcc-envelope"
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$RUNNER_TEMP/bcc-report-key" "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/bcc-report-key"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+            "set -euo pipefail; trap 'rm -f \"$DEPLOY_PATH/shared/bcc-envelope\" \"$DEPLOY_PATH/shared/bcc-report-key\" \"$DEPLOY_PATH/shared/configure_bcc_live.cjs\"' EXIT; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend run -T --rm --no-deps --entrypoint node -v '$DEPLOY_PATH:$DEPLOY_PATH' api '$DEPLOY_PATH/shared/configure_bcc_live.cjs' '$DEPLOY_PATH' '$OPERATION' '$DEPLOY_PATH/shared/bcc-envelope' '$DEPLOY_PATH/shared/bcc-report-key'; if [ '$OPERATION' = apply ] || [ '$OPERATION' = rollback ]; then docker compose -p domly-backend up -d --no-build --force-recreate api worker; for attempt in \$(seq 1 30); do if curl -fsS http://localhost:8080/ready >/dev/null; then echo 'Backend ready'; exit 0; fi; sleep 2; done; exit 1; fi"
