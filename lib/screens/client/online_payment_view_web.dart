@@ -10,10 +10,12 @@ class OnlinePaymentView extends StatefulWidget {
     super.key,
     required this.html,
     this.baseUrl,
+    this.onReturned,
   });
 
   final String html;
   final String? baseUrl;
+  final VoidCallback? onReturned;
 
   @override
   State<OnlinePaymentView> createState() => _OnlinePaymentViewState();

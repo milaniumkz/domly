@@ -28,8 +28,11 @@ dependencies:
   url_launcher: ^6.3.1
   webview_flutter: ^4.8.0
   share_plus: ^10.0.0
+  upgrader: ^13.7.0
 
 dev_dependencies:
+  package_info_plus: ^8.3.1
+  version: ^3.0.2
   flutter_test:
     sdk: flutter
   flutter_lints: ^2.0.0

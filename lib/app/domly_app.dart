@@ -1,5 +1,6 @@
 import 'route_parameters.dart';
 import '../ui/required_password_change.dart';
+import '../ui/store_update_prompt.dart';
 import '../services/client_telemetry.dart';
 import '../services/realtime_updates.dart';
 import '../services/ui_preferences.dart';
@@ -708,8 +709,12 @@ class _DomlyAppState extends State<DomlyApp> {
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context).copyWith(
                     disableAnimations: !UiPreferences.instance.animations),
-                child: RequiredPasswordChange(
-                    child: child ?? const SizedBox.shrink()),
+                child: StoreUpdatePrompt(
+                  navigatorKey: _navigatorKey,
+                  enabled: !config.adminSurface && !DebugSession.enabled,
+                  child: RequiredPasswordChange(
+                      child: child ?? const SizedBox.shrink()),
+                ),
               ),
               navigatorKey: _navigatorKey,
               scaffoldMessengerKey: _messengerKey,
