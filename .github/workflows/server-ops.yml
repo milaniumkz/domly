@@ -8,9 +8,13 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
+        options: [bcc-payment-audit, status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
+        required: false
+        type: string
+      phone_suffix:
+        description: Last four digits of the explicitly authorized customer for BCC verification
         required: false
         type: string
       expected_plan:
@@ -47,7 +51,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
+          PHONE_SUFFIX: ${{ inputs.phone_suffix }}
         run: |
+          if [ "$ACTION" = "bcc-payment-audit" ]; then
+            set -euo pipefail
+            [[ "$PHONE_SUFFIX" =~ ^[0-9]{4}$ ]]
+            [[ "$REPORT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/=]+$ ]]
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/bcc_payment_audit.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/bcc_payment_audit.cjs"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "set -eu; trap 'rm -f \"$DEPLOY_PATH/shared/bcc_payment_audit.cjs\"' EXIT; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e AUDIT_PHONE_SUFFIX='$PHONE_SUFFIX' -e AUDIT_REPORT_KEY='$REPORT_PUBLIC_KEY' api node < '$DEPLOY_PATH/shared/bcc_payment_audit.cjs'"
+            exit 0
+          fi
           if [ "$ACTION" = "kaspi-callback-configure" ]; then
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/configure_kaspi_callback.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/configure_kaspi_callback.cjs"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
