@@ -12422,7 +12422,7 @@
     "key": "t_4277d82c918c5047",
     "source": "Укажите номер Kaspi для оплаты доп. услуг.",
     "locations": [
-      "lib/services/firestore_data_service.dart"
+      "lib/services/booking_checkout_service.dart"
     ]
   },
   {
