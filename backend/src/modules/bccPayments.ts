@@ -27,7 +27,8 @@ export async function reconcileBccPayment(db: Database, gateway: PaymentGatewayS
     const updated = (await tx.query(
       `UPDATE payments SET status=$2::payment_status, payload=payload || $3::jsonb,
        approval_source=CASE WHEN $2::text='paid' THEN 'bcc' ELSE approval_source END,
-       approved_at=CASE WHEN $2::text='paid' THEN NOW() ELSE approved_at END,updated_at=NOW() WHERE id=$1 RETURNING *`,
+       approved_at=CASE WHEN $2::text='paid' THEN COALESCE(approved_at,NOW()) ELSE approved_at END,
+       paid_at=CASE WHEN $2::text='paid' THEN COALESCE(paid_at,NOW()) ELSE paid_at END,updated_at=NOW() WHERE id=$1 RETURNING *`,
       [payment.id,nextStatus,{bccTestMode:config.test,bccBankStatus:status,bccBankResult:result,bccLastCheckedAt:new Date().toISOString()}],
     )).rows[0];
     return {payment:updated,testMode:config.test,bankStatus:status,changed:oldBankStatus!==status};

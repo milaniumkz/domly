@@ -80,6 +80,8 @@ jobs:
         expected={'home-purchase.test.ts','kaspi-callback-config.test.ts','backend-core.test.ts','bcc.test.ts','cleaner-status.test.ts','scheduler.test.ts','admin-integration.test.ts','catalog-migration.test.ts','mobile-integration.test.ts','technical-integration.test.ts','customer-progress.test.ts','slot-counts.test.ts','auth-key.test.ts','password-crypto.test.ts','bonus-atomicity.test.ts','idempotency-recovery.test.ts','bonus-recovery.test.ts','residential-complex.test.ts','notification-delivery-latency.test.ts','order-lost-response.test.ts'}
         assert {p.name for p in Path('src/tests').glob('*.test.ts')} == expected, 'Classify any new backend test in the unit or DB gate before CI can pass'
         PYCODE
+    - name: Check BCC production configuration tools
+      run: node --test ../scripts/server/configure_bcc_live.test.cjs
     - run: npm run build
     - name: Pure unit tests, no DB test skipped to claim success
       run: node --test dist/tests/backend-core.test.js dist/tests/bcc.test.js dist/tests/cleaner-status.test.js
