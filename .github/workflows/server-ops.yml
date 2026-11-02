@@ -151,7 +151,8 @@ jobs:
           mkdir -p apk-release
           cp build/app/outputs/flutter-apk/app-domlyadmin-release.apk apk-release/DomLY-Admin-1.0.15-25.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs apk-release/DomLY-Admin-1.0.15-25.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging apk-release/DomLY-Admin-1.0.15-25.apk | head -20
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging apk-release/DomLY-Admin-1.0.15-25.apk > apk-release/badging.txt
+          sed -n '1,20p' apk-release/badging.txt
           (cd apk-release && sha256sum DomLY-Admin-1.0.15-25.apk > DomLY-Admin-1.0.15-25.apk.sha256)
       - name: Publish explicitly approved preliminary GitHub release
         env:
