@@ -21,6 +21,7 @@ export function asyncHandler(fn: (req: Request, res: Response, next: NextFunctio
 }
 
 const ruMessages: Record<string, string> = {
+  booking_from_tomorrow: 'Заказать уборку можно только с завтрашнего дня. Выберите другую дату.',
   unauthorized: 'Войдите в аккаунт заново.',
   forbidden: 'Недостаточно прав для этого действия.',
   not_found: 'Запись не найдена.',
@@ -38,6 +39,7 @@ const ruMessages: Record<string, string> = {
 };
 
 const kkMessages: Record<string, string> = {
+  booking_from_tomorrow: 'Тазалауға тек ертеңнен бастап тапсырыс беруге болады. Басқа күнді таңдаңыз.',
   unauthorized: 'Аккаунтқа қайта кіріңіз.',
   forbidden: 'Бұл әрекетке құқық жеткіліксіз.',
   not_found: 'Жазба табылмады.',
