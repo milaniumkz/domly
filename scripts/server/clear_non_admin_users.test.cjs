@@ -1,0 +1,48 @@
+const test=require('node:test');const assert=require('node:assert/strict');
+const {cleanup,references,deleteOrder}=require('./clear_non_admin_users.cjs');
+test('exact references do not match unrelated substrings',()=>{assert(references({a:['user-a']},new Set(['user-a'])));assert(!references('user-a-extra',new Set(['user-a'])));});
+test('children precede parents; unexpected cycles stop cleanup',()=>{assert.deepEqual(deleteOrder(['parent','child'],[{child:'child',parent:'parent'}]),['child','parent']);assert.throws(()=>deleteOrder(['a','b'],[{child:'a',parent:'b'},{child:'b',parent:'a'}]),/cycle/);});
+test('real PostgreSQL rollback and cleanup preserve administrator, catalog and shared files',async()=>{
+ assert(process.env.CLEANUP_TEST_DATABASE_URL?.includes('/cleanup_test'),'Isolated test DB required');
+ const {Client}=require('pg');const c=new Client({connectionString:process.env.CLEANUP_TEST_DATABASE_URL});await c.connect();
+ try {
+ const insert=async(sql,args=[])=>(await c.query(sql+' RETURNING id',args)).rows[0].id;
+ const admin=await insert("INSERT INTO app_users(role,phone,status,password_hash) VALUES('superadmin','+77000000001','approved','test-hash')");
+ const user=await insert("INSERT INTO app_users(role,phone,status) VALUES('customer','+77000000002','approved')");
+ const cleaner=await insert("INSERT INTO app_users(role,phone,status) VALUES('cleaner','+77000000003','approved')");
+ const pkg=await insert("INSERT INTO catalog_packages(name_ru,cleaning_count,base_price) VALUES('keep catalog',4,100)");
+ const cp=await insert("INSERT INTO customer_packages(customer_id,package_id,total_cleanings,available_cleanings) VALUES($1,$2,4,3)",[user,pkg]);
+ const order=await insert("INSERT INTO service_orders(customer_id,customer_package_id,cleaner_id) VALUES($1,$2,$3)",[user,cp,cleaner]);
+ const payment=await insert("INSERT INTO payments(customer_id,order_id,customer_package_id,provider,status,amount) VALUES($1,$2,$3,'bcc','paid',43)",[user,order,cp]);
+ await c.query("INSERT INTO quality_check_requests(customer_id,customer_package_id,order_id) VALUES($1,$2,$3)",[user,cp,order]);
+ await c.query("INSERT INTO payment_events(payment_id,provider,event_type) VALUES($1,'bcc','verified_status')",[payment]);
+ const file=await insert("INSERT INTO files(owner_id,bucket,object_key) VALUES($1,'test','shared-banner-photo')",[user]);
+ const privateFile=await insert("INSERT INTO files(owner_id,bucket,object_key) VALUES($1,'test','private-selfie-photo')",[cleaner]);
+ await c.query("INSERT INTO banners(title_ru,image_file_id) VALUES('keep banner',$1)",[file]);
+ await c.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfie',$2)",[cleaner,privateFile]);
+ const chat=await insert("INSERT INTO chats(type,customer_id) VALUES('assistant',$1)",[user]);
+ const installation=await insert("INSERT INTO assistant_installations(key_hash,customer_id,chat_id) VALUES('test', $1,$2)",[user,chat]);
+ await c.query('UPDATE chats SET installation_id=$1 WHERE id=$2',[installation,chat]);
+ await c.query('INSERT INTO chat_participants(chat_id,user_id) VALUES($1,$2),($1,$3)',[chat,user,admin]);
+ await c.query("INSERT INTO chat_messages(chat_id,sender_id,message_ru) VALUES($1,$2,'remove admin reply')",[chat,admin]);
+ const staleNotification=await insert("INSERT INTO notifications(user_id,title_ru,body_ru,target_id) VALUES($1,'remove','remove',$2)",[admin,payment]);
+ const keepNotification=await insert("INSERT INTO notifications(user_id,title_ru,body_ru) VALUES($1,'keep notice','keep')",[admin]);
+ await c.query("INSERT INTO audit_logs(actor_id,action,entity_type,entity_id) VALUES($1,'payment.confirmed','payment',$2),($1,'settings.updated','settings','keep')",[admin,payment]);
+ await c.query("INSERT INTO refresh_sessions(user_id,token_hash,expires_at) VALUES($1,'admin session',NOW()+INTERVAL '1 day'),($2,'user session',NOW()+INTERVAL '1 day')",[admin,user]);
+ const plan=await cleanup(c);
+ assert.equal(plan.deleteCounts.app_users,2);assert.equal(plan.deleteCounts.payments,1);assert.equal(plan.sharedFilesRetained,1);
+ const opts={mode:'apply',expectedPlan:plan.planHash,operationId:'123',backupVerified:true};
+ await assert.rejects(()=>cleanup(c,{...opts,expectedPlan:'wrong'}),/plan changed/);
+ assert.equal((await c.query('SELECT COUNT(*)::int n FROM app_users')).rows[0].n,3);
+ await assert.rejects(()=>cleanup(c,{...opts,afterDelete:tx=>tx.query("UPDATE catalog_packages SET base_price=999")} ),/Protected data changed/);
+ assert.equal((await c.query('SELECT COUNT(*)::int n FROM payments')).rows[0].n,1);
+ const result=await cleanup(c,opts);assert.equal(result.remainingUsers,1);
+ const kept=(await c.query('SELECT id,password_hash FROM app_users')).rows;assert.deepEqual(kept,[{id:admin,password_hash:'test-hash'}]);
+ assert.equal((await c.query('SELECT owner_id FROM files WHERE id=$1',[file])).rows[0].owner_id,null);
+ assert.equal((await c.query('SELECT COUNT(*)::int n FROM files WHERE id=$1',[privateFile])).rows[0].n,0);
+ assert.equal((await c.query('SELECT COUNT(*)::int n FROM notifications WHERE id=$1',[staleNotification])).rows[0].n,0);
+ assert.equal((await c.query('SELECT COUNT(*)::int n FROM notifications WHERE id=$1',[keepNotification])).rows[0].n,1);
+ assert.equal((await c.query('SELECT token_hash FROM refresh_sessions')).rows[0].token_hash,'admin session');
+ assert.equal((await c.query('SELECT base_price FROM catalog_packages WHERE id=$1',[pkg])).rows[0].base_price,'100.00');
+ }finally{await c.end();}
+});

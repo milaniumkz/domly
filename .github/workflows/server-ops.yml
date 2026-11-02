@@ -8,7 +8,7 @@ on:
         required: true
         default: status
         type: choice
-        options: [user-cleanup-audit, status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
+        options: [user-cleanup-audit, user-cleanup-plan, user-cleanup-apply, status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -48,6 +48,19 @@ jobs:
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
         run: |
+          set -euo pipefail
+          if [ "$ACTION" = "user-cleanup-plan" ]; then
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e CLEANUP_MODE=audit api node" < scripts/server/clear_non_admin_users.cjs
+            exit 0
+          fi
+          if [ "$ACTION" = "user-cleanup-apply" ]; then
+            [[ "$EXPECTED_PLAN" =~ ^[a-f0-9]{64}$ ]]
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/clear_non_admin_users.cjs scripts/server/run_user_cleanup.sh "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "APP_DIR='$DEPLOY_PATH' CLEANUP_EXPECTED_PLAN='$EXPECTED_PLAN' CLEANUP_OPERATION_ID='${{ github.run_id }}' bash '$DEPLOY_PATH/shared/run_user_cleanup.sh'"
+            exit 0
+          fi
           if [ "$ACTION" = "user-cleanup-audit" ]; then
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
               "cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T api node" < scripts/server/audit_user_cleanup.cjs
