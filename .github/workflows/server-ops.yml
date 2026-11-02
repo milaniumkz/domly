@@ -8,7 +8,7 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
+        options: [booking-policy-audit, status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -48,6 +48,11 @@ jobs:
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
         run: |
+          if [ "$ACTION" = "booking-policy-audit" ]; then
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T api node" < scripts/server/audit_booking_policy.cjs
+            exit 0
+          fi
           if [ "$ACTION" = "kaspi-callback-configure" ]; then
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/configure_kaspi_callback.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/configure_kaspi_callback.cjs"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
