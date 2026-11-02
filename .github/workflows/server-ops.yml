@@ -8,7 +8,7 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
+        options: [publish-admin-apk, status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -28,6 +28,7 @@ concurrency:
 
 jobs:
   operation:
+    if: inputs.action != 'publish-admin-apk'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -122,3 +123,42 @@ jobs:
           path: bonus-recovery.enc.json
           if-no-files-found: error
           retention-days: 90
+
+  publish-admin-apk:
+    if: inputs.action == 'publish-admin-apk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.1'
+          cache: true
+      - name: Prepare required Android SDK components
+        run: |
+          sdkmanager 'build-tools;35.0.0' 'platforms;android-34' 'platforms;android-35' 'platforms;android-36' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: Build admin APK for manual installation
+        env:
+          FLUTTER_BIN: flutter
+        run: |
+          bash scripts/build_android_domly_admin.sh --build-name=1.0.15 --build-number=25
+          mkdir -p apk-release
+          cp build/app/outputs/flutter-apk/app-domlyadmin-release.apk apk-release/DomLY-Admin-1.0.15-25.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs apk-release/DomLY-Admin-1.0.15-25.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging apk-release/DomLY-Admin-1.0.15-25.apk | head -20
+          (cd apk-release && sha256sum DomLY-Admin-1.0.15-25.apk > DomLY-Admin-1.0.15-25.apk.sha256)
+      - name: Publish explicitly approved preliminary GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create admin-apk-1.0.15-25-20261102 \
+            apk-release/DomLY-Admin-1.0.15-25.apk apk-release/DomLY-Admin-1.0.15-25.apk.sha256 \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title 'DomLY Admin 1.0.15 (25) — APK для ручной установки' \
+            --notes 'APK админки, версия 1.0.15 (25), для ручной установки. Подпись Android Debug: поверх приложения с другим ключом не установится. Исходники приложения соответствуют main ec57562a78beba78ed3bb573c0004e8976eba007; в ветке сборки исправлен только скрипт сборки и добавлен workflow публикации. Не выпуск для магазинов.'
