@@ -1,3 +1,4 @@
+import {isBookableDate, validateBookingStart} from '../../modules/bookingValidation';
 import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
 import { UnitOfWork } from '../../domain/repositories/UnitOfWork';
 import { timeToMinutes } from '../../shared/Month';
@@ -35,7 +36,7 @@ export class CalendarBookingService {
 
     const grouped = new Map<string, number>();
     for (const slot of slots) {
-      if (slot.isClosed || slot.availableCapacity <= 0 || closedDays.has(slot.date)) continue;
+      if (!isBookableDate(slot.date) || slot.isClosed || slot.availableCapacity <= 0 || closedDays.has(slot.date)) continue;
       grouped.set(slot.date, (grouped.get(slot.date) ?? 0) + 1);
     }
 
@@ -45,6 +46,7 @@ export class CalendarBookingService {
   }
 
   async getAvailableTimeSlots(date: string, apartmentId: string): Promise<CleaningSlot[]> {
+    if (!isBookableDate(date)) return [];
     const apartment = await this.repo.getApartment(apartmentId);
     if (!apartment) throw new Error('Apartment not found');
     const durationHours = this.estimateCleaningDuration(apartment.area);
@@ -64,6 +66,7 @@ export class CalendarBookingService {
 
     const seenDates = new Set<string>();
     for (const selection of selectedDates) {
+      validateBookingStart(selection.date, selection.startTime);
       if (!packageRules.allowSameDay && seenDates.has(selection.date)) {
         throw new Error(`Duplicate date is not allowed: ${selection.date}`);
       }
@@ -127,6 +130,7 @@ export class CalendarBookingService {
   }
 
   async rescheduleCleaning(cleaningId: string, newDate: string, newTime: { startTime: string; endTime: string }) {
+    validateBookingStart(newDate, newTime.startTime);
     const cleaning = await this.repo.getScheduledCleaning(cleaningId);
     if (!cleaning) throw new Error('Cleaning not found');
     const userPackage = await this.repo.getUserPackage(cleaning.userPackageId);

@@ -1,5 +1,17 @@
 import {ApiError} from '../common/api';
 
+/** Earliest selectable service day: tomorrow in Kazakhstan. */
+export function earliestBookingDate(now = Date.now()): string {
+  return new Date(now + (5 + 24) * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+export function isBookableDate(date: string, now = Date.now()): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const calendar = new Date(date + 'T00:00:00Z');
+  return Number.isFinite(calendar.getTime()) && calendar.toISOString().slice(0, 10) === date &&
+    date >= earliestBookingDate(now);
+}
+
 /** Service dates are local to Kazakhstan (UTC+5), independently of server TZ. */
 export function validateBookingStart(date: unknown, time: unknown, now = Date.now()) {
   const day = String(date ?? '');
@@ -10,6 +22,9 @@ export function validateBookingStart(date: unknown, time: unknown, now = Date.no
   const calendar = new Date(day + 'T00:00:00Z');
   if (!Number.isFinite(calendar.getTime()) || calendar.toISOString().slice(0, 10) !== day) {
     throw new ApiError(400, 'invalid_order_time', 'Выберите корректную дату уборки.');
+  }
+  if (day < earliestBookingDate(now)) {
+    throw new ApiError(400, 'booking_from_tomorrow', 'Заказать уборку можно только с завтрашнего дня. Выберите другую дату.');
   }
   const timestamp = Date.parse(day + 'T' + (clock.length === 5 ? clock + ':00' : clock) + '+05:00');
   if (!Number.isFinite(timestamp) || timestamp <= now) {

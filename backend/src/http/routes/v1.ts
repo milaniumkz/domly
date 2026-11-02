@@ -13,7 +13,7 @@ import { customerMonthlyProgress,normalizeCustomerTierRules,customerTierDiscount
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
 import {idempotent,idempotentTransaction} from '../../common/idempotency';
 import {ensureChecklistReport,saveChecklist} from '../../modules/checklists';
-import {validateBookingStart, fitsBookingHours, validateBookingHours} from '../../modules/bookingValidation';
+import {validateBookingStart, fitsBookingHours, validateBookingHours, isBookableDate} from '../../modules/bookingValidation';
 import {revokeRealtimeSessions} from '../../realtime/sse';
 import {inspectUpload,registerUploadedFile} from '../../technical/files';
 import {ensureGuestSession, guestSession, bindGuestSession, matchMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
@@ -2242,6 +2242,7 @@ export function buildV1Router(deps: {
 
   router.get('/scheduling/available-slots', auth(), asyncHandler(async (req, res) => {
     const date = String(req.query.date);
+    if (!isBookableDate(date)) { ok(res, []); return; }
     const settings = await readAppSettings(deps.db);
     const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
     const addonIds = String(req.query.addonIds ?? '').split(',').map((id) => id.trim()).filter(Boolean);

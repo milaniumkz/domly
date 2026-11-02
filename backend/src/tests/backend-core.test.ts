@@ -1014,7 +1014,8 @@ test('booking date validation rejects malformed, rolled-over and past local time
   for(const [day,time] of [['2026-02-30','12:00'],['2001-01-01','08:00'],['2026-10-23','14:59'],['2026-11-01','24:00'],['2026-11-01','wrong']]) {
     assert.throws(()=>validateBookingStart(day,time,now));
   }
-  assert.doesNotThrow(()=>validateBookingStart('2026-10-23','15:01',now));
+  assert.throws(()=>validateBookingStart('2026-10-23','15:01',now),/завтрашнего дня/);
+  assert.doesNotThrow(()=>validateBookingStart('2026-10-24','08:00',now));
   assert.doesNotThrow(()=>validateBookingStart('2026-11-01','08:00:00',now));
 });
 
@@ -1164,4 +1165,18 @@ test('running cleaning reserves added minutes from now when the original end has
   assert.equal(durationAfterAddonChange(order,0,25,Date.parse('2039-06-01T12:30:00+05:00')),175);
   assert.equal(durationAfterAddonChange(order,0,25,Date.parse('2039-06-01T11:30:00+05:00')),145);
   assert.equal(durationAfterAddonChange({...order,status:'assigned'},0,25,Date.parse('2039-06-01T12:30:00+05:00')),145);
+});
+
+
+test('booking floor rolls over at Kazakhstan midnight, month and year boundaries',async()=>{
+  const {earliestBookingDate,isBookableDate,validateBookingStart}=await import('../modules/bookingValidation');
+  const before=Date.parse('2026-11-02T18:59:59Z'),after=Date.parse('2026-11-02T19:00:00Z');
+  assert.equal(earliestBookingDate(before),'2026-11-03');
+  assert.equal(earliestBookingDate(after),'2026-11-04');
+  assert.equal(isBookableDate('2026-11-03',before),true);
+  assert.equal(isBookableDate('2026-11-03',after),false);
+  assert.equal(isBookableDate('2026-02-30',before),false);
+  assert.equal(earliestBookingDate(Date.parse('2026-12-31T10:00:00Z')),'2027-01-01');
+  for(const time of ['08:00','12:00','18:00'])assert.throws(()=>validateBookingStart('2026-11-03',time,after),/завтрашнего дня/);
+  assert.doesNotThrow(()=>validateBookingStart('2026-11-04','08:00',after));
 });

@@ -47,6 +47,39 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
 
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('today cannot be booked or selected; tomorrow and current-order extras stay available',async()=>{
+      const pkg=randomUUID(),purchase=randomUUID(),active=randomUUID(),addon=randomUUID();
+      const key='tomorrow-'+randomUUID();
+      const today=new Date(Date.now()+5*3600000).toISOString().slice(0,10);
+      const tomorrow=new Date(Date.now()+29*3600000).toISOString().slice(0,10);
+      try {
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Tomorrow fixture',4,100)",[pkg]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,4,4,'active')",[purchase,customer,pkg]);
+        const slots=await request('/scheduling/available-slots?date='+today,'GET',undefined,true);
+        assert.equal(slots.status,200);assert.deepEqual(slots.json.data,[]);
+        const blocked=await request('/orders','POST',{customerPackageId:purchase,date:today,startTime:'18:00',idempotencyKey:'blocked-'+key},true);
+        assert.equal(blocked.status,400);assert.equal(blocked.json.code,'booking_from_tomorrow');
+        assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,4);
+        const booked=await request('/orders','POST',{customerPackageId:purchase,date:tomorrow,startTime:'18:00',idempotencyKey:key},true);
+        assert.equal(booked.status,201,JSON.stringify(booked.json));
+        const id=booked.json.data.order.id;
+        const moved=await request('/orders/'+id+'/reschedule','POST',{date:today,startTime:'18:00'},true);
+        assert.equal(moved.status,400);assert.equal(moved.json.code,'booking_from_tomorrow');
+        assert.equal((await db.query('SELECT scheduled_date::text AS service_day FROM service_orders WHERE id=$1',[id])).rows[0].service_day,tomorrow);
+        await db.query("INSERT INTO service_orders(id,customer_id,customer_package_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status) VALUES($1,$2,$3,$4,'08:00','10:00',120,'in_progress')",[active,customer,purchase,today]);
+        await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes) VALUES($1,'Today extras fixture',0,10)",[addon]);
+        const extras=await request('/orders/'+active+'/addons','POST',{addonsDetailed:[{id:addon,quantity:1}]},true);
+        assert.equal(extras.status,200,JSON.stringify(extras.json));
+        assert.equal((await db.query('SELECT COUNT(*)::int n FROM order_addons WHERE order_id=$1',[active])).rows[0].n,1);
+      }finally {
+        await db.query('DELETE FROM notifications WHERE target_id IN (SELECT id::text FROM service_orders WHERE customer_package_id=$1)',[purchase]);
+        await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND key=ANY($2::text[])',[customer,[key,'blocked-'+key]]);
+        await db.query('DELETE FROM service_orders WHERE customer_package_id=$1',[purchase]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+        await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);
+      }
+    });
     await t.test('paid package listing keeps old and newly purchased wallets and credits separate',async()=>{
       const pkg=randomUUID(),old=randomUUID(),fresh=randomUUID(),address=randomUUID();
       try{
