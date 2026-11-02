@@ -1,5 +1,6 @@
 import {requestAccountDeletion,anonymizeExpiredAccountDeletions} from '../modules/accountDeletion';
 import test from 'node:test';
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import express from 'express';
@@ -214,7 +215,7 @@ test('temporary delivery fallback completes backend login and the code is single
   }
 });
 
-test('Moon AI invoices, signed events, guest isolation and thirty-minute campaigns', {skip: !process.env.DOMLY_INTEGRATION_DATABASE_URL}, async t => {
+test('Moon AI invoices, signed events, guest isolation and timed WhatsApp campaigns', {skip: !process.env.DOMLY_INTEGRATION_DATABASE_URL}, async t => {
   const {env}=await import('../common/env');
   const {ensureAssistantChat,queueMoonInvoice,scheduleCheckoutFollowup,scheduleSignupFollowup,processMoonOutbox,
     acceptMoonChatEvent,acceptMoonPaymentStatus,matchMoonPaymentStatus,ensureGuestSession,guestSession,bindGuestSession,queueAssistantMessage}=await import('../modules/moonAi');
@@ -362,10 +363,28 @@ test('Moon AI invoices, signed events, guest isolation and thirty-minute campaig
       assert.equal((await acceptMoonChatEvent(db,notifications,{...event,event_id:randomUUID(),external_thread_id:chatId,thread_id:`api:domly:${chatId}`})).ignored,true);
       assert.equal(events.size,1);
     });
-    await t.test('new registered customer gets a single five-minute WhatsApp welcome, never an app message',async()=>{
+    await t.test('ten-minute migration preserves sent welcomes, retries, custom times and checkout followups',async()=>{
+      const chat=await ensureAssistantChat(db,idle),ids=Array.from({length:5},()=>randomUUID());
+      try {
+        for(let i=0;i<ids.length;i++)await db.query(`INSERT INTO moon_ai_outbox(id,customer_id,chat_id,kind,dedupe_key,payload,state,started_at,run_after)
+          VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $8::boolean THEN NOW() ELSE NULL END,NOW()+($9::int*INTERVAL '1 minute'))`,
+          [ids[i],idle,chat.id,i===4?'abandoned_checkout':'inactive_signup','delay-migration-'+ids[i],{text:'пользователь зарегистрировался 5 минут назад'},i===1?'sent':'pending',i===2,i===3?20:5]);
+        const schema=readFileSync('sql/schema.sql','utf8');
+        const migration=schema.slice(schema.indexOf('-- Move only untouched registration welcomes'),schema.indexOf('-- Guests have no WhatsApp phone'));
+        assert.ok(migration.includes("INTERVAL '10 minutes'"));
+        await db.query(migration);await db.query(migration);
+        const rows=(await db.query('SELECT id,state,payload,EXTRACT(EPOCH FROM run_after-created_at)::int delay FROM moon_ai_outbox WHERE id=ANY($1::uuid[])',[ids])).rows;
+        for(let i=0;i<ids.length;i++){
+          const row=rows.find(r=>r.id===ids[i]);assert.equal(row.delay,i===0?600:i===3?1200:300);
+          if(i===0)assert.ok(row.payload.text.includes('10 минут'));
+          if(i===1)assert.equal(row.state,'sent');
+        }
+      }finally{await db.query('DELETE FROM moon_ai_outbox WHERE id=ANY($1::uuid[])',[ids]);}
+    });
+    await t.test('new registered customer gets a single ten-minute WhatsApp welcome, never an app message',async()=>{
       await scheduleSignupFollowup(db,idle);await scheduleSignupFollowup(db,idle);
       const rows=(await db.query("SELECT *,EXTRACT(EPOCH FROM run_after-created_at)::int AS delay FROM moon_ai_outbox WHERE customer_id=$1 AND kind='inactive_signup'",[idle])).rows;
-      assert.equal(rows.length,1);assert.equal(rows[0].delay,300);
+      assert.equal(rows.length,1);assert.equal(rows[0].delay,600);
       await db.query("UPDATE moon_ai_outbox SET run_after=NOW()-INTERVAL '1 second' WHERE id=$1",[rows[0].id]);
       const nativeCalls:any[]=[];
       const nativeSend=(async(url:any,init:any)=>{
