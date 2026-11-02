@@ -1240,6 +1240,13 @@ SET run_after=created_at+INTERVAL '5 minutes',
 WHERE kind IN ('inactive_signup','abandoned_checkout') AND state='pending'
  AND started_at IS NULL AND run_after=created_at+INTERVAL '30 minutes';
 
+-- Move only untouched registration welcomes to ten minutes; sent messages and retries stay intact.
+UPDATE moon_ai_outbox
+SET run_after=created_at+INTERVAL '10 minutes',
+ payload=jsonb_set(payload,'{text}',to_jsonb(replace(COALESCE(payload->>'text',''),'зарегистрировался 5 минут назад','зарегистрировался 10 минут назад')))
+WHERE kind='inactive_signup' AND state='pending' AND started_at IS NULL
+ AND run_after=created_at+INTERVAL '5 minutes';
+
 -- Guests have no WhatsApp phone; they can still ask the in-app assistant first.
 UPDATE moon_ai_outbox SET state='cancelled',failure_code='no_whatsapp_phone',finished_at=NOW()
 WHERE kind='inactive_install' AND state='pending';

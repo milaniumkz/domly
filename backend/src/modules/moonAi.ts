@@ -279,8 +279,8 @@ export async function scheduleSignupFollowup(db: Database, customerId: string) {
   if(!env.moonAiEnabled)return;
   const chat=await ensureAssistantChat(db,customerId);
   await db.query(`INSERT INTO moon_ai_outbox(customer_id,chat_id,kind,dedupe_key,payload,run_after)
-    VALUES($1,$2,'inactive_signup',$3,$4,NOW()+INTERVAL '5 minutes') ON CONFLICT(dedupe_key) DO NOTHING`,
-    [customerId,chat.id,`signup:${customerId}`,{text:'Служебное событие DomLY: пользователь зарегистрировался 5 минут назад, но не начал оформление покупки. Поздоровайся, предложи помочь выбрать уборку. Не выставляй счёт без явного запроса клиента.'}]);
+    VALUES($1,$2,'inactive_signup',$3,$4,NOW()+INTERVAL '10 minutes') ON CONFLICT(dedupe_key) DO NOTHING`,
+    [customerId,chat.id,`signup:${customerId}`,{text:'Служебное событие DomLY: пользователь зарегистрировался 10 минут назад, но не начал оформление покупки. Поздоровайся, предложи помочь выбрать уборку. Не выставляй счёт без явного запроса клиента.'}]);
 }
 export async function ensureGuestSession(db: Database, key: string) {
   if(!moonAiReady()) throw new ApiError(503,'integration_not_configured','Помощник пока не подключён.');
