@@ -8,7 +8,7 @@ on:
         required: true
         default: status
         type: choice
-        options: [whatsapp-signup-audit, booking-policy-audit, status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
+        options: [addon-editor-audit, whatsapp-signup-audit, booking-policy-audit, status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -48,6 +48,11 @@ jobs:
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
         run: |
+          if [ "$ACTION" = "addon-editor-audit" ]; then
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T api node" < scripts/server/audit_addon_editor.cjs
+            exit 0
+          fi
           if [ "$ACTION" = "whatsapp-signup-audit" ]; then
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
               "cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T api node" < scripts/server/audit_whatsapp_signup.cjs
