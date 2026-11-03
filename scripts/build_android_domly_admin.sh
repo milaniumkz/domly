@@ -2,9 +2,19 @@
 set -euo pipefail
 
 FLUTTER_BIN=${FLUTTER_BIN:-flutter}
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == "--unsigned" ]]; then
+  export ORG_GRADLE_PROJECT_domlyUnsignedAdmin=true
+elif [[ -n "${1:-}" ]]; then
+  echo "Usage: $0 [--unsigned]" >&2
+  exit 2
+elif [[ ! -f "$PROJECT_DIR/android/key.properties" ]]; then
+  echo "Release signing configuration missing: android/key.properties. Use --unsigned only to prepare an APK for signing." >&2
+  exit 1
+fi
 
 cd "$PROJECT_DIR"
-"$FLUTTER_BIN" build apk --release --target lib/main_admin.dart --flavor domlyAdmin \
+"$FLUTTER_BIN" build apk --release --flavor domlyAdmin \
   --target lib/main_admin_web.dart \
   --dart-define=FIREBASE_API_KEY_ANDROID=AIzaSyAzPWe_eZjvjRlJ3BvqT2c9y0L6nSQSIw8 \
   --dart-define=FIREBASE_MESSAGING_SENDER_ID=288330515337 \

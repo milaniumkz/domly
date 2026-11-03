@@ -77,7 +77,9 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (hasReleaseKeystore) {
+            signingConfig = if (providers.gradleProperty("domlyUnsignedAdmin").orNull == "true") {
+                null
+            } else if (hasReleaseKeystore) {
                 signingConfigs.getByName("release")
             } else {
                 signingConfigs.getByName("debug")
