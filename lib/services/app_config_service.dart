@@ -1,3 +1,4 @@
+import '../utils/admin_addon_text.dart';
 import '../utils/legal_document_sections.dart';
 import '../utils/stable_polling_stream.dart';
 import '../utils/promotion_data.dart';
@@ -566,10 +567,11 @@ class AppConfigService {
       'descriptionKk': item['description_kk'],
       'hint': item['hint_ru'] ?? '',
       'hintKk': item['hint_kk'],
-      'price': _num(item['price']).round(),
+      'price': _num(item['price']),
       'durationMinutes': _num(item['duration_minutes']).round(),
       'pricingType': item['pricing_type'] ?? 'fixed',
-      'supportsQuantity': item['pricing_type'] != 'fixed_per_order',
+      'supportsQuantity': adminAddonSupportsQuantity(item),
+      'features': item['features'] ?? const [],
       'separatePayment': item['paid_separately'] == true,
       'sortOrder': item['sort_order'] ?? item['sortOrder'] ?? 999,
       'isActive': item['active'] != false,

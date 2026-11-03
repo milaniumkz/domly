@@ -80,6 +80,24 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);
       }
     });
+    await t.test('addon editor persists every field and independent false options on reopen',async()=>{
+      const title='persist-'+randomUUID();let id='';
+      try {
+        const saved=await request('/admin/catalog/addons','POST',{titleRu:title,pricingType:'per_m2',price:25.75,durationMinutes:15,supportsQuantity:true,paidSeparately:true,active:true,sortOrder:8,features:['Пол','Пыль'],descriptionRu:'Кратко',hintRu:'Подсказка',fullDescriptionRu:'Подробно'});
+        assert.equal(saved.status,201,JSON.stringify(saved.json));id=saved.json.data.id;
+        const updated=await request('/admin/catalog/addons/'+id,'PATCH',{titleRu:title+' edited',price:0,durationMinutes:0,supportsQuantity:false,paidSeparately:false,active:false,sortOrder:0,features:[],descriptionRu:'',hintRu:'',fullDescriptionRu:''});
+        assert.equal(updated.status,200,JSON.stringify(updated.json));
+        const row=(await request('/admin/addons?limit=200')).json.data.find((r:any)=>r.id===id);
+        assert.equal(row.supports_quantity,false);assert.equal(row.paid_separately,false);assert.equal(row.active,false);assert.equal(row.pricing_type,'per_m2');
+        assert.equal(Number(row.price),0);assert.equal(row.duration_minutes,0);assert.equal(row.sort_order,0);assert.deepEqual(row.features,[]);
+        for(const key of ['description_ru','hint_ru','full_description_ru'])assert.equal(row[key],'');
+        await request('/admin/catalog/addons/'+id,'PATCH',{price:12.5});
+        const kept=(await db.query('SELECT * FROM catalog_addons WHERE id=$1',[id])).rows[0];assert.equal(kept.supports_quantity,false);assert.equal(kept.pricing_type,'per_m2');assert.equal(Number(kept.price),12.5);
+        assert.equal((await request('/admin/catalog/addons/'+id,'PATCH',{supportsQuantity:'false'})).status,400);
+        assert.equal((await request('/admin/catalog/addons/'+id,'PATCH',{features:'invalid'})).status,400);
+        const enabled=await request('/admin/catalog/addons/'+id,'PATCH',{supportsQuantity:true,features:['Включено']});assert.equal(enabled.json.data.supports_quantity,true);assert.deepEqual(enabled.json.data.features,['Включено']);
+      } finally {if(id)await db.query('DELETE FROM catalog_addons WHERE id=$1',[id]);}
+    });
     await t.test('paid package listing keeps old and newly purchased wallets and credits separate',async()=>{
       const pkg=randomUUID(),old=randomUUID(),fresh=randomUUID(),address=randomUUID();
       try{

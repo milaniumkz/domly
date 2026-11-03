@@ -1693,3 +1693,7 @@ BEGIN
     RAISE NOTICE 'Future cleaning durations recalculated: %',changed_count;
   END IF;
 END $$;
+
+-- Editor options are independent of price calculation; NULL retains legacy quantity behavior.
+ALTER TABLE catalog_addons ADD COLUMN IF NOT EXISTS supports_quantity BOOLEAN;
+ALTER TABLE catalog_addons ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '[]'::jsonb;

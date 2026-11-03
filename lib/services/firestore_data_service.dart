@@ -2115,11 +2115,11 @@ class FirestoreDataService {
                           'labelKk': item['title_kk'],
                           ...adminAddonTextFields(item),
                           'note': item['hint_ru'],
-                          'price': _num(item['price']).round(),
+                          'price': _num(item['price']),
                           'durationMinutes': item['duration_minutes'],
                           'pricingType': item['pricing_type'],
                           'supportsQuantity':
-                              item['pricing_type'] != 'fixed_per_order',
+                              adminAddonSupportsQuantity(item),
                           'separatePayment': item['paid_separately'],
                           'sortOrder': item['sort_order'],
                           'isActive': item['active'],
@@ -13503,8 +13503,8 @@ class FirestoreDataService {
     }
     for (var i = 0; i < items.length; i++) {
       final item = items[i];
-      final title = (item['title'] ??
-              item['label'] ??
+      final title = (item['label'] ??
+              item['title'] ??
               item['name'] ??
               item['key'] ??
               item['id'] ??
@@ -13517,7 +13517,7 @@ class FirestoreDataService {
         'titleRu': title,
         'titleKk': item['titleKk'] ?? item['labelKk'] ?? item['nameKk'],
         ...adminAddonTextPayload(item),
-        'hintRu': item['hint'] ?? item['note'],
+        'hintRu': item['note'] ?? item['hint'],
         'hintKk': item['hintKk'],
         'pricingType': item['pricingType'] ?? 'fixed',
         'price': item['price'] ??
@@ -13526,8 +13526,7 @@ class FirestoreDataService {
             item['cost'] ??
             0,
         'durationMinutes': item['durationMinutes'] ?? 0,
-        'paidSeparately':
-            item['paidSeparately'] ?? item['separatePayment'] ?? false,
+        ...adminAddonOptionPayload(item),
         'active': adminCatalogActive(item),
         'sortOrder': item['sortOrder'] ?? i,
       };
@@ -13692,8 +13691,9 @@ class FirestoreDataService {
 
   Future<void> saveAdminAddonGroupItems(
     String groupId,
-    List<Map<String, dynamic>> items,
-  ) async {
+    List<Map<String, dynamic>> items, {
+    String? editedItemKey,
+  }) async {
     if (_isDebugAdmin) {
       final updated = _debugAdminAddonGroups().map((group) {
         final id = (group['key'] ?? group['id'] ?? '').toString();
@@ -13714,7 +13714,13 @@ class FirestoreDataService {
       _notifyDebugStateChanged();
       return;
     }
-    await _saveAddonItemsToBackend(groupId, items);
+    final selected = editedItemKey == null
+        ? items
+        : items.where((item) => adminAddonIdentity(item) == editedItemKey).toList();
+    if (editedItemKey != null && selected.length != 1) {
+      throw FlutterError('Доп. услуга не найдена. Обновите страницу.');
+    }
+    await _saveAddonItemsToBackend(groupId, selected);
   }
 
   Future<void> _syncAllAddonGroupsToPricingCatalog() async {
