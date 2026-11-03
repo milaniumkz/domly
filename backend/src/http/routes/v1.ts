@@ -4196,6 +4196,8 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/admin/catalog/addons', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    if (req.body.supportsQuantity !== undefined && typeof req.body.supportsQuantity !== 'boolean') throw new ApiError(400,'invalid_request','Проверьте настройку количества.');
+    if (req.body.features !== undefined && (!Array.isArray(req.body.features) || !req.body.features.every((item:any)=>typeof item==='string'))) throw new ApiError(400,'invalid_request','Проверьте список того, что входит в услугу.');
     const row = first((await deps.db.query(
       `WITH existing AS (
          SELECT id FROM catalog_addons WHERE (($1::uuid IS NULL AND group_id IS NULL) OR group_id=$1::uuid) AND title_ru=$2 AND deleted_at IS NULL LIMIT 1
@@ -4205,22 +4207,25 @@ export function buildV1Router(deps: {
            title_kk=$3, description_ru=$4, description_kk=$5, hint_ru=$6, hint_kk=$7,
            pricing_type=COALESCE($8, pricing_type), price=COALESCE($9, price),
            duration_minutes=COALESCE($10, duration_minutes), paid_separately=COALESCE($11, paid_separately),
-           active=COALESCE($12, active), sort_order=COALESCE($13, sort_order), updated_at=NOW()
+           active=COALESCE($12, active), sort_order=COALESCE($13, sort_order),
+           supports_quantity=COALESCE($16,supports_quantity), features=COALESCE($17::jsonb,features), updated_at=NOW()
          WHERE id=(SELECT id FROM existing) RETURNING *
        ), inserted AS (
          INSERT INTO catalog_addons
-         (group_id, title_ru, title_kk, description_ru, description_kk, hint_ru, hint_kk, pricing_type, price, duration_minutes, paid_separately, active, sort_order, full_description_ru, full_description_kk)
-         SELECT $1,$2,$3,$4,$5,$6,$7,COALESCE($8,'fixed'),COALESCE($9,0),COALESCE($10,0),COALESCE($11,FALSE),COALESCE($12,TRUE),COALESCE($13,0),$14,$15
+         (group_id, title_ru, title_kk, description_ru, description_kk, hint_ru, hint_kk, pricing_type, price, duration_minutes, paid_separately, active, sort_order, full_description_ru, full_description_kk, supports_quantity, features)
+         SELECT $1,$2,$3,$4,$5,$6,$7,COALESCE($8,'fixed'),COALESCE($9,0),COALESCE($10,0),COALESCE($11,FALSE),COALESCE($12,TRUE),COALESCE($13,0),$14,$15,$16,COALESCE($17::jsonb,'[]'::jsonb)
          WHERE NOT EXISTS (SELECT 1 FROM existing)
          RETURNING *
        )
        SELECT * FROM updated UNION ALL SELECT * FROM inserted`,
-      [req.body.groupId ?? null, req.body.titleRu, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? 'fixed', req.body.price ?? 0, req.body.durationMinutes ?? 0, req.body.paidSeparately ?? false, req.body.active ?? true, req.body.sortOrder ?? 0, req.body.fullDescriptionRu ?? null, req.body.fullDescriptionKk ?? null],
+      [req.body.groupId ?? null, req.body.titleRu, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? 'fixed', req.body.price ?? 0, req.body.durationMinutes ?? 0, req.body.paidSeparately ?? false, req.body.active ?? true, req.body.sortOrder ?? 0, req.body.fullDescriptionRu ?? null, req.body.fullDescriptionKk ?? null, req.body.supportsQuantity ?? null, req.body.features === undefined ? null : JSON.stringify(req.body.features)],
     )).rows);
     ok(res, row, 201);
   }));
 
   router.patch('/admin/catalog/addons/:id', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    if (req.body.supportsQuantity !== undefined && typeof req.body.supportsQuantity !== 'boolean') throw new ApiError(400,'invalid_request','Проверьте настройку количества.');
+    if (req.body.features !== undefined && (!Array.isArray(req.body.features) || !req.body.features.every((item:any)=>typeof item==='string'))) throw new ApiError(400,'invalid_request','Проверьте список того, что входит в услугу.');
     const row = first((await deps.db.query(
       `UPDATE catalog_addons SET
        full_description_ru=COALESCE($15,full_description_ru), full_description_kk=COALESCE($16,full_description_kk),
@@ -4228,9 +4233,10 @@ export function buildV1Router(deps: {
        description_ru=COALESCE($5,description_ru), description_kk=COALESCE($6,description_kk),
        hint_ru=COALESCE($7,hint_ru), hint_kk=COALESCE($8,hint_kk),
        pricing_type=COALESCE($9,pricing_type), price=COALESCE($10,price), duration_minutes=COALESCE($11,duration_minutes),
-       paid_separately=COALESCE($12,paid_separately), active=COALESCE($13,active), sort_order=COALESCE($14,sort_order), updated_at=NOW()
+       paid_separately=COALESCE($12,paid_separately), active=COALESCE($13,active), sort_order=COALESCE($14,sort_order),
+       supports_quantity=COALESCE($17,supports_quantity), features=COALESCE($18::jsonb,features), updated_at=NOW()
        WHERE id=$1 AND deleted_at IS NULL RETURNING *`,
-      [req.params.id, req.body.groupId ?? null, req.body.titleRu ?? null, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? null, req.body.price ?? null, req.body.durationMinutes ?? null, req.body.paidSeparately ?? null, req.body.active ?? null, req.body.sortOrder ?? null, req.body.fullDescriptionRu ?? null, req.body.fullDescriptionKk ?? null],
+      [req.params.id, req.body.groupId ?? null, req.body.titleRu ?? null, req.body.titleKk ?? null, formatServiceDescription(req.body.descriptionRu) ?? null, formatServiceDescription(req.body.descriptionKk) ?? null, formatServiceDescription(req.body.hintRu) ?? null, formatServiceDescription(req.body.hintKk) ?? null, req.body.pricingType ?? null, req.body.price ?? null, req.body.durationMinutes ?? null, req.body.paidSeparately ?? null, req.body.active ?? null, req.body.sortOrder ?? null, req.body.fullDescriptionRu ?? null, req.body.fullDescriptionKk ?? null, req.body.supportsQuantity ?? null, req.body.features === undefined ? null : JSON.stringify(req.body.features)],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Доп. услуга не найдена.');
     ok(res, row);

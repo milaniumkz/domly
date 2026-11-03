@@ -13912,7 +13912,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 'id': id,
                 'name': nameController.text.trim(),
                 'frequency': frequencyController.text.trim(),
-                'price': int.tryParse(priceController.text.trim()) ?? 0,
+                'price': num.tryParse(priceController.text.trim().replaceAll(',', '.')) ?? 0,
                 'sortOrder':
                     int.tryParse(sortOrderController.text.trim()) ?? 999,
                 'cleaningsPerMonth': int.tryParse(
@@ -14488,6 +14488,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     bool isActive = existing?['isActive'] != false;
     bool supportsQuantity = existing?['supportsQuantity'] == true;
     bool separatePayment = existing?['separatePayment'] == true;
+    bool isSaving = false;
 
     await showDialog<void>(
       context: context,
@@ -14597,6 +14598,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
+              if (isSaving) return;
               final navigator = Navigator.of(context);
               final messenger = ScaffoldMessenger.of(context);
               final key = existing != null
@@ -14606,9 +14608,14 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                       fallbackText: labelController.text,
                       prefix: 'addon',
                     );
-              final durationMinutes =
-                  int.tryParse(durationController.text.trim()) ?? 0;
-              if (durationMinutes <= 0) {
+              final price = num.tryParse(priceController.text.trim().replaceAll(',', '.'));
+              final sortOrder = int.tryParse(sortOrderController.text.trim());
+              if (labelController.text.trim().isEmpty || price == null || !price.isFinite || price < 0 || sortOrder == null) {
+                messenger.showSnackBar(SnackBar(content: Text('Проверьте название, цену и порядок доп. услуги'.tr())));
+                return;
+              }
+              final durationMinutes = int.tryParse(durationController.text.trim());
+              if (durationMinutes == null || durationMinutes < 0 || (!separatePayment && durationMinutes == 0)) {
                 messenger.showSnackBar(
                   SnackBar(
                     content: Text(
@@ -14623,9 +14630,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   .map((item) => Map<String, dynamic>.from(item))
                   .toList();
               final noteText = noteController.text.trim();
-              final shortInfoText = shortInfoController.text.trim().isEmpty
-                  ? noteText
-                  : shortInfoController.text.trim();
+              final shortInfoText = shortInfoController.text.trim();
               final next = <Map<String, dynamic>>[
                 ...items.where(
                   (item) => (item['key'] ?? '').toString() != key,
@@ -14644,10 +14649,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                       .map((item) => item.trim())
                       .where((item) => item.isNotEmpty)
                       .toList(),
-                  'price': int.tryParse(priceController.text.trim()) ?? 0,
+                  'price': price,
                   'durationMinutes': durationMinutes,
-                  'sortOrder':
-                      int.tryParse(sortOrderController.text.trim()) ?? 999,
+                  'sortOrder': sortOrder,
                   'supportsQuantity': supportsQuantity,
                   'separatePayment': separatePayment,
                   'isActive': isActive,
@@ -14657,12 +14661,17 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   final bOrder = (b['sortOrder'] as num?)?.toInt() ?? 999;
                   return aOrder.compareTo(bOrder);
                 });
-              await _data.saveAdminAddonGroupItems(groupId, next);
-              if (!mounted) return;
-              navigator.pop();
-              messenger.showSnackBar(
-                SnackBar(content: Text('Доп. услуга сохранена'.tr())),
-              );
+              isSaving = true;
+              try {
+                await _data.saveAdminAddonGroupItems(groupId, next, editedItemKey: key);
+                if (!context.mounted) return;
+                navigator.pop();
+                messenger.showSnackBar(SnackBar(content: Text('Доп. услуга сохранена'.tr())));
+              } catch (_) {
+                if (context.mounted) messenger.showSnackBar(SnackBar(content: Text('Не удалось сохранить доп. услугу. Попробуйте снова.'.tr())));
+              } finally {
+                isSaving = false;
+              }
             },
             child: Text('Сохранить'.tr()),
           ),

@@ -483,6 +483,7 @@ Email: milaniumkz@yandex.kz','1. Модель работы DomLY принима�
 ('t_d4af68e55105beba','Доп. бонус','қосу. бонус','Доп. бонус','["lib/screens/cleaner/cleaner_bonus_screen.dart"]'::jsonb),
 ('t_43f3e6ee201f62c6','Доп. бонус 2','қосу. бонус 2','Доп. бонус 2','["lib/screens/cleaner/cleaner_bonus_screen.dart"]'::jsonb),
 ('t_4536e7f517eac34a','Доп. номер знакомого *','қосу. досының нөмірі*','Доп. номер знакомого *','["lib/screens/cleaner/cleaner_profile_screen.dart"]'::jsonb),
+('t_7a2acf89ff04bc6a','Доп. услуга не найдена. Обновите страницу.','Қосымша қызмет табылмады. Бетті жаңартыңыз.','Доп. услуга не найдена. Обновите страницу.','["lib/services/firestore_data_service.dart"]'::jsonb),
 ('t_dc5c00795d26ff27','Доп. услуга:','Қосымша қызмет:','Доп. услуга:','["lib/utils/cleaner_checklist_data.dart"]'::jsonb),
 ('t_c020b39c923aa5a0','Доп. услуги','Қосымша қызметтер','Доп. услуги','["lib/screens/cleaner/cleaner_earnings_screen.dart","lib/screens/client/orders_screen.dart","lib/screens/client/package_calendar_screen.dart"]'::jsonb),
 ('t_f9159ec74bceed0c','Доп. услуги (входят в заказ):','қосу. қызметтер (тапсырысқа кіреді):','Доп. услуги (входят в заказ):','["lib/screens/client/calculator_screen.dart"]'::jsonb),
