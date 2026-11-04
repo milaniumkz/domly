@@ -1,3 +1,4 @@
+import {referralDiscountProgress} from '../../modules/referrals';
 import type {NotificationService} from '../../modules/domainServices';
 import {requestAccountDeletion,restoreDeletedAccount} from '../../modules/accountDeletion';
 import {freezePackage} from '../../modules/packageFreeze';
@@ -53,7 +54,8 @@ export function mobileRouter(db: Database,notifications?:NotificationService) {
     const own = first<any>((await db.query(`SELECT 'DOMLY-' || u.numeric_id AS code FROM user_referrals r
       JOIN app_users u ON u.id=r.inviter_id WHERE r.customer_id=$1`, [req.user!.id])).rows);
     const code = `DOMLY-${user.numeric_id}`;
-    ok(res, { referralCode: code, referredByCode: own?.code ?? null,
+    const tiers=first<any>((await db.query("SELECT value FROM app_settings WHERE key='referralDiscountTiers'")).rows)?.value;
+    ok(res, { ...referralDiscountProgress(stats.qualified,tiers), monthlyActivated:stats.qualified, referralCode: code, referredByCode: own?.code ?? null,
       referralLink: `https://domly.kz/customer/?ref=${encodeURIComponent(code)}`,
       invited: stats.invited, invitedCount: stats.invited, registered: stats.invited, paid: stats.qualified,
       referralQualifiedCount: stats.qualified, bonusPoints: Number(user.bonus_balance) });

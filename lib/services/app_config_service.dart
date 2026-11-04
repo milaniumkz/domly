@@ -1150,6 +1150,7 @@ class AppConfigService {
     }
     return {
       ...base,
+      'apartmentTiers': config['referralDiscountTiers'] ?? base['apartmentTiers'],
       'bonusPerReferral': (config['referralBonusAmount'] as num?)?.toInt() ??
           base['bonusPerReferral'],
     };

@@ -29,3 +29,29 @@ export async function referralDiscount(db: Queryable, userId: string) {
   const tiers = setting?.value ?? [{count:5,discount:3},{count:10,discount:7},{count:20,discount:10}];
   return Array.isArray(tiers) ? Math.max(0,...tiers.filter(tier=>Number(tier.count)<=count).map(tier=>Math.min(100,Number(tier.discount)||0))) : 0;
 }
+
+/** Display progress uses the same lifetime qualified-referral thresholds as the discount. */
+export function referralDiscountProgress(qualified: number, input: unknown) {
+  const defaults=[{count:5,discount:3},{count:10,discount:7},{count:20,discount:10}];
+  const byCount=new Map<number,number>();
+  for(const tier of (Array.isArray(input??defaults)?input??defaults:[]) as any[]) {
+    const count=Number(tier?.count),discount=Number(tier?.discount);
+    if(!Number.isFinite(count)||!Number.isFinite(discount))continue;
+    const threshold=Math.max(0,Math.ceil(count)),percent=Math.max(0,Math.min(100,discount));
+    byCount.set(threshold,Math.max(byCount.get(threshold)??0,percent));
+  }
+  const tiers=[...byCount].sort((a,b)=>a[0]-b[0]).map(([count,discount])=>({count,discount}));
+  const count=Math.max(0,Math.floor(Number.isFinite(qualified)?qualified:0));
+  const current=Math.max(0,...tiers.filter(t=>t.count<=count).map(t=>t.discount));
+  const maximum=Math.max(0,...tiers.map(t=>t.discount));
+  const maxTier=tiers.find(t=>t.discount===maximum);
+  const next=tiers.find(t=>t.count>count&&t.discount>current);
+  return {
+    referralDiscountTiers:tiers,referralDiscountPercent:current,
+    nextReferralDiscountPercent:next?.discount??null,nextReferralDiscountThreshold:next?.count??null,
+    remainingForNextDiscount:next?Math.max(0,next.count-count):0,
+    maxReferralDiscountPercent:maximum,maxReferralDiscountThreshold:maxTier?.count??0,
+    remainingForMaxDiscount:Math.max(0,(maxTier?.count??0)-count),
+    maxReferralDiscountReached:maximum>0&&current>=maximum,
+  };
+}

@@ -858,13 +858,6 @@
     ]
   },
   {
-    "key": "t_b5f7c5217f5c9454",
-    "source": "Активировали месячный пакет",
-    "locations": [
-      "lib/screens/client/referral_stats_screen.dart"
-    ]
-  },
-  {
     "key": "t_76ddd792f8fd11cc",
     "source": "Активно",
     "locations": [
@@ -2971,6 +2964,13 @@
     ]
   },
   {
+    "key": "t_a9c90bfab4408ab0",
+    "source": "До максимальной скидки ({discount}%): ещё {count} чел.",
+    "locations": [
+      "lib/ui/referral_discount_progress_card.dart"
+    ]
+  },
+  {
     "key": "t_f95357d6cffeb33c",
     "source": "До подключения осталось: {p0} · Сейчас {p1} из {p2}",
     "locations": [
@@ -2992,17 +2992,10 @@
     ]
   },
   {
-    "key": "t_2f3fdfafe17a4bfa",
-    "source": "До следующего уровня 1 оплата",
+    "key": "t_d02e4afab615c207",
+    "source": "До следующего уровня ({discount}%): ещё {count} чел.",
     "locations": [
-      "lib/screens/client/bonus_screen.dart"
-    ]
-  },
-  {
-    "key": "t_d774dc30f30f03e5",
-    "source": "До следующей скидки осталось {p0} подключение",
-    "locations": [
-      "lib/screens/client/referral_stats_screen.dart"
+      "lib/ui/referral_discount_progress_card.dart"
     ]
   },
   {
@@ -4418,6 +4411,20 @@
     ]
   },
   {
+    "key": "t_420ae3f18aae7432",
+    "source": "Засчитано приглашений",
+    "locations": [
+      "lib/screens/client/referral_stats_screen.dart"
+    ]
+  },
+  {
+    "key": "t_9d813ad19e8b2956",
+    "source": "Засчитано приглашений: {count}",
+    "locations": [
+      "lib/ui/referral_discount_progress_card.dart"
+    ]
+  },
+  {
     "key": "t_5f427d187437adeb",
     "source": "Заявка на {p0} оформлена. После оплаты менеджер подтвердит заказ.",
     "locations": [
@@ -4716,7 +4723,8 @@
     "locations": [
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/package_selection_screen.dart",
-      "lib/ui/info_dialog.dart"
+      "lib/ui/info_dialog.dart",
+      "lib/ui/referral_discount_progress_card.dart"
     ]
   },
   {
@@ -5600,10 +5608,10 @@
     ]
   },
   {
-    "key": "t_da2f6f4acba99663",
-    "source": "Максимальная скидка уже активна",
+    "key": "t_52616c996bcb6192",
+    "source": "Максимальная скидка {discount}% уже получена",
     "locations": [
-      "lib/screens/client/referral_stats_screen.dart"
+      "lib/ui/referral_discount_progress_card.dart"
     ]
   },
   {
@@ -10348,10 +10356,10 @@
     ]
   },
   {
-    "key": "t_3ee322eb6f93cf81",
-    "source": "Прогресс скидки",
+    "key": "t_4a912b9413f15237",
+    "source": "Прогресс реферальной скидки",
     "locations": [
-      "lib/screens/client/referral_stats_screen.dart"
+      "lib/ui/referral_discount_progress_card.dart"
     ]
   },
   {
@@ -11098,13 +11106,6 @@
     ]
   },
   {
-    "key": "t_8da6fe516ade5245",
-    "source": "Следующая {p0}%",
-    "locations": [
-      "lib/screens/client/referral_stats_screen.dart"
-    ]
-  },
-  {
     "key": "t_672592ce2da35b1f",
     "source": "Следующая неделя",
     "locations": [
@@ -11826,10 +11827,10 @@
     ]
   },
   {
-    "key": "t_f52e1a66167c46bb",
-    "source": "Текущая скидка {p0}%",
+    "key": "t_944d6910478f1780",
+    "source": "Текущая скидка: {discount}%",
     "locations": [
-      "lib/screens/client/referral_stats_screen.dart"
+      "lib/ui/referral_discount_progress_card.dart"
     ]
   },
   {
@@ -12476,6 +12477,13 @@
     ]
   },
   {
+    "key": "t_47d6386c9d62b9e1",
+    "source": "Уровни скидки пока не настроены",
+    "locations": [
+      "lib/ui/referral_discount_progress_card.dart"
+    ]
+  },
+  {
     "key": "t_9b692de0ad0cbf2c",
     "source": "Условия бонусов и статусов",
     "locations": [
@@ -12529,6 +12537,13 @@
     "source": "Услуги с пометкой \"Оплачивается отдельно при оценке специалиста\" менеджер рассчитает отдельно.",
     "locations": [
       "lib/screens/client/client_home_screen.dart"
+    ]
+  },
+  {
+    "key": "t_486ebdd7743590b9",
+    "source": "Учитываются друзья, оплатившие пакет по вашей ссылке.",
+    "locations": [
+      "lib/ui/referral_discount_progress_card.dart"
     ]
   },
   {

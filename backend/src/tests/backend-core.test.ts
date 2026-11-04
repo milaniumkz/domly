@@ -1180,3 +1180,21 @@ test('booking floor rolls over at Kazakhstan midnight, month and year boundaries
   for(const time of ['08:00','12:00','18:00'])assert.throws(()=>validateBookingStart('2026-11-03',time,after),/завтрашнего дня/);
   assert.doesNotThrow(()=>validateBookingStart('2026-11-04','08:00',after));
 });
+
+
+test('referral progress shows next and maximum goals from configured paid-invitation tiers',async()=>{
+  const {referralDiscountProgress}=await import('../modules/referrals');
+  const initial=referralDiscountProgress(0,undefined);
+  assert.equal(initial.remainingForNextDiscount,5);assert.equal(initial.remainingForMaxDiscount,20);
+  assert.equal(initial.nextReferralDiscountPercent,3);assert.equal(initial.maxReferralDiscountPercent,10);
+  const current=referralDiscountProgress(8,undefined);
+  assert.equal(current.referralDiscountPercent,3);assert.equal(current.remainingForNextDiscount,2);assert.equal(current.remainingForMaxDiscount,12);
+  const done=referralDiscountProgress(25,undefined);
+  assert.equal(done.remainingForNextDiscount,0);assert.equal(done.remainingForMaxDiscount,0);assert.equal(done.maxReferralDiscountReached,true);assert.equal(done.nextReferralDiscountThreshold,null);
+  const custom=[{count:12,discount:15},{count:3,discount:2},{count:8,discount:7},{count:8,discount:10}];
+  const configured=referralDiscountProgress(5,custom);
+  assert.equal(configured.nextReferralDiscountPercent,10);assert.equal(configured.remainingForNextDiscount,3);assert.equal(configured.remainingForMaxDiscount,7);
+  const tied=referralDiscountProgress(5,[{count:3,discount:10},{count:8,discount:7},{count:20,discount:10}]);
+  assert.equal(tied.maxReferralDiscountThreshold,3);assert.equal(tied.remainingForMaxDiscount,0);
+  assert.deepEqual(referralDiscountProgress(0,[]).referralDiscountTiers,[]);
+});

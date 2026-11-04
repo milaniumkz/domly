@@ -1,3 +1,4 @@
+import '../../ui/referral_discount_progress_card.dart';
 import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
@@ -259,7 +260,6 @@ class _BonusScreenState extends State<BonusScreen> {
         final referredByCode = (profile['referredByCode'] ?? '').toString();
         final referralQualifiedCount =
             (profile['referralQualifiedCount'] as num?)?.toInt() ?? 0;
-        final progress = (referralQualifiedCount / 8).clamp(0.0, 1.0);
 
         return DomlyShell(
           bottomNavigationBar: const DomlyClientBottomNav(currentIndex: 2),
@@ -352,23 +352,40 @@ class _BonusScreenState extends State<BonusScreen> {
                           onShare: () => _shareReferralLink(referralCode),
                         ),
                         const SizedBox(height: 10),
-                        _TierDiscountCard(
-                          progress: progress,
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ReferralStatsScreen(),
-                              ),
-                            );
-                          },
-                          onInfo: () => _showBonusInfo(
-                            'bonus_tiers',
-                            title: 'Скидка по уровням',
-                            shortInfo: 'Как работает прогресс и уровни скидок.',
-                            fullInfo:
-                                'Уровень скидки растет по мере оплаченных приглашений. Подробную статистику можно открыть на этом экране.',
-                          ),
-                        ),
+                        StreamBuilder<Map<String, dynamic>?>(
+                            stream: AppConfigService.instance
+                                .referralConfigStream(),
+                            builder: (context, configSnap) => StreamBuilder<
+                                    Map<String, dynamic>?>(
+                                stream: _data.referralStatsStream(),
+                                builder: (context, statsSnap) =>
+                                    ReferralDiscountProgressCard(
+                                      qualifiedCount: ((statsSnap.data?[
+                                                      'referralQualifiedCount'] ??
+                                                  statsSnap
+                                                      .data?['paid']) as num?)
+                                              ?.toInt() ??
+                                          referralQualifiedCount,
+                                      tiers: statsSnap
+                                              .data?['referralDiscountTiers'] ??
+                                          configSnap.data?['apartmentTiers'],
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                const ReferralStatsScreen(),
+                                          ),
+                                        );
+                                      },
+                                      onInfo: () => _showBonusInfo(
+                                        'bonus_tiers',
+                                        title: 'Скидка по уровням',
+                                        shortInfo:
+                                            'Как работает прогресс и уровни скидок.',
+                                        fullInfo:
+                                            'Уровень скидки растет по мере оплаченных приглашений. Подробную статистику можно открыть на этом экране.',
+                                      ),
+                                    ))),
                         const SizedBox(height: 22),
                         _InvitedByCard(
                           referredByCode: referredByCode,
@@ -540,83 +557,6 @@ class _ReferralCodeCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 7),
-        ],
-      ),
-    );
-  }
-}
-
-class _TierDiscountCard extends StatelessWidget {
-  const _TierDiscountCard({
-    required this.progress,
-    required this.onTap,
-    required this.onInfo,
-  });
-
-  final double progress;
-  final VoidCallback onTap;
-  final VoidCallback onInfo;
-
-  @override
-  Widget build(BuildContext context) {
-    DomlyPalette.watch(context);
-
-    return _BonusCardWithInfo(
-      onTap: onTap,
-      onInfo: onInfo,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 10),
-          Text(
-            'Скидка по уровням'.tr(),
-            style: TextStyle(
-              color: DomlyPalette.foreground(_BonusScreenState._foreground),
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'До следующего уровня 1 оплата'.tr(),
-            style: TextStyle(
-              color: DomlyPalette.foreground(_BonusScreenState._muted),
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Stack(
-              children: [
-                Container(
-                  height: 12,
-                  width: double.infinity,
-                  color: DomlyPalette.surface(const Color(0xFFE5EFE8)),
-                ),
-                FractionallySizedBox(
-                  widthFactor: progress <= 0 ? 0.56 : progress,
-                  child: Container(
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: DomlyPalette.surface(_BonusScreenState._green),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 15),
-          Text(
-            '3% / 7% / 10%',
-            style: TextStyle(
-              color: DomlyPalette.foreground(_BonusScreenState._green),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
         ],
       ),
     );
