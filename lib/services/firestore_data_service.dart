@@ -3450,7 +3450,7 @@ class FirestoreDataService {
     if (uid == null) {
       return Stream.value(null);
     }
-    return Stream.fromFuture(getReferralStats(userId: uid));
+    return _backendPollingStream(() => getReferralStats(userId: uid));
   }
 
   Future<void> updateCustomerSettings(Map<String, dynamic> data) async {

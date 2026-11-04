@@ -109,6 +109,8 @@ test('mobile backend persistence, permissions, pricing and account lifecycle', {
       const balance = (await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[inviter])).rows[0];
       assert.equal(Number(balance.bonus_balance),2000);
       assert.equal((await request('/referrals','GET',undefined,inviter)).json.data.paid,1);
+      const progress=(await request('/referrals','GET',undefined,inviter)).json.data;
+      assert.equal(progress.remainingForNextDiscount,4);assert.equal(progress.remainingForMaxDiscount,19);assert.equal(progress.maxReferralDiscountPercent,10);assert.equal(progress.monthlyActivated,1);
     });
     await t.test('addon edits persist server prices and protect paid quantities', async () => {
       await db.query("INSERT INTO service_orders (id,customer_id,customer_package_id,package_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status) VALUES ($1,$2,$3,$4,CURRENT_DATE+1,'10:00','12:00',120,'pending_assignment')",[order,customer,cp,pkg]);

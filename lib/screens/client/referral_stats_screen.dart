@@ -1,3 +1,4 @@
+import '../../ui/referral_discount_progress_card.dart';
 import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
 
@@ -96,27 +97,13 @@ class _ReferralStatsScreenState extends State<ReferralStatsScreen> {
                               (stats['registered'] as num?)?.toInt() ?? 0;
                           final paid = (stats['paid'] as num?)?.toInt() ?? 0;
                           final monthlyActivated =
-                              (stats['monthlyActivated'] as num?)?.toInt() ?? 0;
-                          final bonus = (stats['bonus'] as num?)?.toInt() ?? 0;
-                          final referralDiscountPercent =
-                              (stats['referralDiscountPercent'] as num?)
+                              ((stats['referralQualifiedCount'] ??
+                                          stats['paid']) as num?)
                                       ?.toInt() ??
-                                  (profile['referralDiscountPercent'] as num?)
+                                  (profile['referralQualifiedCount'] as num?)
                                       ?.toInt() ??
                                   0;
-                          final nextDiscountPercent =
-                              (stats['nextReferralDiscountPercent'] as num?)
-                                      ?.toInt() ??
-                                  _nextDiscountPercent(referralDiscountPercent);
-                          final remainingForNextDiscount =
-                              (stats['remainingForNextDiscount'] as num?)
-                                      ?.toInt() ??
-                                  _remainingForNextDiscount(monthlyActivated);
-                          final nextDiscountThreshold =
-                              (stats['nextReferralDiscountThreshold'] as num?)
-                                      ?.toInt() ??
-                                  _nextDiscountThreshold(monthlyActivated);
-
+                          final bonus = (stats['bonus'] as num?)?.toInt() ?? 0;
                           return SingleChildScrollView(
                             padding: const EdgeInsets.fromLTRB(15, 0, 15, 120),
                             child: Column(
@@ -132,14 +119,10 @@ class _ReferralStatsScreenState extends State<ReferralStatsScreen> {
                                   monthlyActivated: monthlyActivated,
                                 ),
                                 const SizedBox(height: 20),
-                                _ReferralProgressCard(
-                                  monthlyActivated: monthlyActivated,
-                                  currentDiscountPercent:
-                                      referralDiscountPercent,
-                                  nextDiscountPercent: nextDiscountPercent,
-                                  remainingForNextDiscount:
-                                      remainingForNextDiscount,
-                                  nextDiscountThreshold: nextDiscountThreshold,
+                                ReferralDiscountProgressCard(
+                                  qualifiedCount: monthlyActivated,
+                                  tiers: stats['referralDiscountTiers'] ??
+                                      referralConfig['apartmentTiers'],
                                 ),
                                 const SizedBox(height: 28),
                                 _ReferralPotentialCard(
@@ -161,37 +144,6 @@ class _ReferralStatsScreenState extends State<ReferralStatsScreen> {
         ),
       ),
     );
-  }
-
-  static int _nextDiscountPercent(int current) {
-    if (current < 3) {
-      return 3;
-    }
-    if (current < 7) {
-      return 7;
-    }
-    if (current < 10) {
-      return 10;
-    }
-    return 10;
-  }
-
-  static int _remainingForNextDiscount(int monthlyActivated) {
-    final target = _nextDiscountThreshold(monthlyActivated);
-    return (target - monthlyActivated).clamp(0, target);
-  }
-
-  static int _nextDiscountThreshold(int monthlyActivated) {
-    if (monthlyActivated < 5) {
-      return 5;
-    }
-    if (monthlyActivated < 10) {
-      return 10;
-    }
-    if (monthlyActivated < 20) {
-      return 20;
-    }
-    return monthlyActivated == 0 ? 5 : monthlyActivated;
   }
 }
 
@@ -356,107 +308,8 @@ class _ReferralFunnelCard extends StatelessWidget {
           _ReferralMetricRow(label: 'Оплатили', value: '$paid'),
           const SizedBox(height: 10),
           _ReferralMetricRow(
-            label: 'Активировали месячный пакет',
+            label: 'Засчитано приглашений',
             value: '$monthlyActivated',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ReferralProgressCard extends StatelessWidget {
-  const _ReferralProgressCard({
-    required this.monthlyActivated,
-    required this.currentDiscountPercent,
-    required this.nextDiscountPercent,
-    required this.remainingForNextDiscount,
-    required this.nextDiscountThreshold,
-  });
-
-  final int monthlyActivated;
-  final int currentDiscountPercent;
-  final int nextDiscountPercent;
-  final int remainingForNextDiscount;
-  final int nextDiscountThreshold;
-
-  @override
-  Widget build(BuildContext context) {
-    DomlyPalette.watch(context);
-
-    final progress = nextDiscountThreshold > 0
-        ? (monthlyActivated / nextDiscountThreshold).clamp(0.0, 1.0)
-        : 1.0;
-    final subtitle = remainingForNextDiscount > 0
-        ? 'До следующей скидки осталось $remainingForNextDiscount\nподключение'
-        : 'Максимальная скидка уже активна';
-
-    return _ReferralCard(
-      height: 180,
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Прогресс скидки'.tr(),
-            style: TextStyle(
-              color: DomlyPalette.foreground(
-                  _ReferralStatsScreenState._foreground),
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              height: 23 / 18,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            subtitle.tr(),
-            style: TextStyle(
-              color: DomlyPalette.foreground(_ReferralStatsScreenState._muted),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              height: 17 / 13,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Stack(
-              children: [
-                Container(
-                  height: 12,
-                  width: double.infinity,
-                  color: DomlyPalette.surface(
-                      _ReferralStatsScreenState._greenSoft),
-                ),
-                FractionallySizedBox(
-                  widthFactor: progress <= 0 ? 0.68 : progress,
-                  child: Container(
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: DomlyPalette.surface(
-                          _ReferralStatsScreenState._orange),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              _ReferralDiscountPill(
-                label: 'Текущая скидка $currentDiscountPercent%',
-                background: _ReferralStatsScreenState._orangeSoft,
-                foreground: _ReferralStatsScreenState._orange,
-              ),
-              const Spacer(),
-              _ReferralDiscountPill(
-                label: 'Следующая $nextDiscountPercent%',
-                background: _ReferralStatsScreenState._greenSoft,
-                foreground: _ReferralStatsScreenState._green,
-              ),
-            ],
           ),
         ],
       ),
@@ -597,45 +450,6 @@ class _ReferralMetricRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ReferralDiscountPill extends StatelessWidget {
-  const _ReferralDiscountPill({
-    required this.label,
-    required this.background,
-    required this.foreground,
-  });
-
-  final String label;
-  final Color background;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    DomlyPalette.watch(context);
-
-    return Container(
-      width: 130,
-      height: 30,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: DomlyPalette.surface(background),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Text(
-        label.tr(),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: DomlyPalette.foreground(foreground),
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          height: 16 / 12,
-        ),
       ),
     );
   }
