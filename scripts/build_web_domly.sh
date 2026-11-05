@@ -23,7 +23,7 @@ cd "$PROJECT_DIR"
   --dart-define=FIREBASE_APP_ID_WEB=1:288330515337:web:d894db4a58831b07cd9758 \
   --dart-define=FIREBASE_MESSAGING_SENDER_ID=288330515337
 
-for required in index.html flutter.js flutter_bootstrap.js main.dart.js; do
+for required in index.html flutter.js flutter_bootstrap.js main.dart.js install-prompt.js; do
   if [[ ! -f "$TMP_OUT_DIR/$required" ]]; then
     echo "Missing required web build artifact: $TMP_OUT_DIR/$required" >&2
     exit 1
@@ -150,6 +150,7 @@ index_content = index_content.replace(
     'src="flutter_bootstrap.js" async',
     f'src="flutter_bootstrap.js?v={build_stamp}" async',
 )
+index_content = index_content.replace('install-prompt.js?v=1', f'install-prompt.js?v={build_stamp}')
 index_path.write_text(index_content)
 
 content = bootstrap_path.read_text()
