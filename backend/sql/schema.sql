@@ -1381,7 +1381,7 @@ BEGIN
  INSERT INTO chat_participants(chat_id,user_id) VALUES(assistant_chat,NEW.customer_id) ON CONFLICT DO NOTHING;
  INSERT INTO moon_ai_outbox(customer_id,chat_id,kind,dedupe_key,payload)
  VALUES(NEW.customer_id,assistant_chat,'area_verification','quality-area:'||NEW.id::text,
-   jsonb_build_object('qualityCheckId',NEW.id,'text','Требуется подтвердить площадь до уборки. Запросить техплан либо согласовать визит отдела качества.'))
+   jsonb_build_object('qualityCheckId',NEW.id,'text','Запросить фото техплана квартиры. Без фото плана не отправлять заявку на проверку и не согласовывать визит.'))
  ON CONFLICT(dedupe_key) DO NOTHING;
  RETURN NEW;
 END $$;

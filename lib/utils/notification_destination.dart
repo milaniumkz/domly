@@ -100,3 +100,18 @@ NotificationDestination? notificationDestination(Map<String, dynamic> item,
   }
   return null;
 }
+
+String adminNotificationRoute(Map<String, dynamic> payload) {
+  final type =
+      (payload['targetType'] ?? payload['target_type'] ?? payload['type'] ?? '')
+          .toString();
+  if ({'quality_check', 'area_quality_check', 'area_verification'}
+      .contains(type)) {
+    return '/admin/web?section=quality_control';
+  }
+  final route = (payload['route'] ?? '').toString().trim();
+  if (route.startsWith('/admin/web')) return route;
+  if (type == 'work_schedule') return '/admin/web?section=work_schedules';
+  if (type.contains('payment')) return '/admin/web?section=payments';
+  return '/admin/web';
+}

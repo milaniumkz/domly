@@ -21,6 +21,7 @@ export function asyncHandler(fn: (req: Request, res: Response, next: NextFunctio
 }
 
 const ruMessages: Record<string, string> = {
+  document_required: 'Загрузите фото плана квартиры перед отправкой заявки.',
   booking_from_tomorrow: 'Заказать уборку можно только с завтрашнего дня. Выберите другую дату.',
   unauthorized: 'Войдите в аккаунт заново.',
   forbidden: 'Недостаточно прав для этого действия.',
@@ -39,6 +40,7 @@ const ruMessages: Record<string, string> = {
 };
 
 const kkMessages: Record<string, string> = {
+  document_required: 'Өтінім жібермес бұрын пәтер жоспарының фотосын жүктеңіз.',
   booking_from_tomorrow: 'Тазалауға тек ертеңнен бастап тапсырыс беруге болады. Басқа күнді таңдаңыз.',
   unauthorized: 'Аккаунтқа қайта кіріңіз.',
   forbidden: 'Бұл әрекетке құқық жеткіліксіз.',

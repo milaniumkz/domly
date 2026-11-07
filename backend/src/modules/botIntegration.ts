@@ -183,12 +183,13 @@ export async function botScheduleVisit(db:Database,notifications:NotificationSer
     if(prior){if(prior.customer_id!==user.id||prior.request_hash!==hash)throw new ApiError(409,'event_conflict','eventId уже использован с другими данными.');return {...prior.result,duplicate:true};}
     if(Date.parse(at)<=Date.now())throw new ApiError(400,'visit_consent_required','Выберите будущее время проверки.');
     const {q,address}=await requestForCustomer(tx,input,user.id);
+    if(!q.document_file_id)throw new ApiError(400,'document_required','Для отправки заявки загрузите фото плана квартиры в приложении.');
     if(q.status==='approved'||address.verified_area)throw new ApiError(409,'area_already_verified','Площадь уже подтверждена.');
     const firstOrder=(await tx.query(`SELECT scheduled_date::text,start_time::text,status FROM service_orders WHERE customer_id=$1 AND address_id=$2 AND status NOT IN ('cancelled','completed') ORDER BY scheduled_date,start_time LIMIT 1`,[user.id,address.id])).rows[0];
     if(firstOrder?.status==='in_progress'||(firstOrder?.scheduled_date&&firstOrder?.start_time&&Date.parse(at)>=Date.parse(`${firstOrder.scheduled_date}T${firstOrder.start_time}+05:00`)))
       throw new ApiError(409,'visit_after_cleaning','Проверка должна быть до начала уборки. Согласуйте другое время с отделом качества.');
     if(q.scheduled_at&&new Date(q.scheduled_at).getTime()!==Date.parse(at))throw new ApiError(409,'visit_already_scheduled','Визит уже согласован на другое время. Изменение согласует отдел качества.');
-    const row=(await tx.query(`UPDATE quality_check_requests SET status='scheduled',scheduled_at=$2,admin_comment=concat_ws(E'\n',admin_comment,$3::text),updated_at=NOW() WHERE id=$1 RETURNING id,status,scheduled_at`,[q.id,at,q.scheduled_at?null:'Клиент через WhatsApp отказался от документа и согласовал время. Требуется назначить сотрудника отдела качества.'])).rows[0];
+    const row=(await tx.query(`UPDATE quality_check_requests SET status='scheduled',scheduled_at=$2,admin_comment=concat_ws(E'\n',admin_comment,$3::text),updated_at=NOW() WHERE id=$1 RETURNING id,status,scheduled_at`,[q.id,at,q.scheduled_at?null:'Клиент через WhatsApp согласовал время проверки загруженного плана. Требуется назначить сотрудника отдела качества.'])).rows[0];
     await tx.query(`INSERT INTO audit_logs(action,entity_type,entity_id,payload) VALUES('quality_check.visit_requested_by_bot','quality_check',$1,$2)`,[q.id,{eventId:input.eventId,scheduledAt:at,customerConsent:true}]);
     const result={...row,customerId:user.id,controllerAssignment:'pending',message:'Время клиента передано отделу качества. Назначение сотрудника требует подтверждения отдела.'};
     await tx.query('INSERT INTO bot_area_events(event_id,customer_id,request_hash,result,evidence) VALUES($1,$2,$3,$4,$5)',[input.eventId,user.id,hash,result,{documentDeclined:true,customerConsent:true}]);

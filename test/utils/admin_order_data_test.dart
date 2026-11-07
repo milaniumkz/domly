@@ -32,7 +32,7 @@ void main() {
     expect(order['customerId'], 'customer');
     expect(order['customerName'], 'Клиент');
     expect(order['address'], 'Астана, Тестовая, 1, кв. 12');
-    expect(order['time'], '10:00:00 - 12:00:00');
+    expect(order['time'], '10:00 - 12:00');
     expect(order['scheduledFor'], '2030-01-02');
     expect(order['price'], 12000);
     expect(order['paymentStatus'], 'paid');

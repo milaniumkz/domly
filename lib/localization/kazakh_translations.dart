@@ -1,5 +1,7 @@
 // Bundled Kazakh UI catalog; source strings and parameter names stay stable.
 const Map<String,String> kKazakhTranslations = {
+  "Ожидает документа": "Құжат күтілуде",
+  "Не удалось загрузить данные": "Деректерді жүктеу мүмкін болмады",
   "Прогресс реферальной скидки": "Рефералдық жеңілдік прогресі",
   "Текущая скидка: {discount}%": "Қазіргі жеңілдік: {discount}%",
   "Засчитано приглашений: {count}": "Есептелген шақырулар: {count}",

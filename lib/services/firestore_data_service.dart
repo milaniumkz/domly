@@ -1,3 +1,4 @@
+import '../utils/admin_area_check_data.dart';
 import 'booking_checkout_service.dart';
 import '../utils/cleaning_time_range.dart';
 import '../models/domly_models.dart';
@@ -2176,49 +2177,14 @@ class FirestoreDataService {
     if (_isDebugAdmin) {
       return _debugAreaMismatchReportsBridgeStream();
     }
-    return _backendPollingStream(
-      () async => (await BackendApiService.instance.getList('/admin/quality'))
-          .where((row) => !(row['status'] == 'cancelled' &&
-              (row['admin_comment'] ?? '')
-                  .toString()
-                  .contains('duplicate_auto_closed')))
-          .map((row) => <String, dynamic>{
-                ...row,
-                'userId': row['customer_id'],
-                'customerId': row['customer_id'],
-                'orderId': row['order_id'],
-                'actualArea': row['requested_area'],
-                'initialArea': row['verified_area'] ?? row['area'] ?? 0,
-                'createdAt': row['created_at'],
-                'updatedAt': row['updated_at'],
-                'type': row['document_file_id'] == null
-                    ? 'quality_area_check'
-                    : 'area_mismatch',
-                'status':
-                    row['status'] == 'approved' ? 'resolved' : row['status'],
-                'reviewStatus': row['status'],
-                'customerName': row['customer_name'],
-                'customerPhone': row['customer_phone'],
-              })
-          .toList(),
-    );
+    return _backendPollingStream(() => loadAdminAreaChecks(
+        (offset, limit) => BackendApiService.instance.getList('/admin/quality',
+            query: {'offset': '$offset', 'limit': '$limit'})));
   }
 
-  Stream<List<Map<String, dynamic>>> qualityControlAreaChecksStream() {
-    return areaMismatchReportsStream().map((items) {
-      final checks = items
-          .where(
-            (item) => (item['type'] ?? '').toString() == 'quality_area_check',
-          )
-          .toList();
-      checks.sort(
-        (a, b) => _timestampMillis(
-          b['createdAt'] ?? b['updatedAt'],
-        ).compareTo(_timestampMillis(a['createdAt'] ?? a['updatedAt'])),
-      );
-      return checks;
-    });
-  }
+  // Documents must not disappear from the quality-control review queue.
+  Stream<List<Map<String, dynamic>>> qualityControlAreaChecksStream() =>
+      areaMismatchReportsStream();
 
   Stream<List<Map<String, dynamic>>> customerPaymentsStream({String? userId}) {
     final uid = userId ?? _uidOrNull;

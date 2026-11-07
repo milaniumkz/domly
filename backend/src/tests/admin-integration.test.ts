@@ -1312,6 +1312,34 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal((await cleanerRequest()).json.data.zones.length,0);
       } finally {await db.query('DELETE FROM cleaner_zones WHERE cleaner_id=$1',[cleaner]);await db.query('DELETE FROM service_zones WHERE id=ANY($1::uuid[])',[[active,inactive]]);}
     });
+    await t.test('area submissions require an owned plan, become visible and notify once without approving implicitly',async()=>{
+      const address=randomUUID(),document=randomUUID();let check='';
+      try {
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Queue Test','1',90)",[address,customer]);
+        const missing=await request('/quality-checks/from-file','POST',{addressId:address,actualArea:90},true);
+        assert.equal(missing.status,400);assert.equal(missing.json.code,'document_required');
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM quality_check_requests WHERE address_id=$1',[address])).rows[0].n,0);
+        check=randomUUID();
+        await db.query("INSERT INTO quality_check_requests(id,customer_id,address_id,requested_area) VALUES($1,$2,$3,90)",[check,customer,address]);
+        await db.query("INSERT INTO files(id,owner_id,bucket,object_key,mime_type,size_bytes,public_url) VALUES($1,$2,'test',$3,'image/jpeg',10,'https://example.com/queue-plan.jpg')",[document,customer,'queue-test-'+document]);
+        const created=await request('/quality-checks/from-file','POST',{addressId:address,actualArea:90,fileId:document},true);
+        assert.equal(created.status,201);assert.equal(created.json.data.request.id,check);
+        assert.equal(created.json.data.request.status,'pending');
+        const listed=await request('/admin/quality?status=pending');
+        assert.equal(listed.status,200);const queueItem=listed.json.data.find((row:any)=>row.id===check);
+        assert.ok(queueItem);assert.equal(queueItem.status,'open');assert.equal(queueItem.review_status,'pending');
+        assert.equal(queueItem.document_file_id,document);
+        const orders=await request('/admin/orders');assert.equal(orders.status,200);
+        for(const order of orders.json.data) {if(order.start_time)assert.match(order.start_time,/^\d{2}:\d{2}$/);if(order.end_time)assert.match(order.end_time,/^\d{2}:\d{2}$/);}
+        await request('/quality-checks/from-file','POST',{addressId:address,actualArea:90,fileId:document},true);
+        const rows=(await db.query("SELECT * FROM notifications WHERE target_type='quality_check' AND target_id=$1 AND role='superadmin'",[check])).rows;
+        assert.equal(rows.length,1);assert.equal(rows[0].body_ru,'Клиент отправил документы на проверку площади.');
+        assert.equal((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area,null);
+      } finally {
+        if(check) {await db.query('DELETE FROM notifications WHERE target_id=$1',[check]);await db.query('DELETE FROM quality_check_requests WHERE id=$1',[check]);}
+        await db.query('DELETE FROM files WHERE id=$1',[document]);await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+      }
+    });
     await t.test('area approval credits bonus once across both endpoints and retries',async()=>{
       const address=randomUUID(),check=randomUUID();
       const initial=Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance);
@@ -1319,7 +1347,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area,is_primary) VALUES($1,$2,'Астана','Test','1',90,TRUE)",[address,customer]);
         await db.query("INSERT INTO quality_check_requests(id,customer_id,address_id,requested_area) VALUES($1,$2,$3,100)",[check,customer,address]);
         const repeatedRequests=await Promise.all(Array.from({length:3},()=>request('/quality-checks/from-file','POST',{addressId:address,actualArea:100},true)));
-        assert.ok(repeatedRequests.every(result=>result.status===201 && result.json.data.request.id===check));
+        assert.ok(repeatedRequests.every(result=>result.status===400 && result.json.code==='document_required'));
         assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM quality_check_requests WHERE customer_id=$1 AND address_id=$2 AND status IN ('pending','scheduled')",[customer,address])).rows[0].n),1);
         assert.equal((await request('/admin/quality-checks/'+check,'PATCH',{status:'approved',approvedArea:100})).status,200);
         assert.equal((await request('/admin/quality-checks/'+check,'PATCH',{actualArea:100,difference:10,reviewStatus:'verified',confirmedByQualityControl:true})).status,200);
@@ -1533,7 +1561,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     });
     await t.test('area photo request persists an owned file and admin can review it',async()=>{
       const ownFile=randomUUID();
-      await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1::uuid,$2,'test',$1::text,'https://example.com/area-plan')",[ownFile,customer]);
+      await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url,mime_type,size_bytes) VALUES($1::uuid,$2,'test',$1::text,'https://example.com/area-plan','image/jpeg',10)",[ownFile,customer]);
       try {
         assert.equal((await request('/quality-checks/from-file','POST',{actualArea:100,fileId:file},true)).status,404);
         assert.equal((await request('/quality-checks/from-file','POST',{actualArea:100,addressId:randomUUID(),fileId:ownFile},true)).status,404);

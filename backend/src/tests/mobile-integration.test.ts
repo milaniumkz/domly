@@ -655,12 +655,12 @@ test('trusted bot catalog, quality workflow and whole-package financial settleme
       assert.equal((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area,null);
       assert.equal((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[user])).rows[0].bonus_balance,'0.00');
     });
-    await t.test('refusal schedules a visit without approving area and deduplicates retries',async()=>{
-      const input={eventId:randomUUID(),phone,qualityCheckId:quality,documentDeclined:true,customerConsent:true,scheduledAt:'2035-10-19T09:00:00+05:00'};events.push(input.eventId);
-      assert.equal((await request('/area/schedule-visit',{...input,customerConsent:false})).status,400);
-      const result=await request('/area/schedule-visit',{...input,customerConsent:'true',documentDeclined:'true'});assert.equal(result.status,200);assert.equal(result.body.data.status,'scheduled');assert.equal(result.body.data.controllerAssignment,'pending');
-      assert.equal((await request('/area/schedule-visit',input)).body.data.duplicate,true);
-      assert.equal((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area,null);
+    await t.test('bot cannot submit or schedule a document-free request',async()=>{
+      const input={eventId:randomUUID(),phone,qualityCheckId:quality,documentDeclined:true,customerConsent:true,scheduledAt:'2035-10-19T09:00:00+05:00'};
+      const result=await request('/area/schedule-visit',input);
+      assert.equal(result.status,400);assert.equal(result.body.code,'document_required');
+      assert.equal((await db.query('SELECT status FROM quality_check_requests WHERE id=$1',[quality])).rows[0].status,'pending');
+      assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM bot_area_events WHERE event_id=$1',[input.eventId])).rows[0].n,0);
     });
     let pendingId:string;
     await t.test('confirmation recalculates all 12 visits using original prices, reserves no new visits and creates one surcharge',async()=>{

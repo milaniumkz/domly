@@ -7,8 +7,8 @@ Map<String, dynamic> mapAdminOrder(Map<String, dynamic> row) {
       row['type'] == 'package_purchase';
   final status = (row['status'] ?? row['orderStatus'] ?? '').toString();
   final date = (row['scheduled_date'] ?? row['scheduledFor'] ?? '').toString();
-  final start = (row['start_time'] ?? row['startTime'] ?? '').toString();
-  final end = (row['end_time'] ?? row['endTime'] ?? '').toString();
+  final start = adminClockTime(row['start_time'] ?? row['startTime']);
+  final end = adminClockTime(row['end_time'] ?? row['endTime']);
   final address = [
     row['city'],
     row['settlement'],
@@ -110,3 +110,43 @@ bool canAdminCancelOrder(Map<String, dynamic> order) =>
     order['type'] != 'package_purchase' &&
     !{'completed', 'cancelled', 'canceled'}
         .contains(order['orderStatus'] ?? order['status']);
+
+String adminClockTime(dynamic value) {
+  final match = RegExp(r'^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$')
+      .firstMatch('$value'.trim());
+  if (match == null) return '';
+  final hour = int.parse(match[1]!);
+  final minute = int.parse(match[2]!);
+  if (hour > 23 || minute > 59) return '';
+  return '${hour.toString().padLeft(2, '0')}:${match[2]}';
+}
+
+String adminOrderTimeText(Map<String, dynamic> order) {
+  final start = adminClockTime(order['startTime'] ?? order['start_time']);
+  final end = adminClockTime(order['endTime'] ?? order['end_time']);
+  final date =
+      order['scheduledDateKey'] ?? order['scheduled_date'] ?? order['date'];
+  final duration =
+      order['estimated_duration_minutes'] ?? order['durationMinutes'];
+  if (start.isNotEmpty)
+    return cleaningTimeRange(start, end, date: date, durationMinutes: duration);
+  final raw = (order['time'] ??
+          order['scheduledTime'] ??
+          order['orderTime'] ??
+          order['timeRange'] ??
+          '')
+      .toString()
+      .trim();
+  if (raw.isEmpty || raw == '—') return '—';
+  final matches = RegExp(r'(?:^|[^\d:])(\d{1,2}):(\d{2})(?::\d{2})?')
+      .allMatches(raw)
+      .toList();
+  final clocks = matches
+      .map((m) => adminClockTime('${m[1]}:${m[2]}'))
+      .where((v) => v.isNotEmpty)
+      .toList();
+  if (clocks.length >= 2)
+    return cleaningTimeRange(clocks[0], clocks[1],
+        date: date, durationMinutes: duration);
+  return clocks.isEmpty ? raw : clocks.first;
+}
