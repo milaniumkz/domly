@@ -52,6 +52,21 @@ class _ProtectedDocumentState extends State<_ProtectedDocument> {
     _viewType = null;
   }
 
+  Widget _externalPdf(String url) {
+    if (_viewType == null) {
+      _viewType = 'domly-external-plan-${_serial++}';
+      ui_web.platformViewRegistry.registerViewFactory(
+          _viewType!,
+          (_) => html.IFrameElement()
+            ..src = url
+            ..title = 'Техплан квартиры'
+            ..style.border = '0'
+            ..style.width = '100%'
+            ..style.height = '100%');
+    }
+    return HtmlElementView(viewType: _viewType!);
+  }
+
   @override
   void dispose() {
     _release();
@@ -66,6 +81,8 @@ class _ProtectedDocumentState extends State<_ProtectedDocument> {
             if (snapshot.error is BackendApiException &&
                 (snapshot.error as BackendApiException).statusCode == 404 &&
                 Uri.tryParse(widget.url)?.scheme == 'https') {
+              if (Uri.parse(widget.url).path.toLowerCase().endsWith('.pdf'))
+                return _externalPdf(widget.url);
               return Image.network(widget.url,
                   fit: widget.fit,
                   errorBuilder: (_, __, ___) =>

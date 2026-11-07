@@ -1340,6 +1340,35 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM files WHERE id=$1',[document]);await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
       }
     });
+    await t.test('approved bot plans remain readable in list and details and never mix customer or request evidence',async()=>{
+      const q=randomUUID(),other=randomUUID(),uploaded=randomUUID();
+      const events=[randomUUID(),randomUUID(),randomUUID()];
+      try {
+        await db.query("INSERT INTO files(id,owner_id,bucket,object_key,mime_type,size_bytes,public_url) VALUES($1::uuid,$2,'test',$1::text,'image/jpeg',10,'https://example.com/uploaded-plan.jpg')",[uploaded,customer]);
+        await db.query("INSERT INTO quality_check_requests(id,customer_id,status,requested_area,approved_area) VALUES($1,$2,'approved',90,90),($3,$2,'approved',80,80)",[q,customer,other]);
+        await db.query('UPDATE quality_check_requests SET document_file_id=$2 WHERE id=$1',[q,uploaded]);
+        for(const [i,owner,check,url] of [[0,customer,q,'https://example.com/reviewed-by-bot.jpg'],[1,cleaner,q,'https://example.com/wrong-customer.jpg'],[2,customer,other,'https://example.com/other-request.pdf']] as const) {
+          await db.query('INSERT INTO bot_area_events(event_id,customer_id,request_hash,result,evidence) VALUES($1,$2,$3,$4,$5)',[events[i],owner,'fixture',JSON.stringify({qualityCheckId:check,status:'approved'}),JSON.stringify({documentType:'technical_plan',documentUrl:url,readable:true,addressMatches:true,totalApartmentAreaConfirmed:true})]);
+        }
+        const list=await request('/admin/quality?status=approved');assert.equal(list.status,200);
+        const item=list.json.data.find((row:any)=>row.id===q);assert.ok(item);
+        assert.equal(item.areaTechnicalPlanUrl,'https://example.com/reviewed-by-bot.jpg');
+        assert.equal(item.document_url,item.areaTechnicalPlanUrl);
+        assert.equal(item.uploaded_document_url,'https://example.com/uploaded-plan.jpg');
+        assert.ok(item.bot_verified_at);
+        const details=await request('/admin/quality-checks/'+q+'/details');assert.equal(details.status,200);
+        assert.equal(details.json.data.qualityCheck.document_url,item.document_url);
+        assert.equal(details.json.data.qualityCheck.bot_evidence.readable,true);
+        const legacy=await request('/admin/quality-checks/'+other+'/details');
+        assert.equal(legacy.json.data.qualityCheck.document_file_id,null);
+        assert.equal(legacy.json.data.qualityCheck.areaTechnicalPlanUrl,'https://example.com/other-request.pdf');
+        assert.equal((await request('/admin/quality-checks/'+q+'/details','GET',undefined,true)).status,403);
+      } finally {
+        await db.query('DELETE FROM bot_area_events WHERE event_id=ANY($1::text[])',[events]);
+        await db.query('DELETE FROM quality_check_requests WHERE id=ANY($1::uuid[])',[[q,other]]);
+        await db.query('DELETE FROM files WHERE id=$1',[uploaded]);
+      }
+    });
     await t.test('area approval credits bonus once across both endpoints and retries',async()=>{
       const address=randomUUID(),check=randomUUID();
       const initial=Number((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance);

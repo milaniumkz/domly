@@ -1,6 +1,7 @@
 /// Keep the backend review status while presenting consistent queue filters.
 Map<String, dynamic> mapAdminAreaCheck(Map<String, dynamic> row) {
-  final rawStatus = (row['review_status'] ?? row['status'] ?? 'pending').toString();
+  final rawStatus =
+      (row['review_status'] ?? row['status'] ?? 'pending').toString();
   final status = switch (rawStatus) {
     'pending' || 'scheduled' || 'open' => 'open',
     'approved' || 'rejected' || 'cancelled' || 'resolved' => 'resolved',
@@ -22,7 +23,7 @@ Map<String, dynamic> mapAdminAreaCheck(Map<String, dynamic> row) {
     'initialArea': row['verified_area'] ?? row['area'] ?? 0,
     'createdAt': row['created_at'],
     'updatedAt': row['updated_at'],
-    'type': row['document_file_id'] == null
+    'type': row['document_file_id'] == null && areaPlanUrls(row).isEmpty
         ? 'quality_area_check'
         : 'area_mismatch',
     'status': status,
@@ -50,4 +51,26 @@ Future<List<Map<String, dynamic>>> loadAdminAreaChecks(
     if (page.length < limit) break;
   }
   return rows.values.toList();
+}
+
+List<String> areaPlanUrls(Map<String, dynamic> data) {
+  final urls = <String>{};
+  for (final value in [
+    data['bot_document_url'],
+    data['areaTechnicalPlanUrl'],
+    data['technicalPlanUrl'],
+    data['document_url'],
+    data['documentUrl'],
+    data['uploaded_document_url'],
+    data['photoUrl'],
+    if (data['photoUrls'] is Iterable) ...data['photoUrls'] as Iterable
+  ]) {
+    final text = (value ?? '').toString().trim();
+    final uri = Uri.tryParse(text);
+    if (uri != null &&
+        {'https', 'http'}.contains(uri.scheme) &&
+        uri.host.isNotEmpty &&
+        uri.userInfo.isEmpty) urls.add(text);
+  }
+  return urls.toList();
 }

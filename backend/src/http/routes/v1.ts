@@ -1,3 +1,4 @@
+import {areaPlanEvidenceJoin,areaPlanEvidenceColumns} from '../../modules/areaPlanEvidence';
 import {updateOrderAddons} from '../../modules/orderAddons';
 import {submitCleanerPhoto,reviewCleanerPhoto} from '../../modules/cleanerProfilePhoto';
 import {notifySpecialistAddons} from '../../modules/specialistAddons';
@@ -3037,10 +3038,13 @@ export function buildV1Router(deps: {
   router.get('/admin/quality-checks/:id/details', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const qualityCheck = first((await deps.db.query(
       `SELECT q.*, u.full_name AS customer_name, u.phone AS customer_phone, u.email AS customer_email,
-              ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.area, ca.verified_area
+              ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.area, ca.verified_area,
+              ${areaPlanEvidenceColumns}
        FROM quality_check_requests q
        JOIN app_users u ON u.id=q.customer_id
        LEFT JOIN customer_addresses ca ON ca.id=q.address_id
+       LEFT JOIN files f ON f.id=q.document_file_id
+       ${areaPlanEvidenceJoin}
        WHERE q.id=$1`,
       [req.params.id],
     )).rows);
@@ -4692,11 +4696,12 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
               u.full_name AS customer_name, u.phone AS customer_phone,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.area, ca.verified_area,
               cp.id AS package_purchase_id, pkg.name_ru AS package_name_ru,
-              f.public_url AS document_url, f.public_url AS "areaTechnicalPlanUrl"
+              ${areaPlanEvidenceColumns}
        FROM quality_check_requests q
        JOIN app_users u ON u.id=q.customer_id
        LEFT JOIN customer_addresses ca ON ca.id=q.address_id
        LEFT JOIN files f ON f.id=q.document_file_id
+       ${areaPlanEvidenceJoin}
        LEFT JOIN customer_packages cp ON cp.id=q.customer_package_id
        LEFT JOIN catalog_packages pkg ON pkg.id=cp.package_id`,
       'q.created_at DESC',
