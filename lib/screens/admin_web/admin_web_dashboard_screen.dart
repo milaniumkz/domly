@@ -27,7 +27,8 @@ import 'widgets/osm_point_picker.dart';
 import 'widgets/osm_polygon_picker.dart';
 
 class AdminWebDashboardScreen extends StatefulWidget {
-  const AdminWebDashboardScreen({super.key});
+  const AdminWebDashboardScreen({super.key, this.initialSection});
+  final String? initialSection;
 
   @override
   State<AdminWebDashboardScreen> createState() =>
@@ -163,6 +164,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     super.initState();
     _applyUrlSectionSelection();
     _applyDebugSectionSelection();
+    if (widget.initialSection != null) {
+      _selectedIndex = _sectionIndexByKey(widget.initialSection!);
+    }
     _loadAdminCapabilities();
   }
 
@@ -4272,6 +4276,17 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                           if(data['type']=='work_schedule')TextButton.icon(
                             onPressed:()=>setState(()=>_selectedIndex=_sectionIndexByKey('work_schedules')),
                             icon:const Icon(Icons.event_available),label:Text('Открыть графики работы'.tr())),
+                          if ({'quality_check', 'area_quality_check', 'area_verification'}.contains(data['type']))
+                            TextButton.icon(
+                              onPressed: () => setState(() {
+                                _selectedIndex = _sectionIndexByKey('quality_control');
+                                _statusFilter = 'Все';
+                                _searchQuery = '';
+                                _filterStartDate = null;
+                                _filterEndDate = null;
+                              }),
+                              icon: const Icon(Icons.square_foot_outlined),
+                              label: Text('Проверка площади'.tr())),
                           const SizedBox(height: 12),
                           Wrap(
                             spacing: 8,
@@ -5375,29 +5390,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     return date == null ? '—' : _dateLabel(date);
   }
 
-  String _adminOrderTimeText(Map<String, dynamic> order) {
-    final raw = (order['time'] ??
-            order['scheduledTime'] ??
-            order['orderTime'] ??
-            order['timeRange'] ??
-            '')
-        .toString()
-        .trim();
-    if (raw.isEmpty || raw == '—') {
-      return '—';
-    }
-    final range = RegExp(
-      r'\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}',
-    ).firstMatch(raw);
-    if (range != null) {
-      return range.group(0)!.replaceAll(RegExp(r'\s*[–—]\s*'), ' - ');
-    }
-    final times = RegExp(r'\d{1,2}:\d{2}').allMatches(raw).toList();
-    if (times.length >= 2) {
-      return '${times[0].group(0)} - ${times[1].group(0)}';
-    }
-    return raw;
-  }
+  String _adminOrderTimeText(Map<String, dynamic> order) => adminOrderTimeText(order);
 
   List<int>? _adminTimeRange(String raw) {
     final matches = RegExp(r'(\d{1,2}):(\d{2})').allMatches(raw).toList();
@@ -8477,6 +8470,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _data.qualityControlAreaChecksStream(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _sectionScaffold(child: _emptyState('Не удалось загрузить данные', 'Попробуйте снова.'));
+        }
         final reports = snapshot.data ?? const <Map<String, dynamic>>[];
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: _data.adminOrdersStream(),
@@ -8602,8 +8598,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       report['customerPhone'],
     ]);
     final address = _firstText([
-      _customerPrimaryAddress(customer),
       report['address'],
+      _customerPrimaryAddress(customer),
       order['address'],
     ]);
     final orderId = _firstText([
@@ -8628,13 +8624,14 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       order['package'],
       order['packageName'],
       order['frequencyLabel'],
+      report['packageName'],
     ]);
     return _entityCard(
       title: 'Заявка ОКК: $name',
       subtitle: '$phone · $address',
       badges: [
         _statusBadge(
-          status == 'resolved' ? 'Отработано' : 'Открыто',
+          status == 'resolved' ? 'Отработано' : report['document_file_id'] == null ? 'Ожидает документа' : 'Открыто',
           color: status == 'resolved'
               ? const Color(0xFF047857)
               : const Color(0xFFD97706),
@@ -8645,6 +8642,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         spacing: 10,
         runSpacing: 10,
         children: [
+          if (_areaReportPhotoUrls(report).isNotEmpty)
+            _areaReportPhotoPreview(_areaReportPhotoUrls(report).first),
           _miniInfo('Телефон', phone),
           _miniInfo('Адрес', address),
           _miniInfo('Площадь', area == '—' ? '—' : '$area м²'),
@@ -8669,7 +8668,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               _openQualityControlDetails(context, report, customer, order),
           child: Text('Все данные'.tr()),
         ),
-        if (status != 'resolved')
+        if (status != 'resolved' && report['document_file_id'] != null)
           TextButton(
             onPressed: () =>
                 _confirmAreaQualityCheck(context, report, order: order),

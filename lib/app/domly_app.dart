@@ -196,18 +196,12 @@ class _DomlyAppState extends State<DomlyApp> {
       if (!authController.isAuthenticated) return;
       final type = (payload['targetType'] ?? payload['target_type'] ?? payload['type'] ?? '').toString();
       if (config.adminSurface) {
-        final route = (payload['route'] ?? '').toString().trim();
-        final targetRoute = route.startsWith('/admin/web')
-            ? route
-            : type=='work_schedule'
-                ? '/admin/web?section=work_schedules'
-                : type.contains('payment')
-                ? '/admin/web?section=payments'
-                : '/admin/web';
+        final targetRoute = adminNotificationRoute(payload);
         syncAppUrlRoute(targetRoute);
         _navigatorKey.currentState?.pushNamedAndRemoveUntil(
           '/admin/web',
           (_) => false,
+          arguments: {'section': Uri.parse(targetRoute).queryParameters['section']},
         );
         return;
       }
@@ -1409,7 +1403,7 @@ class _DomlyAppState extends State<DomlyApp> {
         return const CleanerMessagesScreen();
       case '/admin':
       case '/admin/web':
-        return const AdminWebDashboardScreen();
+        return AdminWebDashboardScreen(initialSection: _readArgs(settings.arguments)['section']?.toString());
       case '/video/detail':
         final args = _readArgs(settings.arguments);
         final videoId = _routeParam(

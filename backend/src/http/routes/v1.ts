@@ -2791,7 +2791,8 @@ export function buildV1Router(deps: {
 
   router.get('/admin/orders/:id/details', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const order = first((await deps.db.query(
-      `SELECT o.*, cu.full_name AS customer_name, cu.phone AS customer_phone, cu.email AS customer_email,
+      `SELECT o.*, LEFT(o.start_time::text,5) AS start_time, LEFT(o.end_time::text,5) AS end_time,
+              cu.full_name AS customer_name, cu.phone AS customer_phone, cu.email AS customer_email,
               cl.full_name AS cleaner_name, cl.phone AS cleaner_phone,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.floor, ca.intercom, ca.access_comment, ca.area AS profile_area, ca.verified_area,
               cp.total_cleanings, cp.available_cleanings, p.name_ru AS package_name_ru, p.name_kk AS package_name_kk,
@@ -3204,7 +3205,7 @@ export function buildV1Router(deps: {
       bodyRu: 'Клиент отправил документы на проверку площади.',
       targetType: 'quality_check',
       targetId: (result.row as { id: string }).id,
-      dedupeKey: `quality-check-${(result.row as { id: string }).id}`,
+      dedupeKey: `quality-check-documents-${(result.row as { id: string }).id}-${(result.row as any).document_file_id}`,
     });
     ok(res, { request: result.row, file: result.file }, 201);
   }));
@@ -3212,6 +3213,7 @@ export function buildV1Router(deps: {
   router.post('/quality-checks/from-file', auth(['customer']), asyncHandler(async (req, res) => {
     const area = Number(req.body.area ?? req.body.actualArea ?? req.body.requestedArea ?? 0);
     if (!Number.isFinite(area) || area <= 0) throw new ApiError(400, 'invalid_area', 'Укажите площадь.');
+    if (!req.body.fileId && !req.body.fileUrl) throw new ApiError(400, 'document_required', 'Загрузите фото плана квартиры перед отправкой заявки.');
     const result = await deps.db.transaction(async (tx) => {
       await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
         [`quality-check:${req.user!.id}:${req.body.addressId ?? ''}`]);
@@ -3232,8 +3234,8 @@ export function buildV1Router(deps: {
       if (req.body.fileId || req.body.fileUrl) {
         const file = first((await tx.query(
           req.body.fileId
-            ? 'SELECT id FROM files WHERE id=$1 AND owner_id=$2'
-            : 'SELECT id FROM files WHERE public_url=$1 AND owner_id=$2',
+            ? "SELECT id FROM files WHERE id=$1 AND owner_id=$2 AND (mime_type LIKE 'image/%' OR mime_type='application/pdf') AND size_bytes>0"
+            : "SELECT id FROM files WHERE public_url=$1 AND owner_id=$2 AND (mime_type LIKE 'image/%' OR mime_type='application/pdf') AND size_bytes>0",
           [req.body.fileId ?? req.body.fileUrl, req.user!.id],
         )).rows) as { id: string } | undefined;
         if (!file) throw new ApiError(404, 'file_not_found', 'Загрузите фото повторно.');
@@ -3254,10 +3256,17 @@ export function buildV1Router(deps: {
     if (result.notify) await deps.notifications.createAdminEvent({
       event: 'quality_check',
       titleRu: 'Проверка площади',
-      bodyRu: 'Клиент отправил документы на проверку площади.',
+      bodyRu: (row as any).document_file_id
+        ? 'Клиент отправил документы на проверку площади.'
+        : 'Клиент запросил проверку площади.',
+      bodyKk: (row as any).document_file_id
+        ? 'Клиент ауданды тексеруге құжаттарды жіберді.'
+        : 'Клиент ауданды тексеруді сұрады.',
       targetType: 'quality_check',
       targetId: (row as any).id,
-      dedupeKey: `quality-check-${(row as any).id}`,
+      dedupeKey: (row as any).document_file_id
+        ? `quality-check-documents-${(row as any).id}-${(row as any).document_file_id}`
+        : `quality-check-${(row as any).id}`,
     });
     ok(res, { request: row }, 201);
   }));
@@ -4678,7 +4687,9 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
   if (section === 'quality') {
     addCommon('q', ['u.full_name', 'u.phone', 'ca.street', 'ca.house']);
     return done(
-      `SELECT q.*, u.full_name AS customer_name, u.phone AS customer_phone,
+      `SELECT q.*, q.status AS review_status,
+              CASE WHEN q.status IN ('pending','scheduled') THEN 'open' ELSE q.status::text END AS status,
+              u.full_name AS customer_name, u.phone AS customer_phone,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.area, ca.verified_area,
               cp.id AS package_purchase_id, pkg.name_ru AS package_name_ru,
               f.public_url AS document_url, f.public_url AS "areaTechnicalPlanUrl"
@@ -5136,16 +5147,15 @@ async function ensurePackageQualityCheck(db: Database, notifications: Notificati
   if (existing) return qualityCheck;
   await notifications.create({
     userId: row.customer_id,
-    titleRu: settings.qualityCheckNotificationTitleRu ?? 'Назначена проверка площади',
-    titleKk: settings.qualityCheckNotificationTitleKk ?? 'Ауданды тексеру тағайындалды',
-    bodyRu: settings.qualityCheckNotificationBodyRu
-      ?? 'В течение 48 часов отдел контроля качества приедет к вам для проверки площади. Также вы можете пройти проверку в приложении, загрузив план квартиры.',
-    bodyKk: settings.qualityCheckNotificationBodyKk
-      ?? '48 сағат ішінде сапаны бақылау бөлімі пәтер ауданын тексеру үшін келеді. Сонымен қатар қосымшада пәтер жоспарын жүктеп, тексеруден өте аласыз.',
+    titleRu: 'Загрузите план квартиры',
+    titleKk: 'Пәтер жоспарын жүктеңіз',
+    bodyRu: 'Для отправки заявки на проверку площади загрузите фото плана квартиры в приложении.',
+    bodyKk: 'Ауданды тексеруге өтінім жіберу үшін қосымшада пәтер жоспарының фотосын жүктеңіз.',
     targetType: 'quality_check',
     targetId: (qualityCheck as any).id,
     dedupeKey: `quality-check-package-${customerPackageId}`,
   });
+  if (!(qualityCheck as any).document_file_id) return qualityCheck;
   await notifications.createAdminEvent({
     event: 'quality_check',
     titleRu: 'Новая проверка площади',

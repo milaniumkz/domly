@@ -77,6 +77,7 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch) 
         return {cancelled:true};
       }
       if(row.kind==='area_verification') {
+        row.payload.text='Запросить фото техплана квартиры. Без фото плана не отправлять заявку на проверку и не согласовывать визит.';
         const eligible=(await tx.query(`SELECT 1 FROM quality_check_requests q JOIN customer_addresses a ON a.id=q.address_id
           JOIN app_users u ON u.id=q.customer_id
           WHERE q.id=$1 AND q.customer_id=$2 AND q.status='pending' AND q.document_file_id IS NULL
