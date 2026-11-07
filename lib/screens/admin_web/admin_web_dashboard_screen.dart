@@ -1,3 +1,5 @@
+import '../../ui/admin_area_plan.dart';
+import '../../utils/admin_area_check_data.dart';
 import '../../ui/admin_work_schedules.dart';
 import '../../utils/admin_addon_text.dart';
 import '../../utils/admin_order_data.dart';
@@ -8411,6 +8413,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             TextButton(
               onPressed: () => _openEntityDetails(
                 context,
+                attachment: AdminAreaPlan(report: data, onView: (urls) => _showAreaReportPhotos(context, urls)),
                 title: 'Кейс по площади $reportId',
                 sections: [
                   if (isQualityCheck)
@@ -8631,7 +8634,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       subtitle: '$phone · $address',
       badges: [
         _statusBadge(
-          status == 'resolved' ? 'Отработано' : report['document_file_id'] == null ? 'Ожидает документа' : 'Открыто',
+          status == 'resolved' ? 'Отработано' : areaPlanUrls(report).isEmpty ? 'Ожидает документа' : 'Открыто',
           color: status == 'resolved'
               ? const Color(0xFF047857)
               : const Color(0xFFD97706),
@@ -8668,7 +8671,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               _openQualityControlDetails(context, report, customer, order),
           child: Text('Все данные'.tr()),
         ),
-        if (status != 'resolved' && report['document_file_id'] != null)
+        if (status != 'resolved' && areaPlanUrls(report).isNotEmpty)
           TextButton(
             onPressed: () =>
                 _confirmAreaQualityCheck(context, report, order: order),
@@ -8716,6 +8719,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     _openEntityDetails(
       context,
       title: 'Отдел контроля качества · $name',
+      attachment: AdminAreaPlan(report: report, onView: (urls) => _showAreaReportPhotos(context, urls)),
       sections: [
         _detailSection('Клиент', {
           'ФИО': name,
@@ -8742,6 +8746,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           'Площадь к проверке': _firstText([report['actualArea']]),
           'Статус': _firstText([report['reviewStatus'], report['status']]),
           'Создано': _formatAdminDateTime(report['createdAt']),
+          'Проверено ботом': _formatAdminDateTime(report['bot_verified_at']),
+          'Подтверждённая площадь': _firstText([report['approved_area']]),
         }),
         _detailSection('Заказ / тариф', {
           'Заказ': orderId,
@@ -8757,31 +8763,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
   }
 
-  List<String> _areaReportPhotoUrls(Map<String, dynamic> data) {
-    final urls = <String>{};
-
-    void add(Object? value) {
-      final text = (value ?? '').toString().trim();
-      if (text.isEmpty ||
-          text == 'null' ||
-          text.startsWith('storage-error://')) {
-        return;
-      }
-      urls.add(text);
-    }
-
-    add(data['areaTechnicalPlanUrl']);
-    add(data['technicalPlanUrl']);
-    add(data['documentUrl']);
-    add(data['photoUrl']);
-    final photoUrls = data['photoUrls'];
-    if (photoUrls is Iterable) {
-      for (final url in photoUrls) {
-        add(url);
-      }
-    }
-    return urls.toList();
-  }
+  List<String> _areaReportPhotoUrls(Map<String, dynamic> data) => areaPlanUrls(data);
 
   Widget _areaReportPhotoPreview(String url) {
     return SizedBox(
@@ -8836,11 +8818,11 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   child: PageView(
                     children: photoUrls
                         .map(
-                          (url) => buildVerificationDocumentPreview(
+                          (url) => InteractiveViewer(minScale: 0.5, maxScale: 6, child: buildVerificationDocumentPreview(
                             url: url,
                             borderRadius: BorderRadius.circular(14),
                             fit: BoxFit.contain,
-                          ),
+                          )),
                         )
                         .toList(),
                   ),
@@ -10504,6 +10486,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     BuildContext context, {
     required String title,
     required List<_DetailSection> sections,
+    Widget? attachment,
   }) async {
     await showGeneralDialog<void>(
       context: context,
@@ -10519,7 +10502,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             child: Container(
               width: 760,
               height: double.infinity,
-              margin: const EdgeInsets.only(left: 80),
+              margin: EdgeInsets.only(left: MediaQuery.sizeOf(context).width >= 600 ? 80 : 0),
               decoration: const BoxDecoration(
                 color: Colors.white,
                 boxShadow: [
@@ -10566,8 +10549,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                       Expanded(
                         child: SingleChildScrollView(
                           child: Column(
-                            children: sections
-                                .map(
+                            children: [
+                              if (attachment != null) attachment,
+                              ...sections.map(
                                   (section) => Container(
                                     margin: const EdgeInsets.only(bottom: 16),
                                     padding: const EdgeInsets.all(18),
@@ -10600,7 +10584,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 SizedBox(
-                                                  width: 220,
+                                                  width: MediaQuery.sizeOf(context).width < 600 ? 110 : 220,
                                                   child: Text(
                                                     entry.key,
                                                     style: const TextStyle(
@@ -10626,6 +10610,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                   ),
                                 )
                                 .toList(),
+                            ],
                           ),
                         ),
                       ),

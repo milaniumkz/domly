@@ -1352,6 +1352,9 @@ CREATE TABLE IF NOT EXISTS bot_area_events (
  evidence JSONB NOT NULL,
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS bot_area_events_plan_lookup
+ ON bot_area_events(customer_id,(result->>'qualityCheckId'),created_at DESC,event_id DESC)
+ WHERE evidence->>'documentType'='technical_plan' AND evidence->>'documentUrl' LIKE 'https://%';
 CREATE TABLE IF NOT EXISTS area_package_adjustments (
  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
  customer_package_id UUID NOT NULL REFERENCES customer_packages(id),
