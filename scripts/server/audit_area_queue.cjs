@@ -11,9 +11,9 @@ const {Pool}=require('pg');
   const notices=(await db.query(`SELECT n.target_type,q.status,q.document_file_id IS NOT NULL AS has_document,
    COUNT(*)::int AS count,COUNT(*) FILTER(WHERE q.id IS NULL)::int AS missing_request,
    MIN(n.created_at) AS first_notice,MAX(n.created_at) AS last_notice
-   FROM notifications n JOIN app_users u ON u.id=n.user_id AND u.role IN ('admin','superadmin')
+   FROM notifications n LEFT JOIN app_users u ON u.id=n.user_id
    LEFT JOIN quality_check_requests q ON q.id::text=n.target_id::text
-   WHERE n.target_type IN ('quality_check','area_quality_check') AND n.created_at>NOW()-INTERVAL '3 days'
+   WHERE (n.role IN ('admin','superadmin') OR u.role IN ('admin','superadmin')) AND n.target_type IN ('quality_check','area_quality_check') AND n.created_at>NOW()-INTERVAL '3 days'
    GROUP BY n.target_type,q.status,q.document_file_id IS NOT NULL ORDER BY n.target_type,q.status`)).rows;
   console.log('AREA_QUEUE_AUDIT '+JSON.stringify({queue,notices}));
   await db.query('ROLLBACK');
