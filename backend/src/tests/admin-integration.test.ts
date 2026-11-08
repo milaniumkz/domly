@@ -1316,11 +1316,14 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await t.test('apartment numbers keep all digits across save and edit',async()=>{
       let id='';
       try {
-        const created=await request('/addresses','POST',{city:'Астана',street:'Тест',house:'43',apartment:'103,',area:67},true);
+        const created=await request('/addresses','POST',{city:'Астана',street:'Тест',house:'43',apartment:'103,',area:67,residentialComplex:'ЖК Тест'},true);
         assert.equal(created.status,201);id=created.json.data.id;
         assert.equal(created.json.data.apartment,'103');
         const edited=await request('/addresses/'+id,'PATCH',{city:'Астана',street:'Тест',house:'43',apartment:'1003',area:67},true);
         assert.equal(edited.status,200);assert.equal(edited.json.data.apartment,'1003');
+        assert.equal(edited.json.data.residential_complex,'ЖК Тест');
+        const cleared=await request('/addresses/'+id,'PATCH',{city:'Астана',street:'Тест',house:'43',apartment:'1003',area:67,residentialComplex:''},true);
+        assert.equal(cleared.status,200);assert.equal(cleared.json.data.residential_complex,null);
         assert.equal((await request('/addresses/'+id,'PATCH',{city:'Астана',street:'Тест',house:'43',apartment:'10,3',area:67},true)).status,400);
         assert.equal((await db.query('SELECT apartment FROM customer_addresses WHERE id=$1',[id])).rows[0].apartment,'1003');
       } finally {if(id)await db.query('DELETE FROM customer_addresses WHERE id=$1',[id]);}

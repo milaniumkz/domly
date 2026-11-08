@@ -753,7 +753,7 @@ export function buildV1Router(deps: {
        city=COALESCE($3,city), settlement=COALESCE($4,settlement), street=COALESCE($5,street), house=COALESCE($6,house),
        apartment=COALESCE($7,apartment), entrance=COALESCE($8,entrance), floor=COALESCE($9,floor),
        intercom=COALESCE($10,intercom), access_comment=COALESCE($11,access_comment),
-       area=COALESCE($12,area), latitude=COALESCE($13,latitude), longitude=COALESCE($14,longitude), residential_complex=COALESCE($15,residential_complex), updated_at=NOW()
+       area=COALESCE($12,area), latitude=COALESCE($13,latitude), longitude=COALESCE($14,longitude), residential_complex=CASE WHEN $16::boolean THEN $15 ELSE residential_complex END, updated_at=NOW()
        WHERE id=$1 AND user_id=$2 RETURNING *`,
       [
         req.params.id,
@@ -771,6 +771,7 @@ export function buildV1Router(deps: {
         address.latitude,
         address.longitude,
         address.residentialComplex,
+        Object.prototype.hasOwnProperty.call(req.body,'residentialComplex'),
       ],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Адрес не найден.');
