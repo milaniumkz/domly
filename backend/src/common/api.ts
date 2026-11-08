@@ -21,6 +21,8 @@ export function asyncHandler(fn: (req: Request, res: Response, next: NextFunctio
 }
 
 const ruMessages: Record<string, string> = {
+  rejection_reason_required: 'Укажите причину отклонения документа (до 1000 символов).',
+  new_document_required: 'Этот документ уже отклонён. Загрузите новое фото плана квартиры.',
   document_required: 'Загрузите фото плана квартиры перед отправкой заявки.',
   booking_from_tomorrow: 'Заказать уборку можно только с завтрашнего дня. Выберите другую дату.',
   unauthorized: 'Войдите в аккаунт заново.',
@@ -40,6 +42,8 @@ const ruMessages: Record<string, string> = {
 };
 
 const kkMessages: Record<string, string> = {
+  rejection_reason_required: 'Құжатты қабылдамау себебін көрсетіңіз (1000 таңбаға дейін).',
+  new_document_required: 'Бұл құжат қабылданбады. Пәтер жоспарының жаңа фотосын жүктеңіз.',
   document_required: 'Өтінім жібермес бұрын пәтер жоспарының фотосын жүктеңіз.',
   booking_from_tomorrow: 'Тазалауға тек ертеңнен бастап тапсырыс беруге болады. Басқа күнді таңдаңыз.',
   unauthorized: 'Аккаунтқа қайта кіріңіз.',

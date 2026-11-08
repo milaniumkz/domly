@@ -661,6 +661,12 @@ export const openApiSpec = {
         requestBody: jsonBody({ status: 'reviewed', approvedArea: 80 }),
       },
     },
+    '/admin/quality-checks/{id}/reject': {
+      post: {
+        ...secured('Админ: отклонить документ площади и уведомить клиента'),
+        parameters: [path('id')], requestBody: jsonBody({reason: 'План нечитаемый, загрузите чёткое фото'}),
+      },
+    },
     '/admin/quality-checks/{id}/approve': {
       post: {
         ...secured('Админ: подтвердить площадь и создать перерасчёт при необходимости'),

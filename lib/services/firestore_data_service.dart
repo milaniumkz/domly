@@ -9248,6 +9248,7 @@ class FirestoreDataService {
     required int actualArea,
     String? areaTechnicalPlanUrl,
     String? documentFileId,
+    String? addressId,
   }) async {
     if (_isDebugCustomer) {
       final currentUid = _uidOrNull ?? 'customer_demo';
@@ -9330,13 +9331,13 @@ class FirestoreDataService {
         'difference': difference,
       };
     }
-    final addressId = await _backendPrimaryAddressId();
+    final targetAddressId = addressId ?? await _backendPrimaryAddressId();
     final result = await BackendApiService.instance.postMap(
       '/quality-checks/from-file',
       body: {
         'actualArea': actualArea,
         if (documentFileId != null) 'fileId': documentFileId,
-        if (addressId != null) 'addressId': addressId,
+        if (targetAddressId != null) 'addressId': targetAddressId,
         if (areaTechnicalPlanUrl != null && areaTechnicalPlanUrl.isNotEmpty)
           'fileUrl': areaTechnicalPlanUrl,
       },
@@ -9542,6 +9543,10 @@ class FirestoreDataService {
       '/admin/users/$userId/confirm-area',
       body: {'actualArea': actualArea},
     );
+  }
+
+  Future<void> rejectAreaDocument(String id, String reason) async {
+    await BackendApiService.instance.postMap('/admin/quality-checks/$id/reject', body: {'reason': reason});
   }
 
   Future<void> updateAreaMismatchReport(

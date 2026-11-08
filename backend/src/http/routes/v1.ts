@@ -1,3 +1,4 @@
+import {rejectAreaDocument} from '../../modules/areaRejection';
 import {areaPlanEvidenceJoin,areaPlanEvidenceColumns} from '../../modules/areaPlanEvidence';
 import {updateOrderAddons} from '../../modules/orderAddons';
 import {submitCleanerPhoto,reviewCleanerPhoto} from '../../modules/cleanerProfilePhoto';
@@ -3245,6 +3246,10 @@ export function buildV1Router(deps: {
         if (!file) throw new ApiError(404, 'file_not_found', 'Загрузите фото повторно.');
         fileId = file.id;
       }
+      const rejected=(await tx.query(`SELECT 1 FROM quality_check_requests WHERE customer_id=$1
+        AND address_id IS NOT DISTINCT FROM $2::uuid AND status='rejected' AND document_file_id=$3 LIMIT 1`,
+        [req.user!.id,req.body.addressId??null,fileId])).rows.length;
+      if(rejected)throw new ApiError(400,'new_document_required','Этот документ уже отклонён. Загрузите новое фото плана квартиры.');
       const row = existing
         ? first((await tx.query(
           `UPDATE quality_check_requests SET requested_area=$2, document_file_id=COALESCE($3,document_file_id), updated_at=NOW()
@@ -3275,7 +3280,15 @@ export function buildV1Router(deps: {
     ok(res, { request: row }, 201);
   }));
 
+  router.post('/admin/quality-checks/:id/reject', auth(['admin','superadmin']), asyncHandler(async(req,res)=>{
+    ok(res,await rejectAreaDocument(deps.db,deps.notifications,String(req.params.id),req.user!.id,req.body.reason??req.body.adminComment));
+  }));
+
   router.patch('/admin/quality-checks/:id', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    if(req.body.status==='rejected'||req.body.reviewStatus==='rejected') {
+      ok(res,await rejectAreaDocument(deps.db,deps.notifications,String(req.params.id),req.user!.id,req.body.reason??req.body.adminComment));
+      return;
+    }
     const allowed: Record<string, string> = {
       status: 'status',
       reviewStatus: 'status',
@@ -3302,7 +3315,10 @@ export function buildV1Router(deps: {
     values.push(req.user!.id);
     const adminParam = values.length;
     const row = await deps.db.transaction(async client=>{
-    await client.query('SELECT id FROM quality_check_requests WHERE id=$1 FOR UPDATE',[req.params.id]);
+    const previous=(await client.query('SELECT * FROM quality_check_requests WHERE id=$1 FOR UPDATE',[req.params.id])).rows[0];
+    if(previous && ['rejected','cancelled'].includes(previous.status) && (req.body.status||req.body.reviewStatus)) {
+      throw new ApiError(409,'quality_check_closed','Заявка закрыта. Клиент должен загрузить новый документ.');
+    }
     const updated = first<any>((await client.query(
       `UPDATE quality_check_requests
        SET ${updates.join(', ')}, admin_id=$${adminParam}, updated_at=NOW()
@@ -3326,6 +3342,7 @@ export function buildV1Router(deps: {
     const approval = await deps.db.transaction(async client=>{
       const current=first<any>((await client.query('SELECT * FROM quality_check_requests WHERE id=$1 FOR UPDATE',[req.params.id])).rows);
       if (!current) throw new ApiError(404,'not_found','Заявка проверки площади не найдена.');
+      if (['rejected','cancelled'].includes(current.status)) throw new ApiError(409,'quality_check_closed','Заявка закрыта. Клиент должен загрузить новый документ.');
       const area=Number(req.body.approvedArea??current.approved_area??current.requested_area);
       if (current.status === 'approved' && Number(current.approved_area) === area) return {row:current, changed:false};
       await confirmArea(client,current.customer_id,current.address_id,area);

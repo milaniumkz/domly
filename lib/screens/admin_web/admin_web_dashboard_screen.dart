@@ -1,3 +1,4 @@
+import '../../ui/area_document_rejection.dart';
 import '../../ui/admin_area_plan.dart';
 import '../../utils/admin_area_check_data.dart';
 import '../../ui/admin_work_schedules.dart';
@@ -8385,7 +8386,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               : '$customerName · $customerPhone · $house · Отклонение: $difference м²',
           badges: [
             _statusBadge(
-              status == 'resolved' ? 'Закрыто' : 'Открыто',
+              data['reviewStatus']=='rejected' ? 'Отклонено' : status == 'resolved' ? 'Закрыто' : 'Открыто',
               color: status == 'resolved'
                   ? const Color(0xFF047857)
                   : const Color(0xFFD97706),
@@ -8426,7 +8427,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     'Клиент указал': '${data['initialArea'] ?? 0} м²',
                     'Проверенная площадь': '${data['actualArea'] ?? 0} м²',
                     'Отклонение': '$difference м²',
-                    'Статус': status == 'resolved' ? 'Закрыто' : 'Открыто',
+                    if (data['reviewStatus']=='rejected') 'Причина отклонения': _firstText([data['admin_comment']]),
+                    'Статус': data['reviewStatus']=='rejected' ? 'Отклонено' : status == 'resolved' ? 'Закрыто' : 'Открыто',
                   }),
                   _detailSection('Клиент и дом', {
                     'ФИО клиента': customerName,
@@ -8445,6 +8447,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               ),
               child: Text('Открыть'.tr()),
             ),
+            if (!{'rejected','cancelled'}.contains(data['reviewStatus']) && photoUrls.isNotEmpty)
+              TextButton.icon(onPressed: () => _rejectAreaDocument(context, reportId, alreadyApproved: data['reviewStatus']=='approved'),
+                icon: const Icon(Icons.cancel_outlined), label: Text('Отклонить документ'.tr())),
             if (isQualityCheck && status != 'resolved')
               TextButton(
                 onPressed: () => _confirmAreaQualityCheck(context, data),
@@ -8634,7 +8639,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       subtitle: '$phone · $address',
       badges: [
         _statusBadge(
-          status == 'resolved' ? 'Отработано' : areaPlanUrls(report).isEmpty ? 'Ожидает документа' : 'Открыто',
+          report['reviewStatus']=='rejected' ? 'Отклонено' : status == 'resolved' ? 'Отработано' : areaPlanUrls(report).isEmpty ? 'Ожидает документа' : 'Открыто',
           color: status == 'resolved'
               ? const Color(0xFF047857)
               : const Color(0xFFD97706),
@@ -8671,6 +8676,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               _openQualityControlDetails(context, report, customer, order),
           child: Text('Все данные'.tr()),
         ),
+        if (!{'rejected','cancelled'}.contains(report['reviewStatus']) && areaPlanUrls(report).isNotEmpty)
+          TextButton.icon(onPressed: () => _rejectAreaDocument(context, reportId, alreadyApproved: report['reviewStatus']=='approved'),
+            icon: const Icon(Icons.cancel_outlined), label: Text('Отклонить документ'.tr())),
         if (status != 'resolved' && areaPlanUrls(report).isNotEmpty)
           TextButton(
             onPressed: () =>
@@ -8687,6 +8695,19 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           ),
       ],
     );
+  }
+
+  final Set<String> _rejectingAreaDocuments = {};
+  Future<void> _rejectAreaDocument(BuildContext context, String id, {bool alreadyApproved = false}) async {
+    if (!_rejectingAreaDocuments.add(id)) return;
+    try {
+      final reason = await showAreaDocumentRejection(context, alreadyApproved: alreadyApproved);
+      if (reason == null || !mounted) return;
+      await _data.rejectAreaDocument(id, reason);
+      if (context.mounted) showDomlySnackBar(context, title: 'Документ отклонён', subtitle: 'Клиент получит уведомление и сможет загрузить новый план.', type: DomlySnackBarType.success);
+    } catch (_) {
+      if (context.mounted) showDomlySnackBar(context, title: 'Не удалось отклонить документ', subtitle: 'Попробуйте снова.', type: DomlySnackBarType.error);
+    } finally { _rejectingAreaDocuments.remove(id); }
   }
 
   void _openQualityControlDetails(
@@ -8748,6 +8769,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           'Создано': _formatAdminDateTime(report['createdAt']),
           'Проверено ботом': _formatAdminDateTime(report['bot_verified_at']),
           'Подтверждённая площадь': _firstText([report['approved_area']]),
+          if (report['reviewStatus']=='rejected') 'Причина отклонения': _firstText([report['admin_comment']]),
         }),
         _detailSection('Заказ / тариф', {
           'Заказ': orderId,

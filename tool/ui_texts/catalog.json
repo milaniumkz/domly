@@ -6232,6 +6232,13 @@
     ]
   },
   {
+    "key": "t_265f05daa425385a",
+    "source": "Например: план нечитаемый, загрузите чёткое фото",
+    "locations": [
+      "lib/ui/area_document_rejection.dart"
+    ]
+  },
+  {
     "key": "t_f338d0600614e84c",
     "source": "Например: холодильник сильно загрязнен",
     "locations": [
@@ -6489,6 +6496,13 @@
     "source": "Не удалось выполнить запрос.",
     "locations": [
       "lib/services/backend_api_service.dart"
+    ]
+  },
+  {
+    "key": "t_1f2964cb314f70a7",
+    "source": "Не удалось загрузить адрес. Откройте уведомление ещё раз.",
+    "locations": [
+      "lib/screens/client/area_confirmation_screen.dart"
     ]
   },
   {
@@ -8164,10 +8178,24 @@
     ]
   },
   {
+    "key": "t_393827962fdc6a21",
+    "source": "Отклонить документ",
+    "locations": [
+      "lib/ui/area_document_rejection.dart"
+    ]
+  },
+  {
     "key": "t_0fada512d1a0249f",
     "source": "Отклонить заказ?",
     "locations": [
       "lib/screens/cleaner/cleaner_orders_screen.dart"
+    ]
+  },
+  {
+    "key": "t_7b42c6c25847f4ff",
+    "source": "Отклонить и уведомить",
+    "locations": [
+      "lib/ui/area_document_rejection.dart"
     ]
   },
   {
@@ -8302,7 +8330,8 @@
       "lib/screens/client/settings_screen.dart",
       "lib/screens/common/kaspi_invoice_request_dialog.dart",
       "lib/screens/common/package_freeze_dialog.dart",
-      "lib/screens/common/purchase_terms_dialog.dart"
+      "lib/screens/common/purchase_terms_dialog.dart",
+      "lib/ui/area_document_rejection.dart"
     ]
   },
   {
@@ -9418,6 +9447,13 @@
     ]
   },
   {
+    "key": "t_b0c65b3b0bff26ab",
+    "source": "Подтверждение площади будет снято. Оплаты и бонусы требуют отдельного рассмотрения.",
+    "locations": [
+      "lib/ui/area_document_rejection.dart"
+    ]
+  },
+  {
     "key": "t_4f73c713c60c9d43",
     "source": "Подтвержденные визиты",
     "locations": [
@@ -10234,6 +10270,13 @@
     "source": "Причина отказа: {p0}",
     "locations": [
       "lib/screens/cleaner/cleaner_verification_screen.dart"
+    ]
+  },
+  {
+    "key": "t_b061519004c25929",
+    "source": "Причина отклонения",
+    "locations": [
+      "lib/ui/area_document_rejection.dart"
     ]
   },
   {
@@ -13717,6 +13760,7 @@
     "key": "t_10ced2f0b6e41f04",
     "source": "кв. {p0}",
     "locations": [
+      "lib/screens/client/area_confirmation_screen.dart",
       "lib/screens/client/package_selection_screen.dart",
       "lib/screens/client/profile_screen.dart",
       "lib/services/firestore_data_service.dart",
