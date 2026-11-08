@@ -1777,6 +1777,7 @@
     "key": "t_fd08da7a630b6bbe",
     "source": "Все",
     "locations": [
+      "lib/screens/cleaner/cleaner_order_history_screen.dart",
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/orders_screen.dart",
       "lib/screens/common/video_hub_screen.dart"
@@ -13764,6 +13765,7 @@
       "lib/screens/client/package_selection_screen.dart",
       "lib/screens/client/profile_screen.dart",
       "lib/services/firestore_data_service.dart",
+      "lib/utils/address_display.dart",
       "lib/utils/cleaner_order_data.dart"
     ]
   },

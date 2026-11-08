@@ -21,6 +21,7 @@ export function asyncHandler(fn: (req: Request, res: Response, next: NextFunctio
 }
 
 const ruMessages: Record<string, string> = {
+  invalid_apartment: 'Укажите номер квартиры целиком, без запятых и других адресов.',
   rejection_reason_required: 'Укажите причину отклонения документа (до 1000 символов).',
   new_document_required: 'Этот документ уже отклонён. Загрузите новое фото плана квартиры.',
   document_required: 'Загрузите фото плана квартиры перед отправкой заявки.',
@@ -42,6 +43,7 @@ const ruMessages: Record<string, string> = {
 };
 
 const kkMessages: Record<string, string> = {
+  invalid_apartment: 'Пәтер нөмірін үтірсіз және басқа мекенжайларсыз толық көрсетіңіз.',
   rejection_reason_required: 'Құжатты қабылдамау себебін көрсетіңіз (1000 таңбаға дейін).',
   new_document_required: 'Бұл құжат қабылданбады. Пәтер жоспарының жаңа фотосын жүктеңіз.',
   document_required: 'Өтінім жібермес бұрын пәтер жоспарының фотосын жүктеңіз.',
