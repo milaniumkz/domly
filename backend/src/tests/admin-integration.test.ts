@@ -1,3 +1,4 @@
+import {rejectAreaDocument} from '../modules/areaRejection';
 import {updateOrderAddons} from '../modules/orderAddons';
 import {packageQuote} from '../modules/packageQuote';
 import {workingScheduleWeeks,workWeekDates} from '../modules/workingSchedule';
@@ -1367,6 +1368,61 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM bot_area_events WHERE event_id=ANY($1::text[])',[events]);
         await db.query('DELETE FROM quality_check_requests WHERE id=ANY($1::uuid[])',[[q,other]]);
         await db.query('DELETE FROM files WHERE id=$1',[uploaded]);
+      }
+    });
+    await t.test('area rejection notifies once, preserves the rejected plan and accepts a new owned document',async()=>{
+      const address=randomUUID(),q=randomUUID(),a=randomUUID(),b=randomUUID();let resubmitted='';
+      try {
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Reject Test','1',90)",[address,customer]);
+        for(const file of [a,b])await db.query("INSERT INTO files(id,owner_id,bucket,object_key,mime_type,size_bytes,public_url) VALUES($1::uuid,$2,'test',$1::text,'image/jpeg',10,$3)",[file,customer,'https://example.com/'+file+'.jpg']);
+        await db.query("INSERT INTO quality_check_requests(id,customer_id,address_id,requested_area,document_file_id) VALUES($1,$2,$3,90,$4)",[q,customer,address,a]);
+        const path='/admin/quality-checks/'+q+'/reject';
+        assert.equal((await request(path,'POST',{reason:' ' })).status,400);
+        assert.equal((await request(path,'POST',{reason:'План нечитаемый'},true)).status,403);
+        const responses=await Promise.all(Array.from({length:3},()=>request(path,'POST',{reason:'План нечитаемый'})));
+        assert.ok(responses.every(r=>r.status===200&&r.json.data.status==='rejected'));
+        assert.equal((await request('/admin/quality-checks/'+q,'PATCH',{status:'rejected',adminComment:'План нечитаемый'})).status,200);
+        assert.equal((await request('/admin/quality-checks/'+q+'/approve','POST',{approvedArea:90})).status,409);
+        assert.equal((await request('/admin/quality-checks/'+q,'PATCH',{status:'approved',approvedArea:90})).status,409);
+        const notices=(await db.query("SELECT * FROM notifications WHERE user_id=$1 AND dedupe_key=$2",[customer,'area-document-rejected-'+q])).rows;
+        assert.equal(notices.length,1);assert.equal(notices[0].target_type,'area_verification');assert.equal(notices[0].target_id,address);
+        assert.match(notices[0].body_ru,/План нечитаемый/);assert.match(notices[0].body_ru,/новое фото/);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM notification_deliveries WHERE notification_id=$1',[notices[0].id])).rows[0].n,1);
+        assert.equal((await request('/quality-checks/from-file','POST',{addressId:address,actualArea:90,fileId:a},true)).json.code,'new_document_required');
+        const fresh=await request('/quality-checks/from-file','POST',{addressId:address,actualArea:90,fileId:b},true);
+        assert.equal(fresh.status,201);resubmitted=fresh.json.data.request.id;assert.notEqual(resubmitted,q);
+        assert.equal(fresh.json.data.request.status,'pending');assert.equal(fresh.json.data.request.document_file_id,b);
+        const old=(await db.query('SELECT * FROM quality_check_requests WHERE id=$1',[q])).rows[0];
+        assert.equal(old.status,'rejected');assert.equal(old.document_file_id,a);
+      } finally {
+        await db.query("DELETE FROM notifications WHERE dedupe_key=$1 OR target_id=ANY($2::text[])",['area-document-rejected-'+q,[q,resubmitted].filter(Boolean)]);
+        await db.query("DELETE FROM audit_logs WHERE entity_type='quality_check' AND entity_id=$1",[q]);
+        await db.query('DELETE FROM quality_check_requests WHERE id=ANY($1::uuid[])',[[q,resubmitted].filter(Boolean)]);
+        await db.query('DELETE FROM files WHERE id=ANY($1::uuid[])',[[a,b]]);await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+      }
+    });
+    await t.test('rejecting an approved plan is atomic, preserves balances and protects a later approval',async()=>{
+      const address=randomUUID(),q=randomUUID(),newer=randomUUID();
+      const balance=(await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance;
+      try {
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area,verified_area) VALUES($1,$2,'Астана','Rollback Test','2',100,100)",[address,customer]);
+        await db.query("INSERT INTO quality_check_requests(id,customer_id,address_id,status,approved_area) VALUES($1,$2,$3,'approved',100)",[q,customer,address]);
+        await assert.rejects(rejectAreaDocument(db,{create:async()=>{throw Error('notification storage offline')}} as any,q,admin,'План не подходит'));
+        assert.equal((await db.query('SELECT status FROM quality_check_requests WHERE id=$1',[q])).rows[0].status,'approved');
+        assert.equal((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area,'100.00');
+        const rejected=await request('/admin/quality-checks/'+q+'/reject','POST',{reason:'План не подходит'});assert.equal(rejected.status,200);
+        assert.equal((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area,null);
+        await db.query("UPDATE quality_check_requests SET status='approved',updated_at=NOW()-INTERVAL '1 day' WHERE id=$1",[q]);
+        await db.query("INSERT INTO quality_check_requests(id,customer_id,address_id,status,approved_area) VALUES($1,$2,$3,'approved',110)",[newer,customer,address]);
+        await db.query('UPDATE customer_addresses SET verified_area=110 WHERE id=$1',[address]);
+        assert.equal((await request('/admin/quality-checks/'+q+'/reject','POST',{reason:'Старый план отклонён'})).status,200);
+        assert.equal((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area,'110.00');
+        assert.equal((await db.query('SELECT bonus_balance FROM app_users WHERE id=$1',[customer])).rows[0].bonus_balance,balance);
+      } finally {
+        await db.query('DELETE FROM notifications WHERE dedupe_key=$1',['area-document-rejected-'+q]);
+        await db.query("DELETE FROM audit_logs WHERE entity_type='quality_check' AND entity_id=$1",[q]);
+        await db.query('DELETE FROM quality_check_requests WHERE id=ANY($1::uuid[])',[[q,newer]]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
       }
     });
     await t.test('area approval credits bonus once across both endpoints and retries',async()=>{

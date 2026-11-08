@@ -31,6 +31,10 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
       widget.profileStream ?? _data.customerProfileStream(waitForSession: true);
   late final _configStream = widget.configStream ?? _config.areaConfigStream();
 
+  String? _targetAddressId;
+  Map<String, dynamic>? _targetAddress;
+  bool _addressLoading = false;
+  bool _addressFailed = false;
   XFile? _selectedImage;
   bool _isSubmitting = false;
   bool _areaSeeded = false;
@@ -65,7 +69,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
     final area = _readAreaValue(_areaController.text);
     final hasRequiredImage =
         !uploadEnabled || !techPlanRequired || _selectedImage != null;
-    return !_isSubmitting && area != null && hasRequiredImage;
+    return !_isSubmitting && !_addressLoading && !_addressFailed && area != null && hasRequiredImage;
   }
 
   int? _readAreaValue(Object? value) {
@@ -104,10 +108,37 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
           args['initialArea'],
     );
     _forceTechPlanPrompt = args['forceTechPlanPrompt'] == true;
+    final addressId = (args['addressId'] ?? '').toString().trim();
+    if (addressId.isNotEmpty) {
+      _targetAddressId = addressId;
+      _addressLoading = true;
+      _loadTargetAddress(addressId);
+    }
     if (initialArea != null && initialArea > 0) {
       _initialAreaFromRoute = initialArea;
       _areaController.text = initialArea.toString();
       _areaSeeded = true;
+    }
+  }
+
+  Future<void> _loadTargetAddress(String id) async {
+    try {
+      final rows = await BackendApiService.instance.getList('/addresses');
+      final address = rows.where((row) => row['id'] == id).firstOrNull;
+      if (address == null) throw StateError('address_not_found');
+      if (!mounted) return;
+      setState(() {
+        _targetAddress = address;
+        _addressLoading = false;
+        final area = _readAreaValue(address['area']);
+        if (area != null) { _areaController.text = '$area'; _areaSeeded = true; }
+      });
+    } catch (_) {
+      if (mounted) setState(() {
+        _addressLoading = false;
+        _addressFailed = true;
+        _error = 'Не удалось загрузить адрес. Откройте уведомление ещё раз.';
+      });
     }
   }
 
@@ -159,6 +190,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
     required bool uploadEnabled,
     required bool techPlanRequired,
   }) async {
+    if (_addressLoading || _addressFailed) return;
     final areaText = _areaController.text.trim();
     if (areaText.isEmpty) {
       setState(() => _error = 'Введите площадь квартиры');
@@ -224,6 +256,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
         actualArea: area,
         areaTechnicalPlanUrl: downloadUrl,
         documentFileId: fileId,
+        addressId: _targetAddressId,
       );
 
       if (!mounted) return;
@@ -278,7 +311,7 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
             builder: (context, configSnap) {
               TranslationScope.watch(context);
               final areaConfig = configSnap.data ?? const <String, dynamic>{};
-              final uploadEnabled = _config.getBool(
+              final uploadEnabled = _forceTechPlanPrompt || _config.getBool(
                 areaConfig,
                 'uploadEnabled',
                 true,
@@ -301,7 +334,15 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                             'Не удалось загрузить данные. Попробуйте позже.'
                                 .tr()));
                   }
-                  final profile = snapshot.data ?? const <String, dynamic>{};
+                  final profile = <String, dynamic>{
+                    ...?snapshot.data,
+                    if (_targetAddress != null) ...{
+                      'area':_targetAddress!['area'],
+                      'apartmentArea':_targetAddress!['area'],
+                      'actualArea':_targetAddress!['area'],
+                      'areaVerified':_targetAddress!['verified_area'] != null,
+                    },
+                  };
                   final areaVerified = profile['areaVerified'] == true;
                   final rawArea = _initialAreaFromRoute ??
                       _readAreaValue(profile['actualArea']) ??
@@ -332,6 +373,12 @@ class _AreaConfirmationScreenState extends State<AreaConfirmationScreen> {
                           label: areaConfirmationStatus(profile),
                           verified: areaVerified,
                         ),
+                        if (_targetAddress != null)
+                          Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Text([
+                            _targetAddress!['city'],_targetAddress!['street'],_targetAddress!['house'],
+                            if (_targetAddress!['apartment'] != null) 'кв. ${_targetAddress!['apartment']}',
+                          ].where((v) => v != null && '$v'.isNotEmpty).join(', '))),
+                        if (_addressLoading) const LinearProgressIndicator(),
                         const SizedBox(height: 8),
                         _AreaValueCard(controller: _areaController),
                         const SizedBox(height: 30),

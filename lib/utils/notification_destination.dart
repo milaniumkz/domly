@@ -46,7 +46,10 @@ NotificationDestination? notificationDestination(Map<String, dynamic> item,
   if ({'quality_check', 'area_quality_check', 'area_verification'}
       .contains(type)) {
     return NotificationDestination(
-        cleaner ? '/cleaner/profile' : '/client/area-confirmation');
+        cleaner ? '/cleaner/profile' : '/client/area-confirmation',
+        !cleaner && type == 'area_verification' && id.isNotEmpty
+            ? {'addressId': id, 'forceTechPlanPrompt': true}
+            : null);
   }
   if ({'payment', 'payments', 'area_recalculation_payment'}.contains(type)) {
     return NotificationDestination(
