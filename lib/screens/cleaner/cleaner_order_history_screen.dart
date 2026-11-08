@@ -1,3 +1,4 @@
+import '../../utils/cleaner_order_history.dart';
 import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
@@ -7,10 +8,9 @@ import '../../ui/domly_ui.dart';
 import '../../utils/order_display.dart';
 import '../../localization/translation_controller.dart';
 
-enum _OrderPeriod { week, month, year }
-
 class CleanerOrderHistoryScreen extends StatefulWidget {
-  const CleanerOrderHistoryScreen({super.key});
+  const CleanerOrderHistoryScreen({super.key,this.ordersStream});
+  final Stream<List<Map<String,dynamic>>>? ordersStream;
 
   @override
   State<CleanerOrderHistoryScreen> createState() =>
@@ -19,7 +19,8 @@ class CleanerOrderHistoryScreen extends StatefulWidget {
 
 class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
   final _data = FirestoreDataService.instance;
-  _OrderPeriod _period = _OrderPeriod.month;
+  late final _ordersStream=widget.ordersStream??_data.cleanerOrdersStream();
+  CleanerHistoryPeriod _period = CleanerHistoryPeriod.all;
 
   @override
   Widget build(BuildContext context) {
@@ -83,21 +84,22 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       child: Row(
         children: [
-          for (final p in _OrderPeriod.values) ...[
+          for (final p in CleanerHistoryPeriod.values) ...[
             Expanded(child: _periodChip(p)),
-            if (p != _OrderPeriod.values.last) const SizedBox(width: 8),
+            if (p != CleanerHistoryPeriod.values.last) const SizedBox(width: 8),
           ],
         ],
       ),
     );
   }
 
-  Widget _periodChip(_OrderPeriod period) {
+  Widget _periodChip(CleanerHistoryPeriod period) {
     final selected = period == _period;
     final labels = {
-      _OrderPeriod.week: 'Неделя',
-      _OrderPeriod.month: 'Месяц',
-      _OrderPeriod.year: 'Год',
+      CleanerHistoryPeriod.all: 'Все',
+      CleanerHistoryPeriod.week: 'Неделя',
+      CleanerHistoryPeriod.month: 'Месяц',
+      CleanerHistoryPeriod.year: 'Год',
     };
     return Material(
       color:
@@ -125,7 +127,7 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
 
   Widget _orderList() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.cleanerOrdersStream(),
+      stream: _ordersStream,
       builder: (context, snap) {
         TranslationScope.watch(context);
         if (snap.hasError) {
@@ -155,17 +157,7 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
           );
         }
         final allOrders = snap.data ?? [];
-        final completedOrders = allOrders.where((order) {
-          final status =
-              (order['orderStatus'] ?? order['status'] ?? '').toString();
-          return status == 'completed';
-        }).toList();
-        final filtered = _filterByPeriod(completedOrders);
-        filtered.sort((a, b) {
-          final da = _orderDate(b);
-          final db_ = _orderDate(a);
-          return da.compareTo(db_);
-        });
+        final filtered = cleanerOrderHistory(allOrders,period:_period);
 
         if (filtered.isEmpty) {
           return const Center(
@@ -181,43 +173,16 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
         }
 
         final summary = _computeSummary(filtered);
-        return ListView(
+        return ListView.separated(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          children: [
-            _summaryCard(summary, filtered.length),
-            const SizedBox(height: 16),
-            ...filtered.map(
-              (o) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _orderCard(o),
-              ),
-            ),
-          ],
+          itemCount: filtered.length+1,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context,index) => index==0
+            ? _summaryCard(summary,filtered.length)
+            : _orderCard(filtered[index-1]),
         );
       },
     );
-  }
-
-  List<Map<String, dynamic>> _filterByPeriod(
-    List<Map<String, dynamic>> orders,
-  ) {
-    final now = DateTime.now();
-    DateTime cutoff;
-    switch (_period) {
-      case _OrderPeriod.week:
-        cutoff = now.subtract(const Duration(days: 7));
-        break;
-      case _OrderPeriod.month:
-        cutoff = DateTime(now.year, now.month, 1);
-        break;
-      case _OrderPeriod.year:
-        cutoff = DateTime(now.year, 1, 1);
-        break;
-    }
-    return orders.where((o) {
-      final d = _orderDate(o);
-      return d.isAfter(cutoff) || d.isAtSameMomentAs(cutoff);
-    }).toList();
   }
 
   Map<String, dynamic> _computeSummary(List<Map<String, dynamic>> orders) {
@@ -284,8 +249,8 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
 
   Widget _orderCard(Map<String, dynamic> order) {
     final status = (order['orderStatus'] ?? order['status'] ?? '').toString();
-    final date = _orderDate(order);
-    final dateStr = '${date.day.toString().padLeft(2, '0')}.'
+    final date = cleanerHistoryDate(order);
+    final dateStr = date==null?'—':'${date.day.toString().padLeft(2, '0')}.'
         '${date.month.toString().padLeft(2, '0')}.'
         '${date.year}';
     final addons = _formatAddons(order);
@@ -402,17 +367,6 @@ class _CleanerOrderHistoryScreenState extends State<CleanerOrderHistoryScreen> {
           .join(', ');
     }
     return '';
-  }
-
-  DateTime _orderDate(Map<String, dynamic> order) {
-    final value = order['completedAt'] ??
-        order['date'] ??
-        order['scheduledFor'] ??
-        order['createdAt'];
-    if (value is Timestamp) return value.toDate();
-    if (value is DateTime) return value;
-    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
-    return DateTime.now();
   }
 
   String _statusLabel(String status) {

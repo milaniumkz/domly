@@ -1499,11 +1499,7 @@ class ProfileScreen extends StatelessWidget {
                                   address.addressText.trim().isNotEmpty == true
                                       ? address.addressText
                                       : residential;
-                              final residentialText =
-                                  address.selectionText.trim().isNotEmpty ==
-                                          true
-                                      ? address.selectionText
-                                      : residential;
+                              final residentialText = address.residentialComplex.trim();
                               final cityText = address.city.trim().isNotEmpty
                                   ? address.city.trim()
                                   : detectedCity;

@@ -1,3 +1,4 @@
+import '../../utils/address_display.dart';
 import '../../ui/area_document_rejection.dart';
 import '../../ui/admin_area_plan.dart';
 import '../../utils/admin_area_check_data.dart';
@@ -1475,12 +1476,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       customer['customerPhone'],
     ]);
     final address = _customerPrimaryAddress(customer);
-    final house = _firstText([
-      customer['residentialComplex'],
-      customer['houseTitle'],
-      customer['houseName'],
-      customer['houseId'],
-    ]);
+    final house = _firstText([customer['house'],customer['residentialComplex'],customer['houseTitle']]);
     final status = _customerProfileStatus(customer);
     final bonuses = (customer['bonusPoints'] as num?)?.toInt() ??
         (customer['bonuses'] as num?)?.toInt() ??
@@ -1492,7 +1488,6 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       subtitle: [
         phone,
         if (address != '—') address,
-        if (house != '—') house,
       ].where((item) => item != '—').join(' · '),
       badges: [
         _statusBadge(
@@ -1707,24 +1702,17 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   }
 
   String _customerPrimaryAddress(Map<String, dynamic> customer) {
-    final addresses = customer['addresses'];
-    if (addresses is List && addresses.isNotEmpty) {
-      final first = addresses.first;
-      if (first is Map) {
-        return _firstText([
-          first['address'],
-          first['fullAddress'],
-          first['residentialComplex'],
-          first['title'],
-        ]);
-      }
-      return first.toString();
+    final rows=customer['addresses'];
+    if(rows is List && rows.isNotEmpty && rows.first is String) {
+      final text=cleanAddressPart(rows.first);
+      if(text.isNotEmpty)return text;
     }
-    return _firstText([
-      customer['address'],
-      customer['homeAddress'],
-      customer['fullAddress'],
-    ]);
+    if(rows is List && rows.isNotEmpty && rows.first is Map) {
+      final text=addressSummary(Map<String,dynamic>.from(rows.first as Map));
+      if(text.isNotEmpty)return text;
+    }
+    final text=addressSummary(customer);
+    return text.isEmpty?'—':text;
   }
 
   String _personName(

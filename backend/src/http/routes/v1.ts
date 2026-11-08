@@ -1,3 +1,4 @@
+import {apartmentNumber} from '../../modules/addressFields';
 import {rejectAreaDocument} from '../../modules/areaRejection';
 import {areaPlanEvidenceJoin,areaPlanEvidenceColumns} from '../../modules/areaPlanEvidence';
 import {updateOrderAddons} from '../../modules/orderAddons';
@@ -185,7 +186,7 @@ export function buildV1Router(deps: {
       residentialComplex: cleanText(body.residentialComplex),
       street,
       house,
-      apartment: cleanText(body.apartment),
+      apartment: apartmentNumber(body.apartment),
       entrance: cleanText(body.entrance),
       floor: cleanText(body.floor),
       intercom: cleanText(body.intercom),
@@ -1642,7 +1643,7 @@ export function buildV1Router(deps: {
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
        LEFT JOIN catalog_packages pkg ON pkg.id=o.package_id
        WHERE o.cleaner_id=$1
-       ORDER BY o.scheduled_date DESC NULLS LAST, o.start_time DESC NULLS LAST, o.created_at DESC`,
+       ORDER BY o.scheduled_date DESC NULLS LAST, o.start_time DESC NULLS LAST, o.created_at DESC, o.id DESC`,
       [req.user!.id],
     )).rows;
     ok(res, rows);

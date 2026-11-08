@@ -1,3 +1,4 @@
+import '../../utils/cleaner_order_history.dart';
 import '../../theme/domly_palette.dart';
 import '../common/customer_rating_dialog.dart';
 import 'dart:async';
@@ -155,11 +156,7 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
                     }
                     final cleanerOrders =
                         doneSnap.data ?? <Map<String, dynamic>>[];
-                    final done = cleanerOrders
-                        .where(
-                          (e) => (e['status'] ?? '').toString() == 'completed',
-                        )
-                        .toList();
+                    final done = cleanerOrderHistory(cleanerOrders);
                     final activeCleanerOrders = cleanerOrders
                         .where((e) => _isActiveAssignment(e))
                         .toList();

@@ -1313,6 +1313,32 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal((await cleanerRequest()).json.data.zones.length,0);
       } finally {await db.query('DELETE FROM cleaner_zones WHERE cleaner_id=$1',[cleaner]);await db.query('DELETE FROM service_zones WHERE id=ANY($1::uuid[])',[[active,inactive]]);}
     });
+    await t.test('apartment numbers keep all digits across save and edit',async()=>{
+      let id='';
+      try {
+        const created=await request('/addresses','POST',{city:'Астана',street:'Тест',house:'43',apartment:'103,',area:67},true);
+        assert.equal(created.status,201);id=created.json.data.id;
+        assert.equal(created.json.data.apartment,'103');
+        const edited=await request('/addresses/'+id,'PATCH',{city:'Астана',street:'Тест',house:'43',apartment:'1003',area:67},true);
+        assert.equal(edited.status,200);assert.equal(edited.json.data.apartment,'1003');
+        assert.equal((await request('/addresses/'+id,'PATCH',{city:'Астана',street:'Тест',house:'43',apartment:'10,3',area:67},true)).status,400);
+        assert.equal((await db.query('SELECT apartment FROM customer_addresses WHERE id=$1',[id])).rows[0].apartment,'1003');
+      } finally {if(id)await db.query('DELETE FROM customer_addresses WHERE id=$1',[id]);}
+    });
+    await t.test('cleaner receives every completed order, including more than one page of old visits, without other cleaners orders',async()=>{
+      const other=randomUUID(),ids:string[]=[];
+      try {
+        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[other,'+7'+String(Date.now()).slice(-10)]);
+        const rows=(await db.query(`INSERT INTO service_orders(customer_id,cleaner_id,status,area,scheduled_date,start_time,end_time,completed_at)
+          SELECT $1,$2,'completed',50,DATE '2020-01-01'+i,TIME '08:00',TIME '10:00',TIMESTAMPTZ '2020-01-01 10:00:00+05'+i*INTERVAL '1 day'
+          FROM generate_series(1,225) i RETURNING id`,[customer,cleaner])).rows;
+        ids.push(...rows.map((r:any)=>r.id));
+        const foreign=(await db.query("INSERT INTO service_orders(customer_id,cleaner_id,status,area,scheduled_date,start_time,end_time) VALUES($1,$2,'completed',50,'2020-01-01','08:00','10:00') RETURNING id",[customer,other])).rows[0];ids.push(foreign.id);
+        const response=await fetch(base+'/cleaner/orders',{headers:{Authorization:'Bearer '+signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'})}});
+        assert.equal(response.status,200);const data=(await response.json() as any).data;
+        const returned=new Set(data.map((row:any)=>row.id));assert.ok(rows.every((r:any)=>returned.has(r.id)));assert.ok(!returned.has(foreign.id));
+      } finally {if(ids.length)await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[ids]);await db.query('DELETE FROM app_users WHERE id=$1',[other]);}
+    });
     await t.test('area submissions require an owned plan, become visible and notify once without approving implicitly',async()=>{
       const address=randomUUID(),document=randomUUID();let check='';
       try {
