@@ -1226,7 +1226,8 @@
     "source": "Важная информация",
     "locations": [
       "lib/screens/client/client_home_screen.dart",
-      "lib/ui/first_run_tutorial.dart"
+      "lib/ui/first_run_tutorial.dart",
+      "lib/ui/package_consent_dialog.dart"
     ]
   },
   {
@@ -2465,19 +2466,9 @@
     ]
   },
   {
-    "key": "t_141179ad9cfdf71c",
-    "source": "Генеральная",
-    "locations": [
-      "lib/screens/client/calculator_screen.dart"
-    ]
-  },
-  {
     "key": "t_ec583abf6b6bca60",
     "source": "Генеральная уборка",
     "locations": [
-      "lib/screens/client/calculator_screen.dart",
-      "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/package_selection_screen.dart",
       "lib/services/firestore_data_service.dart"
     ]
   },
@@ -2664,7 +2655,8 @@
     "locations": [
       "lib/screens/cleaner/cleaner_dashboard_screen.dart",
       "lib/screens/client/training_order_screen.dart",
-      "lib/ui/first_run_tutorial.dart"
+      "lib/ui/first_run_tutorial.dart",
+      "lib/ui/package_consent_dialog.dart"
     ]
   },
   {
@@ -8332,7 +8324,8 @@
       "lib/screens/common/kaspi_invoice_request_dialog.dart",
       "lib/screens/common/package_freeze_dialog.dart",
       "lib/screens/common/purchase_terms_dialog.dart",
-      "lib/ui/area_document_rejection.dart"
+      "lib/ui/area_document_rejection.dart",
+      "lib/ui/package_consent_dialog.dart"
     ]
   },
   {
@@ -10640,8 +10633,6 @@
     "key": "t_f855d3b66d9fe1b7",
     "source": "Разовая",
     "locations": [
-      "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/package_selection_screen.dart",
       "lib/services/firestore_data_service.dart",
       "lib/utils/package_catalog_utils.dart"
     ]
@@ -12196,9 +12187,6 @@
     "key": "t_4846c345d9afd574",
     "source": "Уборка после ремонта",
     "locations": [
-      "lib/screens/client/calculator_screen.dart",
-      "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/package_selection_screen.dart",
       "lib/services/firestore_data_service.dart"
     ]
   },
@@ -13217,6 +13205,13 @@
     ]
   },
   {
+    "key": "t_4a43f01778303b73",
+    "source": "Что входит в уборку",
+    "locations": [
+      "lib/ui/package_consent_dialog.dart"
+    ]
+  },
+  {
     "key": "t_38869cecb304376b",
     "source": "Что входит в уборку, как выбрать услугу и как подготовить квартиру.",
     "locations": [
@@ -13434,6 +13429,13 @@
     "source": "Я принимаю условия сервиса,",
     "locations": [
       "lib/screens/phone_auth_screen.dart"
+    ]
+  },
+  {
+    "key": "t_3a9d4460bd1df4e9",
+    "source": "Я согласен",
+    "locations": [
+      "lib/ui/package_consent_dialog.dart"
     ]
   },
   {

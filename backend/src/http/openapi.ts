@@ -303,7 +303,8 @@ export const openApiSpec = {
     '/packages/purchase': {
       post: {
         ...secured('Купить пакет'),
-        requestBody: jsonBody({ packageId: 'uuid', addressId: 'uuid', provider: 'kaspi', invoicePhone: '77052597368' }),
+        description: 'Для тарифа с features.requiresConsent передайте актуальный consentVersion из /catalog/packages в acceptedTermsVersion. Устаревшее или отсутствующее согласие отклоняется до создания оплаты.',
+        requestBody: jsonBody({ packageId: 'uuid', addressId: 'uuid', provider: 'kaspi', acceptedTermsVersion: 'consentVersion из каталога' }),
       },
     },
     '/orders': {

@@ -1,3 +1,4 @@
+import {publicCatalogPackage, acceptPackageTerms, validatePackageBody} from '../../modules/packageTerms';
 import {apartmentNumber} from '../../modules/addressFields';
 import {rejectAreaDocument} from '../../modules/areaRejection';
 import {areaPlanEvidenceJoin,areaPlanEvidenceColumns} from '../../modules/areaPlanEvidence';
@@ -1057,7 +1058,7 @@ export function buildV1Router(deps: {
   }));
 
   router.get('/catalog/packages', asyncHandler(async (_req, res) => {
-    ok(res, (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows);
+    ok(res, (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows.map(publicCatalogPackage));
   }));
 
   router.get('/catalog/addons', asyncHandler(async (_req, res) => {
@@ -1311,7 +1312,7 @@ export function buildV1Router(deps: {
     const lang = String(req.query.lang ?? 'ru');
     const settings = await readAppSettings(deps.db);
     const translations = (await deps.db.query(`SELECT key, ru, kk, namespace FROM translations`)).rows;
-    const packages = (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows;
+    const packages = (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows.map(publicCatalogPackage);
     const addonGroups = (await deps.db.query(`SELECT * FROM addon_groups WHERE active=TRUE ORDER BY sort_order`)).rows;
     const addons = (await deps.db.query(`SELECT * FROM catalog_addons WHERE active=TRUE ORDER BY sort_order, title_ru`)).rows.map(formatAddonRecord);
     const banners = (await deps.db.query(`SELECT banners.*, COALESCE(banners.image_url,(SELECT public_url FROM files WHERE id=banners.image_file_id)) AS image_url FROM banners WHERE active=TRUE ORDER BY placement, sort_order`)).rows;
@@ -1337,7 +1338,7 @@ export function buildV1Router(deps: {
     )).rows;
     const settings = settingsRows.reduce((acc: Record<string, unknown>, row) => ({ ...acc, [row.key]: row.value }), {});
     const translations = (await deps.db.query(`SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key`)).rows;
-    const packages = (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows;
+    const packages = (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows.map(publicCatalogPackage);
     const addonGroups = (await deps.db.query(`SELECT * FROM addon_groups WHERE active=TRUE ORDER BY sort_order`)).rows;
     const addons = (await deps.db.query(
       `SELECT a.*, g.title_ru AS group_title_ru, g.title_kk AS group_title_kk
@@ -1427,22 +1428,24 @@ export function buildV1Router(deps: {
 
   router.post('/packages/purchase', auth(['customer']), idempotent(deps.db,'package_purchase'), asyncHandler(async (req, res) => {
     if (req.body.paymentMethod === 'online' && !bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
-    const pkg = first<{ id: string; base_price: string; price_per_m2: string; cleaning_count: number; months: number }>((await deps.db.query(
+    const pkg = first<{ id: string; base_price: string; price_per_m2: string; cleaning_count: number; months: number; name_ru: string; features: any }>((await deps.db.query(
       `SELECT * FROM catalog_packages WHERE id=$1 AND active=TRUE`,
       [req.body.packageId],
     )).rows);
     if (!pkg) throw new ApiError(404, 'not_found', 'Пакет не найден.');
+    acceptPackageTerms(pkg, req.body.acceptedTermsVersion);
     const address = first<{ id: string; area: string; verified_area: string | null; city: string; settlement: string | null; street: string; house: string; apartment: string | null }>((await deps.db.query(
       `SELECT * FROM customer_addresses WHERE id=$1 AND user_id=$2`,
       [req.body.addressId, req.user!.id],
     )).rows);
     if (!address?.area) throw new ApiError(400, 'area_required', 'Заполните площадь квартиры в профиле.');
     const quote = await packageQuote(deps.db, {...req.body, area: Number(address.area), customerId: req.user!.id});
+    const termsAcceptance = acceptPackageTerms(quote.packageSnapshot, req.body.acceptedTermsVersion);
     const total = quote.monthlyPrice;
     const customerPackage = first((await deps.db.query(
       `INSERT INTO customer_packages (customer_id, package_id, address_id, total_cleanings, available_cleanings, months, status, purchase_config)
        VALUES ($1,$2,$3,$4,$4,$5,'pending_payment',$6) RETURNING *`,
-      [req.user!.id, pkg.id, address.id, quote.cleaningCount, pkg.months, {...quote,addressSnapshot:address}],
+      [req.user!.id, pkg.id, address.id, quote.cleaningCount, pkg.months, {...quote,addressSnapshot:address,termsAcceptance}],
     )).rows);
     const payment = await deps.payments.createPayment({
       customerId: req.user!.id,
@@ -4162,6 +4165,7 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/admin/catalog/packages', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    validatePackageBody(req.body);
     const row = first((await deps.db.query(
       `INSERT INTO catalog_packages
        (name_ru, name_kk, description_ru, description_kk, cleaning_count, months, base_price, price_per_m2, active, features)
@@ -4182,13 +4186,18 @@ export function buildV1Router(deps: {
   }));
 
   router.patch('/admin/catalog/packages/:id', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
+    const current = first((await deps.db.query('SELECT * FROM catalog_packages WHERE id=$1', [req.params.id])).rows);
+    if (!current) throw new ApiError(404, 'not_found', 'Пакет не найден.');
+    validatePackageBody(req.body, current);
     const row = first((await deps.db.query(
       `UPDATE catalog_packages SET
        name_ru=COALESCE($2,name_ru), name_kk=COALESCE($3,name_kk),
        description_ru=COALESCE($4,description_ru), description_kk=COALESCE($5,description_kk),
        cleaning_count=COALESCE($6,cleaning_count), months=COALESCE($7,months),
        base_price=COALESCE($8,base_price), price_per_m2=COALESCE($9,price_per_m2),
-       active=COALESCE($10,active), features=COALESCE($11,features), updated_at=NOW()
+       active=COALESCE($10,active), features=CASE
+         WHEN jsonb_typeof(features)='object' AND jsonb_typeof($11::jsonb)='object' THEN features||$11::jsonb
+         ELSE COALESCE($11,features) END, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       [req.params.id, req.body.nameRu ?? null, req.body.nameKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.cleaningCount ?? null, req.body.months ?? null, req.body.basePrice ?? null, req.body.pricePerM2 ?? null, req.body.active ?? null, req.body.features == null ? null : JSON.stringify(req.body.features)],
     )).rows);
