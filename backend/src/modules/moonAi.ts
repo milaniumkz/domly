@@ -87,9 +87,12 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch) 
         if(!eligible){await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='area_check_no_longer_required',finished_at=NOW() WHERE id=$1",[row.id]);return {cancelled:true};}
       }
       if(row.kind==='inactive_signup') {
-        if((await tx.query('SELECT 1 FROM payments WHERE customer_id=$1 LIMIT 1',[row.customer_id])).rows.length ||
-          (await tx.query("SELECT 1 FROM moon_ai_outbox WHERE customer_id=$1 AND kind='message' LIMIT 1",[row.customer_id])).rows.length) {
-          await tx.query("UPDATE moon_ai_outbox SET state='cancelled',finished_at=NOW() WHERE id=$1",[row.id]);return {cancelled:true};
+        const checkout=(await tx.query('SELECT 1 FROM payments WHERE customer_id=$1 LIMIT 1',[row.customer_id])).rows.length>0;
+        const conversation=(await tx.query("SELECT 1 FROM moon_ai_outbox WHERE customer_id=$1 AND kind='message' LIMIT 1",[row.customer_id])).rows.length>0;
+        if(checkout || conversation) {
+          // A checkout has its own reminder; do not send a second welcome.
+          await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code=$2,finished_at=NOW() WHERE id=$1",
+            [row.id,checkout?'checkout_followup_instead':'assistant_conversation_started']);return {cancelled:true};
         }
       }
       if(row.installation_id) {
@@ -101,9 +104,15 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch) 
       if(row.payment_id) {
         const p=(await tx.query('SELECT * FROM payments WHERE id=$1 FOR UPDATE',[row.payment_id])).rows[0];
         const purchased=(await tx.query("SELECT 1 FROM payments WHERE customer_id=$1 AND status='paid' AND COALESCE(paid_at,created_at) >= $2 LIMIT 1",[row.customer_id,row.created_at])).rows.length>0;
-        const newer=row.kind==='abandoned_checkout' && (await tx.query("SELECT 1 FROM payments WHERE customer_id=$1 AND created_at>$2 AND status IN ('pending','invoice_requested') LIMIT 1",[row.customer_id,row.created_at])).rows.length>0;
-        if(!p || ['paid','cancelled','refunded','rejected','failed'].includes(p.status) || (row.kind==='abandoned_checkout' && (purchased || newer))) {
-          await tx.query("UPDATE moon_ai_outbox SET state='cancelled',finished_at=NOW() WHERE id=$1",[row.id]);return {cancelled:true};
+        const checkoutHelp=row.kind==='abandoned_checkout';
+        const newer=checkoutHelp && (await tx.query("SELECT 1 FROM payments WHERE customer_id=$1 AND id<>$3 AND created_at>$2 AND status NOT IN ('paid','refunded') LIMIT 1",[row.customer_id,row.created_at,row.payment_id])).rows.length>0;
+        // Cancelling or failing an unpaid invoice is not a completed purchase.
+        // Only offer help: never resend that invoice or create a new charge.
+        const settled=p && (p.status==='paid' || p.paid_at!=null);
+        const closed=p && (checkoutHelp?p.status==='refunded':['cancelled','refunded','rejected','failed'].includes(p.status));
+        const reason=!p?'payment_not_found':settled || (checkoutHelp && purchased)?'purchase_paid':closed?'payment_closed':newer?'newer_checkout':null;
+        if(reason) {
+          await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code=$2,finished_at=NOW() WHERE id=$1",[row.id,reason]);return {cancelled:true};
         }
       }
       await tx.query("UPDATE moon_ai_outbox SET state='processing',started_at=NOW() WHERE id=$1",[row.id]);return row;
@@ -221,7 +230,7 @@ async function applyMoonPaymentStatus(tx: Queryable, input: MoonPaymentStatusInp
       approved_at=CASE WHEN $2='paid' THEN COALESCE($4::timestamptz,NOW()) ELSE approved_at END,
       payload=payload || $5::jsonb,updated_at=NOW() WHERE id=$1 RETURNING *`,
       [p.id,input.status,input.externalId,input.eventTime,{moonAi:input.payload}])).rows[0];
-    if(input.status==='paid') await tx.query("UPDATE moon_ai_outbox SET state='cancelled',finished_at=NOW() WHERE customer_id=$1 AND kind='abandoned_checkout' AND state='pending'",[p.customer_id]);
+    if(input.status==='paid') await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='purchase_paid',finished_at=NOW() WHERE customer_id=$1 AND kind='abandoned_checkout' AND state='pending'",[p.customer_id]);
     return updated;
 }
 
