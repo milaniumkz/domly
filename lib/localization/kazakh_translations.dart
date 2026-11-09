@@ -1,5 +1,7 @@
 // Bundled Kazakh UI catalog; source strings and parameter names stay stable.
 const Map<String,String> kKazakhTranslations = {
+  "Применено фильтров: {count}": "Қолданылған сүзгілер: {count}",
+  "Скрыть фильтры": "Сүзгілерді жасыру",
   "Что входит в уборку": "Тазалауға не кіреді",
   "Я согласен": "Келісемін",
 

@@ -1,3 +1,4 @@
+import '../../ui/admin_filter_panel.dart';
 import '../../utils/package_catalog_utils.dart';
 import '../../utils/address_display.dart';
 import '../../ui/area_document_rejection.dart';
@@ -86,6 +87,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   ];
   bool _debugActionApplied = false;
   int _selectedIndex = 0;
+  final _expandedFilterSections = ValueNotifier<Set<String>>(<String>{});
+  String _workScheduleStatusFilter = 'pending';
+
   String _searchQuery = '';
   String _statusFilter = 'Все';
   String _clusterFilter = 'Все';
@@ -418,6 +422,61 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     navigator.pushNamedAndRemoveUntil('/admin/web', (_) => false);
   }
 
+  Widget _filterContents(Widget child) {
+    final sectionKey = _sections[_selectedIndex].key;
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: _expandedFilterSections,
+      child: child,
+      builder: (context, expanded, child) => AdminFilterContents(
+        expanded: expanded.contains(sectionKey),
+        child: child!,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _expandedFilterSections.dispose();
+    super.dispose();
+  }
+
+  int _activeFilterCount(String key) {
+    var count =
+        (_filterStartDate != null ? 1 : 0) +
+        (_filterEndDate != null ? 1 : 0) +
+        (_dateSortOrder != 'Сначала новые' ? 1 : 0);
+    if (key == 'customers') {
+      count +=
+          (_customerStatusFilter != 'Все' ? 1 : 0) +
+          (_customerHouseFilter != 'Все' ? 1 : 0);
+    }
+    if (key == 'orders') {
+      count += [
+        _statusFilter,
+        _clusterFilter,
+        _cleanerFilter,
+        _serviceAreaFilter,
+        _assignmentStatusFilter,
+      ].where((value) => value != 'Все').length;
+      if (_ordersTabFilter != 'Все заказы') count++;
+    } else if (const [
+          'complaints',
+          'verifications',
+          'area',
+          'quality_control',
+        ].contains(key) &&
+        _statusFilter != 'Все') {
+      count++;
+    }
+    if (key == 'payments' && _paymentTab != 'all') count++;
+    if (key == 'dictionaries') {
+      if (_dictionaryOnlyMissing) count++;
+      if (_dictionaryLocale != 'ru') count++;
+    }
+    if (key == 'work_schedules' && _workScheduleStatusFilter != 'all') count++;
+    return count;
+  }
+
   Widget _buildHeader(_AdminSection currentSection) {
     final isNarrowHeader = MediaQuery.of(context).size.width < 900;
     return Column(
@@ -455,9 +514,32 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           ],
         ),
         const SizedBox(height: 14),
-        _globalFiltersBar(),
-        const SizedBox(height: 10),
-        _savedViewsBar(currentSection.key),
+        ValueListenableBuilder<Set<String>>(
+          valueListenable: _expandedFilterSections,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _globalFiltersBar(),
+              const SizedBox(height: 10),
+              _savedViewsBar(currentSection.key),
+            ],
+          ),
+          builder: (context, expandedSections, child) => AdminFilterPanel(
+            key: ValueKey('admin-filters-${currentSection.key}'),
+            expanded: expandedSections.contains(currentSection.key),
+            activeCount: _activeFilterCount(currentSection.key),
+            onChanged: (expanded) {
+              final updated = {..._expandedFilterSections.value};
+              if (expanded) {
+                updated.add(currentSection.key);
+              } else {
+                updated.remove(currentSection.key);
+              }
+              _expandedFilterSections.value = updated;
+            },
+            child: child!,
+          ),
+        ),
       ],
     );
   }
@@ -784,9 +866,20 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           builder: _orders,
         ),
         _AdminSection(
-          key:'work_schedules',title:'Графики работы',
-          subtitle:'Одобрение режимов работы уборщиц на текущую и следующую недели.',
-          icon:Icons.event_available,builder:()=>AdminWorkSchedules(search:_searchQuery),
+          key: 'work_schedules',
+          title: 'Графики работы',
+          subtitle: 'Одобрение режимов работы уборщиц на текущую и следующую недели.',
+          icon: Icons.event_available,
+          builder: () => ValueListenableBuilder<Set<String>>(
+            valueListenable: _expandedFilterSections,
+            builder: (context, expanded, _) => AdminWorkSchedules(
+              search: _searchQuery,
+              filtersExpanded: expanded.contains('work_schedules'),
+              initialStatus: _workScheduleStatusFilter,
+              onStatusChanged: (status) =>
+                  setState(() => _workScheduleStatusFilter = status),
+            ),
+          ),
         ),
         _AdminSection(
           key: 'customers',
@@ -1396,47 +1489,68 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         final customers = _sortCustomersByRegistrationDate(filteredCustomers);
 
         return _sectionScaffold(
-          toolbar: Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          toolbar: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _filterChip(
-                label: 'Все: ${allCustomers.length}',
-                selected: _customerStatusFilter == 'Все',
-                onTap: () => setState(() => _customerStatusFilter = 'Все'),
-              ),
-              for (final status in const [
-                'Заполнен',
-                'Без адреса',
-                'Новый',
-                'Удалён с оплатами',
-                'Удалён'
-              ])
-                _filterChip(
-                  label:
-                      '$status: ${allCustomers.where((item) => _customerProfileStatus(item) == status).length}',
-                  selected: _customerStatusFilter == status,
-                  onTap: () => setState(() => _customerStatusFilter = status),
-                ),
-              DropdownButton<String>(
-                value: _customerHouseFilter,
-                items: [
-                  DropdownMenuItem(value: 'Все', child: Text('Все дома'.tr())),
-                  ...houseOptions.map(
-                    (house) =>
-                        DropdownMenuItem(value: house, child: Text(house)),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: customers.isEmpty
+                        ? null
+                        : () => _copyCustomersCsv(customers),
+                    icon: const Icon(Icons.download_outlined),
+                    label: Text('Экспорт CSV'.tr()),
                   ),
                 ],
-                onChanged: (value) =>
-                    setState(() => _customerHouseFilter = value ?? 'Все'),
               ),
-              OutlinedButton.icon(
-                onPressed: customers.isEmpty
-                    ? null
-                    : () => _copyCustomersCsv(customers),
-                icon: const Icon(Icons.download_outlined),
-                label: Text('Экспорт CSV'.tr()),
+              _filterContents(
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _filterChip(
+                      label: 'Все: ${allCustomers.length}',
+                      selected: _customerStatusFilter == 'Все',
+                      onTap: () =>
+                          setState(() => _customerStatusFilter = 'Все'),
+                    ),
+                    for (final status in const [
+                      'Заполнен',
+                      'Без адреса',
+                      'Новый',
+                      'Удалён с оплатами',
+                      'Удалён',
+                    ])
+                      _filterChip(
+                        label:
+                            '$status: ${allCustomers.where((item) => _customerProfileStatus(item) == status).length}',
+                        selected: _customerStatusFilter == status,
+                        onTap: () =>
+                            setState(() => _customerStatusFilter = status),
+                      ),
+                    DropdownButton<String>(
+                      value: _customerHouseFilter,
+                      items: [
+                        DropdownMenuItem(
+                          value: 'Все',
+                          child: Text('Все дома'.tr()),
+                        ),
+                        ...houseOptions.map(
+                          (house) => DropdownMenuItem(
+                            value: house,
+                            child: Text(house),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _customerHouseFilter = value ?? 'Все'),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -2144,32 +2258,35 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 children: [
                   if (cleanersSnapshot.hasError)
                     _adminWarningBox(
-                        'Не удалось загрузить уборщиц. Обновите страницу перед назначением.'),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _filterChip(
-                        label: 'Все заказы: ${orders.length}',
-                        selected: _ordersTabFilter == 'Все заказы',
-                        onTap: () =>
-                            setState(() => _ordersTabFilter = 'Все заказы'),
-                      ),
-                      _filterChip(
-                        label: 'Покупки пакетов: $packagePurchases',
-                        selected: _ordersTabFilter == 'Покупки пакетов',
-                        onTap: () => setState(
-                          () => _ordersTabFilter = 'Покупки пакетов',
+                      'Не удалось загрузить уборщиц. Обновите страницу перед назначением.',
+                    ),
+                  _filterContents(
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _filterChip(
+                          label: 'Все заказы: ${orders.length}',
+                          selected: _ordersTabFilter == 'Все заказы',
+                          onTap: () =>
+                              setState(() => _ordersTabFilter = 'Все заказы'),
                         ),
-                      ),
-                      _filterChip(
-                        label: 'Заказанные уборки: $cleaningOrders',
-                        selected: _ordersTabFilter == 'Заказанные уборки',
-                        onTap: () => setState(
-                          () => _ordersTabFilter = 'Заказанные уборки',
+                        _filterChip(
+                          label: 'Покупки пакетов: $packagePurchases',
+                          selected: _ordersTabFilter == 'Покупки пакетов',
+                          onTap: () => setState(
+                            () => _ordersTabFilter = 'Покупки пакетов',
+                          ),
                         ),
-                      ),
-                    ],
+                        _filterChip(
+                          label: 'Заказанные уборки: $cleaningOrders',
+                          selected: _ordersTabFilter == 'Заказанные уборки',
+                          onTap: () => setState(
+                            () => _ordersTabFilter = 'Заказанные уборки',
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 12),
                   if (selectedVisibleOrderIds.isNotEmpty)
@@ -2239,84 +2356,82 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                         ],
                       ),
                     ),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      OutlinedButton.icon(
-                        onPressed: filtered.isEmpty
-                            ? null
-                            : () => _copyOrdersCsv(filtered),
-                        icon: const Icon(Icons.table_view_outlined),
-                        label: Text('Копировать CSV'.tr()),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: filtered.isEmpty
+                                ? null
+                                : () => _copyOrdersCsv(filtered),
+                            icon: const Icon(Icons.table_view_outlined),
+                            label: Text('Копировать CSV'.tr()),
+                          ),
+                        ],
                       ),
-                      _compactDropdown(
-                        value: _clusterFilter,
-                        label: 'Кластер',
-                        items: ['Все', ...availableClusters],
-                        onChanged: (value) =>
-                            setState(() => _clusterFilter = value ?? 'Все'),
-                      ),
-                      _compactDropdown(
-                        value: _cleanerFilter,
-                        label: 'Уборщица',
-                        items: ['Все', ...availableCleaners],
-                        onChanged: (value) =>
-                            setState(() => _cleanerFilter = value ?? 'Все'),
-                      ),
-                      _compactDropdown(
-                        value: _serviceAreaFilter,
-                        label: 'Район',
-                        items: ['Все', ...availableServiceAreas],
-                        onChanged: (value) =>
-                            setState(() => _serviceAreaFilter = value ?? 'Все'),
-                      ),
-                      _compactDropdown(
-                        value: _assignmentStatusFilter,
-                        label: 'Назначение',
-                        items: ['Все', ...availableAssignmentStatuses],
-                        onChanged: (value) => setState(
-                          () => _assignmentStatusFilter = value ?? 'Все',
+                      _filterContents(
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            _compactDropdown(
+                              value: _clusterFilter,
+                              label: 'Кластер',
+                              items: ['Все', ...availableClusters],
+                              onChanged: (value) => setState(
+                                () => _clusterFilter = value ?? 'Все',
+                              ),
+                            ),
+                            _compactDropdown(
+                              value: _cleanerFilter,
+                              label: 'Уборщица',
+                              items: ['Все', ...availableCleaners],
+                              onChanged: (value) => setState(
+                                () => _cleanerFilter = value ?? 'Все',
+                              ),
+                            ),
+                            _compactDropdown(
+                              value: _serviceAreaFilter,
+                              label: 'Район',
+                              items: ['Все', ...availableServiceAreas],
+                              onChanged: (value) => setState(
+                                () => _serviceAreaFilter = value ?? 'Все',
+                              ),
+                            ),
+                            _compactDropdown(
+                              value: _assignmentStatusFilter,
+                              label: 'Назначение',
+                              items: ['Все', ...availableAssignmentStatuses],
+                              onChanged: (value) => setState(
+                                () => _assignmentStatusFilter = value ?? 'Все',
+                              ),
+                            ),
+                            _filterChip(
+                              label: 'Все',
+                              selected: _statusFilter == 'Все',
+                              onTap: () =>
+                                  setState(() => _statusFilter = 'Все'),
+                            ),
+                            for (final status in [
+                              'pending_payment',
+                              'assigned',
+                              'confirmed',
+                              'in_progress',
+                              'completed',
+                              'canceled',
+                            ])
+                              _filterChip(
+                                label: _orderStatusLabel(status),
+                                selected: _statusFilter == status,
+                                onTap: () =>
+                                    setState(() => _statusFilter = status),
+                              ),
+                          ],
                         ),
                       ),
-                      _dateFilterButton(
-                        label: _filterStartDate == null
-                            ? 'Дата от'
-                            : 'От ${_dateLabel(_filterStartDate!)}',
-                        onTap: () => _pickFilterDate(isStart: true),
-                      ),
-                      _dateFilterButton(
-                        label: _filterEndDate == null
-                            ? 'Дата до'
-                            : 'До ${_dateLabel(_filterEndDate!)}',
-                        onTap: () => _pickFilterDate(isStart: false),
-                      ),
-                      if (_filterStartDate != null || _filterEndDate != null)
-                        TextButton(
-                          onPressed: () => setState(() {
-                            _filterStartDate = null;
-                            _filterEndDate = null;
-                          }),
-                          child: Text('Сбросить даты'.tr()),
-                        ),
-                      _filterChip(
-                        label: 'Все',
-                        selected: _statusFilter == 'Все',
-                        onTap: () => setState(() => _statusFilter = 'Все'),
-                      ),
-                      for (final status in [
-                        'pending_payment',
-                        'assigned',
-                        'confirmed',
-                        'in_progress',
-                        'completed',
-                        'canceled',
-                      ])
-                        _filterChip(
-                          label: _orderStatusLabel(status),
-                          selected: _statusFilter == status,
-                          onTap: () => setState(() => _statusFilter = status),
-                        ),
                     ],
                   ),
                 ],
@@ -2745,26 +2860,28 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             });
             final list = _sortRecordsByDate(filteredComplaints);
             return _sectionScaffold(
-              toolbar: Wrap(
-                spacing: 12,
-                children: [
-                  _filterChip(
-                    label: 'Все',
-                    selected: _statusFilter == 'Все',
-                    onTap: () => setState(() => _statusFilter = 'Все'),
-                  ),
-                  for (final status in [
-                    'open',
-                    'resolved',
-                    'compensated',
-                    'refund',
-                  ])
+              toolbar: _filterContents(
+                Wrap(
+                  spacing: 12,
+                  children: [
                     _filterChip(
-                      label: _complaintStatusLabel(status),
-                      selected: _statusFilter == status,
-                      onTap: () => setState(() => _statusFilter = status),
+                      label: 'Все',
+                      selected: _statusFilter == 'Все',
+                      onTap: () => setState(() => _statusFilter = 'Все'),
                     ),
-                ],
+                    for (final status in [
+                      'open',
+                      'resolved',
+                      'compensated',
+                      'refund',
+                    ])
+                      _filterChip(
+                        label: _complaintStatusLabel(status),
+                        selected: _statusFilter == status,
+                        onTap: () => setState(() => _statusFilter = status),
+                      ),
+                  ],
+                ),
               ),
               child: list.isEmpty
                   ? _emptyState(
@@ -3038,22 +3155,32 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         final otherPayments =
             docs.where((doc) => !_isAdminPaymentActionRequired(doc)).toList();
         return Column(children: [
-          Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final tab in const {
-                  'all': 'Все',
-                  'waiting': 'Ожидает оплату',
-                  'paid': 'Оплаченные',
-                  'cancelled': 'Отменённые',
-                  'errors': 'Ошибки'
-                }.entries)
-                  ChoiceChip(
-                      label:
-                          Text('${tab.value.tr()} (${counts[tab.key] ?? 0})'),
-                      selected: _paymentTab == tab.key,
-                      onSelected: (_) => setState(() => _paymentTab = tab.key)),
-              ])),
+          _filterContents(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final tab in const {
+                      'all': 'Все',
+                      'waiting': 'Ожидает оплату',
+                      'paid': 'Оплаченные',
+                      'cancelled': 'Отменённые',
+                      'errors': 'Ошибки',
+                    }.entries)
+                      ChoiceChip(
+                        label: Text(
+                          '${tab.value.tr()} (${counts[tab.key] ?? 0})',
+                        ),
+                        selected: _paymentTab == tab.key,
+                        onSelected: (_) =>
+                            setState(() => _paymentTab = tab.key),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
               child: _sectionScaffold(
             child: !snapshot.hasData &&
@@ -7082,21 +7209,27 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                         ],
                       ),
                     ),
-                  Wrap(
-                    spacing: 12,
-                    children: [
-                      _filterChip(
-                        label: 'Все',
-                        selected: _statusFilter == 'Все',
-                        onTap: () => setState(() => _statusFilter = 'Все'),
-                      ),
-                      for (final status in ['pending', 'approved', 'rejected'])
+                  _filterContents(
+                    Wrap(
+                      spacing: 12,
+                      children: [
                         _filterChip(
-                          label: _cleanerVerificationLabel(status),
-                          selected: _statusFilter == status,
-                          onTap: () => setState(() => _statusFilter = status),
+                          label: 'Все',
+                          selected: _statusFilter == 'Все',
+                          onTap: () => setState(() => _statusFilter = 'Все'),
                         ),
-                    ],
+                        for (final status in [
+                          'pending',
+                          'approved',
+                          'rejected',
+                        ])
+                          _filterChip(
+                            label: _cleanerVerificationLabel(status),
+                            selected: _statusFilter == status,
+                            onTap: () => setState(() => _statusFilter = status),
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -8287,21 +8420,23 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     ],
                   ),
                 ),
-              Wrap(
-                spacing: 12,
-                children: [
-                  _filterChip(
-                    label: 'Все',
-                    selected: _statusFilter == 'Все',
-                    onTap: () => setState(() => _statusFilter = 'Все'),
-                  ),
-                  for (final status in ['open', 'resolved'])
+              _filterContents(
+                Wrap(
+                  spacing: 12,
+                  children: [
                     _filterChip(
-                      label: status == 'resolved' ? 'Закрыто' : 'Открыто',
-                      selected: _statusFilter == status,
-                      onTap: () => setState(() => _statusFilter = status),
+                      label: 'Все',
+                      selected: _statusFilter == 'Все',
+                      onTap: () => setState(() => _statusFilter = 'Все'),
                     ),
-                ],
+                    for (final status in ['open', 'resolved'])
+                      _filterChip(
+                        label: status == 'resolved' ? 'Закрыто' : 'Открыто',
+                        selected: _statusFilter == status,
+                        onTap: () => setState(() => _statusFilter = status),
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -8517,23 +8652,26 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 final visible = _sortRecordsByDate(filteredQualityReports);
 
                 return _sectionScaffold(
-                  toolbar: Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
-                    children: [
-                      _filterChip(
-                        label: 'Все',
-                        selected: _statusFilter == 'Все',
-                        onTap: () => setState(() => _statusFilter = 'Все'),
-                      ),
-                      for (final status in ['open', 'resolved'])
+                  toolbar: _filterContents(
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 10,
+                      children: [
                         _filterChip(
-                          label:
-                              status == 'resolved' ? 'Отработано' : 'Открыто',
-                          selected: _statusFilter == status,
-                          onTap: () => setState(() => _statusFilter = status),
+                          label: 'Все',
+                          selected: _statusFilter == 'Все',
+                          onTap: () => setState(() => _statusFilter = 'Все'),
                         ),
-                    ],
+                        for (final status in ['open', 'resolved'])
+                          _filterChip(
+                            label: status == 'resolved'
+                                ? 'Отработано'
+                                : 'Открыто',
+                            selected: _statusFilter == status,
+                            onTap: () => setState(() => _statusFilter = status),
+                          ),
+                      ],
+                    ),
                   ),
                   child: snapshot.connectionState == ConnectionState.waiting &&
                           !snapshot.hasData
@@ -9723,42 +9861,57 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           });
 
         return _sectionScaffold(
-          toolbar: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          toolbar: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ElevatedButton.icon(
-                onPressed: !_canManagePolicies
-                    ? null
-                    : () => _syncTranslationSources(),
-                icon: const Icon(Icons.sync_outlined),
-                label: Text('Синхронизировать из кода'.tr()),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: !_canManagePolicies
+                        ? null
+                        : () => _syncTranslationSources(),
+                    icon: const Icon(Icons.sync_outlined),
+                    label: Text('Синхронизировать из кода'.tr()),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: !_canManagePolicies
+                        ? null
+                        : () => _openTranslationEditor(context),
+                    icon: const Icon(Icons.add),
+                    label: Text('Добавить фразу'.tr()),
+                  ),
+                  _statusBadge(
+                    'Всего: ${docs.length} · RU: $filledRu · KK: $filledKk',
+                    color: const Color(0xFF334155),
+                  ),
+                ],
               ),
-              OutlinedButton.icon(
-                onPressed: !_canManagePolicies
-                    ? null
-                    : () => _openTranslationEditor(context),
-                icon: const Icon(Icons.add),
-                label: Text('Добавить фразу'.tr()),
-              ),
-              FilterChip(
-                label: Text('Без перевода'.tr()),
-                selected: _dictionaryOnlyMissing,
-                onSelected: (value) =>
-                    setState(() => _dictionaryOnlyMissing = value),
-              ),
-              ...TranslationController.supportedLocales.map((locale) {
-                final selected = locale == _dictionaryLocale;
-                return ChoiceChip(
-                  label: Text(TranslationController.localeLabel(locale)),
-                  selected: selected,
-                  onSelected: (_) => setState(() => _dictionaryLocale = locale),
-                );
-              }),
-              _statusBadge(
-                'Всего: ${docs.length} · RU: $filledRu · KK: $filledKk',
-                color: const Color(0xFF334155),
+              _filterContents(
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilterChip(
+                      label: Text('Без перевода'.tr()),
+                      selected: _dictionaryOnlyMissing,
+                      onSelected: (value) =>
+                          setState(() => _dictionaryOnlyMissing = value),
+                    ),
+                    ...TranslationController.supportedLocales.map((locale) {
+                      final selected = locale == _dictionaryLocale;
+                      return ChoiceChip(
+                        label: Text(TranslationController.localeLabel(locale)),
+                        selected: selected,
+                        onSelected: (_) =>
+                            setState(() => _dictionaryLocale = locale),
+                      );
+                    }),
+                  ],
+                ),
               ),
             ],
           ),

@@ -1,3 +1,4 @@
+import 'admin_filter_panel.dart';
 import 'package:flutter/material.dart';
 import '../localization/translation_controller.dart';
 import '../services/firestore_data_service.dart';
@@ -5,7 +6,15 @@ import '../utils/user_error_message.dart';
 import '../utils/working_schedule.dart';
 
 class AdminWorkSchedules extends StatefulWidget {
-  const AdminWorkSchedules({super.key, this.search = ''});
+  const AdminWorkSchedules(
+      {super.key,
+      this.search = '',
+      this.filtersExpanded = true,
+      this.initialStatus = 'pending',
+      this.onStatusChanged});
+  final bool filtersExpanded;
+  final String initialStatus;
+  final ValueChanged<String>? onStatusChanged;
   final String search;
   @override
   State<AdminWorkSchedules> createState() => _AdminWorkSchedulesState();
@@ -19,7 +28,9 @@ class _AdminWorkSchedulesState extends State<AdminWorkSchedules> {
   @override
   void initState() {
     super.initState();
-    _stream = _data.adminWorkingSchedulesStream(status: _status);
+    _status = widget.initialStatus;
+    _stream = _data.adminWorkingSchedulesStream(
+        status: _status == 'all' ? null : _status);
   }
 
   Future<void> _review(Map<String, dynamic> row, String decision) async {
@@ -66,25 +77,28 @@ class _AdminWorkSchedulesState extends State<AdminWorkSchedules> {
   Widget build(BuildContext context) {
     TranslationScope.watch(context);
     return Column(children: [
-      Padding(
-          padding: const EdgeInsets.all(16),
-          child: DropdownButtonFormField<String>(
-              initialValue: _status,
-              items: [
-                for (final entry in const {
-                  'pending': 'На одобрении',
-                  'approved': 'Одобрен',
-                  'rejected': 'Отклонён',
-                  'all': 'Все заявки'
-                }.entries)
-                  DropdownMenuItem(
-                      value: entry.key, child: Text(entry.value.tr()))
-              ],
-              onChanged: (value) => setState(() {
-                    _status = value ?? 'pending';
-                    _stream = _data.adminWorkingSchedulesStream(
-                        status: _status == 'all' ? null : _status);
-                  }))),
+      AdminFilterContents(
+          expanded: widget.filtersExpanded,
+          child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: DropdownButtonFormField<String>(
+                  initialValue: _status,
+                  items: [
+                    for (final entry in const {
+                      'pending': 'На одобрении',
+                      'approved': 'Одобрен',
+                      'rejected': 'Отклонён',
+                      'all': 'Все заявки'
+                    }.entries)
+                      DropdownMenuItem(
+                          value: entry.key, child: Text(entry.value.tr()))
+                  ],
+                  onChanged: (value) => setState(() {
+                        _status = value ?? 'pending';
+                        widget.onStatusChanged?.call(_status);
+                        _stream = _data.adminWorkingSchedulesStream(
+                            status: _status == 'all' ? null : _status);
+                      })))),
       Expanded(
           child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _stream,
