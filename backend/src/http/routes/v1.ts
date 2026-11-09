@@ -4195,7 +4195,9 @@ export function buildV1Router(deps: {
        description_ru=COALESCE($4,description_ru), description_kk=COALESCE($5,description_kk),
        cleaning_count=COALESCE($6,cleaning_count), months=COALESCE($7,months),
        base_price=COALESCE($8,base_price), price_per_m2=COALESCE($9,price_per_m2),
-       active=COALESCE($10,active), features=COALESCE($11,features), updated_at=NOW()
+       active=COALESCE($10,active), features=CASE
+         WHEN jsonb_typeof(features)='object' AND jsonb_typeof($11::jsonb)='object' THEN features||$11::jsonb
+         ELSE COALESCE($11,features) END, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       [req.params.id, req.body.nameRu ?? null, req.body.nameKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.cleaningCount ?? null, req.body.months ?? null, req.body.basePrice ?? null, req.body.pricePerM2 ?? null, req.body.active ?? null, req.body.features == null ? null : JSON.stringify(req.body.features)],
     )).rows);

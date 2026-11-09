@@ -77,6 +77,10 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const saved=await request('/admin/catalog/packages','POST',{nameRu:'Renovation fixture '+randomUUID(),cleaningCount:1,months:1,basePrice:0,pricePerM2:95,features});
         assert.equal(saved.status,201,JSON.stringify(saved.json));pkg=saved.json.data.id;
         await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,apartment,area,verified_area) VALUES($1,$2,'Астана','Тест','1','103',67.5,67.5)",[address,customer]);
+        // An older admin app must not erase unknown consent fields while editing price.
+        const legacyEdit=await request('/admin/catalog/packages/'+pkg,'PATCH',{pricePerM2:95,features:{items:['Пол','Пыль'],sortOrder:6}});
+        assert.equal(legacyEdit.status,200);assert.equal(legacyEdit.json.data.features.requiresConsent,true);
+        assert.equal(legacyEdit.json.data.features.importantInfo,features.importantInfo);
         const listing=await request('/catalog/packages');
         const item=listing.json.data.find((p:any)=>p.id===pkg);
         assert.equal(item.features.importantInfo,features.importantInfo);

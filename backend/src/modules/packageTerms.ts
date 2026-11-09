@@ -36,7 +36,9 @@ export function validatePackageBody(body: any, current?: any) {
       throw new ApiError(400, 'invalid_package', 'Укажите корректную цену тарифа.');
     }
   }
-  const features = body.features ?? current?.features ?? {};
+  const incoming = body.features ?? current?.features ?? {};
+  const features = current?.features && !Array.isArray(current.features) && incoming && !Array.isArray(incoming)
+    ? {...current.features, ...incoming} : incoming;
   if (!features || typeof features !== 'object') throw new ApiError(400, 'invalid_package', 'Проверьте настройки тарифа.');
   const count = Number(value('cleaningCount', 'cleaning_count', 1));
   const months = Number(value('months', 'months', 1));
