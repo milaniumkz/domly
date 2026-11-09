@@ -1,3 +1,4 @@
+import '../../ui/package_consent_dialog.dart';
 import '../../ui/quarterly_visits_dialog.dart';
 import '../../theme/domly_palette.dart';
 import '../../services/backend_api_service.dart';
@@ -375,22 +376,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       'discount': 0.10,
       'isQuarterly': true
     },
-    {
-      'id': 'general',
-      'name': 'Генеральная уборка',
-      'frequency': 1,
-      'label': 'Генеральная',
-      'discount': 0.0,
-      'isSpecial': true
-    },
-    {
-      'id': 'renovation',
-      'name': 'Уборка после ремонта',
-      'frequency': 1,
-      'label': 'Уборка после ремонта',
-      'discount': 0.0,
-      'isSpecial': true
-    },
   ];
 
   StreamSubscription<List<Map<String, dynamic>>>? _packagesSubscription;
@@ -452,8 +437,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       'id': mappedId,
       'label': remote['label'] ?? remote['name'] ?? remote['frequency'],
       'sortOrder': remote['sortOrder'] ?? 999,
-      'isSpecial':
-          remoteId == 'general_cleaning' || remoteId == 'post_renovation',
+      'isSpecial': PackageCatalogUtils.isSpecialPackage(remote),
     };
   }
 
@@ -1698,7 +1682,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
           await BackendApiService.instance.postMap('/packages/quote', body: {
         'packageId': pkg?['id'],
         'cleaningsPerMonth': _selectedFrequency,
-        'area': _area.ceil(),
+        'area': _area,
         'addonsDetailed': _selectedAddonsDetailed()
       });
       if (!mounted || requestId != _quoteRequestId) return;
@@ -1736,10 +1720,22 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
 
     setState(() => _submittingOrder = true);
     try {
+      String? acceptedTermsVersion;
+      if (pkg?['requiresConsent'] == true) {
+        acceptedTermsVersion = await showPackageConsentDialog(context, pkg!);
+        if (!mounted || acceptedTermsVersion == null) return;
+        final quote = await BackendApiService.instance.postMap('/packages/quote', body: {
+          'packageId': pkg['id'], 'area': _area,
+          'addonsDetailed': _selectedAddonsDetailed(),
+        });
+        total = (quote['monthlyPrice'] as num).round();
+        if (!mounted) return;
+      }
       final paymentSelection = await showPaymentMethodOptionsDialog(
         context,
         bonusBalance: 0,
         maxBonusToSpend: 0,
+        paymentAmount: total,
       );
       if (!mounted || paymentSelection == null) return;
       final paymentMethod = paymentSelection.method;
@@ -1761,6 +1757,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
           packageName: packageName,
           packageId: pkg?['id']?.toString(),
           pricingMode: 'custom_quote',
+          acceptedTermsVersion: acceptedTermsVersion,
           cleaningsPerMonth: _selectedFrequency,
           accessMethod: 'Я дома',
           addons: _selectedAddonLabels(),

@@ -1,3 +1,5 @@
+import '../../ui/package_consent_dialog.dart';
+import '../../services/backend_api_service.dart';
 import '../../theme/domly_palette.dart';
 import '../../utils/service_coverage.dart';
 import 'dart:async';
@@ -87,26 +89,12 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
       'billingPeriodMonths': 3,
       'discountPercent': 10,
     },
-    {
-      'id': 'general_cleaning',
-      'name': 'Генеральная уборка',
-      'price': 45000,
-      'frequency': 'Разовая',
-      'sortOrder': 6,
-      'isActive': true,
-    },
-    {
-      'id': 'post_renovation',
-      'name': 'Уборка после ремонта',
-      'price': 60000,
-      'frequency': 'Разовая',
-      'sortOrder': 7,
-      'isActive': true,
-    },
   ];
   static const List<int> _quarterlyOptions = [2, 4, 8];
   String? _selectedPackageId;
   bool _submittingPackage = false;
+  bool _openingCheckout = false;
+  bool _openSpecialCheckout = false;
   double? _area;
   int _baseCleaningPrice = 0;
   int _quarterlyVisitsPerMonth = 2;
@@ -221,6 +209,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
     _routeArgsApplied = true;
     final routeArgs = ModalRoute.of(context)?.settings.arguments;
     final args = routeArgs is Map ? routeArgs : const <String, dynamic>{};
+    _openSpecialCheckout = args['openSpecialCheckout'] == true;
     final preselectedPackageId =
         args['preselectedPackageId']?.toString().trim() ?? '';
     if (preselectedPackageId.isNotEmpty) {
@@ -921,8 +910,10 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
     final discountRate = PackageCatalogUtils.discountRate(package);
 
     if (PackageCatalogUtils.isSpecialPackage(package)) {
-      final base = fallbackPrice > 0 ? fallbackPrice : _baseCleaningPrice;
-      return base;
+      final base = PackageCatalogUtils.numValue(package['basePrice']) ?? 0;
+      final rate = PackageCatalogUtils.numValue(package['pricePerM2']) ??
+          (package['pricingType'] == 'fixed' ? 0 : fallbackPrice);
+      return ((base + rate * (_area ?? 0)) * (1 - discountRate)).round();
     }
 
     final area = _area?.ceil() ?? 0;
@@ -961,7 +952,8 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
       return '${_visitsLabel(_quarterlyVisitsPerMonth)}/мес · $billingMonths мес · -$discount%';
     }
     if (PackageCatalogUtils.isSpecialPackage(package)) {
-      return 'Фиксированная стоимость пакета';
+      final rate = PackageCatalogUtils.numValue(package['pricePerM2']) ?? 0;
+      return rate > 0 ? '$rate ₸ за м²' : 'Фиксированная стоимость пакета';
     }
     if (areaUnitPrice > 0) {
       if (visits <= 1 && billingMonths <= 1) {
@@ -982,6 +974,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
   Future<void> _handlePackageTap(Map<String, dynamic> package) async {
     setState(() => _selectedPackageId = package['id'].toString());
     _scrollSelectedPackageToCenter();
+    if (package['requiresConsent'] == true) await _selectPackage(package);
   }
 
   void _scrollSelectedPackageToCenter() {
@@ -1056,6 +1049,12 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
                           (item) => item?['id'] == _selectedPackageId,
                           orElse: () => null,
                         );
+            if (_openSpecialCheckout && selectedPackage != null) {
+              _openSpecialCheckout = false;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _selectPackage(selectedPackage);
+              });
+            }
             _triggerDebugAutoFlowIfNeeded(packages, selectedPackage);
             return DomlyShell(
               bottomNavigationBar: const DomlyClientBottomNav(currentIndex: 0),
@@ -1263,6 +1262,22 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
   }
 
   Future<void> _selectPackage(Map<String, dynamic> package) async {
+    if (_openingCheckout) return;
+    _openingCheckout = true;
+    try {
+      String? acceptedTermsVersion;
+      if (package['requiresConsent'] == true) {
+        acceptedTermsVersion = await showPackageConsentDialog(context, package);
+        if (!mounted || acceptedTermsVersion == null) return;
+      }
+      await _checkoutPackage(package, acceptedTermsVersion);
+    } finally {
+      _openingCheckout = false;
+    }
+  }
+
+  Future<void> _checkoutPackage(
+      Map<String, dynamic> package, String? acceptedTermsVersion) async {
     if (_submittingPackage) {
       return;
     }
@@ -1300,7 +1315,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
       return;
     }
 
-    final price = _packageDisplayPrice(package);
+    var price = _packageDisplayPrice(package);
     final frequencyLabel = PackageCatalogUtils.frequencyLabel(
       package,
       quarterlyVisitsPerMonth: _quarterlyVisitsPerMonth,
@@ -1332,6 +1347,15 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
           houseStatus.isNotEmpty &&
           houseStatus != 'ACTIVE') {
         throw 'Этот дом еще не активирован для заказов. Выберите активный адрес.';
+      }
+      if (package['requiresConsent'] == true) {
+        final quote =
+            await BackendApiService.instance.postMap('/packages/quote', body: {
+          'packageId': package['id'],
+          'area': _area,
+        });
+        price = (quote['monthlyPrice'] as num).round();
+        if (!mounted) return;
       }
       final paymentSelection = isDebugAutoSubmit
           ? const DomlyPaymentSelection(
@@ -1371,6 +1395,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
           packageName: (package['name'] ?? 'Пакет').toString(),
           packageId: package['id']?.toString(),
           pricingMode: 'package_catalog',
+          acceptedTermsVersion: acceptedTermsVersion,
           cleaningsPerMonth: PackageCatalogUtils.cleaningsPerMonth(
             package,
             quarterlyVisitsPerMonth: _quarterlyVisitsPerMonth,

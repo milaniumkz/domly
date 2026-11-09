@@ -95,20 +95,6 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       'sortOrder': 5,
       'isActive': true,
     },
-    {
-      'id': 'general_cleaning',
-      'name': 'Генеральная уборка',
-      'frequency': 'Разовая',
-      'sortOrder': 6,
-      'isActive': true,
-    },
-    {
-      'id': 'post_renovation',
-      'name': 'Уборка после ремонта',
-      'frequency': 'Разовая',
-      'sortOrder': 7,
-      'isActive': true,
-    },
   ];
 
   @override
@@ -140,7 +126,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     return merged.where((item) => item['isActive'] != false).toList();
   }
 
-  Future<void> _openPackageCheckout(String packageId) async {
+  Future<void> _openPackageCheckout(String packageId, {bool showImportantInfo = false}) async {
     if (!mounted || packageId.trim().isEmpty) {
       return;
     }
@@ -148,7 +134,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       () => Navigator.pushNamed(
         context,
         '/client/packages',
-        arguments: {'preselectedPackageId': packageId},
+        arguments: {'preselectedPackageId': packageId, 'openSpecialCheckout': showImportantInfo},
       ),
     );
   }
@@ -276,6 +262,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                                         Navigator.pop(sheetContext);
                                         _openPackageCheckout(
                                           package['id']?.toString() ?? '',
+                                          showImportantInfo: package['requiresConsent'] == true,
                                         );
                                       },
                                       child: Padding(

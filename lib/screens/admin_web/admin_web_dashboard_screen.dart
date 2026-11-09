@@ -1,3 +1,4 @@
+import '../../utils/package_catalog_utils.dart';
 import '../../utils/address_display.dart';
 import '../../ui/area_document_rejection.dart';
 import '../../ui/admin_area_plan.dart';
@@ -9475,13 +9476,22 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           });
 
         return _sectionScaffold(
-          toolbar: Row(
+          toolbar: Wrap(
             children: [
               ElevatedButton.icon(
                 onPressed:
                     !_canEditCatalog ? null : () => _openPackageEditor(context),
                 icon: const Icon(Icons.add),
                 label: Text('Добавить пакет'.tr()),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: !_canEditCatalog ? null : () => _openPackageEditor(context, existing: {
+                  'isSpecial': true, 'requiresConsent': true, 'cleaningsPerMonth': 1,
+                  'billingPeriodMonths': 1, 'sortOrder': 10,
+                }),
+                icon: const Icon(Icons.cleaning_services_outlined),
+                label: Text('Добавить специальный тариф'.tr()),
               ),
             ],
           ),
@@ -13739,7 +13749,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     Map<String, dynamic>? existing,
   }) async {
     final initial = Map<String, dynamic>.from(existing ?? const {});
-    final idController = TextEditingController(text: (docId ?? '').toString());
+    final idController = TextEditingController(text: (docId ?? 'tariff_${DateTime.now().millisecondsSinceEpoch}').toString());
     final nameController = TextEditingController(
       text: (initial['name'] ?? '').toString(),
     );
@@ -13775,6 +13785,10 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final fullInfoController = TextEditingController(
       text: (initial['fullInfo'] ?? '').toString(),
     );
+    final importantInfoController = TextEditingController(text: (initial['importantInfo'] ?? '').toString());
+    bool isSpecial = PackageCatalogUtils.isSpecialPackage(initial);
+    bool requiresConsent = initial['requiresConsent'] == true;
+    String pricingType = initial['pricingType']?.toString() ?? 'per_m2';
     bool isActive = initial['isActive'] != false;
     bool isPopular = initial['popular'] == true;
     bool isQuarterly = initial['isQuarterly'] == true;
@@ -13807,11 +13821,36 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                       labelText: 'Частота / подпись',
                     ),
                   ),
+                  SwitchListTile(
+                    value: isSpecial,
+                    title: Text('Специальный тариф'.tr()),
+                    subtitle: Text('Одна уборка, отдельное название и условия'.tr()),
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: (value) => setModalState(() {
+                      isSpecial = value;
+                      if (value) {
+                        requiresConsent = true;
+                        isQuarterly = false;
+                        cleaningsController.text = '1';
+                        billingController.text = '1';
+                      }
+                    }),
+                  ),
+                  if (isSpecial)
+                    DropdownButtonFormField<String>(
+                      initialValue: pricingType,
+                      decoration: const InputDecoration(labelText: 'Расчёт цены'),
+                      items: [
+                        DropdownMenuItem(value: 'per_m2', child: Text('За м²'.tr())),
+                        DropdownMenuItem(value: 'fixed', child: Text('Фиксированная сумма'.tr())),
+                      ],
+                      onChanged: (value) => setModalState(() => pricingType = value ?? 'per_m2'),
+                    ),
                   TextField(
                     controller: priceController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                        labelText: 'Цена за м² за одну уборку, ₸'),
+                    decoration: InputDecoration(
+                        labelText: pricingType == 'fixed' ? 'Цена за уборку, ₸' : 'Цена за м² за одну уборку, ₸'),
                   ),
                   TextField(
                     controller: sortOrderController,
@@ -13863,6 +13902,21 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                       hintText: 'Подробно опишите пакет, условия и ограничения',
                     ),
                   ),
+                  SwitchListTile(
+                    value: requiresConsent,
+                    title: Text('Согласие перед оплатой'.tr()),
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: (value) => setModalState(() => requiresConsent = value),
+                  ),
+                  if (requiresConsent)
+                    TextField(
+                      controller: importantInfoController,
+                      minLines: 4, maxLines: 12,
+                      decoration: const InputDecoration(
+                        labelText: 'Важная информация перед оплатой',
+                        hintText: 'Условия тарифа. Перечень работ заполните в поле «Что входит».',
+                      ),
+                    ),
                   const SizedBox(height: 12),
                   SwitchListTile(
                     value: isActive,
@@ -13879,7 +13933,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   ),
                   SwitchListTile(
                     value: isQuarterly,
-                    onChanged: (value) =>
+                    onChanged: isSpecial ? null : (value) =>
                         setModalState(() => isQuarterly = value),
                     title: Text('Квартальный пакет'.tr()),
                     contentPadding: EdgeInsets.zero,
@@ -13898,21 +13952,29 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             onPressed: () async {
               final navigator = Navigator.of(context);
               final id = idController.text.trim();
-              if (id.isEmpty) {
+              final price = num.tryParse(priceController.text.trim().replaceAll(',', '.'));
+              if (id.isEmpty || nameController.text.trim().isEmpty || price == null || price < 0 ||
+                  (requiresConsent && importantInfoController.text.trim().isEmpty)) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Заполните название, цену и важную информацию'.tr())));
                 return;
               }
+              try {
               await _data.saveAdminPackage({
                 ...initial,
                 'id': id,
                 'name': nameController.text.trim(),
                 'frequency': frequencyController.text.trim(),
-                'price': num.tryParse(priceController.text.trim().replaceAll(',', '.')) ?? 0,
+                'price': price,
+                'pricingType': pricingType,
+                'isSpecial': isSpecial,
+                'requiresConsent': requiresConsent,
+                'importantInfo': importantInfoController.text.trim(),
                 'sortOrder':
                     int.tryParse(sortOrderController.text.trim()) ?? 999,
-                'cleaningsPerMonth': int.tryParse(
+                'cleaningsPerMonth': isSpecial ? 1 : int.tryParse(
                   cleaningsController.text.trim(),
                 ),
-                'billingPeriodMonths':
+                'billingPeriodMonths': isSpecial ? 1 :
                     int.tryParse(billingController.text.trim()) ?? 1,
                 'discountPercent':
                     int.tryParse(discountController.text.trim()) ?? 0,
@@ -13933,6 +13995,10 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               });
               if (!mounted) return;
               navigator.pop();
+              } catch (error) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(UserErrorMessage.message(error))));
+              }
             },
             child: Text('Сохранить'.tr()),
           ),

@@ -1,3 +1,4 @@
+import {packageConsentVersion} from '../modules/packageTerms';
 import {rejectAreaDocument} from '../modules/areaRejection';
 import {updateOrderAddons} from '../modules/orderAddons';
 import {packageQuote} from '../modules/packageQuote';
@@ -29,7 +30,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
   let failPush=false;
   const notifications=new NotificationService(db,{send:async()=>{if(failPush)throw Error('Provider offline');return {sent:0};}} as any);
   const app=express();
-  app.use(express.json(),buildV1Router({db,notifications,paymentGateway:new PaymentGatewayService(),payments:{refundOrderPayments:async()=>[],markPaid:(id:string,actor:string)=>new PaymentService(db,new BonusService(db)).markPaid(id,actor)},scheduling:new SchedulingService(db),addressSearch:{externalSuggestions:async()=>[]},storage:{uploadBuffer:async(key:string)=>env.minioPublicUrl.replace(/\/$/,'')+'/'+key,client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
+  app.use(express.json(),buildV1Router({db,notifications,paymentGateway:new PaymentGatewayService(),payments:{createPayment:(input:any)=>new PaymentService(db,new BonusService(db)).createPayment(input),refundOrderPayments:async()=>[],markPaid:(id:string,actor:string)=>new PaymentService(db,new BonusService(db)).markPaid(id,actor)},scheduling:new SchedulingService(db),addressSearch:{externalSuggestions:async()=>[]},storage:{uploadBuffer:async(key:string)=>env.minioPublicUrl.replace(/\/$/,'')+'/'+key,client:{getObject:async()=>Readable.from([Buffer.from('test image')])}}} as any),errorHandler);
   const server=app.listen(0,'127.0.0.1');
   await new Promise<void>(resolve=>server.once('listening',resolve));
   const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
@@ -48,6 +49,78 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
 
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('renovation seed copies the single rate once and preserves renamed administrator tariffs',async()=>{
+      await db.transaction(async tx=>{
+        await tx.query('CREATE TEMP TABLE catalog_packages (LIKE public.catalog_packages INCLUDING ALL) ON COMMIT DROP');
+        await tx.query(`INSERT INTO catalog_packages(name_ru,cleaning_count,months,base_price,price_per_m2,features) VALUES('Разовый пакет',1,1,0,95,'{"items":["Пол"]}')`);
+        const migration=readFileSync('sql/schema.sql','utf8').split('-- One new, administrator-editable tariff.')[1];
+        assert.ok(migration);
+        const sql='-- One new, administrator-editable tariff.'+migration;
+        await tx.query(sql);
+        const special=(await tx.query("SELECT * FROM catalog_packages WHERE features->>'systemKey'='post_renovation'")).rows[0];
+        assert.equal(Number(special.price_per_m2),95);assert.deepEqual(special.features.items,['Пол']);
+        assert.equal(special.features.requiresConsent,true);
+        await tx.query(`UPDATE catalog_packages SET name_ru='Новое название',price_per_m2=777,features=features||'{"importantInfo":"Настройки администратора"}'::jsonb WHERE id=$1`,[special.id]);
+        await tx.query(sql);
+        const rows=(await tx.query('SELECT * FROM catalog_packages')).rows;
+        assert.equal(rows.length,2);
+        const saved=rows.find((r:any)=>r.id===special.id)!;
+        assert.equal(saved.name_ru,'Новое название');assert.equal(Number(saved.price_per_m2),777);
+        assert.equal(saved.features.importantInfo,'Настройки администратора');
+        assert.equal(rows.some((r:any)=>r.name_ru.includes('Генеральная')),false);
+      });
+    });
+    await t.test('special tariff is configurable and purchase requires consent to the current terms',async()=>{
+      let pkg='';const address=randomUUID();
+      const features={isSpecial:true,requiresConsent:true,importantInfo:'Работы после ремонта. Условия тестового тарифа.',items:['Пол','Пыль'],sortOrder:6,pricingType:'per_m2'};
+      try {
+        const saved=await request('/admin/catalog/packages','POST',{nameRu:'Renovation fixture '+randomUUID(),cleaningCount:1,months:1,basePrice:0,pricePerM2:95,features});
+        assert.equal(saved.status,201,JSON.stringify(saved.json));pkg=saved.json.data.id;
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,apartment,area,verified_area) VALUES($1,$2,'Астана','Тест','1','103',67.5,67.5)",[address,customer]);
+        const listing=await request('/catalog/packages');
+        const item=listing.json.data.find((p:any)=>p.id===pkg);
+        assert.equal(item.features.importantInfo,features.importantInfo);
+        assert.equal(item.consentVersion,packageConsentVersion(item));
+        const input={packageId:pkg,addressId:address,provider:'manual'};
+        const denied=await request('/packages/purchase','POST',input,true);
+        assert.equal(denied.status,409);assert.equal(denied.json.code,'package_terms_required');
+        assert.equal((await db.query('SELECT COUNT(*)::int n FROM customer_packages WHERE package_id=$1',[pkg])).rows[0].n,0);
+        const quote=await request('/packages/quote','POST',{packageId:pkg,area:67.5},true);
+        assert.equal(quote.json.data.monthlyPrice,6413);
+        const bought=await request('/packages/purchase','POST',{...input,acceptedTermsVersion:item.consentVersion},true);
+        assert.equal(bought.status,200,JSON.stringify(bought.json));
+        assert.equal(Number(bought.json.data.payment.amount),6413);
+        const config=bought.json.data.customerPackage.purchase_config;
+        assert.equal(config.termsAcceptance.version,item.consentVersion);
+        assert.equal(config.termsAcceptance.importantInfo,features.importantInfo);
+        assert.equal(config.cleaningCount,1);
+        const updated=await request('/admin/catalog/packages/'+pkg,'PATCH',{basePrice:15000,pricePerM2:0,features:{...features,importantInfo:'Новые условия',pricingType:'fixed'}});
+        assert.equal(updated.status,200,JSON.stringify(updated.json));
+        const old=await request('/packages/purchase','POST',{...input,acceptedTermsVersion:item.consentVersion},true);
+        assert.equal(old.status,409);assert.equal(old.json.code,'package_terms_required');
+        const fresh=(await request('/catalog/packages')).json.data.find((p:any)=>p.id===pkg);
+        assert.notEqual(fresh.consentVersion,item.consentVersion);
+        const second=await request('/packages/purchase','POST',{...input,acceptedTermsVersion:fresh.consentVersion},true);
+        assert.equal(second.status,200,JSON.stringify(second.json));assert.equal(Number(second.json.data.payment.amount),15000);
+        const original=(await db.query('SELECT purchase_config FROM customer_packages WHERE id=$1',[bought.json.data.customerPackage.id])).rows[0].purchase_config;
+        assert.equal(original.termsAcceptance.importantInfo,features.importantInfo);
+        for(const patch of [{pricePerM2:-1},{cleaningCount:2},{features:{...features,importantInfo:''}}]) {
+          assert.equal((await request('/admin/catalog/packages/'+pkg,'PATCH',patch)).status,400);
+        }
+        assert.equal((await request('/admin/catalog/packages/'+pkg,'PATCH',{active:false})).status,200);
+        assert.equal((await request('/catalog/packages')).json.data.some((p:any)=>p.id===pkg),false);
+      }finally {
+        const ids=(await db.query('SELECT id FROM payments WHERE customer_package_id IN (SELECT id FROM customer_packages WHERE package_id=$1)',[pkg||null])).rows.map((r:any)=>r.id);
+        if(ids.length){
+          await db.query('DELETE FROM notification_deliveries WHERE notification_id IN (SELECT id FROM notifications WHERE target_id=ANY($1::text[]))',[ids]);
+          await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[ids]);
+          await db.query('DELETE FROM payments WHERE id=ANY($1::uuid[])',[ids]);
+        }
+        await db.query('DELETE FROM customer_packages WHERE package_id=$1',[pkg||null]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+        if(pkg)await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+      }
+    });
     await t.test('today cannot be booked or selected; tomorrow and current-order extras stay available',async()=>{
       const pkg=randomUUID(),purchase=randomUUID(),active=randomUUID(),addon=randomUUID();
       const key='tomorrow-'+randomUUID();

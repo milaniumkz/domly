@@ -520,13 +520,13 @@ class FirestoreDataService {
   Map<String, dynamic> _mapBackendCatalogPackage(Map<String, dynamic> item) {
     final cleaningCount = _num(item['cleaning_count']).toInt();
     final months = _num(item['months']).toInt();
-    final basePrice = _num(item['base_price']).round();
     final metadata = item['features'] is Map
         ? Map<String, dynamic>.from(item['features'] as Map)
         : <String, dynamic>{};
     return {
       ...item,
       ...metadata,
+      'catalogMetadata': metadata,
       'features':
           item['features'] is List ? item['features'] : metadata['items'] ?? [],
       'id': item['id'],
@@ -541,10 +541,11 @@ class FirestoreDataService {
         'kk': item['description_kk'] ?? item['description_ru'] ?? '',
       },
       'price': _num(item['price_per_m2']) > 0
-          ? _num(item['price_per_m2']).round()
-          : basePrice,
-      'basePrice': basePrice,
-      'pricePerM2': _num(item['price_per_m2']).round(),
+          ? _num(item['price_per_m2'])
+          : _num(item['base_price']),
+      'basePrice': _num(item['base_price']),
+      'pricePerM2': _num(item['price_per_m2']),
+      'pricingType': metadata['pricingType'] ?? (_num(item['price_per_m2']) > 0 ? 'per_m2' : 'fixed'),
       'cleaningsPerMonth': cleaningCount,
       'includedVisits': cleaningCount,
       'billingPeriodMonths': months <= 0 ? 1 : months,
@@ -8916,6 +8917,7 @@ class FirestoreDataService {
     required String packageName,
     String? packageId,
     String? pricingMode,
+    String? acceptedTermsVersion,
     int? cleaningsPerMonth,
     required String accessMethod,
     required List<String> addons,
@@ -9152,6 +9154,7 @@ class FirestoreDataService {
           body: {
             'idempotencyKey': _newIdempotencyKey(),
             'packageId': normalizedPackageId,
+            if (acceptedTermsVersion != null) 'acceptedTermsVersion': acceptedTermsVersion,
             'cleaningsPerMonth': cleaningsPerMonth,
             'addonsDetailed': addonsDetailed,
             'useBonus': bonusToSpend > 0,
@@ -13253,8 +13256,13 @@ class FirestoreDataService {
         packageData['includedVisits'] ??
         2;
     final metadata = <String, dynamic>{
+      if (packageData['catalogMetadata'] is Map) ...Map<String, dynamic>.from(packageData['catalogMetadata'] as Map),
       'items': packageData['features'] is List ? packageData['features'] : [],
       'isQuarterly': packageData['isQuarterly'] == true,
+      'isSpecial': packageData['isSpecial'] == true,
+      'requiresConsent': packageData['requiresConsent'] == true,
+      'importantInfo': packageData['importantInfo'] ?? '',
+      'pricingType': packageData['pricingType'] ?? 'per_m2',
       'discountPercent': packageData['discountPercent'] ?? 0,
       'sortOrder': packageData['sortOrder'] ?? 0,
       'frequency': packageData['frequency'],
@@ -13271,8 +13279,10 @@ class FirestoreDataService {
       'cleaningCount': monthlyVisits,
       'months':
           packageData['billingPeriodMonths'] ?? packageData['months'] ?? 1,
-      'basePrice': 0,
-      'pricePerM2': packageData['price'] ?? packageData['pricePerM2'] ?? 0,
+      'basePrice': packageData['pricingType'] == 'fixed'
+          ? packageData['price'] ?? 0 : 0,
+      'pricePerM2': packageData['pricingType'] == 'fixed'
+          ? 0 : packageData['price'] ?? packageData['pricePerM2'] ?? 0,
       'active': packageData['isActive'] ?? packageData['active'] ?? true,
       'features': metadata,
     };

@@ -1700,3 +1700,28 @@ END $$;
 -- Editor options are independent of price calculation; NULL retains legacy quantity behavior.
 ALTER TABLE catalog_addons ADD COLUMN IF NOT EXISTS supports_quantity BOOLEAN;
 ALTER TABLE catalog_addons ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- One new, administrator-editable tariff. Copy the current single-cleaning rate
+-- once; subsequent migrations must not overwrite an administrator's edits.
+INSERT INTO catalog_packages
+  (name_ru, name_kk, description_ru, cleaning_count, months, base_price, price_per_m2, active, features)
+SELECT 'Уборка после ремонта', 'Жөндеуден кейінгі тазалау',
+  'Перед оплатой ознакомьтесь с перечнем работ и подтвердите согласие.',
+  1, 1, source.base_price, source.price_per_m2, TRUE,
+  jsonb_build_object(
+    'systemKey', 'post_renovation',
+    'isSpecial', TRUE, 'requiresConsent', TRUE, 'sortOrder', 6,
+    'frequency', 'Разовая уборка', 'discountPercent', 0,
+    'items', COALESCE(source.features->'items', '[]'::jsonb),
+    'importantInfo', 'Уборка после ремонта оформляется на один выезд. Ниже указан включённый в тариф перечень работ. Стоимость рассчитывается по площади квартиры. Дополнительные услуги, не входящие в перечень, оформляются отдельно.'
+  )
+FROM (
+  SELECT * FROM catalog_packages
+  WHERE active=TRUE AND cleaning_count=1 AND months=1
+    AND COALESCE(features->>'isSpecial','false') <> 'true'
+    AND lower(name_ru) NOT LIKE '%ремонт%' AND lower(name_ru) NOT LIKE '%генераль%'
+  ORDER BY CASE WHEN lower(name_ru) LIKE '%разов%' THEN 0 ELSE 1 END, created_at, id
+  LIMIT 1
+) source
+WHERE NOT EXISTS (SELECT 1 FROM catalog_packages WHERE features->>'systemKey'='post_renovation' OR lower(name_ru)='уборка после ремонта')
+ON CONFLICT (name_ru, cleaning_count, months) DO NOTHING;
