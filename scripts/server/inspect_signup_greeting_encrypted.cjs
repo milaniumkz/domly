@@ -26,8 +26,15 @@ const {Pool}=require('pg');
    const activity=(await client.query(`SELECT
      (SELECT MIN(created_at) FROM payments WHERE customer_id=$1) AS first_checkout_at,
      (SELECT MIN(created_at) FROM moon_ai_outbox WHERE customer_id=$1 AND kind='message') AS first_assistant_message_at`,[account.id])).rows[0];
+   const payments=(await client.query(`SELECT status,provider,created_at,paid_at,approved_at,approval_source,
+     (customer_package_id IS NOT NULL) AS package_payment,(order_id IS NOT NULL) AS order_payment
+     FROM payments WHERE customer_id=$1 ORDER BY created_at LIMIT 100`,[account.id])).rows;
+   const packages=(await client.query(`SELECT cp.status,cp.created_at,cp.total_cleanings,cp.available_cleanings,
+     p.status AS purchase_payment_status,p.paid_at AS purchase_paid_at
+     FROM customer_packages cp LEFT JOIN payments p ON p.id=cp.purchase_payment_id
+     WHERE cp.customer_id=$1 ORDER BY cp.created_at LIMIT 100`,[account.id])).rows;
    const {id,...safeAccount}=account;
-   report.accounts.push({...safeAccount,entries,activity});
+   report.accounts.push({...safeAccount,entries,activity,payments,packages});
   }
   await client.query('ROLLBACK');
   const key=crypto.randomBytes(32),iv=crypto.randomBytes(12);

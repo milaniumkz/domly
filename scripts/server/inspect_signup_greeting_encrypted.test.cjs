@@ -13,6 +13,8 @@ test('support report reads one account, never writes or exposes plaintext, and d
   queries.push({sql,values});assert.match(sql,/^(SELECT|BEGIN READ ONLY|ROLLBACK)/);
   if(sql.includes('FROM app_users'))return {rows:[{id:fakeId,registered_at:'2026-11-03T05:00:00Z',status:'active',deleted:false,is_phone_verified:true,whatsapp_opt_out:false}]};
   if(sql.includes('SELECT kind,state'))return {rows:[{kind:'inactive_signup',state:'cancelled',created_at:'2026-11-03T05:00:00Z',failure_code:null}]};
+  if(sql.includes('SELECT status,provider'))return {rows:[{status:'paid',package_payment:true,paid_at:'2026-11-03T05:04:00Z'}]};
+  if(sql.includes('SELECT cp.status'))return {rows:[{status:'active',purchase_payment_status:'paid'}]};
   if(sql.includes('SELECT MIN'))return {rows:[{first_checkout_at:'2026-11-03T05:01:00Z',first_assistant_message_at:null}]};
   return {rows:[]};
  }};
@@ -29,5 +31,7 @@ test('support report reads one account, never writes or exposes plaintext, and d
  const plain=Buffer.concat([decipher.update(Buffer.from(envelope.data,'base64')),decipher.final()]).toString();
  assert.equal(plain.includes(fakeId),false);
  const report=JSON.parse(plain);assert.equal(report.accountFound,true);
+ assert.equal(report.accounts[0].payments[0].status,'paid');
+ assert.equal(report.accounts[0].packages[0].purchase_payment_status,'paid');
  assert.equal(report.accounts[0].entries[0].state,'cancelled');assert.equal(report.accounts[0].activity.first_checkout_at,'2026-11-03T05:01:00Z');
 });
