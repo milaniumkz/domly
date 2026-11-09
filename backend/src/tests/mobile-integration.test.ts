@@ -456,6 +456,76 @@ test('Moon AI invoices, signed events, guest isolation and timed WhatsApp campai
       await assert.rejects(sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Помоги.',phone:'+77000000000'},paused),/WhatsApp/);
       assert.equal(pausedCalls,1,'A manager pause must not be bypassed by starting another conversation');
     });
+    await t.test('unpaid checkout sends one help message even after invoice cancellation; paid customers are excluded',async()=>{
+      for(const scenario of [
+        {status:'pending',send:true},{status:'invoice_requested',send:true},
+        {status:'cancelled',send:true},{status:'draft',send:true},{status:'rejected',send:true},
+        {status:'paid',send:false},{status:'refunded',send:false},
+        {status:'cancelled',paid:true,send:false},{status:'pending',optOut:true,send:false},
+      ]) {
+        const account=randomUUID(),payment=randomUUID();const calls:any[]=[];
+        try {
+          await db.query("INSERT INTO app_users(id,phone,role,status,settings) VALUES($1,'+79000000001','customer','new',$2)",[account,{whatsappOptOut:!!scenario.optOut}]);
+          await scheduleSignupFollowup(db,account);
+          await db.query("INSERT INTO payments(id,customer_id,provider,status,amount) VALUES($1,$2,'kaspi','pending',22000)",[payment,account]);
+          await scheduleCheckoutFollowup(db,(await db.query('SELECT * FROM payments WHERE id=$1',[payment])).rows[0]);
+          await db.query("UPDATE payments SET status=$2,paid_at=CASE WHEN $3 THEN NOW() ELSE NULL END WHERE id=$1",[payment,scenario.status,scenario.status==='paid'||!!scenario.paid]);
+          await db.query("UPDATE moon_ai_outbox SET run_after=NOW()-CASE WHEN kind='inactive_signup' THEN INTERVAL '2 minutes' ELSE INTERVAL '1 minute' END WHERE customer_id=$1",[account]);
+          const transport=(async(url:any,init:any)=>{
+            const path=new URL(url).pathname;const body=init.body?JSON.parse(init.body):null;calls.push({path,body});
+            const result=path.endsWith('/threads')?{results:[]}:path.endsWith('/whatsapp-templates')?{templates:[{id:215,status:'APPROVED'}]}:
+              {thread_id:'checkout-help-fixture',delivery_status:'enqueued'};
+            return new Response(JSON.stringify(result),{status:200});
+          }) as typeof fetch;
+          await processMoonOutbox(db,transport);await processMoonOutbox(db,transport);
+          const reminders=calls.filter(call=>call.path.endsWith('/whatsapp-chat/initiate'));
+          assert.equal(reminders.length,scenario.send?1:0,JSON.stringify(scenario));
+          assert.equal(calls.some(call=>call.path.includes('/channels/api/')),false,'No invoice or API-channel payment command');
+          if(scenario.send){
+            assert.equal(reminders[0].body.template_id,215);
+            assert.match(reminders[0].body.variables['1'],/оплата пока не завершена/);
+          }
+          const rows=(await db.query('SELECT kind,state,failure_code FROM moon_ai_outbox WHERE customer_id=$1',[account])).rows;
+          assert.equal(rows.find(row=>row.kind==='inactive_signup')?.state,'cancelled');
+          assert.equal(rows.find(row=>row.kind==='abandoned_checkout')?.state,scenario.send?'sent':'cancelled');
+          assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[payment])).rows[0].status,scenario.status);
+          assert.equal((await db.query('SELECT COUNT(*)::int n FROM payments WHERE customer_id=$1',[account])).rows[0].n,1);
+        }finally{
+          await db.query('DELETE FROM moon_ai_outbox WHERE customer_id=$1',[account]);
+          await db.query('DELETE FROM payments WHERE customer_id=$1',[account]);
+          await db.query('DELETE FROM chat_participants WHERE user_id=$1',[account]);
+          await db.query('DELETE FROM chats WHERE customer_id=$1',[account]);
+          await db.query('DELETE FROM app_users WHERE id=$1',[account]);
+        }
+      }
+    });
+    await t.test('multiple unpaid cancelled checkouts produce help only for the latest attempt',async()=>{
+      const account=randomUUID(),first=randomUUID(),last=randomUUID();const sent:any[]=[];
+      try {
+        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,'+79000000002','customer','new')",[account]);
+        for(const id of [first,last]){
+          await db.query("INSERT INTO payments(id,customer_id,provider,status,amount) VALUES($1,$2,'kaspi','pending',22000)",[id,account]);
+          await scheduleCheckoutFollowup(db,(await db.query('SELECT * FROM payments WHERE id=$1',[id])).rows[0]);
+          await db.query("UPDATE payments SET status='cancelled' WHERE id=$1",[id]);
+        }
+        await db.query("UPDATE moon_ai_outbox SET run_after=NOW()-INTERVAL '1 minute' WHERE customer_id=$1",[account]);
+        const transport=(async(url:any,init:any)=>{
+          const path=new URL(url).pathname;
+          if(path.endsWith('/whatsapp-chat/initiate'))sent.push(JSON.parse(init.body));
+          return new Response(JSON.stringify(path.endsWith('/threads')?{results:[]}:path.endsWith('/whatsapp-templates')?{templates:[{id:215,status:'APPROVED'}]}:{thread_id:'latest-checkout',delivery_status:'enqueued'}),{status:200});
+        }) as typeof fetch;
+        await processMoonOutbox(db,transport);await processMoonOutbox(db,transport);
+        assert.equal(sent.length,1);
+        assert.equal((await db.query('SELECT failure_code FROM moon_ai_outbox WHERE payment_id=$1',[first])).rows[0].failure_code,'newer_checkout');
+        assert.equal((await db.query('SELECT state FROM moon_ai_outbox WHERE payment_id=$1',[last])).rows[0].state,'sent');
+      }finally{
+        await db.query('DELETE FROM moon_ai_outbox WHERE customer_id=$1',[account]);
+        await db.query('DELETE FROM payments WHERE customer_id=$1',[account]);
+        await db.query('DELETE FROM chat_participants WHERE user_id=$1',[account]);
+        await db.query('DELETE FROM chats WHERE customer_id=$1',[account]);
+        await db.query('DELETE FROM app_users WHERE id=$1',[account]);
+      }
+    });
     await t.test('first-open guest sessions are private, idempotent and expire on account binding',async()=>{
       const a=await ensureGuestSession(db,keys[0]),again=await ensureGuestSession(db,keys[0]),b=await ensureGuestSession(db,keys[1]);
       assert.equal(a.chatId,again.chatId);assert.notEqual(a.chatId,b.chatId);
