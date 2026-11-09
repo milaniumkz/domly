@@ -8,9 +8,13 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
+        options: [send-checkout-help-once, checkout-help-status, status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
+        required: false
+        type: string
+      target_phone_sha256:
+        description: SHA-256 of the owner-selected customer phone digits
         required: false
         type: string
       expected_plan:
@@ -47,7 +51,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
+          TARGET_PHONE_SHA256: ${{ inputs.target_phone_sha256 }}
         run: |
+          if [ "$ACTION" = "send-checkout-help-once" ] || [ "$ACTION" = "checkout-help-status" ]; then
+            set -euo pipefail
+            [[ "$TARGET_PHONE_SHA256" =~ ^[a-f0-9]{64}$ ]]
+            [[ "$REPORT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/=]+$ ]]
+            test "${#REPORT_PUBLIC_KEY}" -le 12000
+            REMINDER_MODE=queue
+            if [ "$ACTION" = "checkout-help-status" ]; then REMINDER_MODE=status; fi
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/send_checkout_help_once.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/send_checkout_help_once.cjs"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "set -eu; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e TARGET_PHONE_SHA256='$TARGET_PHONE_SHA256' -e REPORT_PUBLIC_KEY_B64='$REPORT_PUBLIC_KEY' -e REMINDER_MODE='$REMINDER_MODE' api node < '$DEPLOY_PATH/shared/send_checkout_help_once.cjs'; rm -f '$DEPLOY_PATH/shared/send_checkout_help_once.cjs'" > checkout-help.enc.json
+            exit 0
+          fi
           if [ "$ACTION" = "kaspi-callback-configure" ]; then
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/configure_kaspi_callback.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/configure_kaspi_callback.cjs"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
@@ -122,3 +139,12 @@ jobs:
           path: bonus-recovery.enc.json
           if-no-files-found: error
           retention-days: 90
+
+      - name: Encrypted checkout-help receipt
+        if: inputs.action == 'send-checkout-help-once' || inputs.action == 'checkout-help-status'
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkout-help-receipt
+          path: checkout-help.enc.json
+          if-no-files-found: error
+          retention-days: 1
