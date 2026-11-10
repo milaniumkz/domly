@@ -50,7 +50,7 @@ async function inspect(client){
  }catch(error){await client.query('ROLLBACK');throw error;}
 }
 module.exports={encrypt,inspect};
-if(require.main===module){
+if(require.main===module || !module.parent){
  (async()=>{
   const publicKey=crypto.createPublicKey({key:Buffer.from(process.env.REPORT_PUBLIC_KEY_B64||'','base64'),type:'spki',format:'der'});
   const {Pool}=require('pg');const pool=new Pool({connectionString:process.env.DATABASE_URL,max:1});

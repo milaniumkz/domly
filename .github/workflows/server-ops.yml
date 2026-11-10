@@ -54,6 +54,8 @@ jobs:
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/inspect_cleaner_history_encrypted.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/inspect_cleaner_history_encrypted.cjs"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
               "set -eu; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e REPORT_PUBLIC_KEY_B64='$REPORT_PUBLIC_KEY' api node < '$DEPLOY_PATH/shared/inspect_cleaner_history_encrypted.cjs'" > cleaner-history.enc.json
+            test -s cleaner-history.enc.json
+            node -e "const p=JSON.parse(require('fs').readFileSync('cleaner-history.enc.json'));if(!p.key||!p.data||!p.iv||!p.tag)process.exit(1)"
             exit 0
           fi
           if [ "$ACTION" = "kaspi-callback-configure" ]; then
