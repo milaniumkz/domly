@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -9,18 +10,24 @@ import '../localization/translation_controller.dart';
 Future<void> shareReferralLink(BuildContext context, String code) async {
   final normalized = code.trim().toUpperCase();
   if (normalized.isEmpty) return;
-  final link =
-      Uri.https('domly.kz', '/customer/', {'ref': normalized}).toString();
+  final uri = Uri.https('domly.kz', '/customer/', {'ref': normalized});
+  final link = uri.toString();
   final box = context.findRenderObject();
   final rect = box is RenderBox && box.hasSize && !box.size.isEmpty
       ? box.localToGlobal(Offset.zero) & box.size
       : const Rect.fromLTWH(1, 1, 1, 1);
   try {
-    await Share.share(
-      'Присоединяйся к DomLY. Используй мой код: $normalized. $link',
-      subject: 'Приглашение в DomLY',
-      sharePositionOrigin: rect,
-    );
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android)) {
+      await Share.shareUri(uri, sharePositionOrigin: rect);
+    } else {
+      await Share.share(
+        'Присоединяйся к DomLY. Используй мой код: $normalized. $link',
+        subject: 'Приглашение в DomLY',
+        sharePositionOrigin: rect,
+      );
+    }
   } catch (_) {
     if (!context.mounted) return;
     await showDialog<void>(
@@ -57,6 +64,10 @@ Future<void> prepareReferralShare(
     if (!context.mounted) return;
     final code = (invite['referralCode'] ?? '').toString();
     if (code.trim().isEmpty) throw StateError('Referral code unavailable');
+    if (!kIsWeb) {
+      await shareReferralLink(context, code);
+      return;
+    }
     await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
