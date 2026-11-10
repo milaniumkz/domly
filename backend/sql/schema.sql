@@ -1749,3 +1749,7 @@ CREATE INDEX IF NOT EXISTS service_orders_package_period ON service_orders(custo
   WHERE status NOT IN ('cancelled','canceled');
 CREATE INDEX IF NOT EXISTS payments_paid_customer_package ON payments(customer_package_id)
   WHERE status='paid';
+
+-- Stable monthly credit allocation permits early use without reviving expired credits on cancellation.
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS usage_period_id UUID REFERENCES customer_package_periods(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS service_orders_usage_period ON service_orders(usage_period_id) WHERE status NOT IN ('cancelled','canceled');

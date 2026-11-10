@@ -1,4 +1,4 @@
-import {refreshPackageUsage,validatePackagePeriod,bookingPeriod,remainingPeriodCleanings} from '../../modules/packageUsage';
+import {refreshPackageUsage,validatePackagePeriod,bookingPeriod,packageBookingCapacity} from '../../modules/packageUsage';
 import {publicCatalogPackage, acceptPackageTerms, validatePackageBody, isPostRenovation} from '../../modules/packageTerms';
 import {apartmentNumber} from '../../modules/addressFields';
 import {rejectAreaDocument} from '../../modules/areaRejection';
@@ -1550,6 +1550,7 @@ export function buildV1Router(deps: {
         await tx.query(`INSERT INTO order_addons (order_id,addon_id,price,duration_minutes,quantity,payment_status,paid_separately,requires_customer_approval)
           VALUES ($1,$2,$3,$4,$5,$6,$7,FALSE)`, [created!.id,addon.id,Number(addon.price),addon.separate?0:addon.durationMinutes ?? 0,addon.quantity,addon.separate?'draft':'paid',addon.separate===true]);
       }
+      await refreshPackageUsage(deps.db,customerPackage.id);
       return created;
     });
     await deps.notifications.createAdminEvent({
@@ -1813,6 +1814,7 @@ export function buildV1Router(deps: {
     const tx = deps.db;
     // Match payment creation: customer balance before order/payment locks.
     await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE', [(previous as any).customer_id]);
+    if((previous as any).customer_package_id)await refreshPackageUsage(deps.db,(previous as any).customer_package_id);
     const order = first<{ id: string; customer_id: string; cleaner_id: string | null; customer_package_id: string | null; bonus_spent: string }>((await tx.query(
       `UPDATE service_orders SET status='cancelled', cancelled_by=$2, cancellation_reason=$3, updated_at=NOW()
        WHERE id=$1 AND status NOT IN ('completed','cancelled') RETURNING *`,
@@ -2032,7 +2034,8 @@ export function buildV1Router(deps: {
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
     const row = await deps.db.atomic(()=>deps.db.transaction(async tx => {
-      // Use the same lock order as assignment and offer acceptance.
+      // Lock the package before orders to serialize credit allocation with expiry.
+      if(order.customer_package_id)await refreshPackageUsage(deps.db,order.customer_package_id);
       if (order.cleaner_id) await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[order.cleaner_id]);
       const current = first<any>((await tx.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[order.id])).rows);
       if (!current || current.cleaner_id !== order.cleaner_id) throw new ApiError(409,'order_changed','Назначение изменилось. Обновите страницу.');
@@ -2064,7 +2067,7 @@ export function buildV1Router(deps: {
           [current.cleaner_id,date,startTime,endTime,current.id,duration])).rows);
         if (overlap) throw new ApiError(400,'cleaner_unavailable','Уборщица занята на это время. Выберите другое время.');
       }
-      const updated = first((await tx.query(`UPDATE service_orders SET scheduled_date=$2,start_time=$3,end_time=$4,estimated_duration_minutes=$5,updated_at=NOW() WHERE id=$1 RETURNING *`,[current.id,date,startTime,endTime,duration])).rows);
+      const updated = first((await tx.query(`UPDATE service_orders SET scheduled_date=$2,start_time=$3,end_time=$4,estimated_duration_minutes=$5,usage_period_id=NULL,updated_at=NOW() WHERE id=$1 RETURNING *`,[current.id,date,startTime,endTime,duration])).rows);
       if(current.customer_package_id)await refreshPackageUsage(deps.db,current.customer_package_id);
       await tx.query(`INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,$2,$3,$4)`,[current.id,current.status,req.user!.id,req.body.comment ?? 'Дата и время уборки изменены']);
       return req.body.addonsDetailed!==undefined?{order:updated,payableAmount:addonsResult.payableAmount}:updated;
@@ -2294,7 +2297,10 @@ export function buildV1Router(deps: {
       if(!editedOrder)throw new ApiError(404,'not_found','Заказ не найден.');
       if(!['assigned','waiting_cleaner','pending_assignment','pending_payment'].includes(editedOrder.status))throw new ApiError(409,'order_not_editable','Этот заказ нельзя перенести.');
       tariff=await purchaseTariff(deps.db,editedOrder.customer_package_id);
-      if(editedOrder.customer_package_id)usage=await refreshPackageUsage(deps.db,editedOrder.customer_package_id);
+      if(editedOrder.customer_package_id){
+        usage=await refreshPackageUsage(deps.db,editedOrder.customer_package_id);
+        if(usage.managed)editedOrder.usage_period_id=(await deps.db.query('SELECT usage_period_id FROM service_orders WHERE id=$1',[editedOrder.id])).rows[0]?.usage_period_id;
+      }
       duration=await estimateOrderDuration(deps.db,editedOrder,tariff);
       if(detailed!==null){
         const previous=(await deps.db.query<any>(`SELECT * FROM order_addons WHERE order_id=$1 AND requires_customer_approval IS DISTINCT FROM TRUE AND payment_status::text NOT IN ('cancelled','refunded','rejected')`,[editedOrder.id])).rows;
@@ -2324,9 +2330,7 @@ export function buildV1Router(deps: {
       if(!usage?.managed)return true;
       const period=bookingPeriod(usage.periods,date,start);
       if(!period || new Date(period.ends_at).getTime()<=Date.now())return false;
-      const oldDate=editedOrder?.scheduled_date instanceof Date?editedOrder.scheduled_date.toISOString().slice(0,10):String(editedOrder?.scheduled_date??'').slice(0,10);
-      const ownReservation=editedOrder && bookingPeriod([period],oldDate,String(editedOrder.start_time));
-      return remainingPeriodCleanings(period)+(ownReservation?1:0)>0;
+      return packageBookingCapacity(usage.periods,date,start,editedOrder?.usage_period_id)>0;
     }).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration), durationMinutes: duration}));
     const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined,{excludeOrderId:editedOrder?.id,cleanerId:editedOrder?.cleaner_id});
     const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));

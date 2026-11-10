@@ -1219,3 +1219,18 @@ test('paid monthly periods retain local clock and original month-end anchor',asy
   assert.equal(paidMonthBoundary(paid,2).toISOString(),'2027-03-31T18:30:00.000Z');
   assert.equal(paidMonthBoundary('2028-01-31T20:00:00Z',1).toISOString(),'2028-02-29T20:00:00.000Z');
 });
+
+
+test('quarterly credits allow six early visits while unused monthly credits retain their own expiry',async()=>{
+  const {packageBookingCapacity,remainingPeriodCleanings}=await import('../modules/packageUsage');
+  const periods=[0,1,2].map((i)=>({id:String(i),starts_at:`2027-0${i+1}-10T10:00:00Z`,ends_at:`2027-0${i+2}-10T10:00:00Z`,quota:2,legacy_used:0,expired_cleanings:0,used:0}));
+  assert.equal(packageBookingCapacity(periods,'2027-01-17','12:00'),6);
+  periods[0].used=1;
+  assert.equal(remainingPeriodCleanings(periods[0]),1);
+  assert.equal(packageBookingCapacity(periods,'2027-02-11','12:00'),4);
+  for(const p of periods)p.used=2;
+  assert.equal(packageBookingCapacity(periods,'2027-01-17','12:00'),0);
+  assert.equal(packageBookingCapacity(periods,'2027-01-17','12:00','0'),1);
+  assert.equal(packageBookingCapacity(periods,'2027-02-17','12:00','0'),0);
+  assert.equal(packageBookingCapacity(periods,'2027-04-10','15:00'),0);
+});

@@ -13,12 +13,32 @@ export function paidMonthBoundary(paidAt: Date | string, offset: number): Date {
 }
 
 async function usageRows(db: Database, id: string) {
-  return (await db.query(`SELECT pp.*,COUNT(o.id)::int AS used
-    FROM customer_package_periods pp LEFT JOIN service_orders o
-      ON o.customer_package_id=pp.customer_package_id AND o.status NOT IN ('cancelled','canceled')
-      AND ((o.scheduled_date+COALESCE(o.start_time,TIME '00:00')) AT TIME ZONE 'Asia/Almaty')>=pp.starts_at
-      AND ((o.scheduled_date+COALESCE(o.start_time,TIME '00:00')) AT TIME ZONE 'Asia/Almaty')<pp.ends_at
+  const periods=(await db.query(`SELECT pp.*,COUNT(o.id)::int AS used FROM customer_package_periods pp
+    LEFT JOIN service_orders o ON o.usage_period_id=pp.id AND o.status NOT IN ('cancelled','canceled')
     WHERE pp.customer_package_id=$1 GROUP BY pp.id ORDER BY pp.period_index`,[id])).rows;
+  if(!periods.length)return periods;
+  // Preserve the credit's expiry when an order is cancelled later. Never
+  // reshuffle already allocated visits into another month's remaining credits.
+  const pending=(await db.query(`SELECT id,scheduled_date::text AS date,start_time::text AS time FROM service_orders
+    WHERE customer_package_id=$1 AND usage_period_id IS NULL AND status NOT IN ('cancelled','canceled')
+    ORDER BY created_at,id`,[id])).rows;
+  for(const order of pending){
+    const at=bookingTimestamp(order.date,order.time??'00:00');
+    const period=periods.find(p=>new Date(p.ends_at).getTime()>at&&(periods.length===3||at>=new Date(p.starts_at).getTime())&&remainingPeriodCleanings(p)>0);
+    if(!period)continue; // Preserve incomplete legacy records without inventing credits.
+    await db.query('UPDATE service_orders SET usage_period_id=$2 WHERE id=$1 AND usage_period_id IS NULL',[order.id,period.id]);
+    period.used=Number(period.used)+1;
+  }
+  return periods;
+}
+function bookingTimestamp(date:string,time:string){
+  return Date.parse(`${date}T${time.length===5?time+':00':time}+05:00`);
+}
+/** Later monthly credits may be used early; expired credits may not be carried forward. */
+export function packageBookingCapacity(periods:any[],date:string,time:string,ownPeriodId?:string|null):number{
+  const at=bookingTimestamp(date,time);
+  if(!periods.length||at<new Date(periods[0].starts_at).getTime()||at>=new Date(periods.at(-1).ends_at).getTime())return 0;
+  return periods.filter(p=>at<new Date(p.ends_at).getTime()&&(periods.length===3||at>=new Date(p.starts_at).getTime())).reduce((sum,p)=>sum+remainingPeriodCleanings(p)+(p.id===ownPeriodId?1:0),0);
 }
 export function remainingPeriodCleanings(period: any): number {
   return Math.max(0,Number(period.quota)-Number(period.legacy_used)-Number(period.used)-Number(period.expired_cleanings));
@@ -90,13 +110,9 @@ export async function validatePackagePeriod(db:Database,id:string,date:string,ti
   const state=await refreshPackageUsage(db,id,now);
   if(!state.managed)return state;
   const period=bookingPeriod(state.periods,date,time);
-  if(!period||new Date(period.ends_at).getTime()<=now)throw new ApiError(400,'package_period_expired','Выберите дату в пределах оплаченного месяца пакета. Неиспользованные уборки за прошлый месяц сгорели.');
-  let available=remainingPeriodCleanings(period);
-  if(excludeOrderId){
-    const order=(await db.query("SELECT scheduled_date::text AS date,start_time::text AS time FROM service_orders WHERE id=$1 AND customer_package_id=$2 AND status NOT IN ('cancelled','canceled')",[excludeOrderId,id])).rows[0];
-    if(order&&bookingPeriod([period],order.date,order.time))available++;
-  }
-  if(available<=0)throw new ApiError(400,'monthly_cleanings_used','Все уборки этого месяца уже использованы или забронированы. Выберите следующий оплаченный месяц.');
+  if(!period||new Date(period.ends_at).getTime()<=now)throw new ApiError(400,'package_period_expired','Выберите дату в пределах срока пакета. Остаток за прошедший месяц не переносится.');
+  const own=excludeOrderId?(await db.query("SELECT usage_period_id FROM service_orders WHERE id=$1 AND customer_package_id=$2 AND status NOT IN ('cancelled','canceled')",[excludeOrderId,id])).rows[0]:null;
+  if(packageBookingCapacity(state.periods,date,time,own?.usage_period_id)<=0)throw new ApiError(400,'package_cleanings_used','На выбранную дату не осталось уборок в пакете. Выберите более раннюю дату или купите дополнительный пакет.');
   return state;
 }
 
