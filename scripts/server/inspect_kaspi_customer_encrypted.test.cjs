@@ -12,7 +12,7 @@ test('invoice diagnosis only reads and produces encrypted evidence',async()=>{
  const ctx={require:n=>n==='pg'?{Pool}:require(n),Buffer,AbortSignal,URLSearchParams,
  process:{env:{TARGET_NAME_B64:Buffer.from('Мадина').toString('base64'),REPORT_PUBLIC_KEY_B64:pair.publicKey.export({type:'spki',format:'der'}).toString('base64'),MOON_AI_REST_API_KEY:'fixture-key'},stdout:{write:s=>output+=s}},console:{error:s=>error+=s},
  fetch:async(url,init)=>{calls.push({url,init});assert.equal(init.method,'GET');return {status:200,json:async()=>({results:[{message_type:'text',data:{text:'Invoice could not be issued: fixture error'}}]})};}};
- await vm.runInNewContext(source,ctx);assert.equal(error,'');assert.equal(calls.length,2);
+ await vm.runInNewContext(source,ctx);assert.equal(error,'');assert.equal(calls.length,6);
  assert.equal(output.includes('Madina'),false);assert.equal(output.includes('private-fixture'),false);
  const p=JSON.parse(output);const key=crypto.privateDecrypt({key:pair.privateKey,padding:crypto.constants.RSA_PKCS1_OAEP_PADDING,oaepHash:'sha256'},Buffer.from(p.key,'base64'));
  const d=crypto.createDecipheriv('aes-256-gcm',key,Buffer.from(p.iv,'base64'));d.setAuthTag(Buffer.from(p.tag,'base64'));

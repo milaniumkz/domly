@@ -39,6 +39,23 @@ const crypto=require('node:crypto');const {Pool}=require('pg');
  const org=process.env.MOON_AI_ORGANIZATION_ID||'4649',agent=process.env.MOON_AI_AGENT_ID||'6875';
  if(apiKey&&/^\d+$/.test(org||'')&&/^\d+$/.test(agent||'')){
   const base=`https://core.mooonai.com/api/v1/organizations/${org}/agents/${agent}`;
+  // Connection state and field mappings only; never export integration secrets.
+  report.integration={};
+  for(const [label,path] of [['kaspiPay','/integrations/kaspi-pay/status'],['createOrder','/functions/8759'],['callback','/functions/8517']]){
+   try{
+    const response=await fetch(base+path,{method:'GET',headers:{Authorization:'Bearer '+apiKey},signal:AbortSignal.timeout(30000)});
+    const d=await response.json().catch(()=>null);
+    report.integration[label]={httpStatus:response.status,status:d?.status,name:d?.name,active:d?.is_active,
+     parameters:(d?.parameters||[]).map(p=>({name:p.name,required:p.required})),responseKeys:d?Object.keys(d):[]};
+   }catch(e){report.integration[label]={errorKind:e.name};}
+  }
+  try{
+   const response=await fetch(base+'/functions/8759/integrations/',{method:'GET',headers:{Authorization:'Bearer '+apiKey},signal:AbortSignal.timeout(30000)});
+   const d=await response.json().catch(()=>null);
+   report.integration.orderMappings={httpStatus:response.status,items:(d?.integrations||[]).map(i=>({type:i.integration_type,method:i.data?.method,
+    payerField:i.data?.payment?.payer_phone?{from:i.data.payment.payer_phone.value_from,hasFixed:i.data.payment.payer_phone.value!=null,fixedSuffix:i.data.payment.payer_phone.value==null?null:String(i.data.payment.payer_phone.value).slice(-4)}:null,
+    amountField:i.data?.payment?.amount?{from:i.data.payment.amount.value_from,hasFixed:i.data.payment.amount.value!=null}:null}))};
+  }catch(e){report.integration.orderMappings={errorKind:e.name};}
   for(const job of report.invoiceJobs.filter(j=>j.provider_thread_id).slice(0,3)){
    const item={paymentId:job.payment_id,threadId:job.provider_thread_id};
    try{
@@ -64,7 +81,7 @@ const crypto=require('node:crypto');const {Pool}=require('pg');
     const matching=rows.filter(t=>JSON.stringify(t).includes(job.id));
     lookup.matched=matching.length;lookup.threads=[];
     for(const t of matching.slice(0,2)){
-     const thread={id:t.id,channel:t.channel_type,metadata:t.metadata};
+     const thread={id:t.id,channel:t.channel_type,status:t.status,hasError:t.has_error,pauseReason:t.pause_reason};
      const r=await fetch(base+'/threads/'+encodeURIComponent(t.id)+'/messages?limit=50',
       {method:'GET',headers:{Authorization:'Bearer '+apiKey},signal:AbortSignal.timeout(30000)});
      thread.httpStatus=r.status;const d=await r.json().catch(()=>null);
