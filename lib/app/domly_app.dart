@@ -704,7 +704,6 @@ class _DomlyAppState extends State<DomlyApp> {
                 data: MediaQuery.of(context).copyWith(
                     disableAnimations: !UiPreferences.instance.animations),
                 child: StoreUpdatePrompt(
-                  navigatorKey: _navigatorKey,
                   enabled: !config.adminSurface && !DebugSession.enabled,
                   child: RequiredPasswordChange(
                       child: child ?? const SizedBox.shrink()),

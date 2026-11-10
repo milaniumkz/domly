@@ -8,7 +8,7 @@ import 'package:version/version.dart';
 
 class _StoreUpgrader extends Upgrader {
   _StoreUpgrader(this.available)
-      : super(languageCode: 'ru', durationUntilAlertAgain: Duration.zero) {
+    : super(languageCode: 'ru', durationUntilAlertAgain: Duration.zero) {
     installPackageInfo(
       packageInfo: PackageInfo(
         appName: 'DomLY',
@@ -19,17 +19,19 @@ class _StoreUpgrader extends Upgrader {
     );
   }
 
-  final String? available;
+  String? available;
 
   @override
   Future<UpgraderVersionInfo?> updateVersionInfo() async {
-    updateState(state.copyWith(
-      versionInfo: UpgraderVersionInfo(
-        installedVersion: Version.parse('1.0.14'),
-        appStoreVersion: available == null ? null : Version.parse(available!),
-        appStoreListingURL: 'https://example.test/store',
+    updateState(
+      state.copyWith(
+        versionInfo: UpgraderVersionInfo(
+          installedVersion: Version.parse('1.0.14'),
+          appStoreVersion: available == null ? null : Version.parse(available!),
+          appStoreListingURL: 'https://example.test/store',
+        ),
       ),
-    ));
+    );
     return state.versionInfo;
   }
 }
@@ -37,52 +39,84 @@ class _StoreUpgrader extends Upgrader {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  Future<void> show(WidgetTester tester, String? available,
-      {bool enabled = true}) async {
+  Future<_StoreUpgrader> show(
+    WidgetTester tester,
+    String? available, {
+    bool enabled = true,
+  }) async {
     final navigatorKey = GlobalKey<NavigatorState>();
     final upgrader = _StoreUpgrader(available);
     await tester.runAsync(() => upgrader.initialize());
-    await tester.pumpWidget(MaterialApp(
-      navigatorKey: navigatorKey,
-      builder: (context, child) => StoreUpdatePrompt(
+    await tester.pumpWidget(
+      MaterialApp(
         navigatorKey: navigatorKey,
-        enabled: enabled,
-        upgrader: upgrader,
-        child: child!,
+        builder: (context, child) => StoreUpdatePrompt(
+          enabled: enabled,
+          upgrader: upgrader,
+          child: child!,
+        ),
+        home: const Scaffold(body: Text('Кабинет')),
+        routes: {'/orders': (_) => const Scaffold(body: Text('Заказы'))},
       ),
-      home: const Scaffold(body: Text('Кабинет')),
-    ));
+    );
     await tester.pumpAndSettle();
+    return upgrader;
   }
 
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
-    testWidgets('$platform offers available update and allows postponing',
-        (tester) async {
-      await show(tester, '1.0.15');
-      expect(find.text('Кабинет'), findsOneWidget);
-      final update = UpgraderMessages(code: 'ru')
-          .message(UpgraderMessage.buttonTitleUpdate)!;
-      final later = UpgraderMessages(code: 'ru')
-          .message(UpgraderMessage.buttonTitleLater)!;
-      expect(find.text(update), findsOneWidget);
-      await tester.tap(find.text(later));
-      await tester.pumpAndSettle();
-      expect(find.text(update), findsNothing);
-    }, variant: TargetPlatformVariant({platform}));
+    testWidgets(
+      '$platform keeps the update visible across route changes and refresh errors',
+      (tester) async {
+        final upgrader = await show(tester, '1.0.15');
+        final update = UpgraderMessages(
+          code: 'ru',
+        ).message(UpgraderMessage.buttonTitleUpdate)!;
+        final later = UpgraderMessages(
+          code: 'ru',
+        ).message(UpgraderMessage.buttonTitleLater)!;
+        expect(find.text(update), findsOneWidget);
+        expect(find.text(later), findsNothing);
+        tester
+            .state<NavigatorState>(find.byType(Navigator))
+            .pushNamedAndRemoveUntil('/orders', (_) => false);
+        await tester.pumpAndSettle();
+        expect(find.text('Заказы'), findsOneWidget);
+        expect(find.text(update), findsOneWidget);
+
+        upgrader.available = null;
+        await upgrader.updateVersionInfo();
+        await tester.pumpAndSettle();
+        expect(find.text(update), findsOneWidget);
+
+        upgrader.available = '1.0.14';
+        await upgrader.updateVersionInfo();
+        await tester.pumpAndSettle();
+        expect(find.text(update), findsNothing);
+      },
+      variant: TargetPlatformVariant({platform}),
+    );
   }
 
   for (final available in ['1.0.14', '1.0.13', null]) {
-    testWidgets('no prompt for installed/older/unavailable version $available',
-        (tester) async {
-      await show(tester, available);
-      expect(find.byType(AlertDialog), findsNothing);
-      expect(find.text('Кабинет'), findsOneWidget);
-    });
+    testWidgets(
+      'no prompt for installed/older/unavailable version $available',
+      (tester) async {
+        await show(tester, available);
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(find.text('Кабинет'), findsOneWidget);
+      },
+    );
   }
 
   testWidgets('disabled surfaces skip update checks', (tester) async {
     await show(tester, '1.0.15', enabled: false);
-    expect(find.byWidgetPredicate((widget) => widget is UpgradeAlert),
-        findsNothing);
+    expect(
+      find.text(
+        UpgraderMessages(
+          code: 'ru',
+        ).message(UpgraderMessage.buttonTitleUpdate)!,
+      ),
+      findsNothing,
+    );
   });
 }

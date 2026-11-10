@@ -1,28 +1,73 @@
+import 'dart:async';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:upgrader/upgrader.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-/// Store availability is checked asynchronously and never blocks app startup.
-class StoreUpdatePrompt extends StatefulWidget {
+/// Checks the store without blocking startup. A confirmed update stays above
+/// the app's navigator so redirects and route replacement cannot dismiss it.
+class StoreUpdatePrompt extends StatelessWidget {
   const StoreUpdatePrompt({
     super.key,
     required this.child,
-    required this.navigatorKey,
     this.enabled = true,
     this.upgrader,
   });
 
   final Widget child;
-  final GlobalKey<NavigatorState> navigatorKey;
   final bool enabled;
   final Upgrader? upgrader;
 
   @override
-  State<StoreUpdatePrompt> createState() => _StoreUpdatePromptState();
+  Widget build(BuildContext context) {
+    if (!enabled ||
+        kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
+      return child;
+    }
+    return _NativeStoreUpdatePrompt(upgrader: upgrader, child: child);
+  }
 }
 
-class _StoreUpdatePromptState extends State<StoreUpdatePrompt> {
+class _NativeStoreUpdatePrompt extends StatefulWidget {
+  const _NativeStoreUpdatePrompt({required this.upgrader, required this.child});
+
+  final Upgrader? upgrader;
+  final Widget child;
+
+  @override
+  State<_NativeStoreUpdatePrompt> createState() =>
+      _NativeStoreUpdatePromptState();
+}
+
+class _NativeStoreUpdatePromptState extends State<_NativeStoreUpdatePrompt> {
   Upgrader? _upgrader;
+  UpgraderVersionInfo? _confirmedUpdate;
+  bool _openingStore = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_upgrader != null) return;
+    final upgrader = _upgrader = widget.upgrader ??
+        Upgrader(
+          countryCode: 'KZ',
+          languageCode: Localizations.localeOf(context).languageCode,
+          checkOnResume: true,
+        );
+    unawaited(
+      upgrader.initialize().then<void>(
+        (_) {
+          if (!mounted) upgrader.dispose();
+        },
+        onError: (Object error) =>
+            debugPrint('Store version check failed: $error'),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -30,58 +75,99 @@ class _StoreUpdatePromptState extends State<StoreUpdatePrompt> {
     super.dispose();
   }
 
+  Future<void> _openStore(Uri listing) async {
+    if (_openingStore) return;
+    setState(() => _openingStore = true);
+    try {
+      final openedInStore = defaultTargetPlatform == TargetPlatform.android &&
+          await launchUrl(listing,
+              mode: LaunchMode.externalNonBrowserApplication);
+      if (!openedInStore) {
+        await launchUrl(listing, mode: LaunchMode.externalApplication);
+      }
+    } catch (error) {
+      debugPrint('Opening the app store failed: $error');
+    } finally {
+      if (mounted) setState(() => _openingStore = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!widget.enabled ||
-        kIsWeb ||
-        (defaultTargetPlatform != TargetPlatform.android &&
-            defaultTargetPlatform != TargetPlatform.iOS)) {
-      return widget.child;
-    }
-    final upgrader = _upgrader ??= widget.upgrader ??
-        Upgrader(
-          countryCode: 'KZ',
-          languageCode: Localizations.localeOf(context).languageCode,
-          durationUntilAlertAgain: const Duration(days: 1),
+    final upgrader = _upgrader!;
+    return StreamBuilder<UpgraderState>(
+      stream: upgrader.stateStream,
+      initialData: upgrader.state,
+      builder: (context, snapshot) {
+        final info = snapshot.data?.versionInfo;
+        final available = info?.appStoreVersion;
+        final installed = info?.installedVersion;
+        // A failed refresh must not dismiss an already confirmed update.
+        if (available != null && installed != null) {
+          _confirmedUpdate = available > installed ? info : null;
+        }
+        final update = _confirmedUpdate;
+        final listing = Uri.tryParse(update?.appStoreListingURL ?? '');
+        final showUpdate = update != null &&
+            listing != null &&
+            const {'https', 'market', 'itms-apps'}.contains(listing.scheme);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ExcludeFocus(excluding: showUpdate, child: widget.child),
+            if (showUpdate)
+              BlockSemantics(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    const ModalBarrier(
+                      dismissible: false,
+                      color: Colors.black54,
+                    ),
+                    Center(child: _dialog(context, upgrader, update, listing)),
+                  ],
+                ),
+              ),
+          ],
         );
-    return _NavigatorUpgradeAlert(
-      upgrader: upgrader,
-      navigatorKey: widget.navigatorKey,
-      dialogStyle: defaultTargetPlatform == TargetPlatform.iOS
-          ? UpgradeDialogStyle.cupertino
-          : UpgradeDialogStyle.material,
-      showIgnore: false,
-      showReleaseNotes: false,
-      child: widget.child,
+      },
     );
   }
-}
 
-// MaterialApp.builder sits above Navigator. Dialogs need its overlay context.
-class _NavigatorUpgradeAlert extends UpgradeAlert {
-  _NavigatorUpgradeAlert({
-    required super.upgrader,
-    required super.navigatorKey,
-    required super.dialogStyle,
-    required super.showIgnore,
-    required super.showReleaseNotes,
-    required super.child,
-  });
-
-  @override
-  UpgradeAlertState createState() => _NavigatorUpgradeAlertState();
-}
-
-class _NavigatorUpgradeAlertState extends UpgradeAlertState {
-  @override
-  void checkVersion({required BuildContext context}) {
-    final overlayContext = widget.navigatorKey?.currentState?.overlay?.context;
-    if (overlayContext != null) {
-      super.checkVersion(context: overlayContext);
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) checkVersion(context: this.context);
-      });
+  Widget _dialog(
+    BuildContext context,
+    Upgrader upgrader,
+    UpgraderVersionInfo update,
+    Uri listing,
+  ) {
+    final messages = upgrader.determineMessages(context);
+    final title = Text(messages.message(UpgraderMessage.title)!);
+    final body = Text(
+      messages
+          .message(UpgraderMessage.body)!
+          .replaceAll('{{appName}}', upgrader.appName())
+          .replaceAll(
+            '{{currentAppStoreVersion}}',
+            update.appStoreVersion.toString(),
+          )
+          .replaceAll(
+            '{{currentInstalledVersion}}',
+            update.installedVersion.toString(),
+          ),
+    );
+    final label = Text(messages.message(UpgraderMessage.buttonTitleUpdate)!);
+    final open = _openingStore ? null : () => _openStore(listing);
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return CupertinoAlertDialog(
+        title: title,
+        content: body,
+        actions: [CupertinoDialogAction(onPressed: open, child: label)],
+      );
     }
+    return AlertDialog(
+      title: title,
+      content: body,
+      actions: [TextButton(onPressed: open, child: label)],
+    );
   }
 }
