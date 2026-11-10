@@ -1731,3 +1731,21 @@ ON CONFLICT (name_ru, cleaning_count, months) DO NOTHING;
 UPDATE translations SET ru='Пакет можно оплатить сейчас. Для подтверждения площади загрузите технический план в профиле.'
 WHERE source='Пакет можно оплатить сейчас. В течение 48 часов отдел контроля качества приедет к вам для проверки площади. Также вы можете пройти проверку в приложении, загрузив план квартиры.'
 AND ru=source;
+
+-- Monthly entitlements are anchored to the confirmed payment, not the calendar.
+CREATE TABLE IF NOT EXISTS customer_package_periods (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  customer_package_id UUID NOT NULL REFERENCES customer_packages(id) ON DELETE CASCADE,
+  period_index INTEGER NOT NULL CHECK(period_index>=0),
+  starts_at TIMESTAMPTZ NOT NULL,
+  ends_at TIMESTAMPTZ NOT NULL CHECK(ends_at>starts_at),
+  quota INTEGER NOT NULL CHECK(quota>=0),
+  legacy_used INTEGER NOT NULL DEFAULT 0 CHECK(legacy_used>=0),
+  expired_cleanings INTEGER NOT NULL DEFAULT 0 CHECK(expired_cleanings>=0),
+  UNIQUE(customer_package_id,period_index)
+);
+CREATE INDEX IF NOT EXISTS customer_package_periods_expiry ON customer_package_periods(ends_at);
+CREATE INDEX IF NOT EXISTS service_orders_package_period ON service_orders(customer_package_id,scheduled_date,start_time)
+  WHERE status NOT IN ('cancelled','canceled');
+CREATE INDEX IF NOT EXISTS payments_paid_customer_package ON payments(customer_package_id)
+  WHERE status='paid';

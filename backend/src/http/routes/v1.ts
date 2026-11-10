@@ -1,4 +1,5 @@
-import {publicCatalogPackage, acceptPackageTerms, validatePackageBody} from '../../modules/packageTerms';
+import {refreshPackageUsage,validatePackagePeriod,bookingPeriod,remainingPeriodCleanings} from '../../modules/packageUsage';
+import {publicCatalogPackage, acceptPackageTerms, validatePackageBody, isPostRenovation} from '../../modules/packageTerms';
 import {apartmentNumber} from '../../modules/addressFields';
 import {rejectAreaDocument} from '../../modules/areaRejection';
 import {areaPlanEvidenceJoin,areaPlanEvidenceColumns} from '../../modules/areaPlanEvidence';
@@ -17,7 +18,7 @@ import { customerMonthlyProgress,normalizeCustomerTierRules,customerTierDiscount
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
 import {idempotent,idempotentTransaction} from '../../common/idempotency';
 import {ensureChecklistReport,saveChecklist} from '../../modules/checklists';
-import {validateBookingStart, fitsBookingHours, validateBookingHours, isBookableDate} from '../../modules/bookingValidation';
+import {validateBookingStart, fitsBookingHours, validateBookingHours, isBookableDate, hasBookingLeadTime, validateBookingLeadTime} from '../../modules/bookingValidation';
 import {revokeRealtimeSessions} from '../../realtime/sse';
 import {inspectUpload,registerUploadedFile} from '../../technical/files';
 import {ensureGuestSession, guestSession, bindGuestSession, matchMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
@@ -364,6 +365,7 @@ export function buildV1Router(deps: {
          WHERE id=$1`,
         [payment.customer_package_id, payment.id],
       );
+      await refreshPackageUsage(deps.db,payment.customer_package_id);
       payment.appliedPromotions = await applyPackagePromotions(payment);
       await qualifyReferral(deps.db, payment);
       payment.qualityCheck = await ensurePackageQualityCheck(deps.db, deps.notifications, payment.customer_package_id);
@@ -826,6 +828,8 @@ export function buildV1Router(deps: {
   }));
 
   router.get('/packages/my', auth(['customer']), asyncHandler(async (req, res) => {
+    const active=(await deps.db.query("SELECT id FROM customer_packages WHERE customer_id=$1 AND status='active'",[req.user!.id])).rows;
+    for(const pkg of active)await refreshPackageUsage(deps.db,pkg.id);
     ok(res, (await deps.db.query(
       `SELECT cp.*, p.name_ru, p.name_kk, p.description_ru, p.description_kk, p.cleaning_count, p.months, a.city, a.street, a.house, a.apartment, COALESCE(a.verified_area,a.area) AS address_area
        FROM customer_packages cp
@@ -1493,6 +1497,9 @@ export function buildV1Router(deps: {
     if (!customerPackage || customerPackage.status !== 'active') throw new ApiError(402, 'payment_required', 'Сначала подтвердите оплату пакета.');
     if (customerPackage.freeze_until && String(req.body.date) < String(customerPackage.freeze_until).slice(0,10)) throw new ApiError(409,'package_frozen','Пакет заморожен на выбранную дату.');
     if (customerPackage.available_cleanings <= 0) throw new ApiError(400, 'no_cleanings_left', 'В пакете не осталось доступных уборок.');
+    await validatePackagePeriod(deps.db,customerPackage.id,String(req.body.date),String(req.body.startTime));
+    const tariff = await purchaseTariff(deps.db,customerPackage.id);
+    if (isPostRenovation(tariff)) validateBookingLeadTime(String(req.body.date),String(req.body.startTime),24);
     const prepaid = await prepaidBookingAddons(deps.db,customerPackage);
     const prepaidIds = new Set((Array.isArray(req.body.addonsDetailed) && req.body.addonsDetailed.length ? prepaid : (customerPackage.purchase_config?.addons ?? [])).map((item:any)=>item.id));
     const requestedAddons = Array.isArray(req.body.addonsDetailed) && req.body.addonsDetailed.length
@@ -1514,7 +1521,7 @@ export function buildV1Router(deps: {
       return {...addon,quantity,price:addon.paid_separately?unit:discountedServicePrice(unit,tierPercent)};
     }).filter(addon=>!prepaidIds.has(addon.id));
     const addonAmount = addons.reduce((sum: number, row) => sum + (row.paid_separately ? 0 : Number(row.price)*row.quantity), 0);
-    const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons) + prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes ?? 0)),0);
+    const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons, tariff) + prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes ?? 0)),0);
     validateBookingHours(String(req.body.startTime), duration);
     const end = addMinutes(String(req.body.startTime), duration);
     const initialStatus = addonAmount > 0 ? 'pending_payment' : 'pending_assignment';
@@ -1818,6 +1825,7 @@ export function buildV1Router(deps: {
         `UPDATE customer_packages SET available_cleanings=available_cleanings+1, updated_at=NOW() WHERE id=$1`,
         [order.customer_package_id],
       );
+      await refreshPackageUsage(deps.db,order.customer_package_id);
     }
     await tx.query(`UPDATE order_addons SET payment_status='cancelled' WHERE order_id=$1`, [order.id]);
     await tx.query(`UPDATE order_offers SET status='expired' WHERE order_id=$1 AND status='offered'`, [order.id]);
@@ -2032,7 +2040,10 @@ export function buildV1Router(deps: {
       const date = req.body.date ?? req.body.scheduledDate ?? (current.scheduled_date instanceof Date ? current.scheduled_date.toISOString().slice(0,10) : String(current.scheduled_date).slice(0,10));
       const startTime = req.body.time ?? req.body.startTime ?? current.start_time;
       validateBookingStart(date,startTime);
+      const tariff=await purchaseTariff(tx,current.customer_package_id);
+      if(isPostRenovation(tariff))validateBookingLeadTime(String(date),String(startTime),24);
       if (current.customer_package_id) {
+        await validatePackagePeriod(deps.db,current.customer_package_id,String(date),String(startTime),current.id);
         const pkg = (await tx.query('SELECT freeze_until::text AS freeze_until FROM customer_packages WHERE id=$1 FOR UPDATE',[current.customer_package_id])).rows[0];
         if (pkg?.freeze_until && String(date).slice(0,10)<pkg.freeze_until) throw new ApiError(409,'package_frozen','Пакет заморожен на выбранную дату.');
       }
@@ -2042,18 +2053,19 @@ export function buildV1Router(deps: {
         addonsResult=await updateOrderAddons(deps.db,current.id,current.customer_id,req.body.addonsDetailed,deps.notifications);
         Object.assign(current,addonsResult.order);
       }
-      const duration = Number(current.estimated_duration_minutes) > 0 ? Number(current.estimated_duration_minutes) : await estimateCleaningDurationMinutes(tx,current.address_id,[]);
+      const duration = await estimateOrderDuration(tx,current,tariff);
       validateBookingHours(String(startTime),duration);
       const endTime = addMinutes(String(startTime),duration);
       if (current.cleaner_id) {
         const overlap = first((await tx.query(`SELECT id FROM service_orders
           WHERE cleaner_id=$1 AND status NOT IN ('cancelled','completed')
-          AND scheduled_date+start_time<cleaning_end_at($2::date,$3::time,$4::time,(SELECT estimated_duration_minutes FROM service_orders WHERE id=$5))
+          AND scheduled_date+start_time<cleaning_end_at($2::date,$3::time,$4::time,$6::int)
           AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$2::date+$3::time AND id<>$5 LIMIT 1`,
-          [current.cleaner_id,date,startTime,endTime,current.id])).rows);
+          [current.cleaner_id,date,startTime,endTime,current.id,duration])).rows);
         if (overlap) throw new ApiError(400,'cleaner_unavailable','Уборщица занята на это время. Выберите другое время.');
       }
-      const updated = first((await tx.query(`UPDATE service_orders SET scheduled_date=$2,start_time=$3,end_time=$4,updated_at=NOW() WHERE id=$1 RETURNING *`,[current.id,date,startTime,endTime])).rows);
+      const updated = first((await tx.query(`UPDATE service_orders SET scheduled_date=$2,start_time=$3,end_time=$4,estimated_duration_minutes=$5,updated_at=NOW() WHERE id=$1 RETURNING *`,[current.id,date,startTime,endTime,duration])).rows);
+      if(current.customer_package_id)await refreshPackageUsage(deps.db,current.customer_package_id);
       await tx.query(`INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,$2,$3,$4)`,[current.id,current.status,req.user!.id,req.body.comment ?? 'Дата и время уборки изменены']);
       return req.body.addonsDetailed!==undefined?{order:updated,payableAmount:addonsResult.payableAmount}:updated;
     }));
@@ -2275,11 +2287,15 @@ export function buildV1Router(deps: {
       ? Number(req.query.durationMinutes)
       : await estimateCleaningDurationMinutes(deps.db, req.query.addressId ? String(req.query.addressId) : undefined, addons);
     let editedOrder:any;
+    let tariff:any;
+    let usage:any;
     if(req.query.orderId){
       editedOrder=first<any>((await deps.db.query('SELECT * FROM service_orders WHERE id=$1 AND customer_id=$2',[String(req.query.orderId),req.user!.id])).rows);
       if(!editedOrder)throw new ApiError(404,'not_found','Заказ не найден.');
       if(!['assigned','waiting_cleaner','pending_assignment','pending_payment'].includes(editedOrder.status))throw new ApiError(409,'order_not_editable','Этот заказ нельзя перенести.');
-      duration=Number(editedOrder.estimated_duration_minutes)||await estimateCleaningDurationMinutes(deps.db,editedOrder.address_id,[]);
+      tariff=await purchaseTariff(deps.db,editedOrder.customer_package_id);
+      if(editedOrder.customer_package_id)usage=await refreshPackageUsage(deps.db,editedOrder.customer_package_id);
+      duration=await estimateOrderDuration(deps.db,editedOrder,tariff);
       if(detailed!==null){
         const previous=(await deps.db.query<any>(`SELECT * FROM order_addons WHERE order_id=$1 AND requires_customer_approval IS DISTINCT FROM TRUE AND payment_status::text NOT IN ('cancelled','refunded','rejected')`,[editedOrder.id])).rows;
         const oldMinutes=previous.reduce((sum,row)=>sum+Number(row.duration_minutes),0);
@@ -2296,12 +2312,22 @@ export function buildV1Router(deps: {
     }else if(req.query.customerPackageId){
       const purchase=first<any>((await deps.db.query('SELECT id,address_id,purchase_config FROM customer_packages WHERE id=$1 AND customer_id=$2',[String(req.query.customerPackageId),req.user!.id])).rows);
       if(!purchase)throw new ApiError(404,'not_found','Пакет не найден.');
+      tariff=await purchaseTariff(deps.db,purchase.id);
+      usage=await refreshPackageUsage(deps.db,purchase.id);
       const prepaid=await prepaidBookingAddons(deps.db,purchase);
       const prepaidIds=new Set((detailed===null?(purchase.purchase_config?.addons??[]):prepaid).map((item:any)=>item.id));
       const extra=addons.filter(item=>!prepaidIds.has(item.id));
-      duration=await estimateCleaningDurationMinutes(deps.db,purchase.address_id,extra)+prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes??0)),0);
+      duration=await estimateCleaningDurationMinutes(deps.db,purchase.address_id,extra,tariff)+prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes??0)),0);
     }
-    const intervals = slots.filter((start: string) => fitsBookingHours(start, duration)).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration), durationMinutes: duration}));
+    const intervals = slots.filter((start: string) => {
+      if(!fitsBookingHours(start,duration)|| (isPostRenovation(tariff)&&!hasBookingLeadTime(date,start,24)))return false;
+      if(!usage?.managed)return true;
+      const period=bookingPeriod(usage.periods,date,start);
+      if(!period || new Date(period.ends_at).getTime()<=Date.now())return false;
+      const oldDate=editedOrder?.scheduled_date instanceof Date?editedOrder.scheduled_date.toISOString().slice(0,10):String(editedOrder?.scheduled_date??'').slice(0,10);
+      const ownReservation=editedOrder && bookingPeriod([period],oldDate,String(editedOrder.start_time));
+      return remainingPeriodCleanings(period)+(ownReservation?1:0)>0;
+    }).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration), durationMinutes: duration}));
     const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined,{excludeOrderId:editedOrder?.id,cleanerId:editedOrder?.cleaner_id});
     const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));
     ok(res, available);
@@ -5220,10 +5246,24 @@ async function ensurePackageQualityCheck(db: Database, notifications: Notificati
   return qualityCheck;
 }
 
+async function purchaseTariff(db: Pick<Database,'query'>, purchaseId?: string | null) {
+  if (!purchaseId) return undefined;
+  return (await db.query(`SELECT COALESCE(cp.purchase_config->'packageSnapshot',to_jsonb(p)) AS tariff
+    FROM customer_packages cp JOIN catalog_packages p ON p.id=cp.package_id WHERE cp.id=$1`,[purchaseId])).rows[0]?.tariff;
+}
+
+async function estimateOrderDuration(db:Pick<Database,'query'>,order:any,tariff:any){
+  if(!isPostRenovation(tariff))return Number(order.estimated_duration_minutes)||estimateCleaningDurationMinutes(db,order.address_id,[]);
+  const addons=(await db.query(`SELECT duration_minutes,paid_separately FROM order_addons WHERE order_id=$1
+    AND requires_customer_approval IS DISTINCT FROM TRUE AND payment_status::text NOT IN ('cancelled','refunded','rejected')`,[order.id])).rows;
+  return estimateCleaningDurationMinutes(db,order.address_id,addons,tariff);
+}
+
 async function estimateCleaningDurationMinutes(
   db: Pick<Database, 'query'>,
   addressId?: string,
   addons: Array<{ duration_minutes?: number; quantity?: number; paid_separately?:boolean }> = [],
+  tariff?: any,
 ): Promise<number> {
   const settings = await readAppSettings(db);
   const baseMinutes = Number(settings.baseCleaningMinutes ?? 0);
@@ -5236,7 +5276,7 @@ async function estimateCleaningDurationMinutes(
     : null;
   const area = Number(address?.verified_area ?? address?.area ?? 50);
   const addonMinutes = addons.reduce((sum, addon) => sum + (addon.paid_separately ? 0 : Number(addon.duration_minutes ?? 0) * Number(addon.quantity ?? 1)), 0);
-  return cleaningDurationMinutes(area, addonMinutes, baseMinutes, minutesPerM2);
+  return cleaningDurationMinutes(area, addonMinutes, isPostRenovation(tariff) ? 0 : baseMinutes, isPostRenovation(tariff) ? 25 : minutesPerM2);
 }
 
 async function initProviderPayment(

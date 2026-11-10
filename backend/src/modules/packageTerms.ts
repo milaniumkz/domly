@@ -10,12 +10,16 @@ export function packageConsentVersion(pkg: any): string | null {
   ])).digest('hex');
 }
 
+export function isPostRenovation(pkg: any): boolean {
+  return pkg?.features?.systemKey === 'post_renovation';
+}
+
 export function packageAllowsAddons(pkg: any): boolean {
   return pkg.features?.systemKey !== 'post_renovation' && pkg.features?.allowAddons !== false;
 }
 
 export function publicCatalogPackage(pkg: any) {
-  return {...pkg, features: {...pkg.features, allowAddons: packageAllowsAddons(pkg)}, consentVersion: packageConsentVersion(pkg)};
+  return {...pkg, features: {...pkg.features, allowAddons: packageAllowsAddons(pkg), ...(isPostRenovation(pkg) ? {minutesPerM2:25, minimumBookingLeadHours:24} : {})}, consentVersion: packageConsentVersion(pkg)};
 }
 
 export function acceptPackageTerms(pkg: any, version: unknown) {
