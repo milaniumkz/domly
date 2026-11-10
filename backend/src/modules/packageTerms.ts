@@ -19,7 +19,7 @@ export function packageAllowsAddons(pkg: any): boolean {
 }
 
 export function publicCatalogPackage(pkg: any) {
-  return {...pkg, features: {...pkg.features, allowAddons: packageAllowsAddons(pkg), ...(isPostRenovation(pkg) ? {minutesPerM2:25, minimumBookingLeadHours:24} : {})}, consentVersion: packageConsentVersion(pkg)};
+  return {...pkg, features: {...pkg.features, allowAddons: packageAllowsAddons(pkg), ...(Number(pkg.months)===3?{allowEarlyUsage:true,monthlyUnusedCleaningsExpire:true}:{}), ...(isPostRenovation(pkg) ? {minutesPerM2:25, minimumBookingLeadHours:24} : {})}, consentVersion: packageConsentVersion(pkg)};
 }
 
 export function acceptPackageTerms(pkg: any, version: unknown) {

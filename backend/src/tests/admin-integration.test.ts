@@ -1421,12 +1421,12 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const returned=new Set(data.map((row:any)=>row.id));assert.ok(rows.every((r:any)=>returned.has(r.id)));assert.ok(!returned.has(foreign.id));
       } finally {if(ids.length)await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[ids]);await db.query('DELETE FROM app_users WHERE id=$1',[other]);}
     });
-    await t.test('monthly quotas serialize concurrent bookings, preserve rescheduling and extend with a freeze',async()=>{
+    await t.test('quarterly credits may all be booked in one week without removing monthly expiry or cancellation protection',async()=>{
       const pkg=randomUUID(),address=randomUUID(),purchase=randomUUID(),payment=randomUUID();const visits:string[]=[];
       try{
-        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Quota fixture',4,3,0,100)",[pkg]);
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Quota fixture',2,3,0,100)",[pkg]);
         await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Quota','1',50)",[address,customer]);
-        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,months,status) VALUES($1,$2,$3,$4,12,12,3,'active')",[purchase,customer,pkg,address]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,months,status) VALUES($1,$2,$3,$4,6,6,3,'active')",[purchase,customer,pkg,address]);
         await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,status,amount,paid_at) VALUES($1,$2,$3,'manual','paid',1200,NOW())",[payment,customer,purchase]);
         const initial=await refreshPackageUsage(db,purchase);
         const frozen=await freezePackage(db,customer,purchase,{days:2});
@@ -1435,17 +1435,32 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         for(let i=0;i<3;i++)assert.equal(new Date(after.periods[i].ends_at).getTime()-new Date(initial.periods[i].ends_at).getTime(),2*86400000);
         assert.ok(frozen.freeze_until);
         const date=(offset:number)=>new Date(Date.now()+(offset*24+5)*3600000).toISOString().slice(0,10);
-        const replies=await Promise.all(Array.from({length:5},(_,i)=>request('/orders','POST',{customerPackageId:purchase,date:date(i+3),startTime:'10:00',idempotencyKey:randomUUID()},true)));
+        const replies=await Promise.all(Array.from({length:7},(_,i)=>request('/orders','POST',{customerPackageId:purchase,date:date(i+3),startTime:'10:00',idempotencyKey:randomUUID()},true)));
         for(const r of replies)if(r.status===201)visits.push(r.json.data.order.id);
-        assert.equal(visits.length,4,JSON.stringify(replies));
-        assert.equal(replies.filter(r=>r.status===400&&r.json.code==='monthly_cleanings_used').length,1);
-        assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,8);
+        assert.equal(visits.length,6,JSON.stringify(replies));
+        assert.equal(replies.filter(r=>r.status===400&&['package_cleanings_used','no_cleanings_left'].includes(r.json.code)).length,1);
+        assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,0);
         const moved=await request('/orders/'+visits[0]+'/reschedule','POST',{date:date(9),startTime:'10:00'},true);
         assert.equal(moved.status,200,JSON.stringify(moved.json));
         const next=new Date(new Date(after.periods[1].starts_at).getTime()+2*86400000+5*3600000).toISOString().slice(0,10);
-        const nextMonth=await request('/orders/'+visits[0]+'/reschedule','POST',{date:next,startTime:'10:00'},true);
+        const borrowed=(await db.query('SELECT o.id FROM service_orders o JOIN customer_package_periods p ON p.id=o.usage_period_id WHERE o.customer_package_id=$1 AND p.period_index=1 LIMIT 1',[purchase])).rows[0];
+        const nextMonth=await request('/orders/'+borrowed.id+'/reschedule','POST',{date:next,startTime:'10:00'},true);
         assert.equal(nextMonth.status,200,JSON.stringify(nextMonth.json));
-        assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,8);
+        assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,0);
+        let spent=await refreshPackageUsage(db,purchase);
+        assert.deepEqual(spent.periods.map((p:any)=>p.used),[2,2,2]);
+        const end=new Date(spent.periods[0].ends_at).getTime();
+        spent=await refreshPackageUsage(db,purchase,end);
+        assert.deepEqual(spent.periods.map((p:any)=>p.expired_cleanings),[0,0,0]);
+        const old=(await db.query('SELECT id FROM service_orders WHERE customer_package_id=$1 AND usage_period_id=$2 LIMIT 1',[purchase,spent.periods[0].id])).rows[0];
+        await db.atomic(async()=>{
+          await db.query("UPDATE service_orders SET status='cancelled' WHERE id=$1",[old.id]);
+          await db.query('UPDATE customer_packages SET available_cleanings=available_cleanings+1 WHERE id=$1',[purchase]);
+          await refreshPackageUsage(db,purchase,end+60000);
+        });
+        spent=await refreshPackageUsage(db,purchase,end+120000);
+        assert.equal(spent.pkg.available_cleanings,0);
+        assert.deepEqual(spent.periods.map((p:any)=>p.expired_cleanings),[1,0,0]);
       }finally{
         await db.query('DELETE FROM notification_deliveries WHERE notification_id IN (SELECT id FROM notifications WHERE target_id=ANY($1::text[]))',[visits]);
         await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[visits]);
@@ -1484,7 +1499,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal(state.pkg.available_cleanings,8);assert.equal(state.pkg.status,'active');
         assert.deepEqual(state.periods.map((p:any)=>p.expired_cleanings),[3,0,0]);
         assert.equal((await db.query("SELECT COUNT(*)::int n FROM audit_logs WHERE entity_id=$1 AND action='package.month_expired'",[purchase])).rows[0].n,1);
-        await assert.rejects(()=>validatePackagePeriod(db,purchase,'2027-02-28','14:59',undefined,Date.parse('2027-02-28T10:00:00Z')),/прошлый месяц/);
+        await assert.rejects(()=>validatePackagePeriod(db,purchase,'2027-02-28','14:59',undefined,Date.parse('2027-02-28T10:00:00Z')),/Остаток за прошедший месяц/);
         await validatePackagePeriod(db,purchase,'2027-02-28','15:00',undefined,Date.parse('2027-02-28T10:00:00Z'));
         await db.atomic(async()=>{
           await db.query("UPDATE service_orders SET status='cancelled' WHERE id=$1",[visit]);
