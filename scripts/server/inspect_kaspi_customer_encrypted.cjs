@@ -47,10 +47,35 @@ const crypto=require('node:crypto');const {Pool}=require('pg');
     item.httpStatus=response.status;const raw=await response.json().catch(()=>null);
     const messages=Array.isArray(raw)?raw:raw?.results||raw?.messages||raw?.items||[];
     item.responseKeys=raw&&!Array.isArray(raw)?Object.keys(raw):[];
+    if(response.status>=400)item.errorDetail=String(raw?.detail??'').slice(0,1200);
     item.messages=messages.slice(0,50).map(m=>({id:m.id,from:m.from_type||m.sender_type,type:m.message_type||m.type,at:m.created||m.at||m.created_at,
       data:JSON.stringify(m.data??m.text??m.content??m.message??'').slice(0,6000)}));
    }catch(e){item.errorKind=e.name;}
-   report.upstream.push(item);
+   // Resolve the API-channel external identifier to the REST thread ID.
+   const lookup={paymentId:job.payment_id,lookup:true};
+   try{
+    const query=new URLSearchParams({external_thread_id:job.id,source:'domly_invoice',search:job.id,limit:'100'});
+    const response=await fetch(base+'/threads?'+query,{method:'GET',headers:{Authorization:'Bearer '+apiKey},signal:AbortSignal.timeout(30000)});
+    lookup.httpStatus=response.status;const raw=await response.json().catch(()=>null);
+    const rows=Array.isArray(raw)?raw:raw?.results||raw?.threads||raw?.items||[];
+    lookup.responseKeys=raw&&!Array.isArray(raw)?Object.keys(raw):[];
+    lookup.count=raw?.count;lookup.returned=rows.length;
+    lookup.threadFieldNames=rows[0]?Object.keys(rows[0]):[];
+    const matching=rows.filter(t=>JSON.stringify(t).includes(job.id));
+    lookup.matched=matching.length;lookup.threads=[];
+    for(const t of matching.slice(0,2)){
+     const thread={id:t.id,channel:t.channel_type,metadata:t.metadata};
+     const r=await fetch(base+'/threads/'+encodeURIComponent(t.id)+'/messages?limit=50',
+      {method:'GET',headers:{Authorization:'Bearer '+apiKey},signal:AbortSignal.timeout(30000)});
+     thread.httpStatus=r.status;const d=await r.json().catch(()=>null);
+     const messages=Array.isArray(d)?d:d?.results||d?.messages||d?.items||[];
+     thread.messages=messages.slice(0,50).map(m=>({id:m.id,from:m.from_type||m.sender_type,type:m.message_type||m.type,at:m.created||m.at||m.created_at,
+       data:JSON.stringify(m.data??m.text??m.content??m.message??'').slice(0,6000)}));
+     if(r.status>=400)thread.errorDetail=String(d?.detail??'').slice(0,1200);
+     lookup.threads.push(thread);
+    }
+   }catch(e){lookup.errorKind=e.name;}
+   report.upstream.push(item,lookup);
   }
  }
  const key=crypto.randomBytes(32),iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',key,iv);
