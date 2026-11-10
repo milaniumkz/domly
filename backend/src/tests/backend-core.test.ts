@@ -1198,3 +1198,24 @@ test('referral progress shows next and maximum goals from configured paid-invita
   assert.equal(tied.maxReferralDiscountThreshold,3);assert.equal(tied.remainingForMaxDiscount,0);
   assert.deepEqual(referralDiscountProgress(0,[]).referralDiscountTiers,[]);
 });
+
+
+test('renovation lead time is exactly 24 hours in Kazakhstan, including seconds',async()=>{
+  const {hasBookingLeadTime,validateBookingLeadTime}=await import('../modules/bookingValidation');
+  const now=Date.parse('2026-11-10T12:00:00Z');
+  assert.equal(hasBookingLeadTime('2026-11-11','16:59:59',24,now),false);
+  assert.equal(hasBookingLeadTime('2026-11-11','17:00',24,now),true);
+  assert.equal(hasBookingLeadTime('2026-11-11','18:00',24,now),true);
+  assert.throws(()=>validateBookingLeadTime('2026-11-11','16:00',24,now),/24 часа/);
+  assert.doesNotThrow(()=>validateBookingLeadTime('2026-11-11','17:00',24,now));
+  assert.equal(cleaningDurationMinutes(50,0,0,25),1250);
+  assert.equal(cleaningDurationMinutes(67,0,0,25),1675);
+  assert.equal(cleaningDurationMinutes(67),107);
+});
+test('paid monthly periods retain local clock and original month-end anchor',async()=>{
+  const {paidMonthBoundary}=await import('../modules/packageUsage');
+  const paid='2027-01-31T18:30:00Z';
+  assert.equal(paidMonthBoundary(paid,1).toISOString(),'2027-02-28T18:30:00.000Z');
+  assert.equal(paidMonthBoundary(paid,2).toISOString(),'2027-03-31T18:30:00.000Z');
+  assert.equal(paidMonthBoundary('2028-01-31T20:00:00Z',1).toISOString(),'2028-02-29T20:00:00.000Z');
+});

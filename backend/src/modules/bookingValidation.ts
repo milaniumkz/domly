@@ -45,3 +45,14 @@ export function validateBookingHours(start: string, durationMinutes: number) {
     throw new ApiError(400, 'invalid_order_time', 'Начало уборки — с 08:00 до 18:00 включительно. Выберите другое время начала.');
   }
 }
+
+/** Renovation needs a full 24 hours, rather than merely the next calendar day. */
+export function hasBookingLeadTime(date: string, time: string, leadHours: number, now = Date.now()): boolean {
+  const clock = time.length === 5 ? time + ':00' : time;
+  return Date.parse(`${date}T${clock}+05:00`) >= now + leadHours * 3600000;
+}
+export function validateBookingLeadTime(date: string, time: string, leadHours: number, now = Date.now()) {
+  if (!hasBookingLeadTime(date, time, leadHours, now)) {
+    throw new ApiError(400, 'renovation_booking_24_hours', 'Уборку после ремонта можно заказать не менее чем за 24 часа до начала. Выберите более позднее время.');
+  }
+}

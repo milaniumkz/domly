@@ -1,3 +1,5 @@
+import {freezePackage} from '../modules/packageFreeze';
+import {refreshPackageUsage,processPackageUsageForPackage,validatePackagePeriod} from '../modules/packageUsage';
 import {packageConsentVersion} from '../modules/packageTerms';
 import {rejectAreaDocument} from '../modules/areaRejection';
 import {updateOrderAddons} from '../modules/orderAddons';
@@ -1419,6 +1421,130 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const returned=new Set(data.map((row:any)=>row.id));assert.ok(rows.every((r:any)=>returned.has(r.id)));assert.ok(!returned.has(foreign.id));
       } finally {if(ids.length)await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[ids]);await db.query('DELETE FROM app_users WHERE id=$1',[other]);}
     });
+    await t.test('monthly quotas serialize concurrent bookings, preserve rescheduling and extend with a freeze',async()=>{
+      const pkg=randomUUID(),address=randomUUID(),purchase=randomUUID(),payment=randomUUID();const visits:string[]=[];
+      try{
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Quota fixture',4,3,0,100)",[pkg]);
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Quota','1',50)",[address,customer]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,months,status) VALUES($1,$2,$3,$4,12,12,3,'active')",[purchase,customer,pkg,address]);
+        await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,status,amount,paid_at) VALUES($1,$2,$3,'manual','paid',1200,NOW())",[payment,customer,purchase]);
+        const initial=await refreshPackageUsage(db,purchase);
+        const frozen=await freezePackage(db,customer,purchase,{days:2});
+        const after=await refreshPackageUsage(db,purchase);
+        assert.equal(new Date(after.periods[0].starts_at).getTime(),new Date(initial.periods[0].starts_at).getTime());
+        for(let i=0;i<3;i++)assert.equal(new Date(after.periods[i].ends_at).getTime()-new Date(initial.periods[i].ends_at).getTime(),2*86400000);
+        assert.ok(frozen.freeze_until);
+        const date=(offset:number)=>new Date(Date.now()+(offset*24+5)*3600000).toISOString().slice(0,10);
+        const replies=await Promise.all(Array.from({length:5},(_,i)=>request('/orders','POST',{customerPackageId:purchase,date:date(i+3),startTime:'10:00',idempotencyKey:randomUUID()},true)));
+        for(const r of replies)if(r.status===201)visits.push(r.json.data.order.id);
+        assert.equal(visits.length,4,JSON.stringify(replies));
+        assert.equal(replies.filter(r=>r.status===400&&r.json.code==='monthly_cleanings_used').length,1);
+        assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,8);
+        const moved=await request('/orders/'+visits[0]+'/reschedule','POST',{date:date(9),startTime:'10:00'},true);
+        assert.equal(moved.status,200,JSON.stringify(moved.json));
+        const next=new Date(new Date(after.periods[1].starts_at).getTime()+2*86400000+5*3600000).toISOString().slice(0,10);
+        const nextMonth=await request('/orders/'+visits[0]+'/reschedule','POST',{date:next,startTime:'10:00'},true);
+        assert.equal(nextMonth.status,200,JSON.stringify(nextMonth.json));
+        assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,8);
+      }finally{
+        await db.query('DELETE FROM notification_deliveries WHERE notification_id IN (SELECT id FROM notifications WHERE target_id=ANY($1::text[]))',[visits]);
+        await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[visits]);
+        await db.query('DELETE FROM order_offers WHERE order_id=ANY($1::uuid[])',[visits]);
+        await db.query('DELETE FROM service_orders WHERE customer_package_id=$1',[purchase]);
+        await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND scope=\'order_create\' AND response::text LIKE $2',[customer,'%'+purchase+'%']);
+        await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+      }
+    });
+    await t.test('quarterly monthly expiry preserves future quotas; 7/3/1 reminders and cancellation retries are idempotent',async()=>{
+      const pkg=randomUUID(),purchase=randomUUID(),payment=randomUUID(),visit=randomUUID();
+      try {
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Period fixture',4,3,0,100)",[pkg]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,months,status) VALUES($1,$2,$3,12,11,3,'active')",[purchase,customer,pkg]);
+        await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,status,amount,paid_at) VALUES($1,$2,$3,'manual','paid',1200,'2027-01-31T10:00:00Z')",[payment,customer,purchase]);
+        await db.query("INSERT INTO service_orders(id,customer_id,customer_package_id,status,scheduled_date,start_time,end_time) VALUES($1,$2,$3,'assigned','2027-02-10','10:00','12:00')",[visit,customer,purchase]);
+        for(const at of ['2027-02-21T10:00:00Z','2027-02-25T10:00:00Z','2027-02-27T10:00:00Z']){
+          for(let retry=0;retry<2;retry++)await processPackageUsageForPackage(db,notifications,purchase,Date.parse(at));
+        }
+        const notes=(await db.query("SELECT id,body_ru,target_type FROM notifications WHERE target_id=$1 AND dedupe_key LIKE 'package-period-%'",[purchase])).rows;
+        assert.equal(notes.length,3);assert.ok(notes.every((n:any)=>n.body_ru.includes('Неиспользованных уборок: 3')&&n.target_type==='package'));
+        assert.equal((await db.query('SELECT COUNT(*)::int n FROM notification_deliveries WHERE notification_id=ANY($1::uuid[])',[notes.map((n:any)=>n.id)])).rows[0].n,3);
+        const before=await refreshPackageUsage(db,purchase,Date.parse('2027-02-28T09:59:59Z'));
+        assert.equal(before.pkg.available_cleanings,11);
+        const failure='expiry_fail_'+purchase.replaceAll('-','');
+        await db.query(`CREATE FUNCTION ${failure}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='package.month_expired' AND NEW.entity_id='${purchase}' THEN RAISE EXCEPTION 'expiry audit unavailable'; END IF; RETURN NEW; END $$`);
+        await db.query(`CREATE TRIGGER ${failure} BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION ${failure}()`);
+        try{
+          await assert.rejects(()=>refreshPackageUsage(db,purchase,Date.parse('2027-02-28T10:00:00Z')),/expiry audit unavailable/);
+          assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,11);
+          assert.equal((await db.query('SELECT SUM(expired_cleanings)::int n FROM customer_package_periods WHERE customer_package_id=$1',[purchase])).rows[0].n,0);
+        }finally{await db.query(`DROP TRIGGER IF EXISTS ${failure} ON audit_logs`);await db.query(`DROP FUNCTION IF EXISTS ${failure}()`);}
+        await Promise.all(Array.from({length:4},()=>refreshPackageUsage(db,purchase,Date.parse('2027-02-28T10:00:00Z'))));
+        let state=await refreshPackageUsage(db,purchase,Date.parse('2027-02-28T10:01:00Z'));
+        assert.equal(state.pkg.available_cleanings,8);assert.equal(state.pkg.status,'active');
+        assert.deepEqual(state.periods.map((p:any)=>p.expired_cleanings),[3,0,0]);
+        assert.equal((await db.query("SELECT COUNT(*)::int n FROM audit_logs WHERE entity_id=$1 AND action='package.month_expired'",[purchase])).rows[0].n,1);
+        await assert.rejects(()=>validatePackagePeriod(db,purchase,'2027-02-28','14:59',undefined,Date.parse('2027-02-28T10:00:00Z')),/прошлый месяц/);
+        await validatePackagePeriod(db,purchase,'2027-02-28','15:00',undefined,Date.parse('2027-02-28T10:00:00Z'));
+        await db.atomic(async()=>{
+          await db.query("UPDATE service_orders SET status='cancelled' WHERE id=$1",[visit]);
+          await db.query('UPDATE customer_packages SET available_cleanings=available_cleanings+1 WHERE id=$1',[purchase]);
+          await refreshPackageUsage(db,purchase,Date.parse('2027-02-28T10:02:00Z'));
+        });
+        state=await refreshPackageUsage(db,purchase,Date.parse('2027-03-31T10:00:00Z'));
+        assert.equal(state.pkg.available_cleanings,4);assert.equal(state.pkg.status,'active');
+        assert.deepEqual(state.periods.map((p:any)=>p.expired_cleanings),[4,4,0]);
+        state=await refreshPackageUsage(db,purchase,Date.parse('2027-04-30T10:00:00Z'));
+        assert.equal(state.pkg.available_cleanings,0);assert.equal(state.pkg.status,'expired');
+      }finally{
+        await db.query('DELETE FROM notification_deliveries WHERE notification_id IN (SELECT id FROM notifications WHERE target_id=$1)',[purchase]);
+        await db.query('DELETE FROM notifications WHERE target_id=$1',[purchase]);
+        await db.query('DELETE FROM audit_logs WHERE entity_id=$1',[purchase]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[visit]);
+        await db.query('DELETE FROM payments WHERE id=$1',[payment]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+      }
+    });
+    await t.test('renovation duration and lead policy reach quote, availability and created order without a client update',async()=>{
+      const pkg=randomUUID(),address=randomUUID(),purchase=randomUUID(),worker=randomUUID();let visit='';
+      try{
+        await db.query(`INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2,features)
+          VALUES($1,'Renovation timing fixture',1,1,0,850,'{"systemKey":"post_renovation"}')`,[pkg]);
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Timing','1',67)",[address,customer]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,$4,1,1,'active')",[purchase,customer,pkg,address]);
+        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'renovation-'+worker]);
+        await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
+        const schedule=(await db.query("INSERT INTO cleaner_work_schedule_requests(cleaner_id,week_start,days,status) VALUES($1,'2039-01-31','[]','approved') RETURNING id",[worker])).rows[0];
+        await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2039-02-03','08:00','18:00',$2)",[worker,schedule.id]);
+        const local=new Date(Date.now()+5*3600000);
+        if(local.getUTCHours()*60+local.getUTCMinutes()>8*60){
+          const date=new Date(Date.now()+29*3600000).toISOString().slice(0,10);
+          const time=String(Math.max(8,Math.min(18,local.getUTCHours()-1))).padStart(2,'0')+':00';
+          const early=await request('/orders','POST',{customerPackageId:purchase,date,startTime:time},true);
+          assert.equal(early.status,400,JSON.stringify(early.json));assert.equal(early.json.code,'renovation_booking_24_hours');
+        }
+        const quote=await request('/packages/quote','POST',{packageId:pkg,area:67},true);
+        assert.equal(quote.json.data.estimatedDurationMinutes,1675);assert.equal(quote.json.data.minimumBookingLeadHours,24);
+        const slots=await request('/scheduling/available-slots?date=2039-02-03&customerPackageId='+purchase,'GET',undefined,true);
+        assert.equal(slots.status,200);assert.ok(slots.json.data.length>0);
+        assert.ok(slots.json.data.every((s:any)=>s.durationMinutes===1675));
+        const booked=await request('/orders','POST',{customerPackageId:purchase,date:'2039-02-03',startTime:'08:00'},true);
+        assert.equal(booked.status,201,JSON.stringify(booked.json));visit=booked.json.data.order.id;
+        assert.equal(booked.json.data.order.estimated_duration_minutes,1675);
+        assert.equal(booked.json.data.order.end_time,'11:55:00');
+        const end=(await db.query('SELECT cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)::text AS end FROM service_orders WHERE id=$1',[visit])).rows[0].end;
+        assert.equal(end,'2039-02-04 11:55:00');
+        await db.query("UPDATE service_orders SET estimated_duration_minutes=107,end_time='09:47' WHERE id=$1",[visit]);
+        const moved=await request('/orders/'+visit+'/reschedule','POST',{date:'2039-02-04',startTime:'08:00'},true);
+        assert.equal(moved.status,200,JSON.stringify(moved.json));
+        assert.equal(moved.json.data.estimated_duration_minutes,1675);
+      }finally{
+        if(visit){await db.query('DELETE FROM notifications WHERE target_id=$1',[visit]);await db.query('DELETE FROM order_offers WHERE order_id=$1',[visit]);await db.query('DELETE FROM service_orders WHERE id=$1',[visit]);}
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);await db.query('DELETE FROM app_users WHERE id=$1',[worker]);
+      }
+    });
     await t.test('post renovation rejects addon quotes while other tariffs retain addon support',async()=>{
       const pkg=randomUUID();
       try {
@@ -1903,7 +2029,7 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
     }
     assert.equal((await hook(env.kaspiWebhookToken)).status,200);assert.equal((await hook(env.kaspiWebhookToken)).status,200);
     const cp=(await db.query('SELECT status,available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0];assert.equal(cp.status,'active');assert.equal(cp.available_cleanings,1);
-    const orderBody={customerPackageId:rows[0].data.customerPackage.id,date:'2035-01-03',startTime:'08:00',idempotencyKey:randomUUID()};
+    const orderBody={customerPackageId:rows[0].data.customerPackage.id,date:new Date(Date.now()+29*3600000).toISOString().slice(0,10),startTime:'08:00',idempotencyKey:randomUUID()};
     for(const stage of ['notification','idempotency']) {
       const fail='fail_order_completion_'+randomUUID().replace(/-/g,'');
       const table=stage==='notification'?'notifications':'api_idempotency';
