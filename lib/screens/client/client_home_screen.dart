@@ -16,7 +16,7 @@ import 'dart:math' as math;
 import '../../utils/backend_compat.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
+import '../../ui/referral_share.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_scope.dart';
@@ -101,6 +101,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   void initState() {
     super.initState();
     AppLogger.d('HOME', 'ClientHomeScreen initState');
+    _data.ensureReferralLink().then((invite) {
+      _inviteCode = (invite['referralCode'] ?? '').toString();
+    }).catchError((Object _) {});
   }
 
   List<Map<String, dynamic>> _mergeHomePackages(
@@ -2575,18 +2578,14 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     );
   }
 
+  String _inviteCode = '';
+
   Future<void> _shareNeighborInvite(String houseId) async {
-    await _runProtectedAction(() async {
-      final invite = await _data.ensureReferralLink();
-      final referralCode = (invite['referralCode'] ?? '').toString().trim();
-      final referralLink = (invite['referralLink'] ?? '').toString().trim();
-      final shareText = StringBuffer('Подключай DomLY в наш дом. ')
-        ..write('Открой веб-версию приложения: $referralLink');
-      if (referralCode.isNotEmpty) {
-        shareText.write(' Используй мой код: $referralCode');
-      }
-      await Share.share(shareText.toString(), subject: 'Приглашение в DomLY');
-    });
+    if (_inviteCode.isNotEmpty) {
+      await shareReferralLink(context, _inviteCode);
+    } else {
+      await prepareReferralShare(context, _data.ensureReferralLink);
+    }
   }
 
   Widget _metaBlock({

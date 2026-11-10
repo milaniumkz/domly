@@ -10,8 +10,12 @@ export function packageConsentVersion(pkg: any): string | null {
   ])).digest('hex');
 }
 
+export function packageAllowsAddons(pkg: any): boolean {
+  return pkg.features?.systemKey !== 'post_renovation' && pkg.features?.allowAddons !== false;
+}
+
 export function publicCatalogPackage(pkg: any) {
-  return {...pkg, consentVersion: packageConsentVersion(pkg)};
+  return {...pkg, features: {...pkg.features, allowAddons: packageAllowsAddons(pkg)}, consentVersion: packageConsentVersion(pkg)};
 }
 
 export function acceptPackageTerms(pkg: any, version: unknown) {

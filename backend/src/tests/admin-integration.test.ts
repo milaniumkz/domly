@@ -1419,6 +1419,50 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const returned=new Set(data.map((row:any)=>row.id));assert.ok(rows.every((r:any)=>returned.has(r.id)));assert.ok(!returned.has(foreign.id));
       } finally {if(ids.length)await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[ids]);await db.query('DELETE FROM app_users WHERE id=$1',[other]);}
     });
+    await t.test('post renovation rejects addon quotes while other tariffs retain addon support',async()=>{
+      const pkg=randomUUID();
+      try {
+        await db.query(`INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2,features)
+          VALUES($1,'Renovation',1,1,0,850,'{"systemKey":"post_renovation"}')`,[pkg]);
+        const listing=(await request('/catalog/packages')).json.data.find((p:any)=>p.id===pkg);
+        assert.equal(listing.features.allowAddons,false);
+        const quote=await request('/packages/quote','POST',{packageId:pkg,area:67.5},true);
+        assert.equal(quote.status,200);assert.equal(quote.json.data.monthlyPrice,57375);
+        const rejected=await request('/packages/quote','POST',{packageId:pkg,area:67.5,addonsDetailed:[{id:randomUUID(),quantity:1}]},true);
+        assert.equal(rejected.status,400);assert.equal(rejected.json.code,'package_addons_unavailable');
+        await db.query(`UPDATE catalog_packages SET features='{"isSpecial":true}' WHERE id=$1`,[pkg]);
+        assert.equal((await request('/catalog/packages')).json.data.find((p:any)=>p.id===pkg).features.allowAddons,true);
+      } finally {await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);}
+    });
+    await t.test('legacy checkout preflight defers area submission without a plan and changes no payment or verification',async()=>{
+      const address=randomUUID(),pkg=randomUUID(),purchase=randomUUID(),payment=randomUUID();
+      try {
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Checkout','1',90)",[address,customer]);
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Checkout',1,1,0,95)",[pkg]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,$4,1,0,'pending_payment')",[purchase,customer,pkg,address]);
+        await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,status,amount) VALUES($1,$2,$3,'manual','pending',8550)",[payment,customer,purchase]);
+        for(const orderId of [undefined,randomUUID(),'not-an-id']) {
+          const rejected=await request('/quality-checks/from-file','POST',{addressId:address,actualArea:90,orderId},true);
+          assert.equal(rejected.status,400);assert.equal(rejected.json.code,'document_required');
+        }
+        for(let attempt=0;attempt<2;attempt++) {
+          const accepted=await request('/quality-checks/from-file','POST',{addressId:address,actualArea:90,orderId:payment},true);
+          assert.equal(accepted.status,200);assert.equal(accepted.json.data.deferred,true);
+          assert.equal(accepted.json.data.request.status,'awaiting_document');
+        }
+        assert.equal((await request('/quality-checks/from-file','POST',{addressId:randomUUID(),actualArea:90,orderId:payment},true)).status,400);
+        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM quality_check_requests WHERE address_id=$1',[address])).rows[0].n,0);
+        assert.equal((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area,null);
+        assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[payment])).rows[0].status,'pending');
+        await db.query("UPDATE payments SET status='cancelled' WHERE id=$1",[payment]);
+        assert.equal((await request('/quality-checks/from-file','POST',{actualArea:90,orderId:payment},true)).status,400);
+      } finally {
+        await db.query('DELETE FROM payments WHERE id=$1',[payment]);
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
+        await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+      }
+    });
     await t.test('area submissions require an owned plan, become visible and notify once without approving implicitly',async()=>{
       const address=randomUUID(),document=randomUUID();let check='';
       try {

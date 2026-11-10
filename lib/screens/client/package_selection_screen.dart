@@ -484,23 +484,6 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
     return area * 120;
   }
 
-  bool _needsInitialAreaConfirmation(
-    Map<String, dynamic> profile,
-    Map<String, dynamic>? apartment,
-    double area,
-  ) {
-    if (area <= 0) {
-      return false;
-    }
-    final status =
-        (apartment?['areaStatus'] ?? profile['areaStatus'] ?? '').toString();
-    final verified =
-        apartment?['areaVerified'] == true || profile['areaVerified'] == true;
-    return !verified &&
-        status != 'VERIFIED' &&
-        status != 'QUALITY_CHECK_SCHEDULED';
-  }
-
   Future<void> _persistAreaBaseline(double area) async {
     final normalizedArea = area.ceil();
     if (normalizedArea <= 0) {
@@ -569,197 +552,6 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
       _seedAreaFromProfile(_latestProfile);
     }
     return _area != null && _area! > 0 && _baseCleaningPrice > 0;
-  }
-
-  String _formatAreaCheckDate(DateTime date) {
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return '${date.year}-$month-$day';
-  }
-
-  Future<Map<String, String>?> _showAreaQualityCheckDialog() async {
-    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
-    const timeSlots = <String>[
-      '09:00',
-      '11:00',
-      '13:00',
-      '15:00',
-      '17:00',
-      '19:00',
-    ];
-    var selectedTime = timeSlots.first;
-    return showDialog<Map<String, String>>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        TranslationScope.watch(context);
-        return StatefulBuilder(builder: (context, setDialogState) {
-          return AlertDialog(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24)),
-              title: Text('Проверка квадратуры'.tr(),
-                  style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                      color: DomlyPalette.foreground(DomlyColors.foreground))),
-              content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                        'Выберите удобную дату и время для проверки вашей квадратуры отделом контроля качества.'
-                            .tr(),
-                        style: TextStyle(
-                            fontSize: 14,
-                            height: 1.4,
-                            color: DomlyPalette.foreground(
-                                DomlyColors.foreground))),
-                    const SizedBox(height: 18),
-                    OutlinedButton.icon(
-                        onPressed: () async {
-                          final now = DateTime.now();
-                          final picked = await showDatePicker(
-                              context: context,
-                              initialDate: selectedDate,
-                              firstDate: DateTime(now.year, now.month, now.day)
-                                  .add(const Duration(days: 1)),
-                              lastDate: now.add(const Duration(days: 45)),
-                              locale: Localizations.localeOf(context));
-                          if (picked != null) {
-                            setDialogState(() => selectedDate = picked);
-                          }
-                        },
-                        icon: const Icon(Icons.calendar_today_outlined),
-                        label: Text(_formatAreaCheckDate(selectedDate))),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                        initialValue: selectedTime,
-                        decoration: InputDecoration(
-                            labelText: 'Время'.tr(),
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16))),
-                        items: [
-                          for (final slot in timeSlots)
-                            DropdownMenuItem(value: slot, child: Text(slot))
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() => selectedTime = value);
-                          }
-                        })
-                  ]),
-              actions: [
-                Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      DomlyPrimaryButton(
-                          label: 'Пройти проверку в приложении',
-                          onPressed: () =>
-                              Navigator.of(context).pop({'mode': 'in_app'})),
-                      const SizedBox(height: 10),
-                      DomlySecondaryButton(
-                          label: 'Назначить проверку',
-                          onPressed: () => Navigator.of(context).pop({
-                                'mode': 'visit',
-                                'date': _formatAreaCheckDate(selectedDate),
-                                'time': selectedTime
-                              }))
-                    ])
-              ]);
-        });
-      },
-    );
-  }
-
-  Future<void> _openInAppAreaCheck() async {
-    await Navigator.pushNamed(
-      context,
-      '/client/area-confirmation',
-      arguments: {
-        'actualArea': _area?.round(),
-        'area': _area?.round(),
-        'forceTechPlanPrompt': true,
-      },
-    );
-  }
-
-  Future<void> _requestAreaQualityCheckIfNeeded({
-    required bool needed,
-    String? orderId,
-  }) async {
-    if (!needed || _area == null || _area! <= 0) {
-      return;
-    }
-    if (orderId != null && orderId.trim().isNotEmpty) {
-      final deadline = DateTime.now().add(const Duration(hours: 48));
-      final deadlineDate = '${deadline.year.toString().padLeft(4, '0')}-'
-          '${deadline.month.toString().padLeft(2, '0')}-'
-          '${deadline.day.toString().padLeft(2, '0')}';
-      await PaymentLinkService.runBlocking(
-        context,
-        task: () => _data.requestAreaQualityCheck(
-          actualArea: _area!.round(),
-          preferredDate: deadlineDate,
-          preferredTime: 'В течение 48 часов',
-          orderId: orderId,
-        ),
-        message: 'Создаем проверку квадратуры...',
-      );
-      _latestProfile = {
-        ..._latestProfile,
-        'areaVerified': false,
-        'areaStatus': 'QUALITY_CHECK_SCHEDULED',
-        'areaQualityCheckDate': deadlineDate,
-        'areaQualityCheckTime': 'В течение 48 часов',
-      };
-      if (!mounted) {
-        return;
-      }
-      showDomlySnackBar(
-        context,
-        title: 'Проверка площади',
-        subtitle:
-            'Пакет можно оплатить сейчас. В течение 48 часов отдел контроля качества приедет к вам для проверки площади. Также вы можете пройти проверку в приложении, загрузив план квартиры.',
-        type: DomlySnackBarType.info,
-      );
-      return;
-    }
-    final selection = await _showAreaQualityCheckDialog();
-    if (!mounted || selection == null) {
-      return;
-    }
-    if (selection['mode'] == 'in_app') {
-      await _openInAppAreaCheck();
-      return;
-    }
-    await PaymentLinkService.runBlocking(
-      context,
-      task: () => _data.requestAreaQualityCheck(
-        actualArea: _area!.round(),
-        preferredDate: selection['date'] ?? '',
-        preferredTime: selection['time'] ?? '',
-        orderId: orderId,
-      ),
-      message: 'Назначаем проверку квадратуры...',
-    );
-    _latestProfile = {
-      ..._latestProfile,
-      'areaVerified': false,
-      'areaStatus': 'QUALITY_CHECK_SCHEDULED',
-      'areaQualityCheckDate': selection['date'],
-      'areaQualityCheckTime': selection['time'],
-    };
-    if (!mounted) {
-      return;
-    }
-    showDomlySnackBar(
-      context,
-      title: 'Проверка назначена',
-      subtitle: orderId == null
-          ? 'После подтверждения площади можно будет оформить заказ.'
-          : 'Контроль качества проверит квадратуру ${selection['date']} в ${selection['time']}.',
-    );
   }
 
   bool _requiresScheduleSelection(Map<String, dynamic> package) {
@@ -1305,9 +1097,6 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
       return;
     }
 
-    final needsAreaQualityCheck =
-        _needsInitialAreaConfirmation(_latestProfile, apartment, _area!);
-
     final isDebugAutoSubmit = DebugSession.enabled &&
         DebugSession.uid == 'customer_demo' &&
         DebugSession.value('debug_autosubmit') == 'package';
@@ -1428,12 +1217,6 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
 
       if (orderId != null && orderId.isNotEmpty) {
         if (!mounted) return;
-        await _requestAreaQualityCheckIfNeeded(
-          needed: needsAreaQualityCheck,
-          orderId: orderId,
-        );
-        if (!mounted) return;
-
         if (paymentMethod == DomlyPaymentMethod.online) {
           final paymentSession = await PaymentLinkService.runBlocking(
             context,

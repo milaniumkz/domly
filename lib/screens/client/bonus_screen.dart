@@ -3,7 +3,7 @@ import '../../theme/domly_palette.dart';
 import '../../utils/backend_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
+import '../../ui/referral_share.dart';
 
 import '../../services/app_config_service.dart';
 import '../../services/firestore_data_service.dart';
@@ -31,6 +31,7 @@ class _BonusScreenState extends State<BonusScreen> {
   final _data = FirestoreDataService.instance;
   final _config = AppConfigService.instance;
   bool _isGeneratingLink = false;
+  String _referralCode = '';
 
   @override
   void initState() {
@@ -44,7 +45,8 @@ class _BonusScreenState extends State<BonusScreen> {
     }
     setState(() => _isGeneratingLink = true);
     try {
-      await _data.ensureReferralLink();
+      final invite = await _data.ensureReferralLink();
+      _referralCode = (invite['referralCode'] ?? '').toString();
     } catch (error) {
       AppLogger.w('BONUS', 'Failed to ensure referral link', error);
     } finally {
@@ -72,15 +74,12 @@ class _BonusScreenState extends State<BonusScreen> {
   }
 
   Future<void> _shareReferralLink(String referralCode) async {
-    if (referralCode.trim().isEmpty) {
-      await _ensureReferralLink();
-      return;
+    final code = referralCode.trim().isEmpty ? _referralCode : referralCode;
+    if (code.trim().isNotEmpty) {
+      await shareReferralLink(context, code);
+    } else {
+      await prepareReferralShare(context, _data.ensureReferralLink);
     }
-    final link = _referralLinkFromCode(referralCode);
-    await Share.share(
-      'Присоединяйся к DomLY. Используй мой код: $referralCode. $link',
-      subject: 'Приглашение в DomLY',
-    );
   }
 
   Future<void> _enterReferralCode(String existingCode) async {
