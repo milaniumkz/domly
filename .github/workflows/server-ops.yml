@@ -8,7 +8,7 @@ on:
         required: true
         default: status
         type: choice
-        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure]
+        options: [status, logs, restart, redeploy, rollback, bonus-audit, bonus-refund, publish-offer, quarterly-rate-95, whatsapp-template-inspect, whatsapp-welcome-template, kaspi-status-audit, kaspi-callback-configure, cleaner-history-encrypted]
       report_public_key_b64:
         description: Public RSA key for the encrypted reconciliation report
         required: false
@@ -48,6 +48,14 @@ jobs:
           REPORT_PUBLIC_KEY: ${{ inputs.report_public_key_b64 }}
           EXPECTED_PLAN: ${{ inputs.expected_plan }}
         run: |
+          if [ "$ACTION" = "cleaner-history-encrypted" ]; then
+            [[ "$REPORT_PUBLIC_KEY" =~ ^[A-Za-z0-9+/=]+$ ]]
+            test "${#REPORT_PUBLIC_KEY}" -le 12000
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/inspect_cleaner_history_encrypted.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/inspect_cleaner_history_encrypted.cjs"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
+              "set -eu; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e REPORT_PUBLIC_KEY_B64='$REPORT_PUBLIC_KEY' api node < '$DEPLOY_PATH/shared/inspect_cleaner_history_encrypted.cjs'" > cleaner-history.enc.json
+            exit 0
+          fi
           if [ "$ACTION" = "kaspi-callback-configure" ]; then
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/configure_kaspi_callback.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/configure_kaspi_callback.cjs"
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" \
@@ -122,3 +130,12 @@ jobs:
           path: bonus-recovery.enc.json
           if-no-files-found: error
           retention-days: 90
+
+      - name: Preserve encrypted cleaner diagnosis for one day
+        if: success() && inputs.action == 'cleaner-history-encrypted'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleaner-history-encrypted
+          path: cleaner-history.enc.json
+          retention-days: 1
+          if-no-files-found: error
