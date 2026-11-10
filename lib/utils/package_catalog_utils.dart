@@ -27,6 +27,19 @@ class PackageCatalogUtils {
     return id.contains('quarter') || source.contains('кварт');
   }
 
+  static bool allowsAddons(Map<String, dynamic>? package) {
+    if (package == null) return true;
+    final metadata = package['catalogMetadata'];
+    final features = package['features'];
+    final source = <String, dynamic>{
+      if (features is Map) ...Map<String, dynamic>.from(features),
+      if (metadata is Map) ...Map<String, dynamic>.from(metadata),
+      ...package,
+    };
+    return source['systemKey'] != 'post_renovation' &&
+        source['allowAddons'] != false;
+  }
+
   static bool isSpecialPackage(Map<String, dynamic>? package) {
     if (package == null) {
       return false;

@@ -663,16 +663,18 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                     ),
                   ),
                   const SizedBox(height: 13),
-                  _FigmaAddonCard(
-                    key: _homeAddonTarget,
-                    groups: _addonGroups,
-                    total: quoteTotal > 0 ? quoteTotal : addonTotalPrice,
-                    caption: _displayQuoteCaption,
-                    discount: (_quote['discountAmount'] as num?)?.toInt() ?? 0,
-                    details: _displayQuoteDetails,
-                    loading: _loadingQuote,
-                    buildGroup: _buildFigmaAddonGroup,
-                  ),
+                  if (PackageCatalogUtils.allowsAddons(_selectedPackage))
+                    _FigmaAddonCard(
+                      key: _homeAddonTarget,
+                      groups: _addonGroups,
+                      total: quoteTotal > 0 ? quoteTotal : addonTotalPrice,
+                      caption: _displayQuoteCaption,
+                      discount:
+                          (_quote['discountAmount'] as num?)?.toInt() ?? 0,
+                      details: _displayQuoteDetails,
+                      loading: _loadingQuote,
+                      buildGroup: _buildFigmaAddonGroup,
+                    ),
                   const SizedBox(height: 29),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1019,7 +1021,18 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       onTap: () async {
         setState(() {
           _selectedPackageId = pkgId;
+          if (!PackageCatalogUtils.allowsAddons(_selectedPackage)) {
+            _addonQuantities.clear();
+          }
         });
+        if (!PackageCatalogUtils.allowsAddons(_selectedPackage)) {
+          _refreshQuote();
+          Navigator.of(context).pushNamed('/client/packages', arguments: {
+            'preselectedPackageId': pkgId,
+            'openSpecialCheckout': true,
+          });
+          return;
+        }
         if (isQuarterly) {
           await _selectQuarterlyVisits();
           if (!mounted) {
@@ -1534,6 +1547,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   }
 
   List<Map<String, dynamic>> _selectedAddonsDetailed() {
+    if (!PackageCatalogUtils.allowsAddons(_selectedPackage)) return [];
     final labels = <String, String>{};
     final separateKeys = <String>{};
     final durations = <String, int>{};
@@ -1724,8 +1738,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       if (pkg?['requiresConsent'] == true) {
         acceptedTermsVersion = await showPackageConsentDialog(context, pkg!);
         if (!mounted || acceptedTermsVersion == null) return;
-        final quote = await BackendApiService.instance.postMap('/packages/quote', body: {
-          'packageId': pkg['id'], 'area': _area,
+        final quote =
+            await BackendApiService.instance.postMap('/packages/quote', body: {
+          'packageId': pkg['id'],
+          'area': _area,
           'addonsDetailed': _selectedAddonsDetailed(),
         });
         total = (quote['monthlyPrice'] as num).round();

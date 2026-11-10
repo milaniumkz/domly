@@ -3223,7 +3223,25 @@ export function buildV1Router(deps: {
   router.post('/quality-checks/from-file', auth(['customer']), asyncHandler(async (req, res) => {
     const area = Number(req.body.area ?? req.body.actualArea ?? req.body.requestedArea ?? 0);
     if (!Number.isFinite(area) || area <= 0) throw new ApiError(400, 'invalid_area', 'Укажите площадь.');
-    if (!req.body.fileId && !req.body.fileUrl) throw new ApiError(400, 'document_required', 'Загрузите фото плана квартиры перед отправкой заявки.');
+    if (!req.body.fileId && !req.body.fileUrl) {
+      // Older installed clients call this before opening payment, passing the
+      // package payment id as orderId. Acknowledge that preflight only: a real
+      // document submission still requires an owned plan and creates its own row.
+      const paymentId = String(req.body.orderId ?? '');
+      if (/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(paymentId)) {
+        const pending = first((await deps.db.query(`SELECT p.id FROM payments p
+          JOIN customer_packages cp ON cp.id=p.customer_package_id
+          WHERE p.id=$1 AND p.customer_id=$2 AND cp.customer_id=$2
+            AND p.status IN ('pending','invoice_requested') AND cp.status='pending_payment'
+            AND ($3::text IS NULL OR cp.address_id::text=$3)`,
+          [paymentId, req.user!.id, req.body.addressId ?? null])).rows);
+        if (pending) {
+          ok(res, {request: {id: null, status: 'awaiting_document'}, deferred: true});
+          return;
+        }
+      }
+      throw new ApiError(400, 'document_required', 'Загрузите фото плана квартиры перед отправкой заявки.');
+    }
     const result = await deps.db.transaction(async (tx) => {
       await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
         [`quality-check:${req.user!.id}:${req.body.addressId ?? ''}`]);

@@ -1725,3 +1725,9 @@ FROM (
 ) source
 WHERE NOT EXISTS (SELECT 1 FROM catalog_packages WHERE features->>'systemKey'='post_renovation' OR lower(name_ru)='уборка после ремонта')
 ON CONFLICT (name_ru, cleaning_count, months) DO NOTHING;
+
+-- Installed clients still display this legacy checkout hint after their area
+-- preflight. Correct only the stock wording; preserve administrator overrides.
+UPDATE translations SET ru='Пакет можно оплатить сейчас. Для подтверждения площади загрузите технический план в профиле.'
+WHERE source='Пакет можно оплатить сейчас. В течение 48 часов отдел контроля качества приедет к вам для проверки площади. Также вы можете пройти проверку в приложении, загрузив план квартиры.'
+AND ru=source;

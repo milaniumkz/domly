@@ -1,6 +1,6 @@
 import '../../theme/domly_palette.dart';
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
+import '../../ui/referral_share.dart';
 
 import '../../services/firestore_data_service.dart';
 import '../../ui/domly_ui.dart';
@@ -22,6 +22,7 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
   final _data = FirestoreDataService.instance;
   bool _joining = false;
   bool _inviting = false;
+  String _inviteCode = '';
   late Future<Map<String, dynamic>?> _statsFuture;
   late Future<Map<String, dynamic>> _referralFuture;
 
@@ -43,6 +44,7 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
     ]);
     final link = Map<String, dynamic>.from(results[0] as Map);
     final stats = Map<String, dynamic>.from(results[1] as Map);
+    _inviteCode = (link['referralCode'] ?? '').toString();
     return {
       'referralCode': (link['referralCode'] ?? '').toString().trim(),
       'referralLink': (link['referralLink'] ?? '').toString().trim(),
@@ -443,18 +445,11 @@ class _HouseWaitlistScreenState extends State<HouseWaitlistScreen> {
   Future<void> _inviteNeighbors() async {
     setState(() => _inviting = true);
     try {
-      final invite = await _data.ensureReferralLink();
-      final referralCode = (invite['referralCode'] ?? '').toString().trim();
-      final referralLink = (invite['referralLink'] ?? '').toString().trim();
-      final shareText = StringBuffer('Подключай DomLY в наш дом. ')
-        ..write('Открой веб-версию приложения: $referralLink');
-      if (referralCode.isNotEmpty) {
-        shareText.write(' Используй мой код: $referralCode');
+      if (_inviteCode.isNotEmpty) {
+        await shareReferralLink(context, _inviteCode);
+      } else {
+        await prepareReferralShare(context, _data.ensureReferralLink);
       }
-      await Share.share(
-        shareText.toString(),
-        subject: 'Приглашение в DomLY',
-      );
       await _refreshStats();
     } finally {
       if (mounted) setState(() => _inviting = false);

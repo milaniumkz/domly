@@ -1201,13 +1201,6 @@
     ]
   },
   {
-    "key": "t_36d0f8480a5b8658",
-    "source": "В течение 48 часов",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
-    ]
-  },
-  {
     "key": "t_bebb98e68b9d1a4d",
     "source": "В этой вкладке будут отображаться уведомления.",
     "locations": [
@@ -1714,7 +1707,6 @@
     "locations": [
       "lib/screens/cleaner/cleaner_order_history_screen.dart",
       "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/package_selection_screen.dart",
       "lib/screens/client/training_order_screen.dart"
     ]
   },
@@ -2154,13 +2146,6 @@
     "source": "Выберите уборку",
     "locations": [
       "lib/screens/cleaner/cleaner_checklist_screen.dart"
-    ]
-  },
-  {
-    "key": "t_14ff8181e3b94137",
-    "source": "Выберите удобную дату и время для проверки вашей квадратуры отделом контроля качества.",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
     ]
   },
   {
@@ -4185,7 +4170,8 @@
     "source": "Закрыть",
     "locations": [
       "lib/screens/common/notifications_screen.dart",
-      "lib/ui/info_dialog.dart"
+      "lib/ui/info_dialog.dart",
+      "lib/ui/referral_share.dart"
     ]
   },
   {
@@ -4804,14 +4790,6 @@
     "source": "Использовано: {p0}",
     "locations": [
       "lib/screens/client/client_home_screen.dart"
-    ]
-  },
-  {
-    "key": "t_8561a4401f530ad7",
-    "source": "Используй мой код: {p0}",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/house_waitlist_screen.dart"
     ]
   },
   {
@@ -5437,13 +5415,6 @@
     "source": "Контакты",
     "locations": [
       "lib/screens/client/payment_terms_screen.dart"
-    ]
-  },
-  {
-    "key": "t_7e1f907cb7496b53",
-    "source": "Контроль качества проверит квадратуру {p0} в {p1}.",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
     ]
   },
   {
@@ -6154,24 +6125,10 @@
     ]
   },
   {
-    "key": "t_5f31adcf9fbc2dce",
-    "source": "Назначаем проверку квадратуры...",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
-    ]
-  },
-  {
     "key": "t_56641ad95a68952d",
     "source": "Назначен",
     "locations": [
       "lib/utils/order_display.dart"
-    ]
-  },
-  {
-    "key": "t_f60d8aeee15fea4b",
-    "source": "Назначить проверку",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
     ]
   },
   {
@@ -6696,6 +6653,13 @@
     "source": "Не удалось загрузить сообщения. Попробуйте позже.",
     "locations": [
       "lib/screens/common/assistant_guest_screen.dart"
+    ]
+  },
+  {
+    "key": "t_8b4d5bc0d97d04e0",
+    "source": "Не удалось загрузить ссылку. Попробуйте снова.",
+    "locations": [
+      "lib/ui/referral_share.dart"
     ]
   },
   {
@@ -8206,14 +8170,6 @@
     ]
   },
   {
-    "key": "t_8002c67cc05a5b85",
-    "source": "Открой веб-версию приложения: {p0}",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/house_waitlist_screen.dart"
-    ]
-  },
-  {
     "key": "t_5628f88f24648909",
     "source": "Откройте короткое видео по стандарту уборки кухни.",
     "locations": [
@@ -8822,13 +8778,6 @@
     ]
   },
   {
-    "key": "t_67bcbdcf777e17c0",
-    "source": "Пакет можно оплатить сейчас. В течение 48 часов отдел контроля качества приедет к вам для проверки площади. Также вы можете пройти проверку в приложении, загрузив план квартиры.",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
-    ]
-  },
-  {
     "key": "t_526e946d4edf986f",
     "source": "Пакет на паузе",
     "locations": [
@@ -9233,7 +9182,8 @@
     "key": "t_99ce26e80688e3ec",
     "source": "Поделиться",
     "locations": [
-      "lib/screens/client/bonus_screen.dart"
+      "lib/screens/client/bonus_screen.dart",
+      "lib/ui/referral_share.dart"
     ]
   },
   {
@@ -9243,14 +9193,6 @@
       "lib/screens/client/client_home_screen.dart",
       "lib/screens/client/house_waitlist_screen.dart",
       "lib/screens/common/cluster_map_screen.dart"
-    ]
-  },
-  {
-    "key": "t_16885464ddd43a85",
-    "source": "Подключай DomLY в наш дом.",
-    "locations": [
-      "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/house_waitlist_screen.dart"
     ]
   },
   {
@@ -9895,13 +9837,6 @@
     ]
   },
   {
-    "key": "t_f0f7a180cf27dc8a",
-    "source": "После подтверждения площади можно будет оформить заказ.",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
-    ]
-  },
-  {
     "key": "t_93e452b278763dd2",
     "source": "После подтверждения уборщица сможет продолжить и завершить заказ.",
     "locations": [
@@ -10169,9 +10104,7 @@
     "key": "t_93594dde0743d4e4",
     "source": "Приглашение в DomLY",
     "locations": [
-      "lib/screens/client/bonus_screen.dart",
-      "lib/screens/client/client_home_screen.dart",
-      "lib/screens/client/house_waitlist_screen.dart"
+      "lib/ui/referral_share.dart"
     ]
   },
   {
@@ -10256,7 +10189,7 @@
     "key": "t_accb58b58938f51b",
     "source": "Присоединяйся к DomLY. Используй мой код: {p0}. {p1}",
     "locations": [
-      "lib/screens/client/bonus_screen.dart"
+      "lib/ui/referral_share.dart"
     ]
   },
   {
@@ -10299,27 +10232,6 @@
     "source": "Проверка",
     "locations": [
       "lib/screens/client/client_home_screen.dart"
-    ]
-  },
-  {
-    "key": "t_31085000b62958ca",
-    "source": "Проверка квадратуры",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
-    ]
-  },
-  {
-    "key": "t_2241e70327fd589b",
-    "source": "Проверка назначена",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
-    ]
-  },
-  {
-    "key": "t_960f1506f0e57a9f",
-    "source": "Проверка площади",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
     ]
   },
   {
@@ -10429,13 +10341,6 @@
     "locations": [
       "lib/screens/cleaner/cleaner_profile_screen.dart",
       "lib/screens/client/settings_screen.dart"
-    ]
-  },
-  {
-    "key": "t_581f39b0c4c5082e",
-    "source": "Пройти проверку в приложении",
-    "locations": [
-      "lib/screens/client/package_selection_screen.dart"
     ]
   },
   {
@@ -11141,6 +11046,13 @@
     ]
   },
   {
+    "key": "t_a44800a12ffb6957",
+    "source": "Скопировать ссылку",
+    "locations": [
+      "lib/ui/referral_share.dart"
+    ]
+  },
+  {
     "key": "t_672592ce2da35b1f",
     "source": "Следующая неделя",
     "locations": [
@@ -11301,13 +11213,6 @@
     "source": "Создаем заявку на оплату...",
     "locations": [
       "lib/screens/client/calculator_screen.dart",
-      "lib/screens/client/package_selection_screen.dart"
-    ]
-  },
-  {
-    "key": "t_2f4c7011d38d4dee",
-    "source": "Создаем проверку квадратуры...",
-    "locations": [
       "lib/screens/client/package_selection_screen.dart"
     ]
   },

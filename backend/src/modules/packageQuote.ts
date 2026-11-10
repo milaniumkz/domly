@@ -1,3 +1,4 @@
+import {packageAllowsAddons} from './packageTerms';
 import {customerTierDiscount} from './customerProgress';
 import { referralDiscount } from './referrals';
 import { ApiError } from '../common/api';
@@ -21,6 +22,7 @@ export async function packageQuote(db: Queryable, input: Record<string, any>) {
   const cleaningCount = visits * Number(pkg.months);
   const base = Math.round((Number(pkg.base_price) + rate * area) * cleaningCount);
   const selected = Array.isArray(input.addonsDetailed) ? input.addonsDetailed : [];
+  if (!packageAllowsAddons(pkg) && selected.length) throw new ApiError(400, 'package_addons_unavailable', 'В уборку после ремонта нельзя добавлять дополнительные услуги. Уберите их из расчёта.');
   if (selected.length > 100) throw new ApiError(400, 'invalid_addons', 'Слишком много дополнительных услуг.');
   const addons = [];
   const ids = new Set<string>();
