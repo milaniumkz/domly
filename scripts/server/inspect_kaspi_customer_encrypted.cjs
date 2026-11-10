@@ -21,6 +21,10 @@ const crypto=require('node:crypto');const {Pool}=require('pg');
     p.payload->>'kind' AS payment_kind,p.payload->'moonAi'->>'status' AS callback_status
     FROM payments p LEFT JOIN customer_packages cp ON cp.id=p.customer_package_id
     LEFT JOIN catalog_packages pkg ON pkg.id=cp.package_id WHERE p.customer_id=$1 ORDER BY p.created_at DESC LIMIT 20`,[id])).rows;
+   report.technical=(await client.query(`SELECT action,entity_id,result,started_at,finished_at,http_status,error_code,user_message,failure_reason,platform,app_version
+    FROM tech_events WHERE user_id=$1 AND started_at>=NOW()-INTERVAL '7 days'
+    AND (action LIKE 'POST %packages/purchase%' OR action LIKE 'POST %kaspi-invoice%' OR action LIKE 'POST %quality-checks/from-file%')
+    ORDER BY started_at LIMIT 100`,[id])).rows;
    const ids=report.payments.map(p=>p.id);
    report.invoiceJobs=(await client.query(`SELECT id,payment_id,kind,state,created_at,run_after,started_at,finished_at,failure_code,provider_thread_id
     FROM moon_ai_outbox WHERE customer_id=$1 AND kind='invoice' ORDER BY created_at DESC LIMIT 30`,[id])).rows;
