@@ -72,6 +72,43 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal(rows.some((r:any)=>r.name_ru.includes('Генеральная')),false);
       });
     });
+    await t.test('admin rejects unpaid payments with a valid enum status, idempotent audit and protected settled payments',async()=>{
+      const ids:string[]=[];
+      try{
+        for(const status of ['draft','pending','invoice_requested','paid','refunded','cancelled']){
+          const id=randomUUID();ids.push(id);
+          await db.query('INSERT INTO payments(id,customer_id,provider,status,amount) VALUES($1,$2,\'manual\',$3,100)',[id,customer,status]);
+          const denied=await request('/payments/'+id+'/reject','POST',{},true);
+          assert.equal(denied.status,403);
+          const first=await request('/payments/'+id+'/reject','POST',{note:'Проверка отклонения'});
+          if(['paid','refunded','cancelled'].includes(status)){
+            assert.equal(first.status,409);assert.equal(first.json.code,'payment_already_processed');
+            assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[id])).rows[0].status,status);
+          }else{
+            assert.equal(first.status,200,JSON.stringify(first.json));assert.equal(first.json.data.status,'rejected');
+            const history=await request('/admin/payment-history?tab=errors&search='+id);
+            assert.equal(history.status,200);assert.equal(history.json.data.items.length,1);
+            assert.equal(history.json.data.items[0].status,'rejected');assert.equal(history.json.data.counts.waiting,0);
+            assert.equal(first.json.data.payload.note,'Проверка отклонения');
+            const retry=await request('/payments/'+id+'/reject','POST',{});
+            assert.equal(retry.status,200);assert.equal(retry.json.data.status,'rejected');
+            assert.equal((await db.query("SELECT COUNT(*)::int n FROM audit_logs WHERE entity_id=$1 AND action='payment.rejected'",[id])).rows[0].n,1);
+          }
+        }
+        assert.equal((await request('/payments/'+randomUUID()+'/reject','POST',{})).status,404);
+        const id=randomUUID();ids.push(id);const fail='reject_fail_'+id.replaceAll('-','');
+        await db.query("INSERT INTO payments(id,customer_id,provider,status,amount) VALUES($1,$2,'manual','pending',100)",[id,customer]);
+        await db.query(`CREATE FUNCTION ${fail}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.entity_id='${id}' AND NEW.action='payment.rejected' THEN RAISE EXCEPTION 'reject audit unavailable'; END IF; RETURN NEW; END $$`);
+        await db.query(`CREATE TRIGGER ${fail} BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION ${fail}()`);
+        try{
+          assert.equal((await request('/payments/'+id+'/reject','POST',{})).status,500);
+          assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[id])).rows[0].status,'pending');
+        }finally{await db.query(`DROP TRIGGER IF EXISTS ${fail} ON audit_logs`);await db.query(`DROP FUNCTION IF EXISTS ${fail}()`);}
+      }finally{
+        await db.query('DELETE FROM audit_logs WHERE entity_id=ANY($1::text[])',[ids]);
+        await db.query('DELETE FROM payments WHERE id=ANY($1::uuid[])',[ids]);
+      }
+    });
     await t.test('special tariff is configurable and purchase requires consent to the current terms',async()=>{
       let pkg='';const address=randomUUID();
       const features={isSpecial:true,requiresConsent:true,importantInfo:'Работы после ремонта. Условия тестового тарифа.',items:['Пол','Пыль'],sortOrder:6,pricingType:'per_m2'};

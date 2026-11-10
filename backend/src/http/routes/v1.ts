@@ -2495,14 +2495,20 @@ export function buildV1Router(deps: {
   }));
 
   router.post('/payments/:id/reject', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
-    const payment = first((await deps.db.query(
-      `UPDATE payments SET status='failed', payload=payload || $2::jsonb, updated_at=NOW()
-       WHERE id=$1 AND status NOT IN ('paid','refunded','cancelled')
-       RETURNING *`,
-      [req.params.id, { note: req.body.note ?? null }],
-    )).rows);
-    if (!payment) throw new ApiError(404, 'not_found', 'Платёж не найден или уже обработан.');
-    await recordAudit('payment.rejected', 'payment', String(req.params.id), { note: req.body.note ?? null }, req.user?.id);
+    const payment = await deps.db.atomic(async()=>{
+      const existing=first<any>((await deps.db.query('SELECT * FROM payments WHERE id=$1 FOR UPDATE',[req.params.id])).rows);
+      if(!existing)throw new ApiError(404,'not_found','Платёж не найден.');
+      if(existing.status==='rejected')return existing;
+      if(!['draft','pending','invoice_requested'].includes(existing.status)){
+        throw new ApiError(409,'payment_already_processed','Платёж уже обработан. Обновите список платежей.');
+      }
+      const updated=first((await deps.db.query(
+        `UPDATE payments SET status='rejected',payload=payload || $2::jsonb,updated_at=NOW() WHERE id=$1 RETURNING *`,
+        [req.params.id,{note:req.body.note??null}],
+      )).rows);
+      await recordAudit('payment.rejected','payment',String(req.params.id),{note:req.body.note??null},req.user?.id);
+      return updated;
+    });
     ok(res, payment);
   }));
 
