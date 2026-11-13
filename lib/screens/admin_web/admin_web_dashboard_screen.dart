@@ -1,4 +1,5 @@
 import '../../ui/admin_filter_panel.dart';
+import '../../ui/admin_bot_audit.dart';
 import '../../utils/package_catalog_utils.dart';
 import '../../utils/address_display.dart';
 import '../../ui/area_document_rejection.dart';
@@ -138,7 +139,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         'clusterName': 'ЖК Триумф',
         'customerId': 'customer_demo',
         'customerName': 'Асет',
-        'customerPhone': '+7 708 636 21 53',
+        'customerPhone': '+7 700 000 00 00',
         'cleanerId': 'cleaner_demo',
         'cleanerName': 'Мария',
       },
@@ -161,7 +162,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         'clusterName': 'ЖК Триумф',
         'customerId': 'customer_demo',
         'customerName': 'Асет',
-        'customerPhone': '+7 708 636 21 53',
+        'customerPhone': '+7 700 000 00 00',
         'cleanerId': 'cleaner_demo',
         'cleanerName': 'Мария',
       },
@@ -856,6 +857,13 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               'Главные показатели, узкие места и ближайшие действия менеджера.',
           icon: Icons.dashboard_customize_outlined,
           builder: _dashboard,
+        ),
+        _AdminSection(
+          key: 'bot_actions',
+          title: 'Журнал бота',
+          subtitle: 'Действия MooonAI, клиенты, результаты и ошибки.',
+          icon: Icons.smart_toy_outlined,
+          builder: () => AdminBotAudit(search: _searchQuery),
         ),
         _AdminSection(
           key: 'orders',
