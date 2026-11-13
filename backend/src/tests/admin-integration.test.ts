@@ -26,6 +26,8 @@ import {PaymentGatewayService} from '../modules/integrations';
 
 test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async t=>{
   const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
+  // Legacy fixtures intentionally omit geographic enrollment; coverage has dedicated enabled tests.
+  await db.query("INSERT INTO app_settings(key,value) VALUES('enforceServiceZones','false') ON CONFLICT(key) DO UPDATE SET value='false'");
   const admin=randomUUID(),cleaner=randomUUID(),customer=randomUUID(),file=randomUUID();
   const catalogIds: Record<string,string> = {};
   const housePrefix='admin-address-'+randomUUID();

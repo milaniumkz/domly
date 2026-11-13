@@ -1368,7 +1368,7 @@ CREATE TABLE IF NOT EXISTS area_package_adjustments (
 );
 ALTER TABLE moon_ai_outbox DROP CONSTRAINT IF EXISTS moon_ai_outbox_kind_check;
 ALTER TABLE moon_ai_outbox ADD CONSTRAINT moon_ai_outbox_kind_check
- CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification'));
+ CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification'));
 
 -- Persist immediately in the same transaction as the quality-team assignment.
 -- No customer files, phone numbers, or documents are copied into chat messages.
@@ -1764,3 +1764,170 @@ CREATE TABLE IF NOT EXISTS bot_ordering_requests (
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_bot_audit_created ON audit_logs(created_at DESC) WHERE payload->>'actorKind'='bot';
+
+-- Serviceability is enforced at the database boundary, including legacy clients.
+ALTER TABLE customer_addresses ADD COLUMN IF NOT EXISTS service_status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE customer_addresses ADD COLUMN IF NOT EXISTS area_reverification_required BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE customer_addresses ADD COLUMN IF NOT EXISTS area_invalidated_at TIMESTAMPTZ;
+CREATE OR REPLACE FUNCTION domly_service_zones_enforced() RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
+ SELECT COALESCE((SELECT value='true'::jsonb FROM app_settings WHERE key='enforceServiceZones'),TRUE)
+$$;
+CREATE OR REPLACE FUNCTION domly_address_key(value TEXT) RETURNS TEXT LANGUAGE SQL IMMUTABLE AS $$
+ SELECT regexp_replace(lower(coalesce(value,'')),'[[:space:].,;\-]','','g')
+$$;
+CREATE OR REPLACE FUNCTION domly_polygon_contains(shape JSONB,lat NUMERIC,lng NUMERIC) RETURNS BOOLEAN LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE points TEXT; item JSONB; outer_ring BOOLEAN; ring_index INTEGER:=0;
+BEGIN
+ IF lat IS NULL OR lng IS NULL OR lat NOT BETWEEN -90 AND 90 OR lng NOT BETWEEN -180 AND 180 THEN RETURN FALSE; END IF;
+ IF jsonb_typeof(shape)='object' THEN
+  IF shape->>'type'='Feature' THEN RETURN domly_polygon_contains(shape->'geometry',lat,lng); END IF;
+  IF shape->>'type'='MultiPolygon' THEN
+   FOR item IN SELECT value FROM jsonb_array_elements(shape->'coordinates') LOOP
+    IF domly_polygon_contains(jsonb_build_object('type','Polygon','coordinates',item),lat,lng) THEN RETURN TRUE; END IF;
+   END LOOP;RETURN FALSE;
+  END IF;
+  IF shape->>'type'='Polygon' THEN
+   outer_ring:=FALSE;
+   FOR item IN SELECT value FROM jsonb_array_elements(shape->'coordinates') LOOP
+    IF ring_index=0 THEN outer_ring:=domly_polygon_contains(item,lat,lng);
+    ELSIF domly_polygon_contains(item,lat,lng) THEN RETURN FALSE; END IF;
+    ring_index:=ring_index+1;
+   END LOOP;RETURN outer_ring;
+  END IF;RETURN FALSE;
+ END IF;
+ IF jsonb_typeof(shape)<>'array' OR jsonb_array_length(shape)<3 THEN RETURN FALSE; END IF;
+ SELECT string_agg('('||
+  CASE WHEN jsonb_typeof(value)='array' THEN (value->>0)::numeric ELSE COALESCE(value->>'lng',value->>'longitude',value->>'_longitude')::numeric END||','||
+  CASE WHEN jsonb_typeof(value)='array' THEN (value->>1)::numeric ELSE COALESCE(value->>'lat',value->>'latitude',value->>'_latitude')::numeric END||')',',') INTO points FROM jsonb_array_elements(shape);
+ IF points IS NULL THEN RETURN FALSE; END IF;
+ RETURN point(lng::float8,lat::float8) <@ ('('||points||')')::polygon;
+EXCEPTION WHEN OTHERS THEN RETURN FALSE;
+END $$;
+CREATE OR REPLACE FUNCTION domly_city_key(value TEXT) RETURNS TEXT LANGUAGE SQL IMMUTABLE AS $$
+ SELECT CASE WHEN domly_address_key(regexp_replace(lower(coalesce(value,'')),'^(город[[:space:]]+|г[.][[:space:]]*|г[[:space:]]+)','')) IN ('астана','astana','нурсултан','nursultan') THEN 'астана' ELSE domly_address_key(regexp_replace(lower(coalesce(value,'')),'^(город[[:space:]]+|г[.][[:space:]]*|г[[:space:]]+)','')) END
+$$;
+CREATE OR REPLACE FUNCTION domly_location_in_service_zone(city_value TEXT,street_value TEXT,house_value TEXT,lat NUMERIC,lng NUMERIC) RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM connected_houses h JOIN service_zones z ON z.id=h.zone_id
+  WHERE h.active AND z.active AND domly_city_key(h.city)=domly_city_key(city_value)
+   AND domly_address_key(h.street_ru)=domly_address_key(street_value) AND domly_address_key(h.house)=domly_address_key(house_value))
+ OR EXISTS(SELECT 1 FROM service_zones z WHERE z.active AND domly_city_key(z.city)=domly_city_key(city_value) AND domly_polygon_contains(z.polygon,lat,lng))
+$$;
+CREATE OR REPLACE FUNCTION domly_assert_service_address(address_uuid UUID,require_area BOOLEAN DEFAULT TRUE) RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE a customer_addresses%ROWTYPE;
+BEGIN
+ IF NOT domly_service_zones_enforced() THEN RETURN; END IF;
+ SELECT * INTO a FROM customer_addresses WHERE id=address_uuid;
+ IF NOT FOUND OR a.service_status='needs_new_address' OR NOT domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude) THEN
+  RAISE EXCEPTION USING ERRCODE='PZ001',MESSAGE='Адрес вне активных зон обслуживания. Можно отправить только заявку на подключение адреса.';
+ END IF;
+ IF a.area_reverification_required AND (require_area OR EXISTS(SELECT 1 FROM app_users WHERE id=a.user_id AND settings->>'requiresAddressReverification'='true')) THEN
+  RAISE EXCEPTION USING ERRCODE='PZ002',MESSAGE='После изменения адреса загрузите новый технический план и подтвердите площадь нового адреса.';
+ END IF;
+END $$;
+CREATE OR REPLACE FUNCTION domly_service_order_zone_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.status::text IN ('cancelled','canceled','completed') THEN RETURN NEW; END IF;
+ IF TG_OP='INSERT' THEN PERFORM domly_assert_service_address(NEW.address_id,TRUE);
+ ELSIF NEW.address_id IS DISTINCT FROM OLD.address_id OR NEW.scheduled_date IS DISTINCT FROM OLD.scheduled_date
+  OR NEW.start_time IS DISTINCT FROM OLD.start_time OR NEW.cleaner_id IS DISTINCT FROM OLD.cleaner_id
+  OR (NEW.status IS DISTINCT FROM OLD.status AND NEW.status::text IN ('assigned','start_pending','in_progress')) THEN
+  PERFORM domly_assert_service_address(NEW.address_id,TRUE);
+ END IF;
+ RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS service_order_zone_guard ON service_orders;
+CREATE TRIGGER service_order_zone_guard BEFORE INSERT OR UPDATE ON service_orders FOR EACH ROW EXECUTE FUNCTION domly_service_order_zone_guard();
+CREATE OR REPLACE FUNCTION domly_package_zone_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='INSERT' OR NEW.address_id IS DISTINCT FROM OLD.address_id THEN PERFORM domly_assert_service_address(NEW.address_id,FALSE); END IF;
+ RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS package_zone_guard ON customer_packages;
+CREATE TRIGGER package_zone_guard BEFORE INSERT OR UPDATE ON customer_packages FOR EACH ROW EXECUTE FUNCTION domly_package_zone_guard();
+CREATE OR REPLACE FUNCTION domly_address_change_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+ IF NOT domly_service_zones_enforced() THEN RETURN NEW; END IF;
+ IF TG_OP='INSERT' THEN
+  IF EXISTS(SELECT 1 FROM app_users WHERE id=NEW.user_id AND settings->>'requiresAddressReverification'='true') THEN NEW.area_reverification_required:=TRUE;NEW.area_invalidated_at:=NOW();NEW.verified_area:=NULL; END IF;
+  NEW.service_status:=CASE WHEN domly_location_in_service_zone(NEW.city,NEW.street,NEW.house,NEW.latitude,NEW.longitude) THEN 'active' ELSE 'outside_service_area' END;
+  RETURN NEW;
+ END IF;
+ IF (domly_address_key(NEW.city),domly_address_key(NEW.settlement),domly_address_key(NEW.street),domly_address_key(NEW.house),domly_address_key(NEW.apartment))
+  IS DISTINCT FROM (domly_address_key(OLD.city),domly_address_key(OLD.settlement),domly_address_key(OLD.street),domly_address_key(OLD.house),domly_address_key(OLD.apartment)) THEN
+  NEW.verified_area:=NULL;
+  NEW.area_reverification_required:=OLD.area_reverification_required OR OLD.verified_area IS NOT NULL OR OLD.service_status='needs_new_address';
+  NEW.area_invalidated_at:=NOW();
+  IF (domly_address_key(NEW.city),domly_address_key(NEW.settlement),domly_address_key(NEW.street),domly_address_key(NEW.house)) IS DISTINCT FROM (domly_address_key(OLD.city),domly_address_key(OLD.settlement),domly_address_key(OLD.street),domly_address_key(OLD.house)) AND NEW.latitude IS NOT DISTINCT FROM OLD.latitude AND NEW.longitude IS NOT DISTINCT FROM OLD.longitude THEN NEW.latitude:=NULL;NEW.longitude:=NULL; END IF;
+  NEW.service_status:=CASE WHEN domly_location_in_service_zone(NEW.city,NEW.street,NEW.house,NEW.latitude,NEW.longitude) THEN 'active' ELSE 'outside_service_area' END;
+ ELSIF NEW.verified_area IS NOT NULL AND OLD.area_reverification_required THEN
+  IF OLD.service_status='needs_new_address' OR NOT domly_location_in_service_zone(OLD.city,OLD.street,OLD.house,OLD.latitude,OLD.longitude) THEN RAISE EXCEPTION USING ERRCODE='PZ001',MESSAGE='Сначала укажите адрес в активной зоне.'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM quality_check_requests q JOIN files f ON f.id=q.document_file_id
+   WHERE q.address_id=OLD.id AND q.customer_id=OLD.user_id AND q.status NOT IN ('rejected','cancelled')
+    AND f.owner_id=OLD.user_id AND f.created_at>=OLD.area_invalidated_at) THEN
+   RAISE EXCEPTION USING ERRCODE='PZ002',MESSAGE='Для нового адреса требуется новый технический план.';
+  END IF;
+  NEW.area_reverification_required:=FALSE;
+ END IF;
+ RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS address_change_guard ON customer_addresses;
+CREATE TRIGGER address_change_guard BEFORE INSERT OR UPDATE ON customer_addresses FOR EACH ROW EXECUTE FUNCTION domly_address_change_guard();
+ALTER TABLE moon_ai_outbox DROP CONSTRAINT IF EXISTS moon_ai_outbox_kind_check;
+ALTER TABLE moon_ai_outbox ADD CONSTRAINT moon_ai_outbox_kind_check CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification'));
+
+CREATE OR REPLACE FUNCTION domly_payment_zone_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE address_uuid UUID;
+BEGIN
+ IF NEW.status::text IN ('paid','refunded','rejected','cancelled') THEN RETURN NEW; END IF;
+ IF NEW.customer_package_id IS NOT NULL THEN SELECT address_id INTO address_uuid FROM customer_packages WHERE id=NEW.customer_package_id;
+ ELSIF NEW.order_id IS NOT NULL THEN SELECT address_id INTO address_uuid FROM service_orders WHERE id=NEW.order_id; END IF;
+ IF address_uuid IS NOT NULL THEN PERFORM domly_assert_service_address(address_uuid,FALSE); END IF;
+ RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS payment_zone_guard ON payments;
+CREATE TRIGGER payment_zone_guard BEFORE INSERT OR UPDATE ON payments FOR EACH ROW EXECUTE FUNCTION domly_payment_zone_guard();
+
+-- Older engine endpoints must not bypass the service-address checks.
+CREATE OR REPLACE FUNCTION domly_legacy_zone_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+ IF NOT domly_service_zones_enforced() THEN RETURN NEW; END IF;
+ IF to_jsonb(NEW)->>'status' IN ('CANCELLED','COMPLETED','cancelled','completed') THEN RETURN NEW; END IF;
+ PERFORM domly_assert_service_address(NEW.apartment_id,TRUE);
+ RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS legacy_order_zone_guard ON orders;
+CREATE TRIGGER legacy_order_zone_guard BEFORE INSERT OR UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION domly_legacy_zone_guard();
+DROP TRIGGER IF EXISTS legacy_package_zone_guard ON user_packages;
+CREATE TRIGGER legacy_package_zone_guard BEFORE INSERT OR UPDATE ON user_packages FOR EACH ROW EXECUTE FUNCTION domly_legacy_zone_guard();
+DROP TRIGGER IF EXISTS legacy_custom_package_zone_guard ON custom_packages;
+CREATE TRIGGER legacy_custom_package_zone_guard BEFORE INSERT OR UPDATE ON custom_packages FOR EACH ROW EXECUTE FUNCTION domly_legacy_zone_guard();
+DROP TRIGGER IF EXISTS legacy_calendar_zone_guard ON scheduled_cleanings;
+CREATE TRIGGER legacy_calendar_zone_guard BEFORE INSERT OR UPDATE ON scheduled_cleanings FOR EACH ROW EXECUTE FUNCTION domly_legacy_zone_guard();
+CREATE OR REPLACE FUNCTION domly_offer_zone_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE address_uuid UUID;
+BEGIN
+ IF NEW.status='offered' THEN SELECT address_id INTO address_uuid FROM service_orders WHERE id=NEW.order_id; PERFORM domly_assert_service_address(address_uuid,TRUE); END IF;
+ RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS offer_zone_guard ON order_offers;
+CREATE TRIGGER offer_zone_guard BEFORE INSERT OR UPDATE ON order_offers FOR EACH ROW EXECUTE FUNCTION domly_offer_zone_guard();
+
+CREATE OR REPLACE FUNCTION domly_quality_address_proof_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE changed_at TIMESTAMPTZ;
+BEGIN
+ IF NOT domly_service_zones_enforced() OR NEW.status<>'approved' THEN RETURN NEW; END IF;
+ SELECT area_invalidated_at INTO changed_at FROM customer_addresses WHERE id=NEW.address_id;
+ IF changed_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM files WHERE id=NEW.document_file_id AND owner_id=NEW.customer_id AND created_at>=changed_at) THEN
+  RAISE EXCEPTION USING ERRCODE='PZ002',MESSAGE='Документ относится к старому адресу. Загрузите новый технический план.';
+ END IF;
+ RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS quality_address_proof_guard ON quality_check_requests;
+CREATE TRIGGER quality_address_proof_guard BEFORE INSERT OR UPDATE ON quality_check_requests FOR EACH ROW EXECUTE FUNCTION domly_quality_address_proof_guard();
+
+UPDATE order_offers f SET status='expired'
+WHERE f.status='offered' AND domly_service_zones_enforced() AND NOT EXISTS(
+ SELECT 1 FROM service_orders o JOIN customer_addresses a ON a.id=o.address_id
+ WHERE o.id=f.order_id AND a.service_status<>'needs_new_address' AND NOT a.area_reverification_required
+ AND domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude)
+);
