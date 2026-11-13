@@ -32,6 +32,8 @@ import { qualifyReferral, referralDiscount } from '../../modules/referrals';
 import { packageQuote } from '../../modules/packageQuote';
 import { mobileRouter } from './mobile';
 import {botRouter} from './bot';
+import {botOrderingRouter} from './botOrdering';
+import {bookingLock,checkBotBookingCapacity} from '../../modules/botBookingCapacity';
 import { Router, urlencoded } from 'express';
 import fs from 'fs/promises';
 import multer from 'multer';
@@ -1430,7 +1432,7 @@ export function buildV1Router(deps: {
     ok(res, { kaspi: Boolean(env.moonAiEnabled && env.moonAiChannelUrl && env.moonAiChannelApiKey), online: bccReady(),onlineTest:bccConfig().test });
   }));
 
-  router.post('/packages/purchase', auth(['customer']), idempotent(deps.db,'package_purchase'), asyncHandler(async (req, res) => {
+  const purchasePackage = async (req: any) => {
     if (req.body.paymentMethod === 'online' && !bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
     const pkg = first<{ id: string; base_price: string; price_per_m2: string; cleaning_count: number; months: number; name_ru: string; features: any }>((await deps.db.query(
       `SELECT * FROM catalog_packages WHERE id=$1 AND active=TRUE`,
@@ -1465,7 +1467,7 @@ export function buildV1Router(deps: {
     await deps.notifications.createAdminEvent({
       event: 'new_payment',
       titleRu: 'Новая заявка на оплату',
-      bodyRu: `Клиент покупает пакет на сумму ${total} ₸.`,
+      bodyRu: `${req.botOrdering ? 'Бот MooonAI оформляет клиенту' : 'Клиент покупает'} пакет на сумму ${total} ₸.`,
       targetType: 'payment',
       targetId: (payment.payment as any).id,
       dedupeKey: `payment-${(payment.payment as any).id}`,
@@ -1484,11 +1486,15 @@ export function buildV1Router(deps: {
         targetType: 'area_verification', targetId: address.id, dedupeKey: `area-reminder-${address.id}`,
       });
     }
-    ok(res, { customerPackage, ...payment });
-  }));
+    return { customerPackage, ...payment };
+  };
+  router.post('/packages/purchase', auth(['customer']), idempotent(deps.db,'package_purchase'), asyncHandler(async(req,res)=>{ok(res,await purchasePackage(req));}));
 
-  router.post('/orders', auth(['customer']), idempotent(deps.db, 'order_create', {recoverPending: true}), asyncHandler(async (req, res) => {
+  const createOrder = async (req: any) => {
     const result = await idempotentTransaction(deps.db, req, async () => {
+    await deps.db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[bookingLock]);
+    // Same lock order as assignment: cleaner before order/package.
+    if(req.botOrdering)await deps.db.query("SELECT id FROM app_users WHERE role='cleaner' ORDER BY id FOR UPDATE");
     validateBookingStart(req.body.date, req.body.startTime);
     const customerPackage = first<{ id: string; package_id: string; address_id: string; available_cleanings: number; total_cleanings: number; status: string; purchase_config: any; freeze_until?: string }>((await deps.db.query(
       `SELECT *,freeze_until::text AS freeze_until FROM customer_packages WHERE id=$1 AND customer_id=$2 FOR UPDATE`,
@@ -1504,6 +1510,7 @@ export function buildV1Router(deps: {
     const prepaidIds = new Set((Array.isArray(req.body.addonsDetailed) && req.body.addonsDetailed.length ? prepaid : (customerPackage.purchase_config?.addons ?? [])).map((item:any)=>item.id));
     const requestedAddons = Array.isArray(req.body.addonsDetailed) && req.body.addonsDetailed.length
       ? req.body.addonsDetailed : (Array.isArray(req.body.addonIds) ? req.body.addonIds.map((id: string)=>({id})) : []);
+    if(req.botOrdering && isPostRenovation(tariff) && requestedAddons.length)throw new ApiError(400,'addons_not_allowed','Для уборки после ремонта допуслуги не выбираются.');
     const tierPercent=await customerTierDiscount(deps.db,req.user!.id);
     const serviceAddress=(await deps.db.query('SELECT COALESCE(verified_area,area) AS area FROM customer_addresses WHERE id=$1',[customerPackage.address_id])).rows[0];
     const catalogAddons = requestedAddons.length
@@ -1524,6 +1531,11 @@ export function buildV1Router(deps: {
     const duration = await estimateCleaningDurationMinutes(deps.db, customerPackage.address_id, addons, tariff) + prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes ?? 0)),0);
     validateBookingHours(String(req.body.startTime), duration);
     const end = addMinutes(String(req.body.startTime), duration);
+    if(req.botOrdering){
+      const free=await deps.scheduling.availableCleaners(String(req.body.date),String(req.body.startTime),end,undefined,deps.db,true,duration);
+      await checkBotBookingCapacity(deps.db,req.user!.id,String(req.body.date),String(req.body.startTime),duration,free.length);
+      if(addonAmount>0)throw new ApiError(409,'addons_payment_required','Оплатите допуслуги в составе пакета до бронирования ботом.');
+    }
     const initialStatus = addonAmount > 0 ? 'pending_payment' : 'pending_assignment';
     const row = await deps.db.transaction(async (tx) => {
       const reserved = first((await tx.query(
@@ -1556,7 +1568,7 @@ export function buildV1Router(deps: {
     await deps.notifications.createAdminEvent({
       event: 'new_order',
       titleRu: 'Новый заказ',
-      bodyRu: `Клиент оформил заказ на ${req.body.date} ${req.body.startTime}.`,
+      bodyRu: `${req.botOrdering ? 'Бот MooonAI оформил клиенту' : 'Клиент оформил'} заказ на ${req.body.date} ${req.body.startTime}.`,
       targetType: 'order',
       targetId: row!.id,
       dedupeKey: `order-${row!.id}`,
@@ -1565,8 +1577,9 @@ export function buildV1Router(deps: {
     const offer = addonAmount > 0 ? null : await offerNextCleanerAndNotify(row!.id);
     return { order: row, offer };
     }, 201);
-    ok(res, result, 201);
-  }));
+    return result;
+  };
+  router.post('/orders', auth(['customer']), idempotent(deps.db, 'order_create', {recoverPending: true}), asyncHandler(async(req,res)=>{ok(res,await createOrder(req),201);}));
 
   router.post('/orders/:id/pay', auth(['customer']), asyncHandler(async (req, res) => {
     if (req.body.provider === 'bcc' && !bccReady()) throw new ApiError(503, 'online_payment_unavailable', 'Онлайн-оплата пока недоступна. Выберите Kaspi.kz.');
@@ -2034,6 +2047,7 @@ export function buildV1Router(deps: {
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
     const row = await deps.db.atomic(()=>deps.db.transaction(async tx => {
+      await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[bookingLock]);
       // Lock the package before orders to serialize credit allocation with expiry.
       if(order.customer_package_id)await refreshPackageUsage(deps.db,order.customer_package_id);
       if (order.cleaner_id) await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[order.cleaner_id]);
@@ -2262,9 +2276,9 @@ export function buildV1Router(deps: {
     ok(res, rows);
   }));
 
-  router.get('/scheduling/available-slots', auth(), asyncHandler(async (req, res) => {
+  const availableSlots = async (req: any) => {
     const date = String(req.query.date);
-    if (!isBookableDate(date)) { ok(res, []); return; }
+    if (!isBookableDate(date)) return [];
     const settings = await readAppSettings(deps.db);
     const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
     const addonIds = String(req.query.addonIds ?? '').split(',').map((id) => id.trim()).filter(Boolean);
@@ -2334,8 +2348,18 @@ export function buildV1Router(deps: {
     }).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration), durationMinutes: duration}));
     const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined,{excludeOrderId:editedOrder?.id,cleanerId:editedOrder?.cleaner_id});
     const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));
-    ok(res, available);
-  }));
+    return available;
+  };
+  router.get('/scheduling/available-slots', auth(), asyncHandler(async(req,res)=>{ok(res,await availableSlots(req));}));
+  router.use(botOrderingRouter(deps.db,{purchasePackage,createOrder,availableSlots,verifyPayment:async(payment:any)=>{
+    if(payment.provider==='bcc'){
+      const result=await reconcileBccPayment(deps.db,deps.paymentGateway,payment);
+      if(result.testMode)throw new ApiError(409,'test_payment','Тестовый платёж не активирует пакет.');
+      payment=result.payment;
+    }
+    if(payment.status==='paid')await applyPaidPayment(payment);
+    return payment;
+  }}));
 
   router.get('/payouts', auth(['cleaner']), asyncHandler(async (req, res) => {
     ok(res, (await deps.db.query(`SELECT * FROM payouts WHERE cleaner_id=$1 ORDER BY created_at DESC`, [req.user!.id])).rows);
@@ -2693,6 +2717,7 @@ export function buildV1Router(deps: {
       paymentId: req.body.paymentId ?? undefined,
     });
     await recordAudit('payment.webhook.moon_ai_kaspi', 'payment', result.payment?.id ?? null, {
+      actorKind:'bot',actorName:'MooonAI',customerId:result.payment?.customer_id,
       status, resolution: result.resolution, duplicate: result.duplicate,
     });
     if (result.resolution !== 'matched') {
@@ -2884,7 +2909,7 @@ export function buildV1Router(deps: {
       [(payment as any).order_id],
     )).rows;
     const audit = (await deps.db.query(
-      `SELECT al.*, actor.full_name AS actor_name, actor.phone AS actor_phone
+      `SELECT al.*, CASE WHEN al.payload->>'actorKind'='bot' THEN 'Бот MooonAI' ELSE actor.full_name END AS actor_name, actor.phone AS actor_phone
        FROM audit_logs al
        LEFT JOIN app_users actor ON actor.id=al.actor_id
        WHERE al.entity_type='payment' AND al.entity_id=$1
@@ -4824,9 +4849,9 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
     );
   }
   if (section === 'audit') {
-    addCommon('al', ['al.action', 'al.entity_type', 'al.entity_id', 'u.full_name', 'u.phone', 'u.email', 'u.numeric_id::text']);
+    addCommon('al', ['al.action', 'al.entity_type', 'al.entity_id', "al.payload->>'actorName'", "al.payload->>'customerId'", "al.payload->>'requestId'", 'u.full_name', 'u.phone', 'u.email', 'u.numeric_id::text']);
     return done(
-      `SELECT al.*, u.numeric_id AS actor_number, u.full_name AS actor_name,
+      `SELECT al.*, u.numeric_id AS actor_number, CASE WHEN al.payload->>'actorKind'='bot' THEN 'Бот MooonAI' ELSE u.full_name END AS actor_name,
               u.phone AS actor_phone, u.email AS actor_email, u.role AS actor_role
        FROM audit_logs al
        LEFT JOIN app_users u ON u.id=al.actor_id`,

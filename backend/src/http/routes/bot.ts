@@ -5,6 +5,8 @@ import {Database} from '../../infrastructure/db/Database';
 import {NotificationService} from '../../modules/domainServices';
 import {verifyMoonToken} from '../../modules/moonAi';
 import {botCatalog,botCustomerContext,botConfirmArea,botScheduleVisit,optionalId} from '../../modules/botIntegration';
+import {auditBot} from '../../modules/botOrdering';
+import {randomUUID} from 'node:crypto';
 import {packageQuote} from '../../modules/packageQuote';
 
 export function botRouter(db:Database,notifications:NotificationService) {
@@ -18,7 +20,16 @@ export function botRouter(db:Database,notifications:NotificationService) {
   const protectedRoute=(handler:any)=>asyncHandler(async(req,res)=>{
     verifyMoonToken(req.headers);
     res.set('Cache-Control','no-store');
-    ok(res,await handler(req));
+    const requestId=randomUUID();
+    const operation=req.path.split('/').slice(-2).join('.');
+    try{
+      const result=await handler(req);
+      await auditBot(db,operation,{requestId,result:'success'});
+      ok(res,result);
+    }catch(error){
+      await auditBot(db,operation,{requestId,result:'error',code:error instanceof ApiError?error.code:'internal_error'});
+      throw error;
+    }
   });
   router.get('/integrations/moon-ai/catalog',protectedRoute((req:any)=>botCatalog(db,req.query.area)));
   router.post('/integrations/moon-ai/catalog/quote',protectedRoute(async(req:any)=>{

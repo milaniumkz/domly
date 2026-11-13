@@ -5,6 +5,7 @@ import {Queryable} from '../domain/repositories/UnitOfWork';
 import {normalizePhone, NotificationService} from './domainServices';
 import {confirmArea} from './areaVerification';
 import {packageQuote} from './packageQuote';
+import {publicCatalogPackage} from './packageTerms';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function optionalId(value:unknown) {
@@ -12,7 +13,7 @@ export function optionalId(value:unknown) {
   if(typeof value!=='string'||!uuid.test(value))throw new ApiError(400,'invalid_id','Некорректный идентификатор.');
   return value;
 }
-async function customer(db:Queryable, phone:unknown, lock=false) {
+export async function customer(db:Queryable, phone:unknown, lock=false) {
   const normalized=normalizePhone(String(phone??''));
   if(!/^\+7\d{10}$/.test(normalized))throw new ApiError(400,'invalid_phone','Укажите номер клиента в формате +7XXXXXXXXXX.');
   const rows=(await db.query(`SELECT id,phone FROM app_users WHERE phone=$1 AND role='customer'
@@ -37,7 +38,7 @@ export async function botCatalog(db:Database,areaValue?:unknown) {
         const quote=await packageQuote(tx,{packageId:pkg.id,area,cleaningsPerMonth:frequency});
         quotes.push({...quote,totalPrice:quote.monthlyPrice,perCleaningAfterDiscount:Math.round(quote.monthlyPrice/quote.cleaningCount*100)/100});
       }
-      result.push({...pkg,includedServices:Array.isArray(features)?features:features.items??[],quotes});
+      result.push({...publicCatalogPackage(pkg),includedServices:Array.isArray(features)?features:features.items??[],quotes});
     }
     return {currency:'KZT',area:area??null,generatedAt:new Date().toISOString(),packages:result,addonGroups:groups,addons,
       pricingNotes:{totalPrice:'Весь период пакета, включая скидку. Не ежемесячный платёж.',
@@ -54,7 +55,8 @@ export async function botCustomerContext(db:Database,phone:unknown) {
     FROM quality_check_requests q WHERE q.customer_id=$1 AND q.status IN ('pending','scheduled','approved') ORDER BY q.created_at DESC LIMIT 30`,[user.id])).rows;
   const orders=(await db.query(`SELECT id,address_id,customer_package_id,status,scheduled_date,start_time FROM service_orders
     WHERE customer_id=$1 AND status NOT IN ('cancelled','completed') ORDER BY scheduled_date,start_time LIMIT 30`,[user.id])).rows;
-  return {phone:user.phone,addresses,qualityChecks:requests,orders,appUrl:'https://domly.kz/customer/#/client/area-confirmation'};
+  const packages=(await db.query(`SELECT id,package_id,address_id,status,total_cleanings,available_cleanings,months,period_start,period_end FROM customer_packages WHERE customer_id=$1 ORDER BY created_at DESC`,[user.id])).rows;
+  return {phone:user.phone,addresses,packages,qualityChecks:requests,orders,appUrl:'https://domly.kz/customer/#/client/area-confirmation'};
 }
 function eventInput(input:any) {
   if(typeof input.eventId!=='string'||input.eventId.length<8||input.eventId.length>180)throw new ApiError(400,'event_id_required','Нужен стабильный eventId длиной 8–180 символов.');
@@ -163,7 +165,7 @@ export async function botConfirmArea(db:Database,notifications:NotificationServi
     await tx.query(`UPDATE quality_check_requests SET status='approved',approved_area=$2,recalculation_amount=$3,updated_at=NOW() WHERE id=$1`,[q.id,area,delta]);
     const response={customerId:user.id,qualityCheckId:q.id,addressId:address.id,confirmedArea:area,status:'approved',recalculations,duplicate:false};
     await tx.query(`INSERT INTO bot_area_events(event_id,customer_id,request_hash,result,evidence) VALUES($1,$2,$3,$4,$5)`,[input.eventId,user.id,hash,response,evidence]);
-    await tx.query(`INSERT INTO audit_logs(action,entity_type,entity_id,payload) VALUES('area.confirmed_by_bot','quality_check',$1,$2)`,[q.id,{eventId:input.eventId,...response,evidence}]);
+    await tx.query(`INSERT INTO audit_logs(action,entity_type,entity_id,payload) VALUES('area.confirmed_by_bot','quality_check',$1,$2)`,[q.id,{actorKind:'bot',actorName:'MooonAI',customerId:user.id,eventId:input.eventId,...response,evidence}]);
     return response;
   });
   await notifications.create({userId:result.customerId,titleRu:'Площадь подтверждена',titleKk:'Аудан расталды',
@@ -190,7 +192,7 @@ export async function botScheduleVisit(db:Database,notifications:NotificationSer
       throw new ApiError(409,'visit_after_cleaning','Проверка должна быть до начала уборки. Согласуйте другое время с отделом качества.');
     if(q.scheduled_at&&new Date(q.scheduled_at).getTime()!==Date.parse(at))throw new ApiError(409,'visit_already_scheduled','Визит уже согласован на другое время. Изменение согласует отдел качества.');
     const row=(await tx.query(`UPDATE quality_check_requests SET status='scheduled',scheduled_at=$2,admin_comment=concat_ws(E'\n',admin_comment,$3::text),updated_at=NOW() WHERE id=$1 RETURNING id,status,scheduled_at`,[q.id,at,q.scheduled_at?null:'Клиент через WhatsApp согласовал время проверки загруженного плана. Требуется назначить сотрудника отдела качества.'])).rows[0];
-    await tx.query(`INSERT INTO audit_logs(action,entity_type,entity_id,payload) VALUES('quality_check.visit_requested_by_bot','quality_check',$1,$2)`,[q.id,{eventId:input.eventId,scheduledAt:at,customerConsent:true}]);
+    await tx.query(`INSERT INTO audit_logs(action,entity_type,entity_id,payload) VALUES('quality_check.visit_requested_by_bot','quality_check',$1,$2)`,[q.id,{actorKind:'bot',actorName:'MooonAI',customerId:user.id,eventId:input.eventId,scheduledAt:at,customerConsent:true}]);
     const result={...row,customerId:user.id,controllerAssignment:'pending',message:'Время клиента передано отделу качества. Назначение сотрудника требует подтверждения отдела.'};
     await tx.query('INSERT INTO bot_area_events(event_id,customer_id,request_hash,result,evidence) VALUES($1,$2,$3,$4,$5)',[input.eventId,user.id,hash,result,{documentDeclined:true,customerConsent:true}]);
     return result;

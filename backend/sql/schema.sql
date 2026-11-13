@@ -1753,3 +1753,14 @@ CREATE INDEX IF NOT EXISTS payments_paid_customer_package ON payments(customer_p
 -- Stable monthly credit allocation permits early use without reviving expired credits on cancellation.
 ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS usage_period_id UUID REFERENCES customer_package_periods(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS service_orders_usage_period ON service_orders(usage_period_id) WHERE status NOT IN ('cancelled','canceled');
+
+-- Dedicated bot ordering replay ledger. No credentials are stored here.
+CREATE TABLE IF NOT EXISTS bot_ordering_requests (
+ request_key TEXT PRIMARY KEY,
+ operation TEXT NOT NULL,
+ fingerprint TEXT NOT NULL,
+ customer_id UUID REFERENCES app_users(id),
+ response JSONB NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_bot_audit_created ON audit_logs(created_at DESC) WHERE payload->>'actorKind'='bot';
