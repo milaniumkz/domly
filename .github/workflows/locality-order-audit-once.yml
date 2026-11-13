@@ -1,0 +1,58 @@
+name: Read-only locality order diagnostic
+'on':
+  push:
+    branches:
+    - support/locality-order-audit-20261113
+    paths:
+    - .github/workflows/locality-order-audit-once.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v4
+    - name: Read minimal diagnostic and encrypt on server
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: 'set -euo pipefail
+
+        umask 077
+
+        mkdir -p ~/.ssh
+
+        printf ''%s'' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
+
+        printf ''%s\n'' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+        remote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" ''mktemp -d /tmp/domly-locality-audit-XXXXXX'')
+
+        [[ "$remote_dir" =~ ^/tmp/domly-locality-audit-[A-Za-z0-9]+$ ]]
+
+        trap ''ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "rm -rf -- $remote_dir" >/dev/null 2>&1 || true'' EXIT
+
+        scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/locality_order_audit_once.js scripts/server/locality_audit_owner_public.pem
+        "$VPS_USER@$VPS_HOST:$remote_dir/"
+
+        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "cd ''$DEPLOY_PATH/current'' && umask 077 && docker compose -p domly-backend
+        exec -T api node - < ''$remote_dir/locality_order_audit_once.js'' > ''$remote_dir/report.json'' && openssl rand -out ''$remote_dir/key.bin''
+        32 && openssl enc -aes-256-cbc -salt -pbkdf2 -in ''$remote_dir/report.json'' -out ''$remote_dir/report.enc'' -pass file:''$remote_dir/key.bin''
+        && openssl pkeyutl -encrypt -pubin -inkey ''$remote_dir/locality_audit_owner_public.pem'' -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+        -in ''$remote_dir/key.bin'' -out ''$remote_dir/key.enc''"
+
+        mkdir -m 700 -p encrypted-report
+
+        scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST:$remote_dir/report.enc" "$VPS_USER@$VPS_HOST:$remote_dir/key.enc"
+        encrypted-report/
+
+        '
+    - uses: actions/upload-artifact@v4
+      with:
+        name: locality-order-diagnostic-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
