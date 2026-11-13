@@ -1,0 +1,84 @@
+name: Configure scoped bot ordering access once
+'on':
+  push:
+    branches:
+    - support/bot-ordering-access-20261113
+    paths:
+    - .github/workflows/bot-ordering-access-once.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v4
+    - name: Verify exact deployed source
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'python3 - <<''PYCODE''
+
+        import json,subprocess
+
+        repo=''milaniumkz/domly''
+
+        expected=''e1e1d1042891f40b9f6b8eb63680b59fa5082bdf''
+
+        deploy_id=43393153566
+
+        def api(path):return json.loads(subprocess.check_output([''gh'',''api'',''repos/''+repo+''/''+path]))
+
+        assert api(''git/ref/heads/main'')[''object''][''sha'']==expected
+
+        run=api(''actions/runs/''+str(deploy_id))
+
+        assert run[''head_sha'']==expected and run[''conclusion'']==''success'' and run[''path'']==''.github/workflows/deploy.yml''
+
+        print(''Verified successful checked deployment'')
+
+        PYCODE'
+    - name: Install credential and check scoped authentication
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: 'set -euo pipefail
+
+        umask 077
+
+        mkdir -p ~/.ssh
+
+        printf ''%s'' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
+
+        printf ''%s\n'' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+        remote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" ''mktemp -d /tmp/domly-bot-access-XXXXXX'')
+
+        [[ "$remote_dir" =~ ^/tmp/domly-bot-access-[A-Za-z0-9]+$ ]]
+
+        trap ''ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "rm -rf -- $remote_dir" >/dev/null 2>&1 || true'' EXIT
+
+        scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes scripts/server/bot_ordering_access_once.py scripts/server/bot_ordering_owner_public.pem
+        "$VPS_USER@$VPS_HOST:$remote_dir/"
+
+        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "python3 ''$remote_dir/bot_ordering_access_once.py'' --app-dir ''$DEPLOY_PATH''
+        --revision e1e1d1042891f40b9f6b8eb63680b59fa5082bdf --public-key ''$remote_dir/bot_ordering_owner_public.pem'' --output ''$remote_dir/owner-token.enc''"
+
+        mkdir -m 700 -p owner-access
+
+        scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST:$remote_dir/owner-token.enc" owner-access/owner-token.enc
+
+        chmod 600 owner-access/owner-token.enc
+
+        '
+    - uses: actions/upload-artifact@v4
+      with:
+        name: owner-bot-ordering-access-encrypted
+        path: owner-access/owner-token.enc
+        retention-days: 1
+        if-no-files-found: error
