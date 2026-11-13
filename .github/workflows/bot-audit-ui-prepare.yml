@@ -1,4 +1,4 @@
-name: Prepare bot audit UI and translations
+name: Verify connected bot audit screen and translations
 on:
   push:
     branches: [support/bot-audit-ui-20261113]
