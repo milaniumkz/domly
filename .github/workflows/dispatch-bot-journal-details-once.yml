@@ -1,0 +1,41 @@
+name: Dispatch checked detailed bot journal deployment once
+on:
+  push:
+    branches: [support/dispatch-bot-journal-details-20261113]
+    paths: [.github/workflows/dispatch-bot-journal-details-once.yml]
+permissions:
+  contents: read
+  actions: write
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify checked source, retire obsolete queued runs and dispatch standard deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          repo='milaniumkz/domly'
+          expected='0699d0ae67e7cbdb0581b032a9e5173f6e7af37d'
+          checked='5f47c65d377d7ed27141811b531e83fc2e1d0912'
+          def api(path, method='GET', body=None):
+              args=['gh','api','--method',method,'repos/'+repo+'/'+path]
+              if body is not None: args+=['--input','-']
+              result=subprocess.run(args,input=json.dumps(body) if body is not None else None,text=True,capture_output=True,check=True)
+              return json.loads(result.stdout) if result.stdout.strip() else None
+          assert api('git/ref/heads/main')['object']['sha']==expected,'Main advanced; re-review before deploying.'
+          run=api('actions/runs/43443320454')
+          assert run['head_sha']==checked and run['conclusion']=='success'
+          assert api('commits/'+expected)['commit']['tree']['sha']==api('commits/'+checked)['commit']['tree']['sha'],'Merged tree differs from checked source.'
+          runs=api('actions/workflows/deploy.yml/runs?branch=main&per_page=30')['workflow_runs']
+          for old in runs:
+              if old['status'] not in ['queued','pending']: continue
+              jobs=api('actions/runs/'+str(old['id'])+'/jobs')['jobs']
+              assert not any(j['status']=='in_progress' for j in jobs),'Another deployment is active; do not interrupt it.'
+              api('actions/runs/'+str(old['id'])+'/cancel','POST')
+              print('Cancelled obsolete queued deployment',old['id'])
+          api('actions/workflows/deploy.yml/dispatches','POST',{'ref':'main','inputs':{'mode':'deploy'}})
+          print('Requested standard main deployment for',expected)
+          PY
