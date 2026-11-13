@@ -1,0 +1,59 @@
+name: Prepare bot audit UI and translations
+on:
+  push:
+    branches: [support/bot-audit-ui-20261113]
+    paths: [.github/workflows/bot-audit-ui-prepare.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: domly_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U postgres -d domly_test" --health-interval 5s --health-retries 10
+    env:
+      DOMLY_INTEGRATION_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/domly_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.1
+          cache: true
+      - run: flutter pub get
+      - name: Format new UI and generate required catalogues
+        run: |
+          dart format lib/ui/admin_bot_audit.dart test/services/admin_bot_audit_test.dart
+          (cd tool/ui_texts && dart pub get --enforce-lockfile)
+          dart --packages=tool/ui_texts/.dart_tool/package_config.json tool/ui_texts/generate.dart
+      - run: flutter test test/services/admin_bot_audit_test.dart
+      - name: Verify bot audit against PostgreSQL
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+          PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d domly_test -v ON_ERROR_STOP=1 -f sql/schema.sql
+          node --test dist/tests/bot-ordering.test.js
+      - name: Save only formatting and generated UI text catalogues
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          allowed={'lib/ui/admin_bot_audit.dart','test/services/admin_bot_audit_test.dart','lib/localization/default_translation_sources.dart','backend/sql/ui_text_catalog.sql','tool/ui_texts/catalog.json'}
+          changed=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          assert changed<=allowed,repr(changed-allowed)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/ui/admin_bot_audit.dart test/services/admin_bot_audit_test.dart lib/localization/default_translation_sources.dart backend/sql/ui_text_catalog.sql tool/ui_texts/catalog.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Format bot audit UI and regenerate translated text catalogues"
+            git push origin HEAD:support/bot-audit-ui-20261113
+          fi
