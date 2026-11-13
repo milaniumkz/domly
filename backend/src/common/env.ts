@@ -62,6 +62,7 @@ export const env = {
   kaspiApiKey: process.env.KASPI_API_KEY ?? '',
   kaspiWebhookToken: process.env.KASPI_WEBHOOK_TOKEN ?? '',
   kaspiBaseUrl: process.env.KASPI_BASE_URL ?? '',
+  moonAiOrderingToken: process.env.MOON_AI_ORDERING_TOKEN ?? '',
   moonAiWebhookToken: process.env.MOON_AI_WEBHOOK_TOKEN ?? '',
   moonAiEnabled: boolEnv('MOON_AI_ENABLED'),
   moonAiChannelUrl: process.env.MOON_AI_CHANNEL_URL ?? '',
