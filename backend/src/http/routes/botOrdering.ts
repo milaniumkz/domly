@@ -1,4 +1,5 @@
 import {Router} from 'express';
+import {botAuditContext,botAuditSnapshot} from '../../modules/botAudit';
 import {asyncHandler,ok,ApiError} from '../../common/api';
 import {Database} from '../../infrastructure/db/Database';
 import {customer,optionalId,botCatalog,botCustomerContext} from '../../modules/botIntegration';
@@ -17,11 +18,11 @@ export function botOrderingRouter(db:Database,ops:Operations){
      if(name!=='catalog')user=await customer(db,req.method==='GET'?req.query.phone:req.body.phone);
      const run=()=>work(req,user);
      const data=mutating?await orderingOperation(db,name,req.body,req.header('Idempotency-Key'),run,user?.id):await run();
-     if(!mutating)await auditBot(db,name,{customerId:user?.id,requestId,result:'success'});
+     if(!mutating)await auditBot(db,name,{customerId:user?.id,requestId,result:'success',context:botAuditContext(req.method==='GET'?req.query:req.body),snapshot:botAuditSnapshot(data)});
      ok(res,data);
    }catch(error){
      // orderingOperation logs failures after rollback; customer lookup failures also remain visible.
-     if(!mutating||!user)await auditBot(db,name,{customerId:user?.id,requestId,result:'error',code:error instanceof ApiError?error.code:'internal_error'});
+     if(!mutating||!user)await auditBot(db,name,{customerId:user?.id,requestId,context:botAuditContext(req.method==='GET'?req.query:req.body),result:'error',code:error instanceof ApiError?error.code:'internal_error'});
      throw error;
    }
  });
