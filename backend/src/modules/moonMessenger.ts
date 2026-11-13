@@ -43,7 +43,7 @@ export async function sendMessengerFollowup(input:{id:string;kind:string;text:st
   const thread=threads[0];
   if(thread && thread.status!=='active')throw new MoonMessengerError('whatsapp_conversation_paused');
   const reference=`domly:${input.kind}:${input.id}`;
-  const intro=input.kind==='area_verification'
+  const intro=input.kind==='address_reverification' ? input.text : input.kind==='area_verification'
     ? 'Перед уборкой нужно подтвердить площадь квартиры. Пришлите в этот WhatsApp-чат чёткий технический план с адресом и общей площадью квартиры. Либо откройте мобильное приложение DomLY → Профиль → Подтвердить площадь → Фото технического плана, прикрепите чёткий снимок и нажмите «Подтвердить площадь». Если не хотите отправлять документ, напишите — согласуем дату и время проверки отделом качества до уборки.'
     : input.kind==='inactive_signup'
     ? signupWelcomeText

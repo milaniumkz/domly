@@ -48,7 +48,7 @@ export async function botCatalog(db:Database,areaValue?:unknown) {
 }
 export async function botCustomerContext(db:Database,phone:unknown) {
   const user=await customer(db,phone);
-  const addresses=(await db.query(`SELECT id,city,street,house,apartment,area,verified_area,is_primary FROM customer_addresses WHERE user_id=$1`,[user.id])).rows;
+  const addresses=(await db.query(`SELECT id,city,settlement,street,house,apartment,area,verified_area,is_primary,service_status,area_reverification_required,(NOT domly_service_zones_enforced() OR (service_status<>'needs_new_address' AND domly_location_in_service_zone(city,street,house,latitude,longitude))) AS service_available FROM customer_addresses WHERE user_id=$1`,[user.id])).rows;
   const requests=(await db.query(`SELECT q.id,q.address_id,q.customer_package_id,q.order_id,q.requested_area,q.approved_area,q.status,q.scheduled_at,
     q.document_file_id IS NOT NULL AS document_submitted,
     EXISTS(SELECT 1 FROM service_orders o WHERE o.customer_id=q.customer_id AND o.address_id=q.address_id AND (o.id=q.order_id OR o.customer_package_id=q.customer_package_id) AND o.status IN ('in_progress','completed')) AS cleaning_already_started

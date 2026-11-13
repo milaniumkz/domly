@@ -56,19 +56,19 @@ export async function queueAssistantMessage(db: Queryable, chatId: string, custo
   await db.query(`INSERT INTO moon_ai_outbox(customer_id,chat_id,kind,dedupe_key,payload) VALUES($1,$2,'message',$3,$4) ON CONFLICT(dedupe_key) DO NOTHING`,
     [customerId,chatId,`message:${messageId}`,{text, ...(fileUrl?{fileUrl}: {})}]);
 }
-export async function processMoonOutbox(db: Database, send: typeof fetch=fetch) {
+export async function processMoonOutbox(db: Database, send: typeof fetch=fetch, outboxId?:string) {
   if(!moonAiReady()) return {sent:0};
   const url=new URL(env.moonAiChannelUrl);
   if(url.protocol!=='https:' || !(url.hostname==='mooonai.com' || url.hostname.endsWith('.mooonai.com'))) throw new Error('invalid_moon_ai_channel_url');
   // A crash or uncertain HTTP result must not create duplicate Kaspi invoices.
   await db.query(`UPDATE moon_ai_outbox SET state='uncertain',failure_code='delivery_unknown'
-    WHERE state='processing' AND started_at<NOW()-INTERVAL '2 minutes'`);
+    WHERE state='processing' AND started_at<NOW()-INTERVAL '2 minutes' AND ($1::uuid IS NULL OR id=$1)`,[outboxId??null]);
   let sent=0;
   for(let i=0;i<20;i++) {
     const row=await db.transaction(async tx=>{
-      const row=(await tx.query(`SELECT o.* FROM moon_ai_outbox o WHERE o.state='pending' AND o.run_after<=NOW()
+      const row=(await tx.query(`SELECT o.* FROM moon_ai_outbox o WHERE ($1::uuid IS NULL OR o.id=$1) AND o.state='pending' AND o.run_after<=NOW()
         AND NOT EXISTS(SELECT 1 FROM moon_ai_outbox running WHERE running.chat_id=o.chat_id AND running.state='processing')
-        ORDER BY CASE WHEN o.kind='invoice' THEN 0 WHEN o.kind='area_verification' THEN 1 ELSE 2 END,o.created_at FOR UPDATE SKIP LOCKED LIMIT 1`)).rows[0];
+        ORDER BY CASE WHEN o.kind='invoice' THEN 0 WHEN o.kind='area_verification' THEN 1 ELSE 2 END,o.created_at FOR UPDATE SKIP LOCKED LIMIT 1`,[outboxId??null])).rows[0];
       if(!row)return null;
       await tx.query('SELECT id FROM chats WHERE id=$1 FOR UPDATE',[row.chat_id]);
       if((await tx.query("SELECT 1 FROM moon_ai_outbox WHERE chat_id=$1 AND state='processing' LIMIT 1",[row.chat_id])).rows.length) return {busy:true};
@@ -101,8 +101,18 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch) 
           await tx.query("UPDATE moon_ai_outbox SET state='cancelled',finished_at=NOW() WHERE id=$1",[row.id]);return {cancelled:true};
         }
       }
+      if(row.kind==='address_reverification'){
+        const activeRows=(await tx.query("SELECT service_status,area_reverification_required FROM customer_addresses WHERE id=$1 AND user_id=$2 AND (service_status='needs_new_address' OR area_reverification_required)",[row.payload.addressId,row.customer_id])).rows;
+        const active=activeRows.length;
+        if(active&&activeRows[0].service_status!=='needs_new_address'){row.payload.text='Ваш новый адрес сохранён. Загрузите новый технический план нового адреса в приложении DomLY → Профиль → Подтвердить площадь. После подтверждения площади сможете оформить уборку.';}
+        if(!active){await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='address_already_corrected',finished_at=NOW() WHERE id=$1",[row.id]);return {cancelled:true};}
+      }
       if(row.payment_id) {
         const p=(await tx.query('SELECT * FROM payments WHERE id=$1 FOR UPDATE',[row.payment_id])).rows[0];
+        if(row.kind==='invoice' && p){
+          const check=(await tx.query("SELECT NOT domly_service_zones_enforced() OR EXISTS(SELECT 1 FROM customer_addresses a WHERE a.id=COALESCE((SELECT address_id FROM customer_packages WHERE id=$1),(SELECT address_id FROM service_orders WHERE id=$2)) AND a.service_status<>'needs_new_address' AND domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude)) AS allowed",[p.customer_package_id,p.order_id])).rows[0];
+          if(!check.allowed){await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='outside_service_zone',finished_at=NOW() WHERE id=$1",[row.id]);return {cancelled:true};}
+        }
         const purchased=(await tx.query("SELECT 1 FROM payments WHERE customer_id=$1 AND status='paid' AND COALESCE(paid_at,created_at) >= $2 LIMIT 1",[row.customer_id,row.created_at])).rows.length>0;
         const checkoutHelp=row.kind==='abandoned_checkout';
         const newer=checkoutHelp && (await tx.query("SELECT 1 FROM payments WHERE customer_id=$1 AND id<>$3 AND created_at>$2 AND status NOT IN ('paid','refunded') LIMIT 1",[row.customer_id,row.created_at,row.payment_id])).rows.length>0;

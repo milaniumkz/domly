@@ -133,6 +133,8 @@ export function friendlyError(code: string, fallback: string): ApiError {
 }
 
 function knownError(error: any): { status: number; code: string; message: string } {
+  if(error?.code==='PZ001')return {status:409,code:'outside_service_zone',message:'Адрес вне активных зон обслуживания. Можно отправить только заявку на подключение адреса.'};
+  if(error?.code==='PZ002')return {status:409,code:'address_area_reverification_required',message:'Для нового адреса загрузите новый технический план и подтвердите площадь.'};
   if (error?.type === 'entity.parse.failed' || error instanceof SyntaxError) {
     return { status: 400, code: 'invalid_json', message: ruMessages.invalid_json };
   }
