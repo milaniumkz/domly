@@ -9,6 +9,8 @@ import {Database} from '../infrastructure/db/Database';
 import {env} from '../common/env';
 import {configureAuthDatabase,signAccessToken} from '../common/auth';
 import {errorHandler} from '../common/api';
+import {botAuditRouter} from '../http/routes/botAudit';
+import {botActionTitle,botAuditContext,botAuditSnapshot} from '../modules/botAudit';
 import {buildV1Router} from '../http/routes/v1';
 import {BonusService,PaymentService,NotificationService,SchedulingService} from '../modules/domainServices';
 
@@ -165,5 +167,33 @@ test('strict service zones: database boundary, connection-only fallback and fres
   await db.query("DELETE FROM audit_logs WHERE payload->>'customerId'=$1",[user]);await db.query('DELETE FROM service_address_requests WHERE customer_id=$1',[user]);await db.query('DELETE FROM quality_check_requests WHERE customer_id=$1',[user]);await db.query('DELETE FROM files WHERE owner_id=$1',[user]);
   await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('UPDATE customer_packages SET purchase_payment_id=NULL WHERE id=$1',[pkg]);await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_packages WHERE id=$1',[pkg]);await db.query('DELETE FROM customer_addresses WHERE user_id=$1',[user]);await db.query('DELETE FROM connected_houses WHERE id=$1',[house]);await db.query('DELETE FROM service_zones WHERE id=$1',[zone]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[catalog]);await db.query('DELETE FROM app_users WHERE id=$1',[user]);
   if(previous)await db.query("UPDATE app_settings SET value=$1 WHERE key='enforceServiceZones'",[previous.value]);else await db.query("DELETE FROM app_settings WHERE key='enforceServiceZones'");await db.close();
+ }
+});
+
+test('bot audit descriptions, ownership and safe financial details',{skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async t=>{
+ const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!),admin=randomUUID(),customer=randomUUID(),cleaner=randomUUID(),catalog=randomUUID(),address=randomUUID(),purchase=randomUUID(),payment=randomUUID(),order=randomUUID(),event=randomUUID(),legacy=randomUUID(),human=randomUUID();
+ configureAuthDatabase(db);const app=express();app.use(botAuditRouter(db),errorHandler);const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
+ const request=async(path:string,role:'superadmin'|'customer'='superadmin')=>{const res=await fetch(base+path,{headers:{Authorization:'Bearer '+signAccessToken({id:role==='customer'?customer:admin,phone:'fixture',role})}});return {status:res.status,data:await res.json() as any};};
+ try{
+  for(const [id,role,name] of [[admin,'superadmin','Администратор'],[customer,'customer','Клиент журнала'],[cleaner,'cleaner','Исполнитель журнала']])await db.query("INSERT INTO app_users(id,phone,role,status,full_name) VALUES($1,$2,$3,'approved',$4)",[id,'audit-fixture-'+id,role,name]);
+  await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,$2,4,1,777,0)",[catalog,'Audit '+catalog]);
+  await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Тест','1',50)",[address,customer]);
+  await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,$4,4,3,'active')",[purchase,customer,catalog,address]);
+  await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,amount,status,payload) VALUES($1,$2,$3,'kaspi',777,'paid',$4)",[payment,customer,purchase,{paymentHtml:'DO_NOT_EXPOSE',bccPrivateKey:'DO_NOT_EXPOSE'}]);
+  await db.query('UPDATE customer_packages SET purchase_payment_id=$2 WHERE id=$1',[purchase,payment]);
+  await db.query("INSERT INTO service_orders(id,customer_id,customer_package_id,address_id,package_id,cleaner_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,$3,$4,$5,$6,'2038-01-02','12:00','14:00','assigned')",[order,customer,purchase,address,catalog,cleaner]);
+  await db.query("INSERT INTO audit_logs(id,action,entity_type,entity_id,payload) VALUES($1,'bot.moon-ai.order_create','order',$2,$3)",[event,order,{actorKind:'bot',actorName:'MooonAI',customerId:customer,requestId:randomUUID(),result:'success',snapshot:{order:{status:'pending_assignment'}},context:{date:'2038-01-02',startTime:'12:00'}}]);
+  await db.query("INSERT INTO audit_logs(id,action,entity_type,payload) VALUES($1,'bot.moon-ai.catalog.quote','bot_action',$2)",[legacy,{actorKind:'bot',actorName:'MooonAI',result:'success'}]);
+  await db.query("INSERT INTO audit_logs(id,actor_id,action,entity_type,payload) VALUES($1,$2,'bot.moon-ai.catalog.quote','bot_action',$3)",[human,admin,{actorKind:'bot',actorName:'MooonAI'}]);
+  await t.test('all known catalog variants are readable Russian',()=>{for(const action of ['bot.moon-ai.quote','bot.moon-ai.catalog.quote'])assert.equal(botActionTitle(action),'Расчёт стоимости пакета');assert.equal(botActionTitle('bot.moon-ai.moon-ai.catalog'),'Просмотр каталога услуг');assert.equal(botActionTitle('unknown'),'Действие бота');});
+  await t.test('list shows real customer and excludes human-origin spoof',async()=>{const r=await request('/admin/bot-actions?search='+encodeURIComponent('Клиент журнала'));assert.equal(r.status,200);assert.ok(r.data.data.some((e:any)=>e.id===event&&e.customer.name==='Клиент журнала'));assert.ok(!r.data.data.some((e:any)=>e.id===human));});
+  await t.test('Russian action search matches legacy operation names',async()=>{const r=await request('/admin/bot-actions?search='+encodeURIComponent('Расчёт'));assert.equal(r.status,200);assert.ok(r.data.data.some((e:any)=>e.id===legacy&&e.title==='Расчёт стоимости пакета'));});
+  await t.test('opens the linked payment, package, order and cleaner without gateway secrets',async()=>{const r=await request('/admin/bot-actions/'+event);assert.equal(r.status,200,JSON.stringify(r.data));const d=r.data.data;assert.equal(d.customer.name,'Клиент журнала');assert.equal(d.cleaner.name,'Исполнитель журнала');assert.equal(Number(d.packagePayment.amount),777);assert.equal(d.order.status,'assigned');assert.equal(d.snapshot.order.status,'pending_assignment');assert.equal(JSON.stringify(d).includes('DO_NOT_EXPOSE'),false);});
+  await t.test('historical global quotes do not fabricate missing customer or amounts',async()=>{const r=await request('/admin/bot-actions/'+legacy);assert.equal(r.data.data.customer,null);assert.equal(r.data.data.event.amount,null);assert.equal(r.data.data.detailsAvailable,false);assert.ok(r.data.data.note);});
+  await t.test('customer sessions cannot read admin financial audit',async()=>{assert.equal((await request('/admin/bot-actions','customer')).status,403);assert.equal((await request('/admin/bot-actions/'+event,'customer')).status,403);});
+  await t.test('new snapshots exclude tokens, bank forms and private payloads',()=>{const context=botAuditContext({area:67,date:'2038-01-02',token:'secret',phone:'private',provider:'bcc'});assert.deepEqual(context,{date:'2038-01-02',provider:'bcc',area:67});const snapshot=botAuditSnapshot({payment:{id:payment,amount:777,status:'paid',payload:{paymentHtml:'secret'}}});assert.equal(snapshot.payment.amount,777);assert.equal(JSON.stringify(snapshot).includes('secret'),false);});
+ }finally{
+  await new Promise<void>(r=>server.close(()=>r()));configureAuthDatabase(null);
+  await db.query('DELETE FROM audit_logs WHERE id=ANY($1::uuid[])',[[event,legacy,human]]);await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('UPDATE customer_packages SET purchase_payment_id=NULL WHERE id=$1',[purchase]);await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[catalog]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[admin,customer,cleaner]]);await db.close();
  }
 });

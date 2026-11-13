@@ -1,4 +1,5 @@
 import {createHash,timingSafeEqual,randomUUID} from 'node:crypto';
+import {botAuditContext,botAuditSnapshot} from './botAudit';
 import {ApiError} from '../common/api';
 import {env} from '../common/env';
 import {Database} from '../infrastructure/db/Database';
@@ -10,7 +11,7 @@ export function verifyOrderingToken(headers:Record<string,unknown>) {
   if(typeof supplied!=='string'||Buffer.byteLength(supplied)!==Buffer.byteLength(secret)||!timingSafeEqual(Buffer.from(supplied),Buffer.from(secret)))
     throw new ApiError(401,'unauthorized','Неверный токен интеграции.');
 }
-export async function auditBot(db:Database,operation:string,input:{customerId?:string;requestId:string;entityType?:string;entityId?:string;result:string;code?:string;replay?:boolean}) {
+export async function auditBot(db:Database,operation:string,input:{customerId?:string;requestId:string;entityType?:string;entityId?:string;result:string;code?:string;replay?:boolean;context?:Record<string,unknown>;snapshot?:Record<string,unknown>}) {
   await db.query(`INSERT INTO audit_logs(actor_id,action,entity_type,entity_id,payload) VALUES(NULL,$1,$2,$3,$4)`,
     ['bot.moon-ai.'+operation,input.entityType??'bot_action',input.entityId??input.customerId??input.requestId,
       {actorKind:'bot',actorName:'MooonAI',...input}]);
@@ -19,7 +20,7 @@ export async function auditBot(db:Database,operation:string,input:{customerId?:s
 export async function orderingOperation(db:Database,operation:string,body:any,key:unknown,work:()=>Promise<any>,customerId?:string) {
   const requestId=typeof key==='string'?key:randomUUID();
   if(typeof key!=='string'||!/^[A-Za-z0-9_.:-]{8,128}$/.test(key)){
-    await auditBot(db,operation,{customerId,requestId,result:'error',code:'idempotency_key_required'});
+    await auditBot(db,operation,{customerId,requestId,context:botAuditContext(body),result:'error',code:'idempotency_key_required'});
     throw new ApiError(400,'idempotency_key_required','Передайте стабильный Idempotency-Key (8–128 символов).');
   }
   const fingerprint=createHash('sha256').update(JSON.stringify(body)).digest('hex');
@@ -35,14 +36,14 @@ export async function orderingOperation(db:Database,operation:string,body:any,ke
       const result=await work();
       const entityType=result.order?'order':result.payment?'payment':result.customerPackage?'customer_package':'bot_action';
       const entityId=result.order?.id??result.payment?.id??result.customerPackage?.id;
-      await auditBot(db,operation,{customerId,requestId,entityType,entityId,result:'success'});
+      await auditBot(db,operation,{customerId,requestId,entityType,entityId,result:'success',context:botAuditContext(body),snapshot:botAuditSnapshot(result)});
       if(operation==='package_purchase'&&result.payment?.id)await db.query("UPDATE payments SET payload=payload || $2::jsonb WHERE id=$1",[result.payment.id,{createdBy:'bot',bot:'MooonAI',botRequestId:key}]);
       if(operation==='package_purchase'&&result.customerPackage?.id)await db.query("UPDATE customer_packages SET purchase_config=purchase_config || $2::jsonb WHERE id=$1",[result.customerPackage.id,{createdBy:'bot',bot:'MooonAI',botRequestId:key}]);
       await db.query('INSERT INTO bot_ordering_requests(request_key,operation,fingerprint,customer_id,response) VALUES($1,$2,$3,$4,$5)',[key,operation,fingerprint,customerId??null,result]);
       return result;
     });
   }catch(error){
-    await auditBot(db,operation,{customerId,requestId,result:'error',code:error instanceof ApiError?error.code:'internal_error'});
+    await auditBot(db,operation,{customerId,requestId,context:botAuditContext(body),result:'error',code:error instanceof ApiError?error.code:'internal_error'});
     throw error;
   }
 }
