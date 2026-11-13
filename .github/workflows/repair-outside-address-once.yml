@@ -1,0 +1,59 @@
+name: Deactivate diagnosed outside-zone address and notify its customer
+'on':
+  push:
+    branches:
+    - support/repair-outside-address-20261113
+    paths:
+    - .github/workflows/repair-outside-address-once.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v4
+    - name: Require successful checked main deployment
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'python3 - <<''PYCODE''
+
+        import json,subprocess
+
+        repo=''milaniumkz/domly''
+
+        def api(path):return json.loads(subprocess.check_output([''gh'',''api'',''repos/''+repo+''/''+path]))
+
+        assert api(''git/ref/heads/main'')[''object''][''sha'']==''0eeab76b49593c46f2f06d9dc5fb00fe89390ae6''
+
+        run=api(''actions/runs/43443104597'')
+
+        assert run[''head_sha'']==''0eeab76b49593c46f2f06d9dc5fb00fe89390ae6'' and run[''conclusion'']==''success''
+
+        assert run[''path'']==''.github/workflows/deploy.yml''
+
+        PYCODE'
+    - name: Deactivate only the diagnosed address; preserve financial data; send requested app and WhatsApp messages
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: 'set -euo pipefail
+
+        umask 077
+
+        mkdir -p ~/.ssh
+
+        printf ''%s'' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
+
+        printf ''%s\n'' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "test \"\$(cat ''$DEPLOY_PATH/REVISION'')\" = 0eeab76b49593c46f2f06d9dc5fb00fe89390ae6 && cd
+        ''$DEPLOY_PATH/current'' && docker compose -p domly-backend exec -T api node -" < scripts/server/repair_outside_address_once.js
+
+        '
