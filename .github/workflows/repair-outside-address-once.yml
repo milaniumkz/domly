@@ -1,4 +1,4 @@
-name: Deactivate diagnosed outside-zone address and notify its customer
+name: Repair diagnosed outside-zone address with millisecond timestamp matching
 'on':
   push:
     branches:
