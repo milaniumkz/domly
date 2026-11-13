@@ -1,7 +1,7 @@
 const {Pool}=require('pg');
 (async()=>{const p=new Pool({connectionString:process.env.DATABASE_URL});const c=await p.connect();try{
  await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
- const pattern='(косш|хосш|kossh|kosch|qossh|qosh)';
+ const pattern='(кос[шщ]|қос[шщ]|хос[шщ]|kossh|kosch|kosh|qossh|qosh|khosh)';
  const match="lower(concat_ws(' ',a.city,a.settlement,a.street,a.residential_complex)) ~ $1";
  const addresses=(await c.query(`SELECT split_part(u.full_name,' ',1) AS name,right(u.phone,4) AS phone_last4,a.city,a.settlement,a.created_at,a.updated_at,
  lower(coalesce(a.street,'')) ~ $1 AS locality_in_street,

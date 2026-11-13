@@ -1,4 +1,4 @@
-name: Read-only locality order diagnostic
+name: Read-only locality diagnostic with Kazakh spelling
 'on':
   push:
     branches:
