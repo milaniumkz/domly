@@ -109,7 +109,7 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch, 
       }
       if(row.payment_id) {
         const p=(await tx.query('SELECT * FROM payments WHERE id=$1 FOR UPDATE',[row.payment_id])).rows[0];
-        if(row.kind==='invoice' && p){
+        if(row.kind==='invoice' && p && !p.order_id){
           const check=(await tx.query("SELECT NOT domly_service_zones_enforced() OR EXISTS(SELECT 1 FROM customer_addresses a WHERE a.id=COALESCE((SELECT address_id FROM customer_packages WHERE id=$1),(SELECT address_id FROM service_orders WHERE id=$2)) AND a.service_status<>'needs_new_address' AND domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude)) AS allowed",[p.customer_package_id,p.order_id])).rows[0];
           if(!check.allowed){await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='outside_service_zone',finished_at=NOW() WHERE id=$1",[row.id]);return {cancelled:true};}
         }

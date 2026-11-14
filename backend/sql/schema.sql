@@ -1829,8 +1829,7 @@ BEGIN
  IF NEW.status::text IN ('cancelled','canceled','completed') THEN RETURN NEW; END IF;
  IF TG_OP='INSERT' THEN PERFORM domly_assert_service_address(NEW.address_id,TRUE);
  ELSIF NEW.address_id IS DISTINCT FROM OLD.address_id OR NEW.scheduled_date IS DISTINCT FROM OLD.scheduled_date
-  OR NEW.start_time IS DISTINCT FROM OLD.start_time OR NEW.cleaner_id IS DISTINCT FROM OLD.cleaner_id
-  OR (NEW.status IS DISTINCT FROM OLD.status AND NEW.status::text IN ('assigned','start_pending','in_progress')) THEN
+  OR NEW.start_time IS DISTINCT FROM OLD.start_time THEN
   PERFORM domly_assert_service_address(NEW.address_id,TRUE);
  END IF;
  RETURN NEW;
@@ -1879,6 +1878,8 @@ CREATE OR REPLACE FUNCTION domly_payment_zone_guard() RETURNS TRIGGER LANGUAGE p
 DECLARE address_uuid UUID;
 BEGIN
  IF NEW.status::text IN ('paid','refunded','rejected','cancelled') THEN RETURN NEW; END IF;
+ -- Existing cleaning orders may still be paid for and completed after coverage changes.
+ IF NEW.order_id IS NOT NULL THEN RETURN NEW; END IF;
  IF NEW.customer_package_id IS NOT NULL THEN SELECT address_id INTO address_uuid FROM customer_packages WHERE id=NEW.customer_package_id;
  ELSIF NEW.order_id IS NOT NULL THEN SELECT address_id INTO address_uuid FROM service_orders WHERE id=NEW.order_id; END IF;
  IF address_uuid IS NOT NULL THEN PERFORM domly_assert_service_address(address_uuid,FALSE); END IF;
@@ -1892,7 +1893,10 @@ CREATE OR REPLACE FUNCTION domly_legacy_zone_guard() RETURNS TRIGGER LANGUAGE pl
 BEGIN
  IF NOT domly_service_zones_enforced() THEN RETURN NEW; END IF;
  IF to_jsonb(NEW)->>'status' IN ('CANCELLED','COMPLETED','cancelled','completed') THEN RETURN NEW; END IF;
- PERFORM domly_assert_service_address(NEW.apartment_id,TRUE);
+ IF TG_OP='INSERT' THEN PERFORM domly_assert_service_address(NEW.apartment_id,TRUE);
+ ELSIF NEW.apartment_id IS DISTINCT FROM OLD.apartment_id OR to_jsonb(NEW)->>'date' IS DISTINCT FROM to_jsonb(OLD)->>'date' OR to_jsonb(NEW)->>'start_time' IS DISTINCT FROM to_jsonb(OLD)->>'start_time' THEN
+  PERFORM domly_assert_service_address(NEW.apartment_id,TRUE);
+ END IF;
  RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS legacy_order_zone_guard ON orders;
@@ -1903,14 +1907,8 @@ DROP TRIGGER IF EXISTS legacy_custom_package_zone_guard ON custom_packages;
 CREATE TRIGGER legacy_custom_package_zone_guard BEFORE INSERT OR UPDATE ON custom_packages FOR EACH ROW EXECUTE FUNCTION domly_legacy_zone_guard();
 DROP TRIGGER IF EXISTS legacy_calendar_zone_guard ON scheduled_cleanings;
 CREATE TRIGGER legacy_calendar_zone_guard BEFORE INSERT OR UPDATE ON scheduled_cleanings FOR EACH ROW EXECUTE FUNCTION domly_legacy_zone_guard();
-CREATE OR REPLACE FUNCTION domly_offer_zone_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-DECLARE address_uuid UUID;
-BEGIN
- IF NEW.status='offered' THEN SELECT address_id INTO address_uuid FROM service_orders WHERE id=NEW.order_id; PERFORM domly_assert_service_address(address_uuid,TRUE); END IF;
- RETURN NEW;
-END $$;
+-- Zone checks belong to new bookings, not fulfilment of existing orders.
 DROP TRIGGER IF EXISTS offer_zone_guard ON order_offers;
-CREATE TRIGGER offer_zone_guard BEFORE INSERT OR UPDATE ON order_offers FOR EACH ROW EXECUTE FUNCTION domly_offer_zone_guard();
 
 CREATE OR REPLACE FUNCTION domly_quality_address_proof_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE changed_at TIMESTAMPTZ;
@@ -1924,10 +1922,3 @@ BEGIN
 END $$;
 DROP TRIGGER IF EXISTS quality_address_proof_guard ON quality_check_requests;
 CREATE TRIGGER quality_address_proof_guard BEFORE INSERT OR UPDATE ON quality_check_requests FOR EACH ROW EXECUTE FUNCTION domly_quality_address_proof_guard();
-
-UPDATE order_offers f SET status='expired'
-WHERE f.status='offered' AND domly_service_zones_enforced() AND NOT EXISTS(
- SELECT 1 FROM service_orders o JOIN customer_addresses a ON a.id=o.address_id
- WHERE o.id=f.order_id AND a.service_status<>'needs_new_address' AND NOT a.area_reverification_required
- AND domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude)
-);

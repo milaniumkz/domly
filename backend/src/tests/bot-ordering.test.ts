@@ -103,18 +103,19 @@ test('bot ordering: real transactions, scopes, provider proof, audit and concurr
 
 test('strict service zones: database boundary, connection-only fallback and fresh address proof',{skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async t=>{
  const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
- const user=randomUUID(),zone=randomUUID(),house=randomUUID(),inside=randomUUID(),outside=randomUUID(),catalog=randomUUID(),pkg=randomUUID(),payment=randomUUID(),order=randomUUID(),oldFile=randomUUID(),freshFile=randomUUID(),oldReview=randomUUID(),freshReview=randomUUID();
+ const existingCleaner=randomUUID(),user=randomUUID(),zone=randomUUID(),house=randomUUID(),inside=randomUUID(),outside=randomUUID(),catalog=randomUUID(),pkg=randomUUID(),payment=randomUUID(),order=randomUUID(),oldFile=randomUUID(),freshFile=randomUUID(),oldReview=randomUUID(),freshReview=randomUUID();
  const city='Coverage fixture '+zone;
  const notices=new NotificationService(db,{send:async()=>({sent:0})} as any);
  const previous=(await db.query("SELECT value FROM app_settings WHERE key='enforceServiceZones'")).rows[0];
  await db.query("INSERT INTO app_settings(key,value) VALUES('enforceServiceZones','false') ON CONFLICT(key) DO UPDATE SET value='false'");
  configureAuthDatabase(db);
- const app=express();app.use(express.json(),serviceCoverageRouter(db,notices),errorHandler);
+ const app=express();app.use(express.json(),buildV1Router({db,notifications:notices,payments:new PaymentService(db,new BonusService(db)),scheduling:new SchedulingService(db),paymentGateway:{createKaspiInvoice:async()=>{throw Error('Unexpected invoice');}}} as any),errorHandler);
  const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
  const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
  const request=async(path:string,body:any)=>{const res=await fetch(base+path,{method:'POST',headers:{Authorization:'Bearer '+signAccessToken({id:user,phone:'fixture',role:'customer'}),'Content-Type':'application/json'},body:JSON.stringify(body)});return {status:res.status,body:await res.json() as any};};
  try{
   await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'customer','approved')",[user,'coverage-'+user]);
+  await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[existingCleaner,'coverage-cleaner-'+existingCleaner]);
   await db.query("INSERT INTO service_zones(id,name_ru,city,polygon) VALUES($1,$2,$2,$3)",[zone,city,JSON.stringify([{lat:50,lng:70},{lat:52,lng:70},{lat:52,lng:72},{lat:50,lng:72}])]);
   await db.query("INSERT INTO connected_houses(id,city,street_ru,house,zone_id,active) VALUES($1,$2,'Внутри','1',$3,TRUE)",[house,city,zone]);
   await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area,verified_area) VALUES($1,$2,$3,'Внутри','1',50,50)",[inside,user,city]);
@@ -124,6 +125,7 @@ test('strict service zones: database boundary, connection-only fallback and fres
   await db.query("INSERT INTO payments(id,customer_id,customer_package_id,provider,amount,status) VALUES($1,$2,$3,'kaspi',1000,'paid')",[payment,user,pkg]);
   await db.query('UPDATE customer_packages SET purchase_payment_id=$2 WHERE id=$1',[pkg,payment]);
   await db.query("INSERT INTO service_orders(id,customer_id,customer_package_id,address_id,package_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,$3,$4,$5,'2038-06-08','12:00','14:00','assigned')",[order,user,pkg,outside,catalog]);
+  await db.query("UPDATE service_orders SET cleaner_id=$2,scheduled_date='2020-01-01' WHERE id=$1",[order,existingCleaner]);
   await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url,created_at) VALUES($1,$2,'test',$3,'https://example.com/old-plan',NOW()-INTERVAL '1 day')",[oldFile,user,oldFile]);
   await db.query("INSERT INTO quality_check_requests(id,customer_id,address_id,requested_area,status,document_file_id) VALUES($1,$2,$3,50,'approved',$4)",[oldReview,user,outside,oldFile]);
   await db.query("UPDATE app_settings SET value='true' WHERE key='enforceServiceZones'");
@@ -140,8 +142,22 @@ test('strict service zones: database boundary, connection-only fallback and fres
    assert.equal((await db.query('SELECT COUNT(*)::int n FROM payments WHERE customer_id=$1',[user])).rows[0].n,1);
    assert.equal((await db.query('SELECT COUNT(*)::int n FROM customer_packages WHERE customer_id=$1',[user])).rows[0].n,1);
   });
-  await t.test('database also rejects direct/bot package creation, invoices, booking and cleaner start',async()=>{
-   for(const operation of [()=>db.query("INSERT INTO customer_packages(customer_id,package_id,address_id,total_cleanings,available_cleanings) VALUES($1,$2,$3,4,4)",[user,catalog,outside]),()=>db.query("INSERT INTO payments(customer_id,customer_package_id,provider,amount,status) VALUES($1,$2,'kaspi',1000,'pending')",[user,pkg]),()=>db.query("INSERT INTO service_orders(customer_id,customer_package_id,address_id,package_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,$3,$4,'2038-06-09','12:00','14:00','pending_assignment')",[user,pkg,outside,catalog]),()=>db.query("UPDATE service_orders SET status='start_pending' WHERE id=$1",[order])])await assert.rejects(operation(),(e:any)=>e.code==='PZ001');
+  await t.test('database rejects new outside-zone purchases and bookings but preserves existing order fulfilment',async()=>{
+   for(const operation of [()=>db.query("INSERT INTO customer_packages(customer_id,package_id,address_id,total_cleanings,available_cleanings) VALUES($1,$2,$3,4,4)",[user,catalog,outside]),()=>db.query("INSERT INTO payments(customer_id,customer_package_id,provider,amount,status) VALUES($1,$2,'kaspi',1000,'pending')",[user,pkg]),()=>db.query("INSERT INTO service_orders(customer_id,customer_package_id,address_id,package_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,$3,$4,'2038-06-09','12:00','14:00','pending_assignment')",[user,pkg,outside,catalog])])await assert.rejects(operation(),(e:any)=>e.code==='PZ001');
+  });
+  await t.test('existing outside-zone order can start and finish but cannot move to a new slot',async()=>{
+   const headers={Authorization:'Bearer '+signAccessToken({id:existingCleaner,phone:'fixture',role:'cleaner'}),'Content-Type':'application/json'};
+   const listing=await fetch(base+'/cleaner/orders',{headers});assert.equal(listing.status,200);
+   assert.ok(((await listing.json() as any).data).some((o:any)=>o.id===order&&o.scheduled_date.startsWith('2020-01-01')));
+   const start=await fetch(base+'/orders/'+order+'/status',{method:'POST',headers,body:JSON.stringify({status:'in_progress'})});
+   assert.equal(start.status,200);assert.equal((await start.json() as any).data.status,'start_pending');
+   const confirm=await request('/orders/'+order+'/confirm-start',{confirmed:true});assert.equal(confirm.status,200);
+   assert.equal(confirm.body.data.order.status,'in_progress');
+   await db.query("UPDATE service_orders SET status='completed' WHERE id=$1",[order]);
+   await db.query("UPDATE service_orders SET status='assigned' WHERE id=$1",[order]);
+   await assert.rejects(db.query("UPDATE service_orders SET scheduled_date='2038-06-10' WHERE id=$1",[order]),(e:any)=>e.code==='PZ001');
+   const extra=(await db.query("INSERT INTO payments(customer_id,customer_package_id,order_id,provider,amount,status) VALUES($1,$2,$3,'kaspi',50,'pending') RETURNING id",[user,pkg,order])).rows[0];
+   await db.query('DELETE FROM payments WHERE id=$1',[extra.id]);
   });
   await t.test('invalidation is idempotent, preserves paid visits and queues profile push plus native WhatsApp',async()=>{
    await Promise.all([invalidateServiceAddress(db,notices,outside,user),invalidateServiceAddress(db,notices,outside,user)]);
@@ -165,7 +181,7 @@ test('strict service zones: database boundary, connection-only fallback and fres
   await db.query('DELETE FROM notifications WHERE user_id=$1 OR target_id IN(SELECT id::text FROM service_address_requests WHERE customer_id=$1)',[user]);
   await db.query('DELETE FROM moon_ai_outbox WHERE customer_id=$1',[user]);await db.query('DELETE FROM chat_messages WHERE chat_id IN(SELECT id FROM chats WHERE customer_id=$1)',[user]);await db.query('DELETE FROM chats WHERE customer_id=$1',[user]);
   await db.query("DELETE FROM audit_logs WHERE payload->>'customerId'=$1",[user]);await db.query('DELETE FROM service_address_requests WHERE customer_id=$1',[user]);await db.query('DELETE FROM quality_check_requests WHERE customer_id=$1',[user]);await db.query('DELETE FROM files WHERE owner_id=$1',[user]);
-  await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('UPDATE customer_packages SET purchase_payment_id=NULL WHERE id=$1',[pkg]);await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_packages WHERE id=$1',[pkg]);await db.query('DELETE FROM customer_addresses WHERE user_id=$1',[user]);await db.query('DELETE FROM connected_houses WHERE id=$1',[house]);await db.query('DELETE FROM service_zones WHERE id=$1',[zone]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[catalog]);await db.query('DELETE FROM app_users WHERE id=$1',[user]);
+  await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('UPDATE customer_packages SET purchase_payment_id=NULL WHERE id=$1',[pkg]);await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_packages WHERE id=$1',[pkg]);await db.query('DELETE FROM customer_addresses WHERE user_id=$1',[user]);await db.query('DELETE FROM connected_houses WHERE id=$1',[house]);await db.query('DELETE FROM service_zones WHERE id=$1',[zone]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[catalog]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[user,existingCleaner]]);
   if(previous)await db.query("UPDATE app_settings SET value=$1 WHERE key='enforceServiceZones'",[previous.value]);else await db.query("DELETE FROM app_settings WHERE key='enforceServiceZones'");await db.close();
  }
 });
