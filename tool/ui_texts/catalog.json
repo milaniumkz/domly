@@ -447,7 +447,8 @@
     "key": "t_cfa4f93634dd9415",
     "source": "{p0} за 1 уборку",
     "locations": [
-      "lib/screens/client/calculator_screen.dart"
+      "lib/screens/client/calculator_screen.dart",
+      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -999,7 +1000,8 @@
     "key": "t_e3d51fe3b4daab57",
     "source": "Без допуслуг",
     "locations": [
-      "lib/screens/client/training_order_screen.dart"
+      "lib/screens/client/training_order_screen.dart",
+      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -3079,6 +3081,13 @@
     ]
   },
   {
+    "key": "t_87599b3610a144b4",
+    "source": "Дождитесь расчета стоимости",
+    "locations": [
+      "lib/ui/calculator_package_option.dart"
+    ]
+  },
+  {
     "key": "t_10b6121f90a5f1f3",
     "source": "Дождитесь счёта в Kaspi.",
     "locations": [
@@ -4308,7 +4317,8 @@
     "key": "t_c0b642b70b7a1e3e",
     "source": "Заполните площадь в профиле",
     "locations": [
-      "lib/screens/client/calculator_screen.dart"
+      "lib/screens/client/calculator_screen.dart",
+      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -4717,7 +4727,9 @@
     "key": "t_6d621b2d98173c52",
     "source": "Информация по пакету",
     "locations": [
-      "lib/screens/client/package_selection_screen.dart"
+      "lib/screens/client/calculator_screen.dart",
+      "lib/screens/client/package_selection_screen.dart",
+      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -4940,6 +4952,7 @@
     "key": "t_8866dd1a6a38df30",
     "source": "Итого: {price}",
     "locations": [
+      "lib/ui/calculator_package_option.dart",
       "lib/ui/order_addon_price.dart"
     ]
   },
@@ -8745,6 +8758,7 @@
       "lib/screens/client/package_selection_screen.dart",
       "lib/screens/client/training_order_screen.dart",
       "lib/services/firestore_data_service.dart",
+      "lib/ui/calculator_package_option.dart",
       "lib/ui/customer_package_balances.dart",
       "lib/utils/package_catalog_utils.dart"
     ]
@@ -9105,7 +9119,8 @@
     "key": "t_9e506acb19ac1796",
     "source": "Повторить",
     "locations": [
-      "lib/screens/common/assistant_guest_screen.dart"
+      "lib/screens/common/assistant_guest_screen.dart",
+      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -10995,13 +11010,6 @@
     ]
   },
   {
-    "key": "t_c7d5efa8d020ab3a",
-    "source": "Скидка 10% от суммы за 3 месяца",
-    "locations": [
-      "lib/screens/client/calculator_screen.dart"
-    ]
-  },
-  {
     "key": "t_e70a5e6999abc9fa",
     "source": "Скидка зависит от количества квартир, подключенных в доме.",
     "locations": [
@@ -11350,13 +11358,6 @@
     ]
   },
   {
-    "key": "t_84bb462a8b835988",
-    "source": "Спец.",
-    "locations": [
-      "lib/screens/client/calculator_screen.dart"
-    ]
-  },
-  {
     "key": "t_bf7486888eff6880",
     "source": "Специалист",
     "locations": [
@@ -11577,13 +11578,6 @@
     ]
   },
   {
-    "key": "t_7511637ef8773cdd",
-    "source": "Стоимость = цена за уборку × количество уборок",
-    "locations": [
-      "lib/screens/client/calculator_screen.dart"
-    ]
-  },
-  {
     "key": "t_84f4176f684d0e31",
     "source": "Стоимость зависит от площади квартиры",
     "locations": [
@@ -11616,13 +11610,6 @@
     "source": "Стоимость рассчитывается отдельно. В зависимости от конфигурации окон и степени загрязнения время выполнения может увеличиться.",
     "locations": [
       "lib/services/firestore_data_service.dart"
-    ]
-  },
-  {
-    "key": "t_05179044b24add34",
-    "source": "Стоимость рассчитывается после площади",
-    "locations": [
-      "lib/screens/client/calculator_screen.dart"
     ]
   },
   {
@@ -14048,7 +14035,8 @@
     "key": "t_e3192a97e460df73",
     "source": "уборка",
     "locations": [
-      "lib/screens/client/calculator_screen.dart"
+      "lib/screens/client/calculator_screen.dart",
+      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -14063,6 +14051,7 @@
     "source": "уборки",
     "locations": [
       "lib/screens/client/calculator_screen.dart",
+      "lib/ui/calculator_package_option.dart",
       "lib/ui/customer_home_reference.dart"
     ]
   },
@@ -14071,6 +14060,7 @@
     "source": "уборок",
     "locations": [
       "lib/screens/client/calculator_screen.dart",
+      "lib/ui/calculator_package_option.dart",
       "lib/ui/customer_home_reference.dart"
     ]
   },

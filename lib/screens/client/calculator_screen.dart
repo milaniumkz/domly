@@ -14,6 +14,7 @@ import '../../services/firestore_data_service.dart';
 import '../../services/payment_link_service.dart';
 import '../../ui/domly_ui.dart';
 import '../../ui/info_dialog.dart';
+import '../../ui/calculator_package_option.dart';
 import '../../utils/package_catalog_utils.dart';
 import '../common/kaspi_invoice_request_dialog.dart';
 import 'payment_history_screen.dart';
@@ -422,19 +423,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   }
 
   Map<String, dynamic> _normalizeRemotePackage(Map<String, dynamic> remote) {
-    final remoteId = (remote['id'] ?? '').toString();
-    final mappedId = switch (remoteId) {
-      'basic' => 'twice',
-      'standard' => 'four',
-      'premium' => 'eight',
-      'quarter' => 'quarterly',
-      'general_cleaning' => 'general',
-      'post_renovation' => 'renovation',
-      _ => remoteId,
-    };
     return {
       ...remote,
-      'id': mappedId,
+      'id': remote['id'],
       'label': remote['label'] ?? remote['name'] ?? remote['frequency'],
       'sortOrder': remote['sortOrder'] ?? 999,
       'isSpecial': PackageCatalogUtils.isSpecialPackage(remote),
@@ -643,7 +634,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                   ),
                   const SizedBox(height: 13),
                   _FigmaPackageCard(
-                    packages: _packages,
+                    packages: _remotePackages.isEmpty ? const [] : _packages,
                     buildPackage: (package) => Padding(
                       padding: const EdgeInsets.only(top: 10),
                       child: _packageButton(
@@ -1017,8 +1008,25 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     bool isQuarterly = false,
     bool isSpecial = false,
   }) {
-    return GestureDetector(
-      onTap: () async {
+    final package = _packages.firstWhere((p) => p['id'] == pkgId);
+    return CalculatorPackageOption(
+      key: ValueKey('calculator-package-$pkgId'),
+      package: package,
+      area: _area,
+      visits: PackageCatalogUtils.cleaningsPerMonth(package,
+          quarterlyVisitsPerMonth: _quarterlyVisitsPerMonth),
+      selected: selected,
+      pricingContext:
+          '${_quote['tierDiscountPercent']}|${_quote['referralDiscountPercent']}',
+      loadQuote: (package, area, visits) =>
+          BackendApiService.instance.postMap('/packages/quote', body: {
+        'packageId': package['id'],
+        'area': area,
+        'cleaningsPerMonth': visits,
+        'addonsDetailed': <dynamic>[]
+      }),
+      onInfo: (quote) => _showCalculatorPackageInfo(package, quote),
+      onSelected: () async {
         setState(() {
           _selectedPackageId = pkgId;
           if (!PackageCatalogUtils.allowsAddons(_selectedPackage)) {
@@ -1035,109 +1043,49 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         }
         if (isQuarterly) {
           await _selectQuarterlyVisits();
-          if (!mounted) {
-            return;
-          }
+          if (!mounted) return;
         }
         _refreshQuote();
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: DomlyPalette.surface(selected
-              ? DomlyColors.primary.withValues(alpha: 0.08)
-              : DomlyColors.backgroundSoft),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: DomlyPalette.border(
-                selected ? DomlyColors.primary : DomlyColors.border),
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          name.tr(),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: DomlyPalette.foreground(selected
-                                ? DomlyColors.primary
-                                : DomlyColors.foreground),
-                          ),
-                        ),
-                      ),
-                      if (isSpecial) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: DomlyPalette.surface(
-                                DomlyColors.accent.withValues(alpha: 0.15)),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            'Спец.'.tr(),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color:
-                                  DomlyPalette.foreground(DomlyColors.accent),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  Text(
-                    (isQuarterly
-                            ? 'Скидка 10% от суммы за 3 месяца'
-                            : isSpecial
-                                ? 'Стоимость рассчитывается после площади'
-                                : 'Стоимость = цена за уборку × количество уборок')
-                        .tr(),
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: DomlyPalette.foreground(DomlyColors.foreground)),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: DomlyPalette.surface(
-                    selected ? DomlyColors.primary : Colors.transparent),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: DomlyPalette.border(
-                      selected ? DomlyColors.primary : DomlyColors.border),
-                  width: 2,
-                ),
-              ),
-              child: selected
-                  ? Icon(Icons.check,
-                      size: 14, color: DomlyPalette.foreground(Colors.white))
-                  : null,
-            ),
-          ],
-        ),
-      ),
     );
+  }
+
+  Future<void> _showCalculatorPackageInfo(
+      Map<String, dynamic> package, Map<String, dynamic>? quote) async {
+    final id = (package['key'] ?? package['id'] ?? '').toString();
+    final key = const {
+          'single': 'single_package',
+          'basic': '2x_month',
+          'standard': '4x_month',
+          'premium': '8x_month',
+          'quarter': 'quarter'
+        }[id] ??
+        id;
+    Map<String, dynamic>? configured;
+    try {
+      configured = await _configService.getInfoContent(key);
+    } catch (_) {
+      /* The package itself still contains administrator descriptions. */
+    }
+    if (!mounted) return;
+    String content(String field) {
+      final value = (package[field] ?? '').toString().trim();
+      return value.isNotEmpty ? value : (configured?[field] ?? '').toString();
+    }
+
+    final items = package['features'];
+    await InfoDialog.showFromConfig(context, config: {
+      if (configured != null) ...configured,
+      'title': package['name'] ?? 'Информация по пакету',
+      'shortInfo': content('shortInfo'),
+      'fullInfo': content('fullInfo').isNotEmpty
+          ? content('fullInfo')
+          : (package['description'] ?? '').toString(),
+      'features': items is List && items.isNotEmpty
+          ? items
+          : configured?['features'] ?? const [],
+      'price': quote?['monthlyPrice'] is num ? quote!['monthlyPrice'] : null,
+    });
   }
 
   Widget _buildAddonGroup(_AddonGroupDef group) {
@@ -1676,6 +1624,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   Future<void> _refreshQuote() async {
     final requestId = ++_quoteRequestId;
     final pkg = _selectedPackage;
+    if (_remotePackages.isEmpty) return;
     if (_area <= 0) {
       if (!mounted) return;
       setState(() {
