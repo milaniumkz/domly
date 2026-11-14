@@ -28,7 +28,12 @@ jobs:
           assert api('git/ref/heads/main')['object']['sha']==expected,'Main advanced; re-review before deploying.'
           run=api('actions/runs/43594427314')
           assert run['head_sha']==checked and run['conclusion']=='success'
-          assert api('commits/'+expected)['commit']['tree']['sha']==api('commits/'+checked)['commit']['tree']['sha'],'Merged tree differs from checked source.'
+          merge=api('commits/'+expected)
+          assert merge['commit']['tree']['sha']=='82dab28dcae148f94857b3d640de095ed8dcb828','Merged source changed.'
+          assert [p['sha'] for p in merge['parents']]==['e10fa2b55843994c52d3d3e3673e7c991ebe1fd3',checked],'Unexpected merge parents.'
+          prior=api('actions/runs/43594258416')
+          assert prior['head_sha']=='e10fa2b55843994c52d3d3e3673e7c991ebe1fd3' and prior['conclusion']=='success','Server tariff parent was not successfully deployed.'
+          # Standard deployment runs the complete CI on this exact merged main before SSH.
           runs=api('actions/workflows/deploy.yml/runs?branch=main&per_page=30')['workflow_runs']
           for old in runs:
               if old['status'] not in ['queued','pending']: continue
