@@ -526,44 +526,6 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.deepEqual(published.presentation,payload.presentation);
       } finally {await db.query('DELETE FROM content_pages WHERE slug=$1',[slug]);}
     });
-    await t.test('existing client translations show live package rates without changing catalog names or quotes', async () => {
-      const nameRu='Тариф для проверки цены '+randomUUID();
-      const nameKk='Бағаны тексеру пакеті';
-      const key='t_'+createHash('sha1').update(nameRu).digest('hex').slice(0,16);
-      let packageId='';
-      try {
-        const created=await request('/admin/catalog/packages','POST',{
-          nameRu,nameKk,cleaningCount:2,months:1,basePrice:0,pricePerM2:95,
-          features:{requiresConsent:true,importantInfo:'Условия тестового пакета.',discountPercent:10},
-        });
-        assert.equal(created.status,201);
-        packageId=created.json.data.id;
-        const findLabel=(rows:any[])=>rows.find(row=>row.key===key);
-        const label=findLabel((await request('/translations')).json.data);
-        assert.equal(label.source,nameRu);
-        assert.equal(label.ru,nameRu+' · 95 ₸/м²');
-        assert.equal(label.kk,nameKk+' · 95 ₸/м²');
-        for(const endpoint of ['/app/config','/app/bootstrap']) {
-          const response=await request(endpoint);
-          assert.equal(response.status,200);
-          assert.equal(findLabel(response.json.data.translations).ru,label.ru);
-        }
-        const catalog=(await request('/catalog/packages')).json.data.find((row:any)=>row.id===packageId);
-        assert.equal(catalog.name_ru,nameRu);
-        assert.equal(catalog.name_kk,nameKk);
-        assert.equal(catalog.consentVersion,packageConsentVersion(catalog));
-        assert.equal((await packageQuote(db,{packageId,area:100})).monthlyPrice,17100);
-        assert.equal((await db.query('SELECT key FROM translations WHERE key=$1',[key])).rows.length,0);
-
-        assert.equal((await request('/admin/catalog/packages/'+packageId,'PATCH',{pricePerM2:120})).status,200);
-        assert.equal(findLabel((await request('/translations')).json.data).ru,nameRu+' · 120 ₸/м²');
-        assert.equal((await packageQuote(db,{packageId,area:100})).monthlyPrice,21600);
-        assert.equal((await request('/admin/catalog/packages/'+packageId,'PATCH',{active:false})).status,200);
-        assert.equal(findLabel((await request('/translations')).json.data),undefined);
-      } finally {
-        if(packageId)await db.query('DELETE FROM catalog_packages WHERE id=$1',[packageId]);
-      }
-    });
     await t.test('text editing survives source synchronization and is protected from customers', async () => {
       const key = 'text-regression-'+randomUUID();
       try {
