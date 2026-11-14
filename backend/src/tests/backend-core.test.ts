@@ -5,6 +5,7 @@ import {fitsBookingHours,validateBookingHours} from '../modules/bookingValidatio
 import { formatAddonRecord, formatServiceDescription } from '../modules/serviceDescription';
 import {gunzipSync} from 'node:zlib';
 import {PublicTextCatalog} from '../modules/publicTextCatalog';
+import {withCatalogPriceTranslations} from '../modules/catalogPriceTranslations';
 import {canonicalMediaUrl,httpsMediaUrl,mapMediaValues,verifyMediaLink} from '../modules/mediaLinks';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -1234,4 +1235,85 @@ test('quarterly credits allow six early visits while unused monthly credits reta
   assert.equal(packageBookingCapacity(periods,'2027-01-17','12:00','0'),1);
   assert.equal(packageBookingCapacity(periods,'2027-02-17','12:00','0'),0);
   assert.equal(packageBookingCapacity(periods,'2027-04-10','15:00'),0);
+});
+
+test('catalog price translations reach existing Russian and Kazakh title keys without changing package data', () => {
+  const pkg = Object.freeze({active: true, name_ru: '  Разовый\n пакет ', name_kk: 'Бір реттік пакет', base_price: '0.00', price_per_m2: '95.00', features: Object.freeze({discountPercent: 10})});
+  const rows = Object.freeze([{key: 'unrelated', source: 'Главная', ru: 'Главная', kk: 'Басты бет'}]);
+  const packages = Object.freeze([pkg]);
+  const before = JSON.stringify({rows, packages});
+  const result = withCatalogPriceTranslations(rows, packages);
+  assert.notEqual(result, rows);
+  assert.deepEqual(result.find(row => row.key === 't_003c5f4eec93ccf6'), {
+    key: 't_003c5f4eec93ccf6', source: 'Разовый пакет', namespace: 'catalog',
+    ru: 'Разовый пакет · 95 ₸/м²', kk: 'Бір реттік пакет · 95 ₸/м²',
+  });
+  assert.equal(result.find(row => row.key === 't_63f5f1c7e164da3b')?.kk, 'Бір реттік пакет · 95 ₸/м²');
+  assert.deepEqual(result[0], rows[0]);
+  assert.equal(JSON.stringify({rows, packages}), before);
+});
+
+test('catalog price translations preserve administrator wording and refresh only the base tariff', () => {
+  const row = Object.freeze({key: 't_003c5f4eec93ccf6', source: 'Разовый пакет', namespace: 'packages', ru: 'Одна уборка', kk: 'Бір тазалау', updated_at: '2026-11-01'});
+  const rows = Object.freeze([row]);
+  const pkg = {active: true, name_ru: 'Разовый пакет', name_kk: 'Бір реттік пакет', base_price: 0, price_per_m2: 120, features: {discountPercent: 25}, cleaning_count: 8, months: 3};
+  const result = withCatalogPriceTranslations(rows, [pkg]);
+  assert.equal(result.filter(item => item.key === row.key).length, 1);
+  assert.deepEqual(result[0], {...row, ru: 'Одна уборка · 120 ₸/м²', kk: 'Бір тазалау · 120 ₸/м²'});
+  assert.equal(withCatalogPriceTranslations(rows, [{...pkg, price_per_m2: 135.5}])[0].ru, 'Одна уборка · 135,5 ₸/м²');
+  assert.equal(row.ru, 'Одна уборка');
+});
+
+test('catalog price translations distinguish fixed, area, combined and zero tariffs without claiming a package total', () => {
+  const packages = [
+    {name_ru: 'Фиксированный', name_kk: 'Тұрақты', base_price: '12500.50', price_per_m2: 0},
+    {name_ru: 'По площади', base_price: 0, price_per_m2: '1234.567'},
+    {name_ru: 'Комбинированный', base_price: '2500', price_per_m2: '95.25'},
+    {name_ru: 'Нулевой', base_price: '0', price_per_m2: 0},
+  ].map(pkg => ({...pkg, active: true}));
+  const result = withCatalogPriceTranslations([], packages);
+  const find = (source: string) => result.find(row => row.source === source)!;
+  assert.equal(find('Фиксированный').ru, 'Фиксированный · 12\u00a0500,5 ₸/уборка');
+  assert.equal(find('Фиксированный').kk, 'Тұрақты · 12\u00a0500,5 ₸/тазалау');
+  assert.equal(find('По площади').ru, 'По площади · 1\u00a0234,57 ₸/м²');
+  assert.equal(find('По площади').kk, undefined);
+  assert.equal(find('Комбинированный').ru, 'Комбинированный · 2\u00a0500 ₸ + 95,25 ₸/м²');
+  assert.equal(find('Нулевой').ru, 'Нулевой · 0 ₸/уборка');
+});
+
+test('catalog price translations ignore inactive, unnamed and unknown tariffs rather than inventing a price', () => {
+  const valid = {active: true, name_ru: 'Проверка', base_price: 0, price_per_m2: 100};
+  const invalidValues = [undefined, null, '', ' ', false, {}, NaN, Infinity, -1, '0x10', '100 ₸', 100000001];
+  const packages = [
+    {...valid, active: false}, {...valid, active: undefined}, {...valid, name_ru: ' \n '},
+    ...invalidValues.map(value => ({...valid, base_price: value})),
+    ...invalidValues.map(value => ({...valid, price_per_m2: value})),
+  ];
+  const rows = [{key: 'keep', source: 'Справка', ru: 'Справка'}];
+  assert.deepEqual(withCatalogPriceTranslations(rows, packages), rows);
+});
+
+test('catalog price translations suppress conflicting names across whitespace and languages but allow identical tariffs', () => {
+  const base = {active: true, name_ru: 'Разовый пакет', base_price: 0, price_per_m2: 95};
+  const rows = [{key: 't_003c5f4eec93ccf6', source: 'Разовый пакет', ru: 'Одна уборка', kk: 'Бір тазалау'}];
+  for (const conflict of [
+    {...base, name_ru: 'Разовый\nпакет', price_per_m2: 100},
+    {...base, name_ru: 'Другой', name_kk: 'Разовый пакет', price_per_m2: 100},
+    {...base, price_per_m2: null},
+  ]) {
+    assert.deepEqual(withCatalogPriceTranslations(rows, [base, conflict]).find(row => row.key === rows[0].key), rows[0]);
+  }
+  const same = withCatalogPriceTranslations([], [base, {...base, name_ru: ' Разовый   пакет ', price_per_m2: '95.00'}, {...base, active: false, price_per_m2: 120}]);
+  assert.equal(same.length, 1);
+  assert.equal(same[0].ru, 'Разовый пакет · 95 ₸/м²');
+});
+
+test('catalog price translations preserve source-based admin text and do not overwrite another source under a malformed key', () => {
+  const pkg = {active: true, name_ru: 'Разовый пакет', name_kk: 'Бір реттік пакет', base_price: 0, price_per_m2: 95};
+  const row = {key: 'admin_custom_key', source: ' Разовый  пакет ', ru: 'Уборка по запросу', kk: 'Сұраныс бойынша тазалау'};
+  const result = withCatalogPriceTranslations([row], [pkg]);
+  assert.deepEqual(result[0], row);
+  assert.equal(result.find(item => item.key === 't_003c5f4eec93ccf6')?.kk, 'Сұраныс бойынша тазалау · 95 ₸/м²');
+  const other = {key: 't_003c5f4eec93ccf6', source: 'Иной текст', ru: 'Иной текст'};
+  assert.deepEqual(withCatalogPriceTranslations([other], [{...pkg, name_kk: null}]), [other]);
 });
