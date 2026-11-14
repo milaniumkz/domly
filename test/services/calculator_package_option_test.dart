@@ -33,7 +33,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.textContaining('11700 ₸'), findsOneWidget);
     expect(find.textContaining('5850 ₸'), findsOneWidget);
-    expect(find.text('Без дополнительных услуг'), findsOneWidget);
+    expect(find.text('Без допуслуг'), findsOneWidget);
     expect(find.textContaining('Стоимость ='), findsNothing);
   });
   testWidgets(
@@ -66,7 +66,7 @@ void main() {
         }));
     await t.pumpAndSettle();
     expect(calls, 0);
-    expect(find.text('Укажите площадь в профиле'), findsOneWidget);
+    expect(find.text('Заполните площадь в профиле'), findsOneWidget);
     expect(find.textContaining('0 ₸'), findsNothing);
     expect(find.byIcon(Icons.info_outline), findsOneWidget);
   });
@@ -97,10 +97,10 @@ void main() {
       return {'monthlyPrice': 7000, 'cleaningCount': 1};
     }));
     await t.pumpAndSettle();
-    expect(find.text('Повторить расчёт'), findsOneWidget);
+    expect(find.text('Повторить'), findsOneWidget);
     expect(find.textContaining('0 ₸'), findsNothing);
-    await t.tap(find.text('Повторить расчёт'));
+    await t.tap(find.text('Повторить'));
     await t.pumpAndSettle();
-    expect(find.text('7000 ₸ — за пакет'), findsOneWidget);
+    expect(find.text('Итого: 7000 ₸'), findsOneWidget);
   });
 }

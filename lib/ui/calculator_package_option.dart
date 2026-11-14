@@ -120,27 +120,31 @@ class _CalculatorPackageOptionState extends State<CalculatorPackageOption> {
                                     : DomlyColors.foreground))),
                         const SizedBox(height: 6),
                         if (total != null && count > 0) ...[
-                          Text('${_money(total)} — ${'за пакет'.tr()}',
+                          Text(
+                              'Итого: {price}'
+                                  .tr(params: {'price': _money(total)}),
                               style: const TextStyle(
                                   fontWeight: FontWeight.w700, fontSize: 14)),
                           Text(
-                              '${_money(total / count)} — ${'за 1 уборку'.tr()} · $count ${_visits(count)}',
+                              "${'{p0} за 1 уборку'.tr(params: {
+                                    'p0': _money(total / count)
+                                  })} · $count ${_visits(count)}",
                               style: const TextStyle(fontSize: 12)),
-                          Text('Без дополнительных услуг'.tr(),
+                          Text('Без допуслуг'.tr(),
                               style: const TextStyle(fontSize: 11)),
                         ] else if (widget.area <= 0)
-                          Text('Укажите площадь в профиле'.tr(),
+                          Text('Заполните площадь в профиле'.tr(),
                               style: const TextStyle(fontSize: 12))
                         else if (loading)
-                          Text('Рассчитываем стоимость…'.tr(),
+                          Text('Дождитесь расчета стоимости'.tr(),
                               style: const TextStyle(fontSize: 12))
                         else
                           TextButton(
                               onPressed: () => setState(_load),
-                              child: Text('Повторить расчёт'.tr())),
+                              child: Text('Повторить'.tr())),
                       ])),
                   IconButton(
-                      tooltip: 'Информация о пакете'.tr(),
+                      tooltip: 'Информация по пакету'.tr(),
                       onPressed: () => widget.onInfo(quote),
                       icon: Icon(Icons.info_outline,
                           color: DomlyPalette.foreground(DomlyColors.primary))),

@@ -447,7 +447,8 @@
     "key": "t_cfa4f93634dd9415",
     "source": "{p0} за 1 уборку",
     "locations": [
-      "lib/screens/client/calculator_screen.dart"
+      "lib/screens/client/calculator_screen.dart",
+      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -996,17 +997,11 @@
     ]
   },
   {
-    "key": "t_0b9150643836c122",
-    "source": "Без дополнительных услуг",
-    "locations": [
-      "lib/ui/calculator_package_option.dart"
-    ]
-  },
-  {
     "key": "t_e3d51fe3b4daab57",
     "source": "Без допуслуг",
     "locations": [
-      "lib/screens/client/training_order_screen.dart"
+      "lib/screens/client/training_order_screen.dart",
+      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -3086,6 +3081,13 @@
     ]
   },
   {
+    "key": "t_87599b3610a144b4",
+    "source": "Дождитесь расчета стоимости",
+    "locations": [
+      "lib/ui/calculator_package_option.dart"
+    ]
+  },
+  {
     "key": "t_10b6121f90a5f1f3",
     "source": "Дождитесь счёта в Kaspi.",
     "locations": [
@@ -4315,7 +4317,8 @@
     "key": "t_c0b642b70b7a1e3e",
     "source": "Заполните площадь в профиле",
     "locations": [
-      "lib/screens/client/calculator_screen.dart"
+      "lib/screens/client/calculator_screen.dart",
+      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -4721,18 +4724,12 @@
     ]
   },
   {
-    "key": "t_f4a18bd2a6eeb099",
-    "source": "Информация о пакете",
-    "locations": [
-      "lib/screens/client/calculator_screen.dart",
-      "lib/ui/calculator_package_option.dart"
-    ]
-  },
-  {
     "key": "t_6d621b2d98173c52",
     "source": "Информация по пакету",
     "locations": [
-      "lib/screens/client/package_selection_screen.dart"
+      "lib/screens/client/calculator_screen.dart",
+      "lib/screens/client/package_selection_screen.dart",
+      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -4955,6 +4952,7 @@
     "key": "t_8866dd1a6a38df30",
     "source": "Итого: {price}",
     "locations": [
+      "lib/ui/calculator_package_option.dart",
       "lib/ui/order_addon_price.dart"
     ]
   },
@@ -9121,13 +9119,7 @@
     "key": "t_9e506acb19ac1796",
     "source": "Повторить",
     "locations": [
-      "lib/screens/common/assistant_guest_screen.dart"
-    ]
-  },
-  {
-    "key": "t_082178e50bd4006d",
-    "source": "Повторить расчёт",
-    "locations": [
+      "lib/screens/common/assistant_guest_screen.dart",
       "lib/ui/calculator_package_option.dart"
     ]
   },
@@ -10613,13 +10605,6 @@
     "locations": [
       "lib/screens/client/client_home_screen.dart",
       "lib/ui/customer_home_reference.dart"
-    ]
-  },
-  {
-    "key": "t_0eb3f8e762926312",
-    "source": "Рассчитываем стоимость…",
-    "locations": [
-      "lib/ui/calculator_package_option.dart"
     ]
   },
   {
@@ -12380,13 +12365,6 @@
     ]
   },
   {
-    "key": "t_041c4ce1f412ad3f",
-    "source": "Укажите площадь в профиле",
-    "locations": [
-      "lib/ui/calculator_package_option.dart"
-    ]
-  },
-  {
     "key": "t_869d292870c6c126",
     "source": "Укажите способ доступа",
     "locations": [
@@ -13617,20 +13595,6 @@
       "lib/screens/client/profile_screen.dart",
       "lib/services/firestore_data_service.dart",
       "lib/ui/address_search_sheet.dart"
-    ]
-  },
-  {
-    "key": "t_17e10ea32ac36e43",
-    "source": "за 1 уборку",
-    "locations": [
-      "lib/ui/calculator_package_option.dart"
-    ]
-  },
-  {
-    "key": "t_142e652c8b3265ff",
-    "source": "за пакет",
-    "locations": [
-      "lib/ui/calculator_package_option.dart"
     ]
   },
   {

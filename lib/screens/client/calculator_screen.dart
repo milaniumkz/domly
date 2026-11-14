@@ -1076,7 +1076,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     final items = package['features'];
     await InfoDialog.showFromConfig(context, config: {
       if (configured != null) ...configured,
-      'title': package['name'] ?? 'Информация о пакете',
+      'title': package['name'] ?? 'Информация по пакету',
       'shortInfo': content('shortInfo'),
       'fullInfo': content('fullInfo').isNotEmpty
           ? content('fullInfo')
