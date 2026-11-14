@@ -1,0 +1,62 @@
+name: Deploy checked calculator price labels once
+on:
+  push:
+    branches: [support/dispatch-catalog-prices-20261114]
+    paths: [.github/workflows/dispatch-catalog-prices-once.yml]
+permissions:
+  contents: read
+  actions: write
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify tested source and request the standard backend deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, subprocess, sys, time
+          repo='milaniumkz/domly'
+          expected='e10fa2b55843994c52d3d3e3673e7c991ebe1fd3'
+          checked='158e78ee46526143ee1d614b6476e489a61e70d1'
+          ci_run=43593786640
+          web_run=43444339953
+          def api(path, method='GET', body=None):
+              args=['gh','api','--method',method,'repos/'+repo+'/'+path]
+              if body is not None: args+=['--input','-']
+              result=subprocess.run(args,input=json.dumps(body) if body is not None else None,text=True,capture_output=True,check=True)
+              return json.loads(result.stdout) if result.stdout.strip() else None
+          assert api('git/ref/heads/main')['object']['sha']==expected, 'Main advanced; review the new source first.'
+          run=api('actions/runs/'+str(ci_run))
+          assert run['head_sha']==checked and run['status']=='completed' and run['conclusion']=='success'
+          assert run['event']=='pull_request' and run['path']=='.github/workflows/ci.yml'
+          checked_jobs=api('actions/runs/'+str(ci_run)+'/jobs?per_page=100')['jobs']
+          for name in ['backend-unit','backend','flutter']:
+              assert any(job['name']==name and job['conclusion']=='success' for job in checked_jobs), 'Required CI job did not pass: '+name
+          assert api('commits/'+expected)['commit']['tree']['sha']==api('commits/'+checked)['commit']['tree']['sha'], 'Merged tree differs from checked source.'
+          source=api('actions/runs/'+str(web_run))
+          assert source['status']=='completed' and source['conclusion']=='success' and source['head_branch']=='main' and source['path']=='.github/workflows/deploy.yml'
+          artifacts=api('actions/runs/'+str(web_run)+'/artifacts')['artifacts']
+          assert any(item['name']=='domly-web' and not item['expired'] for item in artifacts), 'Reusable web build is unavailable.'
+          runs=api('actions/workflows/deploy.yml/runs?branch=main&per_page=30')['workflow_runs']
+          for other in runs:
+              if other['head_sha']==expected and other['event']=='workflow_dispatch' and (other['status']!='completed' or other['conclusion']=='success'):
+                  print('Standard deployment already requested:',other['id'])
+                  sys.exit(0)
+          active=[item for item in runs if item['status']!='completed']
+          for duplicate in active:
+              assert duplicate['head_sha']==expected and duplicate['event']=='push' and duplicate['status'] in ['queued','pending'], 'Another deployment is active; leave it untouched.'
+              jobs=api('actions/runs/'+str(duplicate['id'])+'/jobs')['jobs']
+              assert all(job['status'] in ['queued','pending','completed'] for job in jobs), 'A job is running or awaiting approval; leave it untouched.'
+          for duplicate in active:
+              api('actions/runs/'+str(duplicate['id'])+'/cancel','POST')
+              for attempt in range(30):
+                  if api('actions/runs/'+str(duplicate['id']))['status']=='completed': break
+                  time.sleep(1)
+              else: raise RuntimeError('Duplicate deployment is still active.')
+              print('Replaced queued duplicate for the same checked commit:',duplicate['id'])
+          assert api('git/ref/heads/main')['object']['sha']==expected, 'Main advanced before dispatch.'
+          api('actions/workflows/deploy.yml/dispatches','POST',{'ref':'main','inputs':{'mode':'deploy','reuse_web_from_run':str(web_run)}})
+          print('Requested standard backend deployment for',expected)
+          PY
