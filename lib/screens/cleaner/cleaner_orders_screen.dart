@@ -1637,76 +1637,8 @@ class _CleanerOrdersScreenState extends State<CleanerOrdersScreen>
         : firstLine;
   }
 
-  bool _isTerminalAssignment(Map<String, dynamic> item) {
-    final status = (item['status'] ?? '').toString().toLowerCase();
-    return status == 'completed' ||
-        status == 'cancelled' ||
-        status == 'canceled';
-  }
-
-  bool _isActiveAssignment(Map<String, dynamic> item) {
-    if (_isTerminalAssignment(item)) {
-      return false;
-    }
-    final endAt = _assignmentEndAt(item);
-    if (endAt == null) {
-      return true;
-    }
-    return endAt.isAfter(DateTime.now());
-  }
-
-  DateTime? _assignmentEndAt(Map<String, dynamic> item) {
-    final startAt = _assignmentStartAt(item);
-    if (startAt == null) {
-      return null;
-    }
-    final timeText = (item['time'] ?? '').toString();
-    final endFromRange = _timeRangeEndAt(startAt, timeText);
-    if (endFromRange != null) {
-      return endFromRange;
-    }
-    final duration = _intValue(
-      item['totalDurationMinutes'] ?? item['estimatedDurationMinutes'],
-    );
-    if (duration > 0) {
-      return startAt.add(Duration(minutes: duration));
-    }
-    return DateTime(startAt.year, startAt.month, startAt.day, 23, 59, 59);
-  }
-
-  DateTime? _assignmentStartAt(Map<String, dynamic> item) {
-    final value = item['scheduledFor'] ?? item['date'];
-    if (value is Timestamp) {
-      return value.toDate();
-    }
-    if (value is DateTime) {
-      return value;
-    }
-    final dateKey = (item['scheduledDateKey'] ?? '').toString().trim();
-    if (dateKey.isNotEmpty) {
-      return DateTime.tryParse(dateKey);
-    }
-    final raw = value?.toString().trim() ?? '';
-    if (raw.isEmpty) {
-      return null;
-    }
-    return DateTime.tryParse(raw);
-  }
-
-  DateTime? _timeRangeEndAt(DateTime date, String value) {
-    final match = RegExp(
-      r'(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})',
-    ).firstMatch(value);
-    if (match == null) {
-      return null;
-    }
-    final hour = int.tryParse(match.group(3) ?? '');
-    final minute = int.tryParse(match.group(4) ?? '');
-    if (hour == null || minute == null || hour > 23 || minute > 59) {
-      return null;
-    }
-    return DateTime(date.year, date.month, date.day, hour, minute);
-  }
+  bool _isActiveAssignment(Map<String, dynamic> item) =>
+      cleanerOrderIsActive(item);
 
   List<Map<String, dynamic>> _mergeActiveAssignments(
     List<Map<String, dynamic>> scheduleSlots,

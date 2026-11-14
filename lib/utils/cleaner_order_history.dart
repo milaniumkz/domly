@@ -2,6 +2,13 @@ import 'backend_compat.dart';
 
 enum CleanerHistoryPeriod { all, week, month, year }
 
+/// A missed planned end never completes or cancels a real assignment.
+bool cleanerOrderIsActive(Map<String, dynamic> order) {
+  final status =
+      '${order['orderStatus'] ?? order['status']}'.trim().toLowerCase();
+  return !const {'completed', 'cancelled', 'canceled'}.contains(status);
+}
+
 DateTime? cleanerHistoryDate(Map<String, dynamic> order) {
   for (final value in [
     order['completedAt'],
