@@ -568,7 +568,6 @@ export class SchedulingService {
       if (!order?.scheduled_date || !order.start_time || !order.end_time) {
         throw new ApiError(400, 'invalid_order_time', 'У заказа не указаны дата и время.');
       }
-      if(!(await client.query("SELECT NOT domly_service_zones_enforced() OR EXISTS(SELECT 1 FROM customer_addresses a WHERE a.id=$1 AND a.service_status<>'needs_new_address' AND NOT a.area_reverification_required AND domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude)) AS allowed",[order.address_id])).rows[0].allowed)return null;
       const active = first((await client.query(
         "SELECT * FROM order_offers WHERE order_id=$1 AND status='offered' AND expires_at>NOW()",
         [orderId],
@@ -609,7 +608,7 @@ export class SchedulingService {
        JOIN app_users u ON u.id=o.customer_id
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
        LEFT JOIN catalog_packages pkg ON pkg.id=o.package_id
-       WHERE (NOT domly_service_zones_enforced() OR EXISTS(SELECT 1 FROM customer_addresses a WHERE a.id=o.address_id AND a.service_status<>'needs_new_address' AND NOT a.area_reverification_required AND domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude))) AND ${approvedWorkStartSql('oo.cleaner_id','o.scheduled_date','o.start_time')} AND oo.cleaner_id=$1 AND oo.status='offered' AND oo.expires_at > NOW() AND o.cleaner_id IS NULL AND o.status IN ('pending_assignment','waiting_cleaner') AND o.payable_amount <= 0
+       WHERE ${approvedWorkStartSql('oo.cleaner_id','o.scheduled_date','o.start_time')} AND oo.cleaner_id=$1 AND oo.status='offered' AND oo.expires_at > NOW() AND o.cleaner_id IS NULL AND o.status IN ('pending_assignment','waiting_cleaner') AND o.payable_amount <= 0
        ORDER BY oo.created_at ASC`,
       [cleanerId],
     )).rows;
@@ -645,7 +644,6 @@ export class SchedulingService {
       const order=first<any>((await client.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[orderId])).rows);
       if(!order)throw new ApiError(404,'not_found','Заказ не найден.');
       if(Number(order.payable_amount ?? 0) > 0 || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status))throw new ApiError(409,'order_unavailable','Заказ уже недоступен для принятия.');
-      if(order&&!(await client.query("SELECT NOT domly_service_zones_enforced() OR EXISTS(SELECT 1 FROM customer_addresses a WHERE a.id=$1 AND a.service_status<>'needs_new_address' AND NOT a.area_reverification_required AND domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude)) AS allowed",[order.address_id])).rows[0].allowed)throw new ApiError(409,'outside_service_zone','Адрес вне активных зон обслуживания.');
       const working=(await client.query(`SELECT 1 WHERE ${approvedWorkStartSql('$1','$2','$3')}`,[cleanerId,order.scheduled_date,order.start_time])).rows[0];
       if(!working)throw new ApiError(409,'outside_working_hours','Начало заказа не входит в утверждённый график работы.');
       const overlap=(await client.query(`SELECT id FROM service_orders WHERE cleaner_id=$1
