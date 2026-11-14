@@ -12,6 +12,7 @@ import {cleaningDurationMinutes,durationAfterAddonChange} from '../../modules/cl
 import {cancelHomePurchase,resumeHomePurchase} from '../../modules/homePurchase';
 import { formatAddonRecord, formatServiceDescription } from '../../modules/serviceDescription';
 import {PublicTextCatalog} from '../../modules/publicTextCatalog';
+import {withCatalogPriceTranslations} from '../../modules/catalogPriceTranslations';
 import {freezePackage} from '../../modules/packageFreeze';
 import {adminPaymentHistory} from '../../modules/adminPaymentHistory';
 import { customerMonthlyProgress,normalizeCustomerTierRules,customerTierDiscount,discountedServicePrice } from '../../modules/customerProgress';
@@ -1249,8 +1250,13 @@ export function buildV1Router(deps: {
     }, 201);
   }));
 
-  const publicTexts = new PublicTextCatalog(async () => (await deps.db.query(
-    'SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key')).rows);
+  const publicTexts = new PublicTextCatalog(async () => {
+    const [translations, packages] = await Promise.all([
+      deps.db.query('SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key'),
+      deps.db.query('SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price'),
+    ]);
+    return withCatalogPriceTranslations(translations.rows, packages.rows);
+  });
   router.get('/translations', asyncHandler(async (_req, res) => {
     const catalog = await publicTexts.get();
     res.set('ETag', catalog.etag).set('Cache-Control', 'no-cache').vary('Accept-Encoding').set('Content-Type', 'application/json; charset=utf-8');
@@ -1317,8 +1323,9 @@ export function buildV1Router(deps: {
   router.get('/app/config', asyncHandler(async (req, res) => {
     const lang = String(req.query.lang ?? 'ru');
     const settings = await readAppSettings(deps.db);
-    const translations = (await deps.db.query(`SELECT key, ru, kk, namespace FROM translations`)).rows;
+    const translationRows = (await deps.db.query(`SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key`)).rows;
     const packages = (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows.map(publicCatalogPackage);
+    const translations = withCatalogPriceTranslations(translationRows, packages);
     const addonGroups = (await deps.db.query(`SELECT * FROM addon_groups WHERE active=TRUE ORDER BY sort_order`)).rows;
     const addons = (await deps.db.query(`SELECT * FROM catalog_addons WHERE active=TRUE ORDER BY sort_order, title_ru`)).rows.map(formatAddonRecord);
     const banners = (await deps.db.query(`SELECT banners.*, COALESCE(banners.image_url,(SELECT public_url FROM files WHERE id=banners.image_file_id)) AS image_url FROM banners WHERE active=TRUE ORDER BY placement, sort_order`)).rows;
@@ -1343,8 +1350,9 @@ export function buildV1Router(deps: {
       `SELECT key, value, updated_at FROM app_settings ORDER BY key`,
     )).rows;
     const settings = settingsRows.reduce((acc: Record<string, unknown>, row) => ({ ...acc, [row.key]: row.value }), {});
-    const translations = (await deps.db.query(`SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key`)).rows;
+    const translationRows = (await deps.db.query(`SELECT key, ru, kk, source, namespace, updated_at FROM translations ORDER BY namespace, key`)).rows;
     const packages = (await deps.db.query(`SELECT * FROM catalog_packages WHERE active=TRUE ORDER BY cleaning_count, base_price`)).rows.map(publicCatalogPackage);
+    const translations = withCatalogPriceTranslations(translationRows, packages);
     const addonGroups = (await deps.db.query(`SELECT * FROM addon_groups WHERE active=TRUE ORDER BY sort_order`)).rows;
     const addons = (await deps.db.query(
       `SELECT a.*, g.title_ru AS group_title_ru, g.title_kk AS group_title_kk
@@ -4255,6 +4263,7 @@ export function buildV1Router(deps: {
        RETURNING *`,
       [req.body.nameRu, req.body.nameKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.cleaningCount, req.body.months ?? 1, req.body.basePrice, req.body.pricePerM2 ?? 0, req.body.active, JSON.stringify(req.body.features ?? {})],
     )).rows);
+    publicTexts.invalidate();
     ok(res, row, 201);
   }));
 
@@ -4275,6 +4284,7 @@ export function buildV1Router(deps: {
       [req.params.id, req.body.nameRu ?? null, req.body.nameKk ?? null, req.body.descriptionRu ?? null, req.body.descriptionKk ?? null, req.body.cleaningCount ?? null, req.body.months ?? null, req.body.basePrice ?? null, req.body.pricePerM2 ?? null, req.body.active ?? null, req.body.features == null ? null : JSON.stringify(req.body.features)],
     )).rows);
     if (!row) throw new ApiError(404, 'not_found', 'Пакет не найден.');
+    publicTexts.invalidate();
     ok(res, row);
   }));
 
