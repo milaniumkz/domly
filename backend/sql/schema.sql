@@ -1806,10 +1806,17 @@ END $$;
 CREATE OR REPLACE FUNCTION domly_city_key(value TEXT) RETURNS TEXT LANGUAGE SQL IMMUTABLE AS $$
  SELECT CASE WHEN domly_address_key(regexp_replace(lower(coalesce(value,'')),'^(город[[:space:]]+|г[.][[:space:]]*|г[[:space:]]+)','')) IN ('астана','astana','нурсултан','nursultan') THEN 'астана' ELSE domly_address_key(regexp_replace(lower(coalesce(value,'')),'^(город[[:space:]]+|г[.][[:space:]]*|г[[:space:]]+)','')) END
 $$;
+-- Match Russian/Kazakh street spelling and explicit street-type labels, never house prefixes.
+CREATE OR REPLACE FUNCTION domly_street_key(value TEXT) RETURNS TEXT LANGUAGE SQL IMMUTABLE AS $$
+ SELECT regexp_replace(regexp_replace(' '||domly_normalize_address(value)||' ',
+  ' (проспект|пр т|прт|пр|улица|ул|дангили|дангил|кошеси|коше|бульвар|бул|переулок|пер|шоссе) ', ' ', 'g'), '[[:space:]]+', '', 'g')
+$$;
 CREATE OR REPLACE FUNCTION domly_location_in_service_zone(city_value TEXT,street_value TEXT,house_value TEXT,lat NUMERIC,lng NUMERIC) RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
  SELECT EXISTS(SELECT 1 FROM connected_houses h JOIN service_zones z ON z.id=h.zone_id
   WHERE h.active AND z.active AND domly_city_key(h.city)=domly_city_key(city_value)
-   AND domly_address_key(h.street_ru)=domly_address_key(street_value) AND domly_address_key(h.house)=domly_address_key(house_value))
+   AND domly_city_key(z.city)=domly_city_key(city_value)
+   AND (domly_street_key(h.street_ru)=domly_street_key(street_value) OR (NULLIF(h.street_kk,'') IS NOT NULL AND domly_street_key(h.street_kk)=domly_street_key(street_value)))
+   AND domly_street_key(street_value)<>'' AND domly_address_key(h.house)=domly_address_key(house_value))
  OR EXISTS(SELECT 1 FROM service_zones z WHERE z.active AND domly_city_key(z.city)=domly_city_key(city_value) AND domly_polygon_contains(z.polygon,lat,lng))
 $$;
 CREATE OR REPLACE FUNCTION domly_assert_service_address(address_uuid UUID,require_area BOOLEAN DEFAULT TRUE) RETURNS VOID LANGUAGE plpgsql AS $$

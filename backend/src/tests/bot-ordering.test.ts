@@ -103,7 +103,7 @@ test('bot ordering: real transactions, scopes, provider proof, audit and concurr
 
 test('strict service zones: database boundary, connection-only fallback and fresh address proof',{skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async t=>{
  const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
- const existingCleaner=randomUUID(),user=randomUUID(),zone=randomUUID(),house=randomUUID(),inside=randomUUID(),outside=randomUUID(),catalog=randomUUID(),pkg=randomUUID(),payment=randomUUID(),order=randomUUID(),oldFile=randomUUID(),freshFile=randomUUID(),oldReview=randomUUID(),freshReview=randomUUID();
+ const aliasHouse=randomUUID(),existingCleaner=randomUUID(),user=randomUUID(),zone=randomUUID(),house=randomUUID(),inside=randomUUID(),outside=randomUUID(),catalog=randomUUID(),pkg=randomUUID(),payment=randomUUID(),order=randomUUID(),oldFile=randomUUID(),freshFile=randomUUID(),oldReview=randomUUID(),freshReview=randomUUID();
  const city='Coverage fixture '+zone;
  const notices=new NotificationService(db,{send:async()=>({sent:0})} as any);
  const previous=(await db.query("SELECT value FROM app_settings WHERE key='enforceServiceZones'")).rows[0];
@@ -118,6 +118,7 @@ test('strict service zones: database boundary, connection-only fallback and fres
   await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[existingCleaner,'coverage-cleaner-'+existingCleaner]);
   await db.query("INSERT INTO service_zones(id,name_ru,city,polygon) VALUES($1,$2,$2,$3)",[zone,city,JSON.stringify([{lat:50,lng:70},{lat:52,lng:70},{lat:52,lng:72},{lat:50,lng:72}])]);
   await db.query("INSERT INTO connected_houses(id,city,street_ru,house,zone_id,active) VALUES($1,$2,'Внутри','1',$3,TRUE)",[house,city,zone]);
+  await db.query("INSERT INTO connected_houses(id,city,street_ru,street_kk,house,zone_id,active) VALUES($1,$2,'проспект Тауелсиздик','Тәуелсіздік даңғылы','43',$3,TRUE)",[aliasHouse,city,zone]);
   await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area,verified_area) VALUES($1,$2,$3,'Внутри','1',50,50)",[inside,user,city]);
   await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area,verified_area) VALUES($1,$2,'Астана','Қосшы вне зоны','9',50,50)",[outside,user]);
   await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,$2,4,1,1000,0)",[catalog,city]);
@@ -135,6 +136,16 @@ test('strict service zones: database boundary, connection-only fallback and fres
    const geometry=(await db.query("SELECT domly_polygon_contains($1,51,71) AS inside,domly_polygon_contains($1,60,80) AS outside",[JSON.stringify([{lat:50,lng:70},{lat:52,lng:70},{lat:52,lng:72}])])).rows[0];assert.equal(geometry.inside,true);assert.equal(geometry.outside,false);
    const geo=(await db.query("SELECT domly_polygon_contains($1,51,71) AS hole,domly_polygon_contains($1,50.2,70.2) AS covered,domly_city_key('г. Нур-Султан')=domly_city_key('Astana') AS alias",[JSON.stringify({type:'Polygon',coordinates:[[[70,50],[72,50],[72,52],[70,52],[70,50]],[[70.5,50.5],[71.5,50.5],[71.5,51.5],[70.5,51.5],[70.5,50.5]]]})])).rows[0];assert.equal(geo.hole,false);assert.equal(geo.covered,true);assert.equal(geo.alias,true);
    await db.query('UPDATE service_zones SET active=FALSE WHERE id=$1',[zone]);await assert.rejects(checkServiceAddress(db,inside));await db.query('UPDATE service_zones SET active=TRUE WHERE id=$1',[zone]);
+  });
+  await t.test('street aliases match a connected house without coordinates but never another building or city',async()=>{
+   for(const street of ['тауелсыздык','Тәуелсіздік даңғылы','проспект Тауелсиздик','Тауелсиздик дангылы','пр-т Тауелсиздик']){
+    assert.equal((await db.query('SELECT domly_location_in_service_zone($1,$2,$3,NULL,NULL) AS covered',[city,street,'43'])).rows[0].covered,true,street);
+   }
+   for(const houseNumber of ['43/1','43А','431'])assert.equal((await db.query('SELECT domly_location_in_service_zone($1,$2,$3,NULL,NULL) AS covered',[city,'тауелсыздык',houseNumber])).rows[0].covered,false);
+   assert.equal((await db.query('SELECT domly_location_in_service_zone($1,$2,$3,NULL,NULL) AS covered',['Косшы','тауелсыздык','43'])).rows[0].covered,false);
+   await db.query('UPDATE connected_houses SET active=FALSE WHERE id=$1',[aliasHouse]);
+   assert.equal((await db.query('SELECT domly_location_in_service_zone($1,$2,$3,NULL,NULL) AS covered',[city,'тауелсыздык','43'])).rows[0].covered,false);
+   await db.query('UPDATE connected_houses SET active=TRUE WHERE id=$1',[aliasHouse]);
   });
   await t.test('old-client purchase attempts create one connection request and no charge',async()=>{
    const replies=await Promise.all([request('/packages/purchase',{addressId:outside,packageId:catalog}),request('/packages/purchase',{addressId:outside,packageId:catalog})]);assert.ok(replies.every(r=>r.status===409&&r.body.code==='outside_service_zone'));
@@ -181,7 +192,7 @@ test('strict service zones: database boundary, connection-only fallback and fres
   await db.query('DELETE FROM notifications WHERE user_id=$1 OR target_id IN(SELECT id::text FROM service_address_requests WHERE customer_id=$1)',[user]);
   await db.query('DELETE FROM moon_ai_outbox WHERE customer_id=$1',[user]);await db.query('DELETE FROM chat_messages WHERE chat_id IN(SELECT id FROM chats WHERE customer_id=$1)',[user]);await db.query('DELETE FROM chats WHERE customer_id=$1',[user]);
   await db.query("DELETE FROM audit_logs WHERE payload->>'customerId'=$1",[user]);await db.query('DELETE FROM service_address_requests WHERE customer_id=$1',[user]);await db.query('DELETE FROM quality_check_requests WHERE customer_id=$1',[user]);await db.query('DELETE FROM files WHERE owner_id=$1',[user]);
-  await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('UPDATE customer_packages SET purchase_payment_id=NULL WHERE id=$1',[pkg]);await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_packages WHERE id=$1',[pkg]);await db.query('DELETE FROM customer_addresses WHERE user_id=$1',[user]);await db.query('DELETE FROM connected_houses WHERE id=$1',[house]);await db.query('DELETE FROM service_zones WHERE id=$1',[zone]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[catalog]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[user,existingCleaner]]);
+  await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('UPDATE customer_packages SET purchase_payment_id=NULL WHERE id=$1',[pkg]);await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_packages WHERE id=$1',[pkg]);await db.query('DELETE FROM customer_addresses WHERE user_id=$1',[user]);await db.query('DELETE FROM connected_houses WHERE id=ANY($1::uuid[])',[[house,aliasHouse]]);await db.query('DELETE FROM service_zones WHERE id=$1',[zone]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[catalog]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[user,existingCleaner]]);
   if(previous)await db.query("UPDATE app_settings SET value=$1 WHERE key='enforceServiceZones'",[previous.value]);else await db.query("DELETE FROM app_settings WHERE key='enforceServiceZones'");await db.close();
  }
 });
