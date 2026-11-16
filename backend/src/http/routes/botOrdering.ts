@@ -7,6 +7,7 @@ import {packageQuote} from '../../modules/packageQuote';
 import {verifyOrderingToken,orderingOperation,auditBot} from '../../modules/botOrdering';
 import {pendingBookingCount} from '../../modules/botBookingCapacity';
 import {randomUUID} from 'node:crypto';
+import {normalizePhone} from '../../modules/domainServices';
 
 type Operations={purchasePackage:(req:any)=>Promise<any>;createOrder:(req:any)=>Promise<any>;availableSlots:(req:any)=>Promise<any>;verifyPayment:(payment:any)=>Promise<any>};
 export function botOrderingRouter(db:Database,ops:Operations){
@@ -28,7 +29,7 @@ export function botOrderingRouter(db:Database,ops:Operations){
  });
  const context=(req:any,user:any,body:any)=>({body,query:req.query,botOrdering:true,user:{id:user.id,phone:user.phone,role:'customer'},ip:req.ip});
  const id=(value:unknown)=>{const result=optionalId(value);if(!result)throw new ApiError(400,'invalid_id','Укажите UUID.');return result;};
- router.get(prefix+'/catalog',route('catalog',req=>botCatalog(db,req.query.area)));
+ router.get(prefix+'/catalog',route('catalog',async req=>({...await botCatalog(db,req.query.area),paymentInstructions:{kaspi:{invoicePhoneRequired:true,invoicePhoneField:'invoicePhone',questionRu:'На какой номер Kaspi выставить счёт?',payerMustBeRegistered:false,customerIdentityField:'phone',amountCalculatedByServer:true,paidOnlyAfterProviderConfirmation:true}}})));
  router.get(prefix+'/customer',route('customer',req=>botCustomerContext(db,req.query.phone)));
  router.post(prefix+'/quote',route('quote',async(req,user)=>{
    const address=(await db.query('SELECT * FROM customer_addresses WHERE id=$1 AND user_id=$2',[id(req.body.addressId),user.id])).rows[0];
@@ -39,7 +40,16 @@ export function botOrderingRouter(db:Database,ops:Operations){
    if(req.body.confirmedByCustomer!==true)throw new ApiError(400,'customer_consent_required','Получите согласие клиента на тариф, адрес и сумму.');
    const provider=req.body.provider??'kaspi';
    if(!['kaspi','bcc'].includes(provider))throw new ApiError(400,'invalid_provider','Выберите kaspi или bcc.');
-   const result=await ops.purchasePackage(context(req,user,{packageId:id(req.body.packageId),addressId:id(req.body.addressId),cleaningsPerMonth:req.body.cleaningsPerMonth,addonsDetailed:req.body.addonsDetailed,acceptedTermsVersion:req.body.acceptedTermsVersion,provider,invoicePhone:user.phone,paymentMethod:provider==='bcc'?'online':'kaspi',useBonus:false}));
+   let invoicePhone:string|undefined;
+   if(provider==='kaspi'){
+     const value=req.body.invoicePhone;
+     if(value===undefined||value===null||(typeof value==='string'&&!value.trim()))throw new ApiError(400,'invoice_phone_required','Уточните у клиента, на какой номер Kaspi выставить счёт, и передайте его в invoicePhone.');
+     if(typeof value!=='string'||value.length>64||!/^\+?[\d\s()-]+$/.test(value.trim()))throw new ApiError(400,'invalid_invoice_phone','Укажите номер плательщика Kaspi в формате +7XXXXXXXXXX.');
+     if(value.trim().startsWith('+')&&!/^7\d{10}$/.test(value.replace(/\D/g,'')))throw new ApiError(400,'invalid_invoice_phone','Укажите номер плательщика Kaspi в формате +7XXXXXXXXXX.');
+     invoicePhone=normalizePhone(value.trim());
+     if(!/^\+7\d{10}$/.test(invoicePhone))throw new ApiError(400,'invalid_invoice_phone','Укажите номер плательщика Kaspi в формате +7XXXXXXXXXX.');
+   }
+   const result=await ops.purchasePackage(context(req,user,{packageId:id(req.body.packageId),addressId:id(req.body.addressId),cleaningsPerMonth:req.body.cleaningsPerMonth,addonsDetailed:req.body.addonsDetailed,acceptedTermsVersion:req.body.acceptedTermsVersion,provider,invoicePhone,paymentMethod:provider==='bcc'?'online':'kaspi',useBonus:false}));
    const payment=(await db.query('SELECT * FROM payments WHERE id=$1',[result.payment.id])).rows[0];
    return {...result,payment,createdBy:'bot',bot:'MooonAI'};
  },true));
