@@ -1,0 +1,59 @@
+name: Connect explicitly approved Tauelsizdik house 43
+'on':
+  push:
+    branches:
+    - support/connect-tauelsizdik-43-20261116
+    paths:
+    - .github/workflows/connect-tauelsizdik-43-once.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v4
+    - name: Require successful checked main deployment
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'python3 - <<''PYCODE''
+
+        import json,subprocess
+
+        repo=''milaniumkz/domly''
+
+        def api(path):return json.loads(subprocess.check_output([''gh'',''api'',''repos/''+repo+''/''+path]))
+
+        assert api(''git/ref/heads/main'')[''object''][''sha'']==''7f8567d3722d819bbb5e600cebf92b97e6ec9e8f''
+
+        run=api(''actions/runs/43839161267'')
+
+        assert run[''head_sha'']==''7f8567d3722d819bbb5e600cebf92b97e6ec9e8f'' and run[''conclusion'']==''success''
+
+        assert run[''path'']==''.github/workflows/deploy.yml''
+
+        PYCODE'
+    - name: Connect only the approved building; verify street spelling aliases; preserve customer and financial records
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: 'set -euo pipefail
+
+        umask 077
+
+        mkdir -p ~/.ssh
+
+        printf ''%s'' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
+
+        printf ''%s\n'' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "test \"\$(cat ''$DEPLOY_PATH/REVISION'')\" = 7f8567d3722d819bbb5e600cebf92b97e6ec9e8f && cd
+        ''$DEPLOY_PATH/current'' && docker compose -p domly-backend exec -T api node -" < scripts/server/connect_tauelsizdik_43_once.js
+
+        '
