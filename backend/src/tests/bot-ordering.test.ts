@@ -18,8 +18,8 @@ test('bot ordering: real transactions, scopes, provider proof, audit and concurr
  const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!),users=[randomUUID(),randomUUID()],cleaner=randomUUID(),catalog=randomUUID(),addresses=[randomUUID(),randomUUID()],packages=[randomUUID(),randomUUID()];
  const phones=['+7701'+String(Date.now()).slice(-7),'+7702'+String(Date.now()).slice(-7)];
  const saved={token:env.moonAiOrderingToken,enabled:env.moonAiEnabled};env.moonAiOrderingToken='fixture-ordering-token-never-use-in-production';env.moonAiEnabled=false;
- let invoices=0;const notifications=new NotificationService(db,{send:async()=>({sent:0})} as any);
- const app=express();app.use(express.json(),buildV1Router({db,notifications,payments:new PaymentService(db,new BonusService(db)),scheduling:new SchedulingService(db),paymentGateway:{createKaspiInvoice:async()=>{invoices++;return {provider:'kaspi',queued:true};}}} as any),errorHandler);
+ let invoices=0,lastInvoicePhone='';const notifications=new NotificationService(db,{send:async()=>({sent:0})} as any);
+ const app=express();app.use(express.json(),buildV1Router({db,notifications,payments:new PaymentService(db,new BonusService(db)),scheduling:new SchedulingService(db),paymentGateway:{createKaspiInvoice:async(input:any)=>{invoices++;lastInvoicePhone=input.phone;return {provider:'kaspi',queued:true};}}} as any),errorHandler);
  const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));const base='http://127.0.0.1:'+(server.address() as AddressInfo).port+'/integrations/moon-ai/ordering';
  const call=async(path:string,body?:any,key=randomUUID(),token=env.moonAiOrderingToken)=>{
   const response=await fetch(base+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-MoonAI-Ordering-Token':token,'Idempotency-Key':key},body:body?JSON.stringify(body):undefined});return {status:response.status,body:await response.json() as any};
@@ -40,15 +40,28 @@ test('bot ordering: real transactions, scopes, provider proof, audit and concurr
    assert.equal((await call('/customer?phone='+encodeURIComponent(phones[0]))).body.data.packages.length,1);
   });
   await t.test('purchase cannot use another customer address and failures are audited without acting as customer',async()=>{
-   const r=await call('/packages',{phone:phones[0],packageId:catalog,addressId:addresses[1],confirmedByCustomer:true});assert.equal(r.status,400);
+   const r=await call('/packages',{phone:phones[0],packageId:catalog,addressId:addresses[1],invoicePhone:phones[1],confirmedByCustomer:true});assert.equal(r.status,400);
    assert.equal((await db.query("SELECT COUNT(*)::int n FROM audit_logs WHERE action='bot.moon-ai.package_purchase' AND payload->>'customerId'=$1 AND payload->>'result'='error' AND actor_id IS NULL",[users[0]])).rows[0].n,1);
+  });
+  await t.test('bot must ask for the payer phone before creating any Kaspi invoice',async()=>{
+   const catalogReply=await call('/catalog');assert.equal(catalogReply.body.data.paymentInstructions.kaspi.invoicePhoneRequired,true);
+   const body={phone:phones[0],packageId:catalog,addressId:addresses[0],confirmedByCustomer:true};
+   for(const invoicePhone of [undefined,null,'','   '])assert.equal((await call('/packages',{...body,invoicePhone})).body.code,'invoice_phone_required');
+   for(const invoicePhone of ['abc','+12025550123','+7700000000','123456789012345',12345678901,'+7 letters 700 000 00 00'])assert.equal((await call('/packages',{...body,invoicePhone})).body.code,'invalid_invoice_phone');
+   assert.equal((await db.query('SELECT COUNT(*)::int n FROM payments WHERE customer_id=$1',[users[0]])).rows[0].n,0);
+   assert.equal((await db.query('SELECT COUNT(*)::int n FROM customer_packages WHERE customer_id=$1',[users[0]])).rows[0].n,1);
+   assert.equal(invoices,0);
   });
   let paymentId='';
   await t.test('five concurrent purchase retries create one package, one invoice and one durable replay',async()=>{
-   const key=randomUUID(),body={phone:phones[0],packageId:catalog,addressId:addresses[0],confirmedByCustomer:true};
+   const key=randomUUID(),body={phone:phones[0],packageId:catalog,addressId:addresses[0],invoicePhone:'8 ('+phones[1].slice(2,5)+') '+phones[1].slice(5),confirmedByCustomer:true};
    const replies=await Promise.all(Array.from({length:5},()=>call('/packages',body,key)));
    assert.ok(replies.every(r=>r.status===200),JSON.stringify(replies));assert.equal(invoices,1);
    paymentId=replies[0].body.data.payment.id;
+   assert.equal(lastInvoicePhone,phones[1]);
+   for(const r of replies){assert.equal(r.body.data.payment.invoice_phone,phones[1]);assert.equal(r.body.data.payment.customer_id,users[0]);}
+   assert.equal((await call('/packages',{...body,invoicePhone:phones[0]},key)).status,409);
+   assert.equal(invoices,1);
    for(const r of replies)assert.equal(r.body.data.payment.id,paymentId);
    assert.equal((await call('/packages',{...body,addressId:addresses[1]},key)).status,409);
    const p=(await db.query('SELECT payload FROM payments WHERE id=$1',[paymentId])).rows[0];assert.equal(p.payload.createdBy,'bot');
@@ -72,6 +85,28 @@ test('bot ordering: real transactions, scopes, provider proof, audit and concurr
    assert.equal(response.status,200);
    const data:any=await response.json();assert.ok(data.data.some((row:any)=>row.entity_id===paymentId&&row.actor_name==='Бот MooonAI'&&row.actor_id===null));
   });
+  await t.test('native Moon invoice and trusted callback use an unregistered payer but fulfil only the original customer',async()=>{
+   const before={enabled:env.moonAiEnabled,url:env.moonAiChannelUrl,key:env.moonAiChannelApiKey,webhook:env.moonAiWebhookToken};
+   const payer='+7703'+String(Date.now()).slice(-7);
+   try{
+    env.moonAiEnabled=true;env.moonAiChannelUrl='https://fixture.mooonai.com/test';env.moonAiChannelApiKey='fixture-channel-key';env.moonAiWebhookToken='fixture-callback-token';
+    const created=await call('/packages',{phone:phones[0],packageId:catalog,addressId:addresses[0],invoicePhone:payer,confirmedByCustomer:true,amount:1,paid:true});
+    assert.equal(created.status,200,JSON.stringify(created));
+    const payment=created.body.data.payment;assert.equal(payment.invoice_phone,payer);assert.equal(payment.customer_id,users[0]);assert.equal(Number(payment.amount),4000);assert.equal(payment.status,'invoice_requested');
+    assert.equal((await db.query('SELECT 1 FROM app_users WHERE phone=$1',[payer])).rows.length,0);
+    const queued=(await db.query("SELECT o.payload,o.customer_id,c.customer_id AS chat_owner FROM moon_ai_outbox o JOIN chats c ON c.id=o.chat_id WHERE o.payment_id=$1 AND o.kind='invoice'",[payment.id])).rows;
+    assert.equal(queued.length,1);assert.equal(queued[0].customer_id,users[0]);assert.equal(queued[0].chat_owner,users[0]);
+    assert.ok(queued[0].payload.text.includes('phone_number='+payer.slice(1)));assert.ok(queued[0].payload.text.includes('payment_sum=4000 KZT'));
+    const event={phone:payer,amount:4000,status:'paid',dateTime:new Date().toISOString(),paymentId:payment.id};
+    const settle=async(body:any)=>{const r=await fetch(base.replace('/integrations/moon-ai/ordering','')+'/payments/moon-ai/kaspi-status',{method:'POST',headers:{'Content-Type':'application/json','X-MoonAI-Token':env.moonAiWebhookToken},body:JSON.stringify(body)});return {status:r.status,body:await r.json() as any};};
+    for(const wrong of [{...event,phone:phones[0]},{...event,amount:1}]){const r=await settle(wrong);assert.equal(r.status,200,JSON.stringify(r));assert.equal(r.body.data.resolution,'not_found');}
+    assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[payment.id])).rows[0].status,'invoice_requested');
+    const confirmed=await settle(event);assert.equal(confirmed.status,200,JSON.stringify(confirmed));assert.equal(confirmed.body.data.resolution,'matched');
+    const purchase=(await db.query('SELECT customer_id,status,available_cleanings FROM customer_packages WHERE id=$1',[payment.customer_package_id])).rows[0];assert.equal(purchase.customer_id,users[0]);assert.equal(purchase.status,'active');assert.equal(purchase.available_cleanings,4);
+    const duplicate=await settle(event);assert.equal(duplicate.body.data.duplicate,true);assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[payment.customer_package_id])).rows[0].available_cleanings,4);
+    assert.deepEqual((await db.query('SELECT id,phone FROM app_users WHERE id=ANY($1::uuid[]) ORDER BY id',[users])).rows.map((r:any)=>[r.id,r.phone]).sort(),users.map((id,i)=>[id,phones[i]]).sort());
+   }finally{env.moonAiEnabled=before.enabled;env.moonAiChannelUrl=before.url;env.moonAiChannelApiKey=before.key;env.moonAiWebhookToken=before.webhook;}
+  });
   await t.test('concurrent bookings compete atomically for one cleaner; losing request spends no cleaning',async()=>{
    const replies=await Promise.all(users.map((_,i)=>call('/orders',{phone:phones[i],customerPackageId:packages[i],date:'2038-06-08',startTime:'18:00',confirmedByCustomer:true})));
    assert.deepEqual(replies.map(r=>r.status).sort(),[200,409],JSON.stringify(replies));
@@ -87,6 +122,9 @@ test('bot ordering: real transactions, scopes, provider proof, audit and concurr
   await db.query('DELETE FROM bot_ordering_requests WHERE customer_id=ANY($1::uuid[])',[users]);
   await db.query("DELETE FROM audit_logs WHERE payload->>'customerId'=ANY($1::text[]) OR entity_id IN(SELECT id::text FROM payments WHERE customer_id=ANY($1::uuid[]))",[users]);
   await db.query('DELETE FROM notifications WHERE user_id=ANY($1::uuid[]) OR target_id IN(SELECT id::text FROM service_orders WHERE customer_id=ANY($1::uuid[]))',[users]);
+  await db.query("DELETE FROM moon_ai_payment_callbacks WHERE payment_id IN(SELECT id FROM payments WHERE customer_id=ANY($1::uuid[])) OR payload->>'paymentId' IN(SELECT id::text FROM payments WHERE customer_id=ANY($1::uuid[]))",[users]);
+  await db.query('DELETE FROM moon_ai_outbox WHERE customer_id=ANY($1::uuid[])',[users]);
+  await db.query('DELETE FROM chats WHERE customer_id=ANY($1::uuid[])',[users]);
   await db.query('DELETE FROM service_orders WHERE customer_id=ANY($1::uuid[])',[users]);
   await db.query('DELETE FROM payment_events WHERE payment_id IN(SELECT id FROM payments WHERE customer_id=ANY($1::uuid[]))',[users]);
   await db.query('DELETE FROM customer_package_periods WHERE customer_package_id IN(SELECT id FROM customer_packages WHERE customer_id=ANY($1::uuid[]))',[users]);
