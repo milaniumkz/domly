@@ -35,7 +35,14 @@ jobs:
         for(const id of ids){const [reason,finished,processed,stack]=await redis.hmget('bull:moon-ai:'+id,'failedReason','finishedOn','processedOn','stacktrace');\n\
         const combined=String(reason)+' '+String(stack);failures.push({finishedOn:finished,processedOn:processed,codes:patterns.filter(v=>combined.toLowerCase().includes(v.toLowerCase())),stackLocations:['processMoonOutbox','Database.query','pg-pool','moonAi','sendMessengerFollowup'].filter(v=>combined.includes(v)),reasonLength:reason?.length??0});}\n\
         result.queueFailures={count:ids.length,failures};\n}catch(e){result.queueFailures={unavailable:true,errorKind:e.name};}finally{redis.disconnect();}\n\
-        console.log(JSON.stringify(result));}finally{await db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
+        const dns=require('node:dns').promises;\nconst host=new URL(process.env.MOON_AI_CHANNEL_URL).hostname;\n\
+        result.dnsProbes=[];\nif(host==='mooonai.com'||host.endsWith('.mooonai.com')){\n\
+        \ result.moonHost=host;\n for(const server of ['default','1.1.1.1','8.8.8.8']){\n\
+        \  const begin=Date.now(),resolver=new dns.Resolver({timeout:2000,tries:1});\n\
+        \  try{if(server!=='default')resolver.setServers([server]);const ips=await\
+        \ resolver.resolve4(host);result.dnsProbes.push({server,ok:true,elapsedMs:Date.now()-begin,addressCount:ips.length});}\n\
+        \  catch(e){result.dnsProbes.push({server,ok:false,elapsedMs:Date.now()-begin,code:e.code});}finally{resolver.cancel();}\n\
+        \ }\n}\nconsole.log(JSON.stringify(result));}finally{await db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
         AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
         MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEArZFJpaJMHLvZBR0zjr5H\n+UR5CveMm1TB4bx9SjYR9b/Ne8iuYN0SHj8N+lf+bXzOUKGIksUpO4FrVIB+vEc2\n\
         vITgY4ovnkjDYI2s0mcoCEi7N8jcEYzSTQ9q5LDgwJ2maOrbNpU+yVQQhTuGOiC3\nRz2ob7RGxNtMXlLjzIuMH3Ofrh7GE+xW8axvlXeLSkUXwDZwcQW9ty2cet/bIXtC\n\
@@ -73,16 +80,22 @@ jobs:
         \ daemon error summaries; never export command arguments.\nimport shlex,collections\n\
         code,raw=command(['journalctl','-u','docker','--since','2026-11-17 03:22:00\
         \ UTC','--until','2026-11-17 03:27:00 UTC','--no-pager','-o','json','-q'])\n\
-        summaries=collections.Counter()\nfor line in raw.splitlines():\n try:msg=json.loads(line).get('MESSAGE','')\n\
-        \ except ValueError:continue\n if 'error' not in msg.lower():continue\n try:fields=dict(token.split('=',1)\
+        summaries=collections.Counter();dns_errors=[]\nfor line in raw.splitlines():\n\
+        \ try:msg=json.loads(line).get('MESSAGE','')\n except ValueError:continue\n\
+        \ if 'error' not in msg.lower():continue\n try:fields=dict(token.split('=',1)\
         \ for token in shlex.split(msg) if '=' in token)\n except ValueError:fields={}\n\
-        \ text=' '.join(str(fields[k]) for k in ['msg','error'] if k in fields) or\
-        \ msg\n text=re.split(r'(?i)\\b(?:cmd|command|args|payload|body)=',text)[0]\n\
-        \ text=re.sub(r'(?i)(?:password|passwd|token|secret|authorization|api[_-]?key)\\\
+        \ question=fields.get('question','')\n if 'mooonai.com' in question.lower():dns_errors.append({'at':json.loads(line).get('__REALTIME_TIMESTAMP'),'question':question,'server':fields.get('dns-server'),'errorCode':'timeout'\
+        \ if 'timeout' in fields.get('error','').lower() else 'other'})\n text=' '.join(str(fields[k])\
+        \ for k in ['msg','error'] if k in fields) or msg\n text=re.split(r'(?i)\\\
+        b(?:cmd|command|args|payload|body)=',text)[0]\n text=re.sub(r'(?i)(?:password|passwd|token|secret|authorization|api[_-]?key)\\\
         s*[:=]\\s*[^\\s,;]+','[redacted]',text)\n text=re.sub(r'https?://\\S+','[url]',text)\n\
         \ text=re.sub(r'\\b[0-9a-f]{16,}\\b','[id]',text)\n text=re.sub(r'\\b(?:[0-9]{1,3}\\\
         .){3}[0-9]{1,3}\\b','[ip]',text)\n text=re.sub(r'\\+?\\b[0-9]{10,15}\\b','[number]',text)\n\
-        \ summaries[text[:350]]+=1\nreport['daemonErrorSummaries']=[{'summary':s,'count':n}\
+        \ summaries[text[:350]]+=1\nreport['moonDnsErrors']=dns_errors[:40]\nreport['hostDnsServers']=[l.split()[1]\
+        \ for l in pathlib.Path('/etc/resolv.conf').read_text().splitlines() if l.startswith('nameserver\
+        \ ') and len(l.split())>1]\ncode,raw=command(['docker','inspect','--format','{{json\
+        \ .HostConfig.Dns}}',worker]);report['workerDnsOverride']=json.loads(raw)\
+        \ if code==0 else None\nreport['daemonErrorSummaries']=[{'summary':s,'count':n}\
         \ for s,n in summaries.most_common(8)]\n(p/'report.json').write_text(json.dumps(report))\n\
         HOST_AUDIT\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
         $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-audit-XXXXXX')\n[[ \"\
