@@ -39,6 +39,9 @@ test('customer CRM: private admin notes, revisions, filters and pagination again
    assert.equal((await list('&purchase=paid')).body.data.items[0].id,users[0]);assert.equal((await list('&purchase=pending')).body.data.items[0].id,users[1]);assert.equal((await list('&purchase=none')).body.data.items[0].id,users[2]);
    assert.equal((await list('&area=verified')).body.data.items[0].id,users[0]);assert.equal((await list('&area=unverified')).body.data.items[0].id,users[1]);assert.equal((await list('&area=missing')).body.data.items[0].id,users[2]);
    assert.equal((await list('&city='+encodeURIComponent('Астана')+'&house=43')).body.data.total,1);
+   await db.query("INSERT INTO customer_addresses(user_id,city,street,house,area) VALUES($1,'Алматы','Второй адрес','7',20)",[users[0]]);
+   assert.equal((await list('&city='+encodeURIComponent('Астана')+'&house=7')).body.data.total,0);
+   assert.equal((await list('&city='+encodeURIComponent('Астана')+'&house=43')).body.data.items[0].addresses.length,2);
    assert.equal((await list('&dateFrom=2026-11-11T00%3A00%3A00Z&dateTo=2026-11-11T23%3A59%3A59Z')).body.data.items[0].id,users[1]);
    assert.equal((await list('&paidMin=900&paidMax=1100')).body.data.items[0].id,users[0]);
    assert.equal((await list('&limit=1&offset=1')).body.data.items[0].id,users[1]);

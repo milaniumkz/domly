@@ -31,6 +31,11 @@ export const openApiSpec = {
     },
   },
   paths: {
+    '/admin/cancelled-sales': {get:{...secured('Отменённые счета и заказы: только администраторы'),parameters:['kind','search','dateFrom','dateTo','sort','limit','offset'].map(name=>query(name,'')),responses:okError()}},
+    '/admin/customer-crm': {get:{...secured('Клиенты CRM: только администраторы'),parameters:['search','dateFrom','dateTo','stage','account','purchase','area','notes','profile','sort','city','house','paidMin','paidMax','limit','offset'].map(name=>query(name,'')),responses:okError()}},
+    '/admin/customer-crm/{id}': {patch:{...secured('Изменить этап клиента; stage и revision обязательны'),parameters:[path('id')],responses:okError()}},
+    '/admin/customer-crm/{id}/notes': {get:{...secured('Личные заметки администраторов'),parameters:[path('id'),query('limit','50'),query('offset','0')],responses:okError()},post:{...secured('Добавить личную заметку; body — текст'),parameters:[path('id')],responses:okError()}},
+    '/admin/customer-crm/{id}/notes/{noteId}': {patch:{...secured('Редактировать личную заметку; body и revision обязательны'),parameters:[path('id'),path('noteId')],responses:okError()}},
     '/payments/bcc/return': {
       get: {summary:'Возврат с платёжной страницы BCC; статус проверяется у банка',responses:{'303':{description:'Возврат в историю платежей'}}},
       post: {summary:'Возврат BCC через форму',responses:{'303':{description:'Возврат в историю платежей'}}},
