@@ -74,6 +74,14 @@ test('Moon invoice recovery with real PostgreSQL',{skip:!process.env.DOMLY_INTEG
    try{await processMoonOutbox(db,accept,id);}finally{db.query=query;}
    assert.equal((await row(id)).state,'uncertain');await processMoonOutbox(db,accept,id);assert.equal(calls-before,1);
   });
+  await t.test('alerts skip closed payments and finish deduplicated notification recovery',async()=>{
+   const id=await fixture(),r=await row(id),targets:string[]=[];
+   await db.query("UPDATE moon_ai_outbox SET state='uncertain' WHERE id=$1",[id]);
+   await db.query("UPDATE payments SET status='cancelled' WHERE id=$1",[r.payment_id]);
+   const notify={createAdminEvent:async(input:any)=>{targets.push(input.targetId);return [];}};
+   await notifyMoonInvoiceFailures(db,notify as any);assert.equal(targets.includes(r.payment_id),false);
+   const before=targets.length;await notifyMoonInvoiceFailures(db,notify as any);assert.equal(targets.length,before);
+  });
   await t.test('concurrent processors send an invoice only once',async()=>{
    const id=await fixture(),before=calls;await Promise.all(Array.from({length:4},()=>processMoonOutbox(db,accept,id)));assert.equal(calls-before,1);assert.equal((await row(id)).state,'sent');
   });

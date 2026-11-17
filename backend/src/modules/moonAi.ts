@@ -65,14 +65,15 @@ export function moonTransportFailure(error:unknown):string {
 }
 
 export async function notifyMoonInvoiceFailures(db:Database,notifications:Pick<NotificationService,'createAdminEvent'>) {
-  const rows=(await db.query(`SELECT id,payment_id,failure_code FROM moon_ai_outbox
-    WHERE kind='invoice' AND state IN ('uncertain','failed') AND payload->>'deliveryAlertedAt' IS NULL
-    ORDER BY created_at LIMIT 20`)).rows;
+  const rows=(await db.query(`SELECT o.id,o.payment_id,o.failure_code FROM moon_ai_outbox o JOIN payments p ON p.id=o.payment_id
+    WHERE o.kind='invoice' AND o.state IN ('uncertain','failed') AND o.payload->>'deliveryAlertedAt' IS NULL
+      AND p.status IN ('pending','invoice_requested') AND p.paid_at IS NULL
+    ORDER BY o.created_at LIMIT 20`)).rows;
   for(const row of rows){
-    const created=await notifications.createAdminEvent({event:'new_payment',titleRu:'Не подтверждено выставление счёта Kaspi',
+    await notifications.createAdminEvent({event:'new_payment',titleRu:'Не подтверждено выставление счёта Kaspi',
       bodyRu:'Запрос агенту требует проверки. Не создавайте повторный счёт до сверки с MonAI.',
       targetType:'payment',targetId:row.payment_id,dedupeKey:`invoice-delivery-failed:${row.id}`});
-    if(created.length)await db.query(`UPDATE moon_ai_outbox SET payload=payload || jsonb_build_object('deliveryAlertedAt',NOW()) WHERE id=$1`,[row.id]);
+    await db.query(`UPDATE moon_ai_outbox SET payload=payload || jsonb_build_object('deliveryAlertedAt',NOW()) WHERE id=$1`,[row.id]);
   }
 }
 
