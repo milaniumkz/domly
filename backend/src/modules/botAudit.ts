@@ -3,7 +3,7 @@ import {ApiError} from '../common/api';
 
 export function botActionTitle(action:string){
  const key=action.replace(/^bot\.moon-ai\./,'');
- const labels:Record<string,string>={catalog:'Просмотр каталога услуг','moon-ai.catalog':'Просмотр каталога услуг',quote:'Расчёт стоимости пакета','catalog.quote':'Расчёт стоимости пакета',customer:'Проверка данных клиента','moon-ai.customer-context':'Проверка данных клиента',package_purchase:'Оформление пакета и счёта',payment_verify:'Проверка оплаты',order_create:'Бронирование уборки',available_slots:'Поиск свободного времени','area.confirm':'Подтверждение площади','area.schedule-visit':'Запись на проверку площади','area.confirmed_by_bot':'Подтверждение площади','quality_check.visit_requested_by_bot':'Запись на проверку площади','payment.webhook.moon_ai_kaspi':'Получение статуса оплаты от Kaspi'};
+ const labels:Record<string,string>={package_renewal_queued:'Предложение нового пакета поставлено в очередь', 'payment.kaspi_cancelled':'Отмена счёта Kaspi и неоплаченной покупки',catalog:'Просмотр каталога услуг','moon-ai.catalog':'Просмотр каталога услуг',quote:'Расчёт стоимости пакета','catalog.quote':'Расчёт стоимости пакета',customer:'Проверка данных клиента','moon-ai.customer-context':'Проверка данных клиента',package_purchase:'Оформление пакета и счёта',payment_verify:'Проверка оплаты',order_create:'Бронирование уборки',available_slots:'Поиск свободного времени','area.confirm':'Подтверждение площади','area.schedule-visit':'Запись на проверку площади','area.confirmed_by_bot':'Подтверждение площади','quality_check.visit_requested_by_bot':'Запись на проверку площади','payment.webhook.moon_ai_kaspi':'Получение статуса оплаты от Kaspi'};
  return labels[key]??'Действие бота';
 }
 export function botAuditContext(input:any){
@@ -40,7 +40,7 @@ const columns=`a.*,u.id AS customer_id,NULLIF(u.full_name,'') AS customer_name,u
 export async function listBotAudit(db:Database,query:any){
  const limit=Math.min(100,Math.max(1,Math.trunc(Number(query.limit)||30))),offset=Math.min(1000000,Math.max(0,Math.trunc(Number(query.offset)||0)));
  const search=String(query.search??'').slice(0,200);
- const known=['catalog','moon-ai.catalog','quote','catalog.quote','customer','moon-ai.customer-context','package_purchase','payment_verify','order_create','available_slots','area.confirm','area.schedule-visit','area.confirmed_by_bot','quality_check.visit_requested_by_bot','payment.webhook.moon_ai_kaspi'];
+ const known=['package_renewal_queued','payment.kaspi_cancelled','catalog','moon-ai.catalog','quote','catalog.quote','customer','moon-ai.customer-context','package_purchase','payment_verify','order_create','available_slots','area.confirm','area.schedule-visit','area.confirmed_by_bot','quality_check.visit_requested_by_bot','payment.webhook.moon_ai_kaspi'];
  const matching=known.map(a=>a.startsWith('payment.')||a.endsWith('_by_bot')?a:'bot.moon-ai.'+a).filter(a=>botActionTitle(a).toLowerCase().replace(/ё/g,'е').includes(search.toLowerCase().replace(/ё/g,'е')));
  const rows=(await db.query(`SELECT ${columns} ${base} WHERE a.actor_id IS NULL AND a.payload->>'actorKind'='bot'
  AND ($1::text='' OR u.full_name ILIKE $2 OR u.phone ILIKE $2 OR a.entity_id ILIKE $2 OR a.payload->>'requestId' ILIKE $2 OR a.action ILIKE $2 OR a.action=ANY($5::text[]))

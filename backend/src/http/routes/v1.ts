@@ -1,3 +1,4 @@
+import {customerCrmRouter} from './customerCrm';
 import {refreshPackageUsage,validatePackagePeriod,bookingPeriod,packageBookingCapacity} from '../../modules/packageUsage';
 import {publicCatalogPackage, acceptPackageTerms, validatePackageBody, isPostRenovation} from '../../modules/packageTerms';
 import {apartmentNumber} from '../../modules/addressFields';
@@ -14,6 +15,7 @@ import { formatAddonRecord, formatServiceDescription } from '../../modules/servi
 import {PublicTextCatalog} from '../../modules/publicTextCatalog';
 import {withCatalogPriceTranslations} from '../../modules/catalogPriceTranslations';
 import {freezePackage} from '../../modules/packageFreeze';
+import {adminCancelledSales} from '../../modules/adminCancelledSales';
 import {adminPaymentHistory} from '../../modules/adminPaymentHistory';
 import { customerMonthlyProgress,normalizeCustomerTierRules,customerTierDiscount,discountedServicePrice } from '../../modules/customerProgress';
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
@@ -225,7 +227,8 @@ export function buildV1Router(deps: {
   };
 
   const normalizeMoonAiKaspiStatus = (payload: Record<string, unknown>) => {
-    const raw = String(payload.status ?? '').toLowerCase().trim();
+    const received = String(payload.status ?? '').toLowerCase().trim();
+    const raw = received==='cancel'?'cancelled':received;
     if (!['invoice_sent','paid','rejected','cancelled'].includes(raw)) throw new ApiError(400,'invalid_payment_status','Неизвестный статус Moon AI.');
     return raw as 'invoice_sent'|'paid'|'rejected'|'cancelled';
   };
@@ -2359,6 +2362,7 @@ export function buildV1Router(deps: {
     return available;
   };
   router.get('/scheduling/available-slots', auth(), asyncHandler(async(req,res)=>{ok(res,await availableSlots(req));}));
+  router.use(customerCrmRouter(deps.db));
   router.use(botOrderingRouter(deps.db,{purchasePackage,createOrder,availableSlots,verifyPayment:async(payment:any)=>{
     if(payment.provider==='bcc'){
       const result=await reconcileBccPayment(deps.db,deps.paymentGateway,payment);
@@ -2747,6 +2751,17 @@ export function buildV1Router(deps: {
         userId: result.payment.customer_id, titleRu: labels[status][0], bodyRu: labels[status][1],
         targetType: 'payments', targetId: result.payment.id, dedupeKey: `moon-status:${result.callbackId}`,
       });
+    }
+    if(status==='cancelled'&&result.payment?.status==='cancelled'){
+      await deps.notifications.createAdminEvent({event:'new_payment',titleRu:'Отменён счёт Kaspi',
+        bodyRu:`Счёт на ${result.payment.amount} ₸ отменён. Подробности в разделе «Отменённые счета и заказы».`,
+        targetType:'payment',targetId:result.payment.id,dedupeKey:`kaspi-cancelled:${result.payment.id}`});
+      const effects=(await deps.db.query("SELECT payload->'kaspiCancellation' effects FROM payments WHERE id=$1",[result.payment.id])).rows[0]?.effects;
+      for(const id of effects?.readyOrderIds??[])await offerNextCleanerAndNotify(id);
+      for(const id of effects?.cancelledOrderIds??[]){
+        const cleaner=(await deps.db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[id])).rows[0]?.cleaner_id;
+        if(cleaner)await deps.notifications.create({userId:cleaner,titleRu:'Заказ отменён',bodyRu:'Счёт Kaspi отменён, уборка снята с расписания.',targetType:'order',targetId:id,dedupeKey:`kaspi-order-cancelled:${id}`});
+      }
     }
     if (result.payment?.status === 'paid') await applyPaidPayment(result.payment);
     ok(res, {accepted: true, resolution: result.resolution, duplicate: result.duplicate, status});
@@ -4632,6 +4647,8 @@ export function buildV1Router(deps: {
     if (!row) throw new ApiError(404, 'not_found', 'Запись не найдена.');
     ok(res, row);
   }));
+
+  router.get('/admin/cancelled-sales',auth(['admin','superadmin']),asyncHandler(async(req,res)=>{res.set('Cache-Control','no-store');ok(res,await adminCancelledSales(deps.db,req.query));}));
 
   router.get('/admin/payment-history', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     ok(res, await adminPaymentHistory(deps.db, req.query));

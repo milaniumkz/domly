@@ -1,3 +1,5 @@
+import '../../ui/admin_customer_crm.dart';
+import '../../ui/admin_cancelled_sales.dart';
 import '../../ui/admin_filter_panel.dart';
 import '../../ui/admin_bot_audit.dart';
 import '../../utils/package_catalog_utils.dart';
@@ -913,6 +915,14 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           builder: _payments,
         ),
         _AdminSection(
+          key: 'cancelled_sales',
+          title: 'Отменённые счета и заказы',
+          subtitle: 'Клиенты, пакеты, суммы и контакты для ручной работы.',
+          icon: Icons.cancel_outlined,
+          builder: () => AdminCancelledSales(search: _searchQuery, dateFrom: _filterStartDate, dateTo: _filterEndDate,
+            sort: _dateSortOrder == 'Сначала старые' ? 'asc' : 'desc'),
+        ),
+        _AdminSection(
           key: 'special_addons',
           title: 'Спец. допы',
           subtitle:
@@ -1459,6 +1469,19 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   }
 
   Widget _customers() {
+    if (DebugSession.enabled) return _legacyCustomers();
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: _expandedFilterSections,
+      builder: (context, expanded, _) => AdminCustomerCrm(
+        search: _searchQuery, dateFrom: _filterStartDate, dateTo: _filterEndDate,
+        sort: _dateSortOrder == 'Сначала старые' ? 'oldest' : 'newest',
+        filtersExpanded: expanded.contains('customers'), legacyStatus: _customerStatusFilter,
+        cardBuilder: _customerCard, onExport: _copyCustomersCsv,
+      ),
+    );
+  }
+
+  Widget _legacyCustomers() {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _data.adminCustomersStream(),
       builder: (context, snapshot) {

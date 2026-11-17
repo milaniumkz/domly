@@ -1929,3 +1929,29 @@ BEGIN
 END $$;
 DROP TRIGGER IF EXISTS quality_address_proof_guard ON quality_check_requests;
 CREATE TRIGGER quality_address_proof_guard BEFORE INSERT OR UPDATE ON quality_check_requests FOR EACH ROW EXECUTE FUNCTION domly_quality_address_proof_guard();
+
+-- Administrative CRM data is separate from all customer-facing profile payloads.
+CREATE TABLE IF NOT EXISTS admin_customer_crm (
+ customer_id UUID PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
+ stage TEXT NOT NULL DEFAULT 'new' CHECK(stage IN ('new','working','purchased','refused','processed')),
+ revision INTEGER NOT NULL DEFAULT 1,
+ updated_by UUID REFERENCES app_users(id) ON DELETE SET NULL,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS admin_customer_crm_stage_idx ON admin_customer_crm(stage);
+CREATE TABLE IF NOT EXISTS admin_customer_notes (
+ id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+ customer_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+ author_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
+ updated_by UUID REFERENCES app_users(id) ON DELETE SET NULL,
+ body TEXT NOT NULL CHECK(char_length(body) BETWEEN 1 AND 10000),
+ revision INTEGER NOT NULL DEFAULT 1,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS admin_customer_notes_customer_idx ON admin_customer_notes(customer_id,created_at DESC,id);
+
+-- Reuse the native WhatsApp delivery outbox, including opt-out and pause handling.
+ALTER TABLE moon_ai_outbox DROP CONSTRAINT IF EXISTS moon_ai_outbox_kind_check;
+ALTER TABLE moon_ai_outbox ADD CONSTRAINT moon_ai_outbox_kind_check
+ CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification','package_renewal'));
