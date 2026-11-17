@@ -69,7 +69,21 @@ jobs:
         for label,args in [('kernel',['journalctl','-k']),('dockerDaemon',['journalctl','-u','docker'])]:\n\
         \ code,raw=command(args+['--since','2026-11-17 03:22:00 UTC','--until','2026-11-17\
         \ 03:27:00 UTC','--no-pager','-o','cat','-q'])\n report[label]={'commandAvailable':code==0,'counts':{k:len(re.findall(k,raw,re.I))\
-        \ for k in patterns},'hasEntries':bool(raw.strip())}\n(p/'report.json').write_text(json.dumps(report))\n\
+        \ for k in patterns},'hasEntries':bool(raw.strip())}\n# Only bounded Docker\
+        \ daemon error summaries; never export command arguments.\nimport shlex,collections\n\
+        code,raw=command(['journalctl','-u','docker','--since','2026-11-17 03:22:00\
+        \ UTC','--until','2026-11-17 03:27:00 UTC','--no-pager','-o','json','-q'])\n\
+        summaries=collections.Counter()\nfor line in raw.splitlines():\n try:msg=json.loads(line).get('MESSAGE','')\n\
+        \ except ValueError:continue\n if 'error' not in msg.lower():continue\n try:fields=dict(token.split('=',1)\
+        \ for token in shlex.split(msg) if '=' in token)\n except ValueError:fields={}\n\
+        \ text=' '.join(str(fields[k]) for k in ['msg','error'] if k in fields) or\
+        \ msg\n text=re.split(r'(?i)\\b(?:cmd|command|args|payload|body)=',text)[0]\n\
+        \ text=re.sub(r'(?i)(?:password|passwd|token|secret|authorization|api[_-]?key)\\\
+        s*[:=]\\s*[^\\s,;]+','[redacted]',text)\n text=re.sub(r'https?://\\S+','[url]',text)\n\
+        \ text=re.sub(r'\\b[0-9a-f]{16,}\\b','[id]',text)\n text=re.sub(r'\\b(?:[0-9]{1,3}\\\
+        .){3}[0-9]{1,3}\\b','[ip]',text)\n text=re.sub(r'\\+?\\b[0-9]{10,15}\\b','[number]',text)\n\
+        \ summaries[text[:350]]+=1\nreport['daemonErrorSummaries']=[{'summary':s,'count':n}\
+        \ for s,n in summaries.most_common(8)]\n(p/'report.json').write_text(json.dumps(report))\n\
         HOST_AUDIT\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
         $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-audit-XXXXXX')\n[[ \"\
         $remote_dir\" =~ ^/tmp/domly-invoice-audit-[A-Za-z0-9]+$ ]]\ntrap 'ssh -i\
