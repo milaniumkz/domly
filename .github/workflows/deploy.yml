@@ -102,7 +102,7 @@ jobs:
           git diff --name-only "$WEB_SOURCE_SHA" HEAD > /tmp/web-source-changes.txt
           while IFS= read -r changed; do
             case "$changed" in
-              backend/*|docs/*|.github/*|scripts/server/*) ;;
+              backend/*|docs/*|.github/*|scripts/server/*|docker-compose.yml) ;;
               *) echo "Frontend build cannot be reused after changing $changed" >&2; exit 1 ;;
             esac
           done < /tmp/web-source-changes.txt
