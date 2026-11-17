@@ -20,13 +20,22 @@ jobs:
         DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
       run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
         \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
-        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Pool}=require('pg');\n\
-        (async()=>{const db=new Pool({connectionString:process.env.DATABASE_URL});try{\n\
+        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Pool}=require('pg');\
+        \ const Redis=require('ioredis');\n(async()=>{const db=new Pool({connectionString:process.env.DATABASE_URL});try{\n\
         await db.query('BEGIN READ ONLY');await db.query(\"SET LOCAL statement_timeout='10s'\"\
         );\nconst result={at:new Date().toISOString(),deliveryCounts:(await db.query(\"\
         SELECT kind,state,failure_code,count(*)::int count FROM moon_ai_outbox GROUP\
-        \ BY kind,state,failure_code\")).rows};\nawait db.query('ROLLBACK');console.log(JSON.stringify(result));}finally{await\
-        \ db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
+        \ BY kind,state,failure_code\")).rows};\nawait db.query('ROLLBACK');\nconst\
+        \ redis=new Redis(process.env.REDIS_URL,{lazyConnect:true,maxRetriesPerRequest:1,connectTimeout:5000,commandTimeout:8000});redis.on('error',()=>{});\n\
+        try{\nawait redis.connect();\nconst ids=await redis.zrangebyscore('bull:moon-ai:failed',Date.parse('2026-11-17T03:22:00Z'),Date.parse('2026-11-17T03:27:00Z'),'LIMIT',0,30);\n\
+        const failures=[];\nconst patterns=['deadlock detected','connection terminated','too\
+        \ many clients','Query read timeout','timeout exceeded when trying to connect','statement\
+        \ timeout','ECONNRESET','ECONNREFUSED','EAI_AGAIN','ETIMEDOUT','Missing lock','stalled','socket\
+        \ hang up','invalid input syntax','bind message','violates','aborted'];\n\
+        for(const id of ids){const [reason,finished,processed,stack]=await redis.hmget('bull:moon-ai:'+id,'failedReason','finishedOn','processedOn','stacktrace');\n\
+        const combined=String(reason)+' '+String(stack);failures.push({finishedOn:finished,processedOn:processed,codes:patterns.filter(v=>combined.toLowerCase().includes(v.toLowerCase())),stackLocations:['processMoonOutbox','Database.query','pg-pool','moonAi','sendMessengerFollowup'].filter(v=>combined.includes(v)),reasonLength:reason?.length??0});}\n\
+        result.queueFailures={count:ids.length,failures};\n}catch(e){result.queueFailures={unavailable:true,errorKind:e.name};}finally{redis.disconnect();}\n\
+        console.log(JSON.stringify(result));}finally{await db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
         AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
         MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEArZFJpaJMHLvZBR0zjr5H\n+UR5CveMm1TB4bx9SjYR9b/Ne8iuYN0SHj8N+lf+bXzOUKGIksUpO4FrVIB+vEc2\n\
         vITgY4ovnkjDYI2s0mcoCEi7N8jcEYzSTQ9q5LDgwJ2maOrbNpU+yVQQhTuGOiC3\nRz2ob7RGxNtMXlLjzIuMH3Ofrh7GE+xW8axvlXeLSkUXwDZwcQW9ty2cet/bIXtC\n\
@@ -45,7 +54,12 @@ jobs:
         code,raw=command(['docker','inspect','--format','{{.RestartCount}}',worker]);report['workerRestarts']=raw.strip()\
         \ if code==0 else None\nstart='2026-11-17T03:22:00Z';end='2026-11-17T03:27:00Z'\n\
         patterns=['OOM','out of memory','SIGTERM','SIGKILL','ECONNRESET','ETIMEDOUT','deadlock','statement\
-        \ timeout','process exited','stalled','unhandled','Error']\ncode,raw=command(['docker','logs','--timestamps','--since',start,'--until',end,worker],True)\n\
+        \ timeout','process exited','stalled','unhandled','Error','failed to start\
+        \ exec','stream copy error','context deadline exceeded','context canceled','container\
+        \ not running','failed to copy log','shim disconnected','failed to delete\
+        \ task','health check','OCI runtime exec failed','broken pipe','connection\
+        \ reset by peer','exec command failed','failed to send event','failed to read\
+        \ log']\ncode,raw=command(['docker','logs','--timestamps','--since',start,'--until',end,worker],True)\n\
         report['workerLogCounts']={'commandAvailable':code==0,'historicalContainerRetained':bool(state.get('StartedAt')\
         \ and state['StartedAt']<=start),'counts':{k:len(re.findall(k,raw,re.I)) for\
         \ k in patterns}}\ncode,raw=command(['docker','events','--since',start,'--until',end,'--filter','type=container','--filter','label=com.docker.compose.project=domly-backend','--filter','label=com.docker.compose.service=worker','--format','{{json\
