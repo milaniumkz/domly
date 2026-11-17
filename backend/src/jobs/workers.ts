@@ -6,7 +6,7 @@ import {translateKazakh,sendLocalizedPush} from '../localization';
 import {technicalTick} from '../technical/runtime';
 import {StorageService} from '../modules/integrations';
 import {observeWorker} from '../technical/jobs';
-import {processMoonOutbox} from '../modules/moonAi';
+import {processMoonOutbox,notifyMoonInvoiceFailures} from '../modules/moonAi';
 import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { env, validateEnvForRuntime } from '../common/env';
@@ -199,7 +199,7 @@ void maintenanceQueue.add('expire-order-offers', {}, {
   removeOnComplete: true,
 });
 
-workers.push(new Worker('moon-ai', async()=>{await processMoonOutbox(db);},{connection}));
+workers.push(new Worker('moon-ai', async()=>{await processMoonOutbox(db);await notifyMoonInvoiceFailures(db,notificationService);},{connection}));
 void (async()=>{
   for(const job of await moonQueue.getRepeatableJobs())if(job.name==='moon-ai-outbox'&&Number(job.every)!==2000)await moonQueue.removeRepeatableByKey(job.key);
   await moonQueue.add('moon-ai-outbox', {}, {jobId:'moon-ai-outbox',repeat:{every:2000},removeOnComplete:true});

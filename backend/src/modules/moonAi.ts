@@ -56,12 +56,37 @@ export async function queueAssistantMessage(db: Queryable, chatId: string, custo
   await db.query(`INSERT INTO moon_ai_outbox(customer_id,chat_id,kind,dedupe_key,payload) VALUES($1,$2,'message',$3,$4) ON CONFLICT(dedupe_key) DO NOTHING`,
     [customerId,chatId,`message:${messageId}`,{text, ...(fileUrl?{fileUrl}: {})}]);
 }
+// Never persist raw exception messages: they may contain URLs or credentials.
+export function moonTransportFailure(error:unknown):string {
+  const e=error as any,code=e?.cause?.code??e?.code;
+  const known=['ENOTFOUND','EAI_AGAIN','ECONNREFUSED','ENETUNREACH','EHOSTUNREACH','UND_ERR_CONNECT_TIMEOUT','ECONNRESET','ETIMEDOUT','UND_ERR_SOCKET','UND_ERR_HEADERS_TIMEOUT','UND_ERR_BODY_TIMEOUT'];
+  if(known.includes(code))return code;
+  return e?.name==='TimeoutError'?'request_timeout':e?.name==='AbortError'?'request_aborted':'delivery_unknown';
+}
+
+export async function notifyMoonInvoiceFailures(db:Database,notifications:Pick<NotificationService,'createAdminEvent'>) {
+  const rows=(await db.query(`SELECT o.id,o.payment_id,o.failure_code FROM moon_ai_outbox o JOIN payments p ON p.id=o.payment_id
+    WHERE o.kind='invoice' AND o.state IN ('uncertain','failed') AND o.payload->>'deliveryAlertedAt' IS NULL
+      AND p.status IN ('pending','invoice_requested') AND p.paid_at IS NULL
+    ORDER BY o.created_at LIMIT 20`)).rows;
+  for(const row of rows){
+    await notifications.createAdminEvent({event:'new_payment',titleRu:'Не подтверждено выставление счёта Kaspi',
+      bodyRu:'Запрос агенту требует проверки. Не создавайте повторный счёт до сверки с MonAI.',
+      targetType:'payment',targetId:row.payment_id,dedupeKey:`invoice-delivery-failed:${row.id}`});
+    await db.query(`UPDATE moon_ai_outbox SET payload=payload || jsonb_build_object('deliveryAlertedAt',NOW()) WHERE id=$1`,[row.id]);
+  }
+}
+
 export async function processMoonOutbox(db: Database, send: typeof fetch=fetch, outboxId?:string) {
   if(!moonAiReady()) return {sent:0};
   const url=new URL(env.moonAiChannelUrl);
   if(url.protocol!=='https:' || !(url.hostname==='mooonai.com' || url.hostname.endsWith('.mooonai.com'))) throw new Error('invalid_moon_ai_channel_url');
-  // A crash or uncertain HTTP result must not create duplicate Kaspi invoices.
-  await db.query(`UPDATE moon_ai_outbox SET state='uncertain',failure_code='delivery_unknown'
+  // Only a recorded pre-dispatch crash is safe to retry. Legacy/HTTP-started
+  // attempts remain uncertain: the receiver may already have created an invoice.
+  await db.query(`UPDATE moon_ai_outbox SET
+    state=CASE WHEN kind='invoice' AND payload->'apiDelivery'->>'phase'='claimed'
+      AND COALESCE((payload->'apiDelivery'->>'attempt')::int,0)<3 THEN 'pending' ELSE 'uncertain' END,
+    failure_code='worker_interrupted',finished_at=NOW(),run_after=NOW()
     WHERE state='processing' AND started_at<NOW()-INTERVAL '2 minutes' AND ($1::uuid IS NULL OR id=$1)`,[outboxId??null]);
   let sent=0;
   for(let i=0;i<20;i++) {
@@ -125,9 +150,14 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch, 
           await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code=$2,finished_at=NOW() WHERE id=$1",[row.id,reason]);return {cancelled:true};
         }
       }
-      await tx.query("UPDATE moon_ai_outbox SET state='processing',started_at=NOW() WHERE id=$1",[row.id]);return row;
+      await tx.query(`UPDATE moon_ai_outbox SET state='processing',started_at=NOW(),finished_at=NULL,
+        payload=CASE WHEN kind IN ('invoice','message') THEN payload || jsonb_build_object('apiDelivery',
+          jsonb_build_object('phase','claimed','attempt',COALESCE((payload->'apiDelivery'->>'attempt')::int,0)+1)) ELSE payload END
+        WHERE id=$1`,[row.id]);
+      row.apiAttempt=Number(row.payload.apiDelivery?.attempt??0)+1;return row;
     });
     if(!row)break;if(row.cancelled || row.busy)continue;
+    let apiTransportFailure=false;
     try {
       if(!['invoice','message'].includes(row.kind)) {
         const customer=(await db.query('SELECT phone,settings FROM app_users WHERE id=$1',[row.customer_id])).rows[0];
@@ -144,18 +174,32 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch, 
       // execution requires from_type=user, including trusted app-generated intents.
       body.from_type='user';
       if(row.payload.fileUrl) {body.message_type='multi';body.data.attachments=[{url:row.payload.fileUrl,filename:'attachment'}];}
-      const response=await send(url,{method:'POST',headers:{'X-API-Key':env.moonAiChannelApiKey,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+      // Commit the dispatch boundary before the network call. A lost worker can
+      // now be distinguished from a request whose outcome is genuinely unknown.
+      const lease=await db.query(`UPDATE moon_ai_outbox SET payload=jsonb_set(payload,'{apiDelivery,phase}','"http_started"'::jsonb)
+        WHERE id=$1 AND state='processing' AND (payload->'apiDelivery'->>'attempt')::int=$2 RETURNING id`,[row.id,row.apiAttempt]);
+      if(!lease.rows.length)continue; // A suspended previous worker no longer owns this attempt.
+      const response=await send(url,{method:'POST',headers:{'X-API-Key':env.moonAiChannelApiKey,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)}).catch(error=>{apiTransportFailure=true;throw error;});
       const result:any=await response.json().catch(()=>null);
       if(!response.ok || result?.accepted!==true || result.external_thread_id!==externalThread) {
-        await db.query("UPDATE moon_ai_outbox SET state=$2,failure_code=$3,finished_at=NOW() WHERE id=$1",[row.id,response.status>=500?'uncertain':'failed',`http_${response.status}`]);continue;
+        await db.query("UPDATE moon_ai_outbox SET state=$2,failure_code=$3,finished_at=NOW() WHERE id=$1",[row.id,response.ok||response.status>=500?'uncertain':'failed',response.ok?'invalid_acceptance':`http_${response.status}`]);continue;
       }
-      await db.query("UPDATE moon_ai_outbox SET state='sent',provider_thread_id=$2,finished_at=NOW() WHERE id=$1",[row.id,result.thread_id ?? null]);sent++;
+      await db.query("UPDATE moon_ai_outbox SET state='sent',provider_thread_id=$2,finished_at=NOW(),failure_code=NULL WHERE id=$1",[row.id,result.thread_id ?? null]);sent++;
     }catch(error) {
       if(error instanceof MoonMessengerError) {
         await db.query(`UPDATE moon_ai_outbox SET state=$2,failure_code=$3,finished_at=CASE WHEN $2='pending' THEN NULL ELSE NOW() END,
           run_after=CASE WHEN $2='pending' THEN NOW()+INTERVAL '5 minutes' ELSE run_after END WHERE id=$1`,
           [row.id,error.retryable?'pending':error.failureCode.includes('paused')||error.failureCode.includes('opted_out')||error.failureCode.includes('phone_unavailable')?'cancelled':'failed',error.failureCode]);
-      } else await db.query("UPDATE moon_ai_outbox SET state='uncertain',failure_code='delivery_unknown',finished_at=NOW() WHERE id=$1",[row.id]);
+      } else {
+        const code=moonTransportFailure(error);
+        // DNS/refused-connect errors prove that the request never reached the
+        // receiver. Timeouts/resets after connection do not, and must not replay.
+        const retry=apiTransportFailure && ['ENOTFOUND','EAI_AGAIN','ECONNREFUSED','ENETUNREACH','EHOSTUNREACH','UND_ERR_CONNECT_TIMEOUT'].includes(code)
+          && row.kind==='invoice' && row.apiAttempt<3;
+        await db.query(`UPDATE moon_ai_outbox SET state=$2,failure_code=$3,
+          finished_at=NOW(),run_after=CASE WHEN $2='pending' THEN NOW()+INTERVAL '30 seconds' ELSE run_after END
+          WHERE id=$1`,[row.id,retry?'pending':'uncertain',code]);
+      }
     }
   }
   return {sent};
