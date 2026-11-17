@@ -1,4 +1,4 @@
-name: Dispatch checked invoice recovery deployment once
+name: Release queued duplicate deployment once
 'on':
   push:
     branches:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-    - name: Dispatch standard main deployment with unchanged verified web release
+    - name: Cancel only the old deployment still waiting for a runner
       env:
         GH_TOKEN: ${{ github.token }}
       run: 'set -euo pipefail
@@ -24,14 +24,22 @@ jobs:
 
         test "$head" = f8c76ab794bb62167ef7c5ec9cda180b1fc81a69
 
-        test "$(gh api "repos/$repo/actions/runs/44042037157" --jq .conclusion)" =
-        success
+        gh api "repos/$repo/actions/runs/44042757869/jobs" > jobs.json
 
-        gh api -X POST "repos/$repo/actions/workflows/deploy.yml/dispatches" --input
-        - <<''JSON''
+        python3 - <<''PYCODE''
 
-        {"ref":"main","inputs":{"mode":"deploy","reuse_web_from_run":"43600267635"}}
+        import json
 
-        JSON
+        jobs=json.load(open(''jobs.json''))[''jobs'']
+
+        assert not any(j[''name'']==''deploy'' and j[''status'']!=''queued'' for j
+        in jobs), ''Never cancel an active production deployment''
+
+        assert all(j[''status'']==''queued'' or j.get(''conclusion'')==''skipped''
+        for j in jobs), ''Expected a fully queued duplicate''
+
+        PYCODE
+
+        gh api -X POST "repos/$repo/actions/runs/44042757869/cancel"
 
         '
