@@ -1,3 +1,4 @@
+import {packageRenewalStillEligible} from './packageRenewal';
 import {applyKaspiCancellation} from './kaspiCancellation';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { env } from '../common/env';
@@ -111,6 +112,9 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch, 
             AND NOT EXISTS(SELECT 1 FROM service_orders o WHERE o.customer_id=q.customer_id AND o.address_id=q.address_id
               AND (o.id=q.order_id OR o.customer_package_id=q.customer_package_id) AND o.status IN ('in_progress','completed'))`,[row.payload.qualityCheckId,row.customer_id])).rows.length;
         if(!eligible){await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='area_check_no_longer_required',finished_at=NOW() WHERE id=$1",[row.id]);return {cancelled:true};}
+      }
+      if(row.kind==='package_renewal' && !await packageRenewalStillEligible(db,row.customer_id,row.payload.packageId)){
+        await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='renewal_no_longer_needed',finished_at=NOW() WHERE id=$1",[row.id]);return {cancelled:true};
       }
       if(row.kind==='inactive_signup') {
         const checkout=(await tx.query('SELECT 1 FROM payments WHERE customer_id=$1 LIMIT 1',[row.customer_id])).rows.length>0;

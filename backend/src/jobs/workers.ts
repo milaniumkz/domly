@@ -1,3 +1,4 @@
+import {queuePackageRenewals} from '../modules/packageRenewal';
 import {processPackageUsage} from '../modules/packageUsage';
 import {approvedWorkStartSql} from '../modules/workingSchedule';
 import {anonymizeExpiredAccountDeletions} from '../modules/accountDeletion';
@@ -102,7 +103,7 @@ workers.push(new Worker('payments', async (job) => {
 }, { connection }));
 
 workers.push(new Worker('maintenance', async (job) => {
-  if(job.name==='package-month-expiry'){await processPackageUsage(db,notificationService);return;}
+  if(job.name==='package-month-expiry'){await processPackageUsage(db,notificationService);await queuePackageRenewals(db);return;}
   if(job.name==='anonymize-deleted-accounts'){await anonymizeExpiredAccountDeletions(db);return;}
   if (job.name === 'cleanup-expired-auth') {
     const otp = (await db.query<{ count: string }>(

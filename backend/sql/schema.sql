@@ -1950,3 +1950,8 @@ CREATE TABLE IF NOT EXISTS admin_customer_notes (
  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS admin_customer_notes_customer_idx ON admin_customer_notes(customer_id,created_at DESC,id);
+
+-- Reuse the native WhatsApp delivery outbox, including opt-out and pause handling.
+ALTER TABLE moon_ai_outbox DROP CONSTRAINT IF EXISTS moon_ai_outbox_kind_check;
+ALTER TABLE moon_ai_outbox ADD CONSTRAINT moon_ai_outbox_kind_check
+ CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification','package_renewal'));
