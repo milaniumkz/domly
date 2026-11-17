@@ -47,9 +47,9 @@ export async function customerCrmList(db:Database,q:Record<string,unknown>){
    COALESCE(crm.stage,CASE WHEN COALESCE(pay.paid_count,0)>0 THEN 'purchased' ELSE 'new' END) crm_stage,COALESCE(crm.revision,0) crm_revision,
    GREATEST(crm.updated_at,nt.notes_updated_at) crm_updated_at,COALESCE(nt.notes_count,0) notes_count
   FROM app_users u LEFT JOIN pay ON pay.customer_id=u.id LEFT JOIN pk ON pk.customer_id=u.id LEFT JOIN nt ON nt.customer_id=u.id LEFT JOIN admin_customer_crm crm ON crm.customer_id=u.id
-  LEFT JOIN LATERAL(SELECT * FROM customer_addresses WHERE user_id=u.id ORDER BY is_primary DESC,updated_at DESC,id LIMIT 1) a ON TRUE
+  LEFT JOIN LATERAL(SELECT loc.* FROM customer_addresses loc WHERE ${addressFilters.join(' AND ')} ORDER BY loc.is_primary DESC,loc.updated_at DESC,loc.id LIMIT 1) a ON TRUE
   WHERE ${filters.join(' AND ')}), visible AS(SELECT * FROM matching ORDER BY ${order[sort]} LIMIT $1 OFFSET $2), details AS (
-  SELECT v.*,(SELECT COALESCE(jsonb_agg(to_jsonb(loc)),'[]'::jsonb) FROM customer_addresses loc WHERE loc.user_id=v.id) addresses,latest.preview latest_note FROM visible v LEFT JOIN LATERAL(SELECT LEFT(body,200) preview FROM admin_customer_notes WHERE customer_id=v.id ORDER BY created_at DESC,id DESC LIMIT 1) latest ON TRUE
+  SELECT v.*,(SELECT COALESCE(jsonb_agg(to_jsonb(loc)||jsonb_build_object('address',concat_ws(', ',loc.street,loc.house),'residentialComplex',loc.residential_complex)),'[]'::jsonb) FROM customer_addresses loc WHERE loc.user_id=v.id) addresses,latest.preview latest_note FROM visible v LEFT JOIN LATERAL(SELECT LEFT(body,200) preview FROM admin_customer_notes WHERE customer_id=v.id ORDER BY created_at DESC,id DESC LIMIT 1) latest ON TRUE
  ) SELECT (SELECT COUNT(*)::int FROM matching) total,(SELECT COUNT(*)::int FROM matching WHERE paid_count>0) paid_customers,
  (SELECT COUNT(*)::int FROM matching WHERE notes_count>0) customers_with_notes,
  COALESCE(jsonb_agg(to_jsonb(d) ORDER BY ${order[sort]}) FILTER(WHERE d.id IS NOT NULL),'[]') items FROM details d`,values)).rows[0];
