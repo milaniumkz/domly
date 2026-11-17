@@ -1,3 +1,4 @@
+import {applyKaspiCancellation} from './kaspiCancellation';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { env } from '../common/env';
 import { ApiError } from '../common/api';
@@ -256,9 +257,12 @@ type MoonPaymentStatusInput = {
  externalId: string|null; eventId: string; eventTime: string|null; payload: any;
 };
 export async function acceptMoonPaymentStatus(db: Database, input: MoonPaymentStatusInput) {
-  return db.transaction(tx => applyMoonPaymentStatus(tx, input));
+  return db.atomic(() => applyMoonPaymentStatus(db, input));
 }
-async function applyMoonPaymentStatus(tx: Queryable, input: MoonPaymentStatusInput) {
+async function applyMoonPaymentStatus(db: Database, input: MoonPaymentStatusInput) {
+    const tx=db;
+    const owner=(await tx.query('SELECT customer_id FROM payments WHERE id::text=$1 OR external_id=$1 LIMIT 1',[input.key])).rows[0];
+    if(owner)await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[owner.customer_id]);
     const p=(await tx.query('SELECT * FROM payments WHERE id::text=$1 OR external_id=$1 LIMIT 1 FOR UPDATE',[input.key])).rows[0];
     if(!p) throw new ApiError(404,'payment_not_found','Платёж не найден.');
     if(p.provider!=='kaspi') throw new ApiError(409,'invalid_provider','Платёж не относится к Kaspi.');
@@ -275,15 +279,17 @@ async function applyMoonPaymentStatus(tx: Queryable, input: MoonPaymentStatusInp
     if(!event) {
       const original=(await tx.query("SELECT payment_id FROM payment_events WHERE provider='kaspi' AND idempotency_key=$1",[input.eventId])).rows[0];
       if(original?.payment_id!==p.id) throw new ApiError(409,'event_conflict','Событие уже относится к другому платежу.');
+      if(p.status==='cancelled'&&input.status==='cancelled')await applyKaspiCancellation(db,p,input.eventTime);
       return p;
     }
-    if(['paid','refunded','cancelled'].includes(p.status)) return p;
+    if(['paid','refunded','cancelled'].includes(p.status)){if(p.status==='cancelled'&&input.status==='cancelled')await applyKaspiCancellation(db,p,input.eventTime);return p;}
     const updated=(await tx.query(`UPDATE payments SET status=$2::payment_status,external_id=COALESCE($3,external_id),
       paid_at=CASE WHEN $2='paid' THEN COALESCE($4::timestamptz,paid_at,NOW()) ELSE paid_at END,
       approval_source=CASE WHEN $2='paid' THEN 'moon_ai' ELSE approval_source END,
       approved_at=CASE WHEN $2='paid' THEN COALESCE($4::timestamptz,NOW()) ELSE approved_at END,
       payload=payload || $5::jsonb,updated_at=NOW() WHERE id=$1 RETURNING *`,
       [p.id,input.status,input.externalId,input.eventTime,{moonAi:input.payload}])).rows[0];
+    if(input.status==='cancelled')await applyKaspiCancellation(db,updated,input.eventTime);
     if(input.status==='paid') await tx.query("UPDATE moon_ai_outbox SET state='cancelled',failure_code='purchase_paid',finished_at=NOW() WHERE customer_id=$1 AND kind='abandoned_checkout' AND state='pending'",[p.customer_id]);
     return updated;
 }
@@ -303,12 +309,14 @@ export async function matchMoonPaymentStatus(db: Database, input: {
   const amount = Math.round(input.amount * 100) / 100;
   const eventTime = time.toISOString();
   const fingerprint = createHash('sha256').update(JSON.stringify(paymentId ? [phone, amount, input.status, eventTime, paymentId.toLowerCase()] : [phone, amount, input.status, eventTime])).digest('hex');
-  return db.transaction(async tx => {
+  return db.atomic(async () => {
+    const tx=db;
     // Serialize all callbacks sharing this matching key, including duplicates.
     await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`moon:${phone}:${amount}`]);
     const old = (await tx.query('SELECT * FROM moon_ai_payment_callbacks WHERE fingerprint=$1', [fingerprint])).rows[0];
     if (old) {
       const payment = old.payment_id ? (await tx.query('SELECT * FROM payments WHERE id=$1', [old.payment_id])).rows[0] : null;
+      if(payment?.status==='cancelled'&&old.status==='cancelled')await applyKaspiCancellation(db,payment,old.event_time);
       return {resolution: old.resolution as string, duplicate: true, callbackId: old.id as string, candidateIds: old.candidate_ids as string[], payment};
     }
     // Use the original event time, not delivery time: delayed retries cannot
@@ -323,7 +331,7 @@ export async function matchMoonPaymentStatus(db: Database, input: {
           AND retry.invoice_requested_at<=$3::timestamptz))
         AND invoice_requested_at<=$3::timestamptz+INTERVAL '1 second'
         AND invoice_requested_at>=$3::timestamptz-CASE WHEN $4='invoice_sent' THEN INTERVAL '20 minutes' ELSE INTERVAL '72 hours' END
-      ORDER BY invoice_requested_at DESC FOR UPDATE`, [phone, amount, eventTime, input.status, paymentId ?? null])).rows;
+      ORDER BY invoice_requested_at DESC`, [phone, amount, eventTime, input.status, paymentId ?? null])).rows;
     const candidateIds = candidates.map(p => String(p.id));
     const resolution = candidates.length === 1 ? 'matched' : candidates.length ? 'ambiguous' : 'not_found';
     const payload = {phone, amount, status: input.status, dateTime: eventTime, ...(paymentId ? {paymentId} : {})};
@@ -333,7 +341,7 @@ export async function matchMoonPaymentStatus(db: Database, input: {
       if (candidateIds.length) await tx.query(`UPDATE payments SET payload=payload || jsonb_build_object('moonAiReview',$2::jsonb) WHERE id=ANY($1::uuid[])`, [candidateIds, {reason: resolution, callbackId: callback.id, ...payload}]);
       return {resolution, duplicate: false, callbackId: callback.id as string, candidateIds, payment: null};
     }
-    const payment = await applyMoonPaymentStatus(tx, {key: candidates[0].id, status: input.status==='invoice_sent'?'invoice_requested':input.status,
+    const payment = await applyMoonPaymentStatus(db, {key: candidates[0].id, status: input.status==='invoice_sent'?'invoice_requested':input.status,
       amount, phone, externalId: null, eventId: `moon:${fingerprint}`, eventTime, payload});
     return {resolution, duplicate: false, callbackId: callback.id as string, candidateIds, payment};
   });
