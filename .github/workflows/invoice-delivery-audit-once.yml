@@ -1,0 +1,70 @@
+name: Read-only invoice delivery diagnostic once
+'on':
+  push:
+    branches:
+    - support/invoice-delivery-audit-20261117
+    paths:
+    - .github/workflows/invoice-delivery-audit-once.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+    - name: Read minimal invoice delivery state and encrypt report
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
+        \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
+        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Pool}=require('pg');\n\
+        (async()=>{\nconst db=new Pool({connectionString:process.env.DATABASE_URL});\n\
+        try {\nawait db.query('BEGIN READ ONLY');\nawait db.query(\"SET LOCAL statement_timeout='10s'\"\
+        );\nconst selected=(await db.query(\"SELECT id,customer_id,status,created_at\
+        \ FROM customer_packages WHERE encode(sha256(convert_to(id::text,'UTF8')),'hex')=$1\"\
+        ,[\"e3c9d4eda6511809ac867f42c08025c66b5ce87672c16b98f4b7afff8795d28a\"])).rows;\n\
+        if(selected.length!==1)throw Error('selection_not_unique');\nconst cp=selected[0];\n\
+        const payments=(await db.query(`SELECT id,status,provider,amount,created_at,updated_at,invoice_requested_at,paid_at,customer_package_id,\n\
+        \ invoice_phone IS NOT NULL AS has_invoice_phone, payload->>'createdBy' AS\
+        \ created_by, payload->>'provider' AS init_provider,\n payload->>'queued'\
+        \ AS init_queued FROM payments WHERE customer_package_id=$1 ORDER BY created_at`,[cp.id])).rows;\n\
+        const ids=payments.map(p=>p.id);\nconst outbox=(await db.query(`SELECT id,payment_id,kind,state,failure_code,created_at,run_after,started_at,finished_at,provider_thread_id\n\
+        \ FROM moon_ai_outbox WHERE payment_id=ANY($1::uuid[]) ORDER BY created_at`,[ids])).rows;\n\
+        const requests=(await db.query(`SELECT request_key,operation,created_at,response->'payment'->>'id'\
+        \ AS payment_id,response->'payment'->>'status' AS response_payment_status\n\
+        \ FROM bot_ordering_requests WHERE customer_id=$1 AND response->'payment'->>'id'=ANY($2::text[])\
+        \ ORDER BY created_at`,[cp.customer_id,ids])).rows;\nconst result={at:new\
+        \ Date().toISOString(),package:{id:cp.id,status:cp.status,created_at:cp.created_at},payments,outbox,requests,config:{enabled:process.env.MOON_AI_ENABLED==='true',channelUrlConfigured:!!process.env.MOON_AI_CHANNEL_URL,channelKeyConfigured:!!process.env.MOON_AI_CHANNEL_API_KEY,webhookConfigured:!!process.env.MOON_AI_WEBHOOK_TOKEN}};\n\
+        await db.query('ROLLBACK');console.log(JSON.stringify(result));\n}finally{await\
+        \ db.end();}\n})().catch(e=>{console.error('Read-only invoice diagnostic failed:',e.code||e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
+        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEArZFJpaJMHLvZBR0zjr5H\n+UR5CveMm1TB4bx9SjYR9b/Ne8iuYN0SHj8N+lf+bXzOUKGIksUpO4FrVIB+vEc2\n\
+        vITgY4ovnkjDYI2s0mcoCEi7N8jcEYzSTQ9q5LDgwJ2maOrbNpU+yVQQhTuGOiC3\nRz2ob7RGxNtMXlLjzIuMH3Ofrh7GE+xW8axvlXeLSkUXwDZwcQW9ty2cet/bIXtC\n\
+        NML8Zf08u1E83oxEhBbuyuIMsWVwjGoibdr4UVx6+yDzjGe4ctlmoXPFJDPdNVK0\nPYEEDWGcuz1FFaYk/WxbTVHGXZihvx2q0xID+iiOQxNAfs+XmddRQ2dH7V4IEKF4\n\
+        kzB5DjGZRac67xA4tr2wLhjwdKtyMF+hYchVtXHwlb+trhJqYvf49kQ+Truvjs08\nYMAVNoAjfo4IQeWXk3IRn3pff9S7W99O7gUMlrBID3c3UFnatP6eABS8VDO/bazx\n\
+        panBYFOQ9U57lJnF4Z/rpxUtD1rgAe0NNmF2hnmybqc1AgMBAAE=\n-----END PUBLIC KEY-----\n\
+        OWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
+        $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-audit-XXXXXX')\n[[ \"\
+        $remote_dir\" =~ ^/tmp/domly-invoice-audit-[A-Za-z0-9]+$ ]]\ntrap 'ssh -i\
+        \ ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm -rf\
+        \ -- $remote_dir\" >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key\
+        \ -o IdentitiesOnly=yes audit.js owner-public.pem \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
+        \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"\
+        cd '$DEPLOY_PATH/current' && umask 077 && docker compose -p domly-backend\
+        \ exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
+        \ && openssl rand -out '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc\
+        \ -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
+        \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey\
+        \ '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256\
+        \ -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\nmkdir -m 700 -p\
+        \ encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: invoice-delivery-diagnostic-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
