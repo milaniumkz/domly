@@ -1,4 +1,4 @@
-name: Recover approved existing invoice delivery once
+name: Read-only worker delivery incident diagnostic
 'on':
   push:
     branches:
@@ -13,59 +13,61 @@ jobs:
     environment: production
     timeout-minutes: 5
     steps:
-    - name: Retry guarded existing invoice once and encrypt result
+    - name: Read minimal invoice delivery state and encrypt report
       env:
         VPS_HOST: ${{ secrets.VPS_HOST }}
         VPS_USER: ${{ secrets.VPS_USER }}
         DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
       run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
         \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
-        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Database}=require(process.cwd()+'/dist/infrastructure/db/Database');\n\
-        const {processMoonOutbox}=require(process.cwd()+'/dist/modules/moonAi');\n\
-        (async()=>{\nconst db=new Database(process.env.DATABASE_URL),attempts=[];\n\
-        try{\nconst selected=(await db.query(\"SELECT id,payment_id FROM moon_ai_outbox\
-        \ WHERE encode(sha256(convert_to(id::text,'UTF8')),'hex')=$1\",['16858f0255928729006eaf88182954381e984e1ab9b56806f1c63f6ea763b0fa'])).rows;if(selected.length!==1)throw\
-        \ Error('selection_not_unique');const outboxId=selected[0].id,paymentId=selected[0].payment_id;\n\
-        const reset=await db.atomic(async()=>{\n const p=(await db.query('SELECT id,status,paid_at,amount\
-        \ FROM payments WHERE id=$1 FOR UPDATE',[paymentId])).rows[0];\n const o=(await\
-        \ db.query('SELECT id,state,failure_code,finished_at FROM moon_ai_outbox WHERE\
-        \ id=$1 AND payment_id=$2 FOR UPDATE',[outboxId,paymentId])).rows[0];\n if(!p||!o||p.status!=='invoice_requested'||p.paid_at)throw\
-        \ Error('payment_guard_failed');\n if(o.state==='sent')return false;\n if(o.state!=='uncertain'||o.failure_code!=='delivery_unknown'||o.finished_at)throw\
-        \ Error('outbox_guard_failed');\n await db.query(`UPDATE moon_ai_outbox SET\
-        \ state='pending',failure_code=NULL,started_at=NULL,finished_at=NULL,run_after=NOW(),payload=payload\
-        \ || jsonb_build_object('operatorRetryApprovedAt',NOW()) WHERE id=$1`,[outboxId]);\n\
-        \ await db.query(`INSERT INTO audit_logs(action,entity_type,entity_id,payload)\
-        \ VALUES('payment.invoice_delivery_retry','payment',$1,$2)`,[paymentId,{source:'support',reason:'customer_confirmed_no_invoice_and_provider_reported_no_request',outboxId}]);\n\
-        \ return true;\n});\nconst send=async(url,init)=>{\n const request=JSON.parse(init.body);const\
-        \ attempt={startedAt:new Date().toISOString(),thread:request.thread_id,source:request.source,fromType:request.from_type};attempts.push(attempt);\n\
-        \ try{const response=await fetch(url,init);attempt.httpStatus=response.status;\n\
-        \ const raw=await response.text();let value;try{value=JSON.parse(raw);}catch{};\n\
-        \ attempt.accepted=value?.accepted===true;attempt.externalThreadMatches=value?.external_thread_id===request.thread_id;attempt.providerThread=value?.thread_id??null;\n\
-        \ return new Response(raw,{status:response.status,headers:response.headers});\n\
-        \ }catch(e){attempt.errorKind=e.name;attempt.causeCode=e.cause?.code??null;throw\
-        \ e;}\n finally{attempt.finishedAt=new Date().toISOString();}\n};\nif(reset)await\
-        \ processMoonOutbox(db,send,outboxId);\nconst outbox=(await db.query('SELECT\
-        \ id,state,failure_code,started_at,finished_at,provider_thread_id FROM moon_ai_outbox\
-        \ WHERE id=$1',[outboxId])).rows[0];\nconst payment=(await db.query('SELECT\
-        \ id,status,paid_at FROM payments WHERE id=$1',[paymentId])).rows[0];\nconsole.log(JSON.stringify({reset,attempts,outbox,payment}));\n\
-        }finally{await db.close();}\n})().catch(e=>{console.error('Guarded invoice\
-        \ recovery failed:',e.code||e.name);process.exitCode=1;});\nAUDIT_JS\ncat\
-        \ > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEArZFJpaJMHLvZBR0zjr5H\n\
-        +UR5CveMm1TB4bx9SjYR9b/Ne8iuYN0SHj8N+lf+bXzOUKGIksUpO4FrVIB+vEc2\nvITgY4ovnkjDYI2s0mcoCEi7N8jcEYzSTQ9q5LDgwJ2maOrbNpU+yVQQhTuGOiC3\n\
-        Rz2ob7RGxNtMXlLjzIuMH3Ofrh7GE+xW8axvlXeLSkUXwDZwcQW9ty2cet/bIXtC\nNML8Zf08u1E83oxEhBbuyuIMsWVwjGoibdr4UVx6+yDzjGe4ctlmoXPFJDPdNVK0\n\
-        PYEEDWGcuz1FFaYk/WxbTVHGXZihvx2q0xID+iiOQxNAfs+XmddRQ2dH7V4IEKF4\nkzB5DjGZRac67xA4tr2wLhjwdKtyMF+hYchVtXHwlb+trhJqYvf49kQ+Truvjs08\n\
-        YMAVNoAjfo4IQeWXk3IRn3pff9S7W99O7gUMlrBID3c3UFnatP6eABS8VDO/bazx\npanBYFOQ9U57lJnF4Z/rpxUtD1rgAe0NNmF2hnmybqc1AgMBAAE=\n\
-        -----END PUBLIC KEY-----\nOWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key\
-        \ -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-audit-XXXXXX')\n\
-        [[ \"$remote_dir\" =~ ^/tmp/domly-invoice-audit-[A-Za-z0-9]+$ ]]\ntrap 'ssh\
-        \ -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm\
-        \ -rf -- $remote_dir\" >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key\
-        \ -o IdentitiesOnly=yes audit.js owner-public.pem \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
-        \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"\
-        cd '$DEPLOY_PATH/current' && umask 077 && docker compose -p domly-backend\
-        \ exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
-        \ && openssl rand -out '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc\
-        \ -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
+        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Pool}=require('pg');\n\
+        (async()=>{const db=new Pool({connectionString:process.env.DATABASE_URL});try{\n\
+        await db.query('BEGIN READ ONLY');await db.query(\"SET LOCAL statement_timeout='10s'\"\
+        );\nconst result={at:new Date().toISOString(),deliveryCounts:(await db.query(\"\
+        SELECT kind,state,failure_code,count(*)::int count FROM moon_ai_outbox GROUP\
+        \ BY kind,state,failure_code\")).rows};\nawait db.query('ROLLBACK');console.log(JSON.stringify(result));}finally{await\
+        \ db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
+        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEArZFJpaJMHLvZBR0zjr5H\n+UR5CveMm1TB4bx9SjYR9b/Ne8iuYN0SHj8N+lf+bXzOUKGIksUpO4FrVIB+vEc2\n\
+        vITgY4ovnkjDYI2s0mcoCEi7N8jcEYzSTQ9q5LDgwJ2maOrbNpU+yVQQhTuGOiC3\nRz2ob7RGxNtMXlLjzIuMH3Ofrh7GE+xW8axvlXeLSkUXwDZwcQW9ty2cet/bIXtC\n\
+        NML8Zf08u1E83oxEhBbuyuIMsWVwjGoibdr4UVx6+yDzjGe4ctlmoXPFJDPdNVK0\nPYEEDWGcuz1FFaYk/WxbTVHGXZihvx2q0xID+iiOQxNAfs+XmddRQ2dH7V4IEKF4\n\
+        kzB5DjGZRac67xA4tr2wLhjwdKtyMF+hYchVtXHwlb+trhJqYvf49kQ+Truvjs08\nYMAVNoAjfo4IQeWXk3IRn3pff9S7W99O7gUMlrBID3c3UFnatP6eABS8VDO/bazx\n\
+        panBYFOQ9U57lJnF4Z/rpxUtD1rgAe0NNmF2hnmybqc1AgMBAAE=\n-----END PUBLIC KEY-----\n\
+        OWNER_KEY\ncat > host-worker-audit.py <<'HOST_AUDIT'\nimport json,subprocess,sys,re,pathlib\n\
+        p=pathlib.Path(sys.argv[1]);report=json.loads((p/'report.json').read_text())\n\
+        def command(args,include_stderr=False):\n try:\n  r=subprocess.run(args,capture_output=True,text=True,timeout=25)\n\
+        \  return r.returncode,r.stdout+(r.stderr if include_stderr else '')\n except\
+        \ subprocess.TimeoutExpired:return -1,''\ncode,ids=command(['docker','compose','-p','domly-backend','ps','-q','worker'])\n\
+        worker=ids.strip()\nif not worker:raise RuntimeError('worker_not_found')\n\
+        code,raw=command(['docker','inspect','--format','{{json .State}}',worker])\n\
+        state=json.loads(raw) if code==0 else {}\nreport['workerState']={k:state.get(k)\
+        \ for k in ['Status','Running','OOMKilled','Restarting','ExitCode','StartedAt','FinishedAt']}\n\
+        code,raw=command(['docker','inspect','--format','{{.RestartCount}}',worker]);report['workerRestarts']=raw.strip()\
+        \ if code==0 else None\nstart='2026-11-17T03:22:00Z';end='2026-11-17T03:27:00Z'\n\
+        patterns=['OOM','out of memory','SIGTERM','SIGKILL','ECONNRESET','ETIMEDOUT','deadlock','statement\
+        \ timeout','process exited','stalled','unhandled','Error']\ncode,raw=command(['docker','logs','--timestamps','--since',start,'--until',end,worker],True)\n\
+        report['workerLogCounts']={'commandAvailable':code==0,'historicalContainerRetained':bool(state.get('StartedAt')\
+        \ and state['StartedAt']<=start),'counts':{k:len(re.findall(k,raw,re.I)) for\
+        \ k in patterns}}\ncode,raw=command(['docker','events','--since',start,'--until',end,'--filter','type=container','--filter','label=com.docker.compose.project=domly-backend','--filter','label=com.docker.compose.service=worker','--format','{{json\
+        \ .}}'])\nevents=[]\nfor line in raw.splitlines():\n try:\n  e=json.loads(line);events.append({'action':e.get('Action',e.get('status')),'time':e.get('time'),'exitCode':e.get('Actor',{}).get('Attributes',{}).get('exitCode')})\n\
+        \ except ValueError:pass\nreport['historicalWorkerEvents']={'commandAvailable':code==0,'events':events,'retentionNote':'Docker\
+        \ event history is bounded; an empty list is not proof of no restart.'}\n\
+        for label,args in [('kernel',['journalctl','-k']),('dockerDaemon',['journalctl','-u','docker'])]:\n\
+        \ code,raw=command(args+['--since','2026-11-17 03:22:00 UTC','--until','2026-11-17\
+        \ 03:27:00 UTC','--no-pager','-o','cat','-q'])\n report[label]={'commandAvailable':code==0,'counts':{k:len(re.findall(k,raw,re.I))\
+        \ for k in patterns},'hasEntries':bool(raw.strip())}\n(p/'report.json').write_text(json.dumps(report))\n\
+        HOST_AUDIT\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
+        $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-audit-XXXXXX')\n[[ \"\
+        $remote_dir\" =~ ^/tmp/domly-invoice-audit-[A-Za-z0-9]+$ ]]\ntrap 'ssh -i\
+        \ ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm -rf\
+        \ -- $remote_dir\" >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key\
+        \ -o IdentitiesOnly=yes audit.js owner-public.pem host-worker-audit.py \"\
+        $VPS_USER@$VPS_HOST:$remote_dir/\"\nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes\
+        \ \"$VPS_USER@$VPS_HOST\" \"set -euo pipefail; cd '$DEPLOY_PATH/current' &&\
+        \ umask 077 && docker compose -p domly-backend exec -T api node - < '$remote_dir/audit.js'\
+        \ > '$remote_dir/report.json' && python3 '$remote_dir/host-worker-audit.py'\
+        \ '$remote_dir'  && openssl rand -out '$remote_dir/key.bin' 32 && openssl\
+        \ enc -aes-256-cbc -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
         \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey\
         \ '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256\
         \ -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\nmkdir -m 700 -p\
@@ -73,7 +75,7 @@ jobs:
         \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
     - uses: actions/upload-artifact@v4
       with:
-        name: invoice-delivery-recovery-encrypted
+        name: worker-delivery-incident-encrypted
         path: encrypted-report/
         retention-days: 1
         if-no-files-found: error
