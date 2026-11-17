@@ -176,7 +176,9 @@ export async function processMoonOutbox(db: Database, send: typeof fetch=fetch, 
       if(row.payload.fileUrl) {body.message_type='multi';body.data.attachments=[{url:row.payload.fileUrl,filename:'attachment'}];}
       // Commit the dispatch boundary before the network call. A lost worker can
       // now be distinguished from a request whose outcome is genuinely unknown.
-      await db.query(`UPDATE moon_ai_outbox SET payload=jsonb_set(payload,'{apiDelivery,phase}','"http_started"'::jsonb) WHERE id=$1`,[row.id]);
+      const lease=await db.query(`UPDATE moon_ai_outbox SET payload=jsonb_set(payload,'{apiDelivery,phase}','"http_started"'::jsonb)
+        WHERE id=$1 AND state='processing' AND (payload->'apiDelivery'->>'attempt')::int=$2 RETURNING id`,[row.id,row.apiAttempt]);
+      if(!lease.rows.length)continue; // A suspended previous worker no longer owns this attempt.
       const response=await send(url,{method:'POST',headers:{'X-API-Key':env.moonAiChannelApiKey,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)}).catch(error=>{apiTransportFailure=true;throw error;});
       const result:any=await response.json().catch(()=>null);
       if(!response.ok || result?.accepted!==true || result.external_thread_id!==externalThread) {

@@ -82,6 +82,19 @@ test('Moon invoice recovery with real PostgreSQL',{skip:!process.env.DOMLY_INTEG
    await notifyMoonInvoiceFailures(db,notify as any);assert.equal(targets.includes(r.payment_id),false);
    const before=targets.length;await notifyMoonInvoiceFailures(db,notify as any);assert.equal(targets.length,before);
   });
+  await t.test('a suspended old worker cannot send after its pre-dispatch lease is recovered',async()=>{
+   const id=await fixture(),before=calls,query=db.query.bind(db);let park=true,release!:()=>void,parked!:()=>void;
+   const wait=new Promise<void>(resolve=>{release=resolve;}),ready=new Promise<void>(resolve=>{parked=resolve;});
+   (db as any).query=async(sql:string,values:any[])=>{
+    if(park&&sql.includes("'{apiDelivery,phase}'")){park=false;parked();await wait;}
+    return query(sql,values);
+   };
+   const old=processMoonOutbox(db,accept,id);
+   try{
+    await ready;await query("UPDATE moon_ai_outbox SET started_at=NOW()-INTERVAL '3 minutes' WHERE id=$1",[id]);
+    await processMoonOutbox(db,accept,id);release();await old;assert.equal(calls-before,1);assert.equal((await row(id)).state,'sent');
+   }finally{release();await old;db.query=query;}
+  });
   await t.test('concurrent processors send an invoice only once',async()=>{
    const id=await fixture(),before=calls;await Promise.all(Array.from({length:4},()=>processMoonOutbox(db,accept,id)));assert.equal(calls-before,1);assert.equal((await row(id)).state,'sent');
   });
