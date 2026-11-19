@@ -36,14 +36,14 @@ jobs:
         \ count,MAX(dt.updated_at) last_registered_at\n FROM device_tokens dt JOIN\
         \ app_users u ON u.id=dt.user_id WHERE u.deleted_at IS NULL AND u.status<>'blocked'\n\
         \ GROUP BY u.role,dt.platform,dt.enabled`)).rows;\n out.deliveries=(await\
-        \ db.query(`SELECT COALESCE(n.role,u.role,'unknown') role,COUNT(*) FILTER(WHERE\
+        \ db.query(`SELECT COALESCE(n.role::text,u.role::text,'unknown') role,COUNT(*) FILTER(WHERE\
         \ d.created_at>NOW()-INTERVAL '24 hours')::int created_24h,\n COUNT(*) FILTER(WHERE\
         \ d.delivered_at>NOW()-INTERVAL '24 hours')::int processed_24h,\n COUNT(*)\
         \ FILTER(WHERE d.delivered_at IS NULL)::int pending,\n MAX(d.attempts) max_attempts,MAX(d.delivered_at)\
         \ last_processed_at,MIN(d.created_at) FILTER(WHERE d.delivered_at IS NULL)\
         \ oldest_pending_at\n FROM notification_deliveries d JOIN notifications n\
         \ ON n.id=d.notification_id LEFT JOIN app_users u ON u.id=n.user_id GROUP\
-        \ BY COALESCE(n.role,u.role,'unknown')`)).rows;\n out.queueErrors=(await db.query(\"\
+        \ BY COALESCE(n.role::text,u.role::text,'unknown')`)).rows;\n out.queueErrors=(await db.query(\"\
         SELECT last_error,COUNT(*)::int count FROM notification_deliveries WHERE delivered_at\
         \ IS NULL GROUP BY last_error\")).rows;\n out.adminEvents=(await db.query(\"\
         SELECT role,target_type,COUNT(*)::int count FROM notifications WHERE role\
