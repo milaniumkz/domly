@@ -1,4 +1,4 @@
-name: Read deployment build status without changing services
+name: Repair verified repeated schema constraint and recover current services
 'on':
   push:
     branches:
@@ -8,69 +8,49 @@ name: Read deployment build status without changing services
 permissions:
   contents: read
 jobs:
-  audit:
+  repair:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
     steps:
-    - name: Validate FCM without sending and encrypt aggregate report
+    - name: Back up DB, apply checksum-verified compatibility repair and restore API/worker
       env:
         VPS_HOST: ${{ secrets.VPS_HOST }}
         VPS_USER: ${{ secrets.VPS_USER }}
         DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
       run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
         \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
-        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconsole.log('{}');\n\
-        \nAUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
-        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAumiD9Ft9K1xVRPwyJYeJ\nxV1fAy/0/72HiZx6x4Y/Qi1I2WDOlu04hOWVuNQ4AVClt/KAdfJ86RP7oXEJvB8U\n\
-        VrOgXcQhT/Yg/5/GxhD2NSWAUz/9lw2AGeSI2GpQOtft/xnmaH8yH3MxiwFlrAiA\neMicXn38Yd5OHMXGB5lU+/0i6MG2VFeu1SBQ2Xs5DrXZXQXGwBISiHu6KgakWq/T\n\
-        WSKT9G8ai3owA5EPrFCb2NNZezjTVJMOYUoi9uvZI8cO8IKRN8RsGxPCIPVisfrb\n3TC8AmT/na6UmxgQuMPmsD3p+Am8uG7Z6NqSBukNlI2FonRWWaYfLp/pJcnsBAEY\n\
-        YhrdCsqzHCDalkEiceInvlKn71bvn1X6XetHrUFXQnNEkt/aGs/B5O6GLael3m6H\nH8zY5vm1DEo/tudo367+y/RTX9I3fNqaV/5CDyjxKHhfbe6GFKy8nCoPsuhFJiLS\n\
-        rB8dXGd4Ix0oMapjeNgys2VUE451mz/8R5LIiHNgAXxlAgMBAAE=\n-----END PUBLIC KEY-----\n\
-        OWNER_KEY\ncat > host-audit.py <<'HOST_AUDIT'\nimport json,subprocess,sys\n\
-        from pathlib import Path\np=Path(sys.argv[1]);r=json.loads((p/'report.json').read_text())\n\
-        r['containers']={}\nfor service in ['api','worker']:\n q=subprocess.run(['docker','compose','-p','domly-backend','ps','-q',service],capture_output=True,text=True,timeout=10)\n\
-        \ cid=q.stdout.strip()\n if not cid:r['containers'][service]={'found':False};continue\n\
-        \ q=subprocess.run(['docker','inspect','--format','{{json .State}}',cid],capture_output=True,text=True,timeout=10)\n\
-        \ state=json.loads(q.stdout);r['containers'][service]={k:state.get(k) for\
-        \ k in ['Status','Running','OOMKilled','Restarting','StartedAt','ExitCode']}\n\
-        \ q=subprocess.run(['docker','logs','--since','60m',cid],capture_output=True,text=True,timeout=15)\n\
-        \ logs=q.stdout+q.stderr\n import re\n error_lines=[]\n for line in logs.splitlines():\n\
-        \  if not re.search(r'(?i)error|fatal|exception|cannot|syntax|not found',line):continue\n\
-        \  line=re.sub(r'https?://[^\\s]+','[url]',line)\n  line=re.sub(r'[\\w.+-]+@[\\\
-        w.-]+','[email]',line)\n  line=re.sub(r'\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b','[id]',line,flags=re.I)\n\
-        \  line=re.sub(r'\\+?\\b[0-9]{10,15}\\b','[number]',line)\n  line=re.sub(r'[A-Za-z0-9+/=_-]{45,}','[opaque]',line)\n\
-        \  if re.search(r'(?i)private.key|password|authorization|client.secret|access.token',line):continue\n\
-        \  error_lines.append(line[:300])\n r['containers'][service]['sanitizedErrors']=error_lines[-12:]\n\
-        \ r['containers'][service]['logCounts']={x:logs.count(x) for x in ['PushDeliveryFailed','[fcm]\
-        \ push failed','[notifications] Outbox processing failed','ENOTFOUND','EAI_AGAIN','ECONNREFUSED']}\n\
-        q=subprocess.run(['ps','-e','-o','comm='],capture_output=True,text=True,timeout=10)\n\
-        comm=q.stdout.splitlines();r['buildProcesses']={name:sum(name in x for x in\
-        \ comm) for name in ['apk','npm','node','docker','buildkit']}\nq=subprocess.run(['docker','compose','-p','domly-backend','exec','-T','api','node','-e','console.log(process.env.APP_RELEASE||\"\
-        unknown\")'],capture_output=True,text=True,timeout=10)\nr['apiRelease']=q.stdout.strip()\
-        \ if q.returncode==0 else 'unavailable'\nq=subprocess.run(['journalctl','-u','docker','--since','15\
-        \ minutes ago','--no-pager','-o','cat','-q'],capture_output=True,text=True,timeout=15)\n\
-        r['buildDnsErrors']={host:sum(host in line for line in q.stdout.splitlines()\
-        \ if 'error' in line.lower()) for host in ['registry.npmjs.org','dl-cdn.alpinelinux.org']}\n\
-        (p/'report.json').write_text(json.dumps(r))\nHOST_AUDIT\nremote_dir=$(ssh\
-        \ -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" 'mktemp\
-        \ -d /tmp/domly-push-audit-XXXXXX')\n[[ \"$remote_dir\" =~ ^/tmp/domly-push-audit-[A-Za-z0-9]+$\
+        \ }}\" > ~/.ssh/known_hosts\ncat > repair.py <<'REPAIR'\nimport sys,pathlib,hashlib,subprocess,re,datetime,urllib.request,time,json,os\n\
+        root=pathlib.Path(sys.argv[1]);current=root/'current'\nexpected='6760e54c0b19e1e9f7d67578d959cfc71a7f9aa7'\n\
+        assert current.resolve().name==expected,'unexpected_current_release'\nsource=current/'backend/sql/schema.sql';raw=source.read_bytes()\n\
+        oldhash='e8beafc164562d6a402ca57a1e49807f4abf54ab525795a4dd9bb4234f446fd7';newhash='6a5d960cdd6a44394e64c2fc55c3aff98829bdddaab74b504f27f366d885f438'\n\
+        assert hashlib.sha256(raw).hexdigest() in [oldhash,newhash],'unexpected_schema'\n\
+        prefix=['docker','compose','-p','domly-backend','-f',str(current/'docker-compose.yml'),'--project-directory',str(current)]\n\
+        def command(args):\n p=subprocess.run(args,capture_output=True,text=True,timeout=90)\n\
+        \ if p.returncode:raise RuntimeError('container_operation_failed')\n return\
+        \ p.stdout.strip()\ndef cid(service):\n value=command(prefix+['ps','--all','-q',service]);assert\
+        \ re.fullmatch('[a-f0-9]{12,64}',value),'container_not_unique';return value\n\
+        api,worker,postgres=cid('api'),cid('worker'),cid('postgres')\nbackup=root/'backups'/('fcm-schema-repair-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S'));backup.mkdir(mode=0o700)\n\
+        (backup/'schema.sql.before').write_bytes(raw)\nwith (backup/'postgres.sql').open('wb')\
+        \ as f:\n p=subprocess.run(['docker','exec',postgres,'sh','-c','exec pg_dump\
+        \ -U \"${POSTGRES_USER:-domly}\" \"${POSTGRES_DB:-domly}\"'],stdout=f,stderr=subprocess.PIPE,timeout=120)\n\
+        \ assert p.returncode==0,'backup_failed'\ns=raw.decode();new=\"CHECK(kind\
+        \ IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification','package_renewal'))\"\
+        \nfor old in [\"CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install'))\"\
+        ,\"CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification'))\"\
+        ]:s=s.replace(old,new)\nassert hashlib.sha256(s.encode()).hexdigest()==newhash,'patch_mismatch'\n\
+        command(['docker','stop','-t','10',api,worker])\ntry:\n source.write_text(s)\n\
+        \ for container in [api,worker]:command(['docker','cp',str(source),container+':/app/sql/schema.sql'])\n\
+        finally:\n command(['docker','start',api,worker])\nconsecutive=0\nfor attempt\
+        \ in range(90):\n try:\n  ready=all(urllib.request.urlopen('http://127.0.0.1:8080/'+p,timeout=5).status==200\
+        \ for p in ['health','ready'])\n  running=all(json.loads(command(['docker','inspect','--format','{{json\
+        \ .State}}',container])).get('Running') for container in [api,worker])\n \
+        \ consecutive=consecutive+1 if ready and running else 0\n  if consecutive>=3:print(json.dumps({'schema_fixed':True,'api_ready':True,'worker_running':True}));break\n\
+        \ except Exception:consecutive=0\n time.sleep(2)\nelse:raise RuntimeError('services_not_ready_after_repair')\n\
+        REPAIR\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ 'mktemp -d /tmp/domly-schema-repair-XXXXXX')\n[[ \"$remote_dir\" =~ ^/tmp/domly-schema-repair-[A-Za-z0-9]+$\
         \ ]]\ntrap 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
         \ \"rm -rf -- $remote_dir\" >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key\
-        \ -o IdentitiesOnly=yes audit.js owner-public.pem host-audit.py \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
-        \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"\
-        set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && printf '{}' >\
-        \ '$remote_dir/report.json' && python3 '$remote_dir/host-audit.py' '$remote_dir'\
-        \ && openssl rand -out '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc\
-        \ -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
-        \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey\
-        \ '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256\
-        \ -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\nmkdir -m 700 -p\
-        \ encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
-        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
-    - uses: actions/upload-artifact@v4
-      with:
-        name: admin-push-audit-encrypted
-        path: encrypted-report/
-        retention-days: 1
-        if-no-files-found: error
+        \ -o IdentitiesOnly=yes repair.py \"$VPS_USER@$VPS_HOST:$remote_dir/\"\nssh\
+        \ -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"umask\
+        \ 077; python3 '$remote_dir/repair.py' '$DEPLOY_PATH'\"\n"
