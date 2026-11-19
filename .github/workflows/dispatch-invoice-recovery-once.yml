@@ -71,11 +71,17 @@ jobs:
         \ denied','permission','error fetching access token','error while making request','unexpected\
         \ response','invalid response','ssl','tls','connection','socket','empty','json','und_err','unsupported','proxy','end\
         \ of','network','error obtaining','stream'];\n out.fcm.errorKeywords=phrases.filter(x=>message.includes(x));\n\
-        \ out.fcm.causeCode=typeof e.cause?.code==='string'&&/^[A-Z_0-9-]{1,80}$/.test(e.cause.code)?e.cause.code:null;\n\
+        \ out.fcm.systemErrorCodes=[...new Set((message.match(/\\b(?:enetunreach|ehostunreach|eaddrnotavail|econnreset|econnrefused|etimedout|eai_again|enotfound|eacces|eperm|epipe|eproto)\\\
+        b/g)||[]).map(x=>x.toUpperCase()))];\n out.fcm.causeCode=typeof e.cause?.code==='string'&&/^[A-Z_0-9-]{1,80}$/.test(e.cause.code)?e.cause.code:null;\n\
         out.fcm.failureClassification={invalidGrant:message.includes('invalid_grant'),invalidJwtSignature:message.includes('invalid\
         \ jwt signature'),pemParseFailure:message.includes('parse private key')||message.includes('pem'),accountDisabled:message.includes('disabled'),accountNotFound:message.includes('not\
         \ found'),clockError:message.includes('clock')||message.includes('iat')||message.includes('expired'),networkError:message.includes('network')||message.includes('getaddrinfo')||message.includes('timed\
-        \ out')};}}\n await db.query('ROLLBACK');console.log(JSON.stringify(out));\n\
+        \ out')};}}\n if(!out.fcm.oauth && env.fcmProjectId&&env.fcmClientEmail&&env.fcmPrivateKey){\n\
+        \  try{const agent=new(require('node:https').Agent)({family:4});const credential=admin.credential.cert({projectId:env.fcmProjectId,clientEmail:env.fcmClientEmail,privateKey:env.fcmPrivateKey},agent);out.fcm.ipv4OAuth=Boolean((await\
+        \ timeout(credential.getAccessToken())).access_token);}catch(e){out.fcm.ipv4OAuth=false;out.fcm.ipv4Error=e.code||e.name;const\
+        \ m=String(e.message??'').toLowerCase();out.fcm.ipv4SystemCodes=[...new Set((m.match(/\\\
+        b(?:enetunreach|ehostunreach|eaddrnotavail|econnreset|econnrefused|etimedout|eai_again|enotfound|eacces|eperm|epipe|eproto)\\\
+        b/g)||[]).map(x=>x.toUpperCase()))];}\n }\n await db.query('ROLLBACK');console.log(JSON.stringify(out));\n\
         \ }finally{await db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
         AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
         MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAumiD9Ft9K1xVRPwyJYeJ\nxV1fAy/0/72HiZx6x4Y/Qi1I2WDOlu04hOWVuNQ4AVClt/KAdfJ86RP7oXEJvB8U\n\
