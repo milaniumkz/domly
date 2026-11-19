@@ -81,7 +81,13 @@ jobs:
         \ timeout(credential.getAccessToken())).access_token);}catch(e){out.fcm.ipv4OAuth=false;out.fcm.ipv4Error=e.code||e.name;const\
         \ m=String(e.message??'').toLowerCase();out.fcm.ipv4SystemCodes=[...new Set((m.match(/\\\
         b(?:enetunreach|ehostunreach|eaddrnotavail|econnreset|econnrefused|etimedout|eai_again|enotfound|eacces|eperm|epipe|eproto)\\\
-        b/g)||[]).map(x=>x.toUpperCase()))];}\n }\n await db.query('ROLLBACK');console.log(JSON.stringify(out));\n\
+        b/g)||[]).map(x=>x.toUpperCase()))];}\n }\n out.fcm.originalDnsOrder=require('node:dns').getDefaultResultOrder();\n\
+        \ if(!out.fcm.oauth && out.fcm.ipv4OAuth){\n  require('node:dns').setDefaultResultOrder('ipv4first');\n\
+        \  try{const credential=admin.credential.cert({projectId:env.fcmProjectId,clientEmail:env.fcmClientEmail,privateKey:env.fcmPrivateKey});out.fcm.dnsIpv4OAuth=Boolean((await\
+        \ timeout(credential.getAccessToken())).access_token);\n   const app=admin.initializeApp({credential},'diagnostic-ipv4');out.fcm.ipv4Validation={checked:0,valid:0,errors:[]};\n\
+        \   for(const d of devices){out.fcm.ipv4Validation.checked++;try{await timeout(app.messaging().send({token:d.token,notification:{title:'Проверка\
+        \ настройки',body:'Валидация без доставки'},data:{targetType:'diagnostic'}},true));out.fcm.ipv4Validation.valid++;}catch(e){out.fcm.ipv4Validation.errors.push({role:d.role,platform:d.platform,code:e.code||e.name});}}\n\
+        \  }catch(e){out.fcm.dnsIpv4Error=e.code||e.name;}\n }\n await db.query('ROLLBACK');console.log(JSON.stringify(out));\n\
         \ }finally{await db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
         AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
         MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAumiD9Ft9K1xVRPwyJYeJ\nxV1fAy/0/72HiZx6x4Y/Qi1I2WDOlu04hOWVuNQ4AVClt/KAdfJ86RP7oXEJvB8U\n\
