@@ -1,10 +1,8 @@
-name: Dispatch checked admin CRM deployment once
+name: Dispatch requested admin APK build once
 'on':
   push:
-    branches:
-    - support/deploy-invoice-recovery-20261117
-    paths:
-    - .github/workflows/dispatch-invoice-recovery-once.yml
+    branches: [support/deploy-invoice-recovery-20261117]
+    paths: [.github/workflows/dispatch-invoice-recovery-once.yml]
 permissions:
   contents: read
   actions: write
@@ -13,21 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-    - name: Release an unstarted duplicate and dispatch standard checked main deployment
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: "set -euo pipefail\nrepo=milaniumkz/domly\nexpected=1634de1f977d73bc21545e35417a5f66f94ba356\n\
-        test \"$(gh api \"repos/$repo/git/ref/heads/main\" --jq .object.sha)\" = \"\
-        $expected\"\ntest \"$(gh api \"repos/$repo/actions/runs/44065405876\" --jq\
-        \ .conclusion)\" = success\ngh api \"repos/$repo/actions/runs?head_sha=$expected&per_page=10\"\
-        \ > runs.json\nqueued=$(python3 - <<'PYCODE'\nimport json\nruns=json.load(open('runs.json'))['workflow_runs']\n\
-        ids=[str(r['id']) for r in runs if r['path']=='.github/workflows/deploy.yml'\
-        \ and r['event']=='push' and r['status'] in ['queued','pending','in_progress']]\n\
-        assert len(ids)<=1\nprint(ids[0] if ids else '')\nPYCODE\n)\nif [ -n \"$queued\"\
-        \ ]; then\n gh api \"repos/$repo/actions/runs/$queued/jobs\" > jobs.json\n\
-        \ python3 - <<'PYCODE'\nimport json\njobs=json.load(open('jobs.json'))['jobs']\n\
-        assert all(j['status']=='queued' or j.get('conclusion')=='skipped' for j in\
-        \ jobs), 'Only a fully unstarted automatic deployment may be replaced'\nPYCODE\n\
-        \ gh api -X POST \"repos/$repo/actions/runs/$queued/cancel\"\nfi\ngh api -X\
-        \ POST \"repos/$repo/actions/workflows/deploy.yml/dispatches\" --input - <<'JSON'\n\
-        {\"ref\":\"main\",\"inputs\":{\"mode\":\"deploy\"}}\nJSON\n"
+      - name: Build requested APK from checked main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo=milaniumkz/domly
+          test "$(gh api "repos/$repo/git/ref/heads/main" --jq .object.sha)" = 1634de1f977d73bc21545e35417a5f66f94ba356
+          test "$(gh api "repos/$repo/actions/runs/44065405876" --jq .conclusion)" = success
+          gh api -X POST "repos/$repo/actions/workflows/admin-apk-release.yml/dispatches" --input - <<'JSON'
+          {"ref":"main","inputs":{"version_name":"1.0.22","version_code":"32"}}
+          JSON
