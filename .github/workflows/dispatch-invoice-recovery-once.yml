@@ -1,97 +1,101 @@
-name: Build requested admin APK 1.0.22 (32)
-permissions:
-  contents: write
-concurrency:
-  group: admin-apk-release
-  cancel-in-progress: false
-jobs:
-  release:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: 1634de1f977d73bc21545e35417a5f66f94ba356
-        persist-credentials: false
-    - name: Validate version
-      env:
-        APK_VERSION: 1.0.22
-        APK_BUILD: '32'
-      run: '[[ "$APK_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-
-        [[ "$APK_BUILD" =~ ^[1-9][0-9]*$ ]]
-
-        printf ''APK_VERSION=%s\nAPK_BUILD=%s\nAPK_TAG=admin-apk-%s-%s-%s\n'' "$APK_VERSION"
-        "$APK_BUILD" "$APK_VERSION" "$APK_BUILD" "$(date -u +%Y%m%d)" >> "$GITHUB_ENV"
-
-        '
-    - uses: actions/setup-java@v4
-      with:
-        distribution: temurin
-        java-version: '21'
-        cache: gradle
-    - uses: subosito/flutter-action@v2
-      with:
-        flutter-version: 3.44.1
-        cache: true
-    - uses: android-actions/setup-android@v3
-      with:
-        packages: platform-tools
-    - name: Prepare Android SDK
-      run: sdkmanager 'build-tools;35.0.0' 'platforms;android-34' 'platforms;android-35'
-        'platforms;android-36' 'ndk;28.2.13676358' 'cmake;3.22.1'
-    - name: Resolve Flutter Gradle plugins through Maven Central
-      run: 'python3 - <<''PYCODE''
-
-        import os
-
-        from pathlib import Path
-
-        p=Path(os.environ[''FLUTTER_ROOT''])/''packages/flutter_tools/gradle/settings.gradle.kts''
-
-        s=p.read_text()
-
-        assert ''pluginManagement'' not in s
-
-        p.write_text(''pluginManagement { repositories { google(); mavenCentral();
-        gradlePluginPortal() } }\n''+s)
-
-        PYCODE'
-    - name: Build and verify APK
-      env:
-        FLUTTER_BIN: flutter
-      run: 'bash scripts/build_android_domly_admin.sh --build-name="$APK_VERSION"
-        --build-number="$APK_BUILD"
-
-        mkdir -p apk-release
-
-        cp build/app/outputs/flutter-apk/app-domlyadmin-release.apk "apk-release/DomLY-Admin-$APK_VERSION-$APK_BUILD.apk"
-
-        "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs
-        "apk-release/DomLY-Admin-$APK_VERSION-$APK_BUILD.apk"
-
-        "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "apk-release/DomLY-Admin-$APK_VERSION-$APK_BUILD.apk"
-        > apk-release/badging.txt
-
-        sed -n ''1,20p'' apk-release/badging.txt
-
-        (cd apk-release && sha256sum "DomLY-Admin-$APK_VERSION-$APK_BUILD.apk" > "DomLY-Admin-$APK_VERSION-$APK_BUILD.apk.sha256")
-
-        '
-    - name: Publish approved preliminary admin release
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: "gh release create \"$APK_TAG\" apk-release/*.apk apk-release/*.sha256\
-        \ \\\n  --repo \"$GITHUB_REPOSITORY\" --target \"1634de1f977d73bc21545e35417a5f66f94ba356\"\
-        \ --prerelease --latest=false \\\n  --title \"DomLY Admin $APK_VERSION ($APK_BUILD)\
-        \ — APK\" \\\n  --notes 'APK админки для ручной установки. Актуальная админка:\
-        \ CRM, заметки, фильтры и отменённые счета. Подпись Android Debug; поверх\
-        \ APK с другим ключом не установится. Данные аккаунта хранятся на сервере.\
-        \ Не выпуск для магазинов.'\n"
+name: Read-only server push configuration audit
 'on':
   push:
     branches:
     - support/deploy-invoice-recovery-20261117
     paths:
     - .github/workflows/dispatch-invoice-recovery-once.yml
-
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - name: Validate FCM without sending and encrypt aggregate report
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
+        \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
+        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Pool}=require('pg');const\
+        \ admin=require('firebase-admin');const {env}=require('./dist/common/env');\n\
+        const timeout=(p)=>Promise.race([p,new Promise((_,r)=>{const t=setTimeout(()=>r(Object.assign(new\
+        \ Error(),{code:'diagnostic_timeout'})),20000);t.unref();})]);\n(async()=>{const\
+        \ db=new Pool({connectionString:process.env.DATABASE_URL});try{\n await db.query('BEGIN\
+        \ READ ONLY');await db.query(\"SET LOCAL statement_timeout='10s'\");\n const\
+        \ out={at:new Date().toISOString(),config:{projectConfigured:!!env.fcmProjectId,projectMatchesAndroid:env.fcmProjectId==='domly-d0f91',clientEmailConfigured:!!env.fcmClientEmail,privateKeyConfigured:!!env.fcmPrivateKey,privateKeyPemShape:/BEGIN\
+        \ PRIVATE KEY/.test(env.fcmPrivateKey)}};\n out.adminRules=(await db.query(\"\
+        SELECT COALESCE((value->>'enabled')::boolean,true) enabled,value->'events'\
+        \ events FROM app_settings WHERE key='adminNotificationRules'\")).rows;\n\
+        \ out.accounts=(await db.query(\"SELECT role,status,deleted_at IS NOT NULL\
+        \ deleted,COUNT(*)::int count FROM app_users GROUP BY role,status,deleted_at\
+        \ IS NOT NULL\")).rows;\n out.devices=(await db.query(`SELECT u.role,dt.platform,dt.enabled,COUNT(*)::int\
+        \ count,MAX(dt.updated_at) last_registered_at\n FROM device_tokens dt JOIN\
+        \ app_users u ON u.id=dt.user_id WHERE u.deleted_at IS NULL AND u.status<>'blocked'\n\
+        \ GROUP BY u.role,dt.platform,dt.enabled`)).rows;\n out.deliveries=(await\
+        \ db.query(`SELECT COALESCE(n.role,u.role,'unknown') role,COUNT(*) FILTER(WHERE\
+        \ d.created_at>NOW()-INTERVAL '24 hours')::int created_24h,\n COUNT(*) FILTER(WHERE\
+        \ d.delivered_at>NOW()-INTERVAL '24 hours')::int processed_24h,\n COUNT(*)\
+        \ FILTER(WHERE d.delivered_at IS NULL)::int pending,\n MAX(d.attempts) max_attempts,MAX(d.delivered_at)\
+        \ last_processed_at,MIN(d.created_at) FILTER(WHERE d.delivered_at IS NULL)\
+        \ oldest_pending_at\n FROM notification_deliveries d JOIN notifications n\
+        \ ON n.id=d.notification_id LEFT JOIN app_users u ON u.id=n.user_id GROUP\
+        \ BY COALESCE(n.role,u.role,'unknown')`)).rows;\n out.queueErrors=(await db.query(\"\
+        SELECT last_error,COUNT(*)::int count FROM notification_deliveries WHERE delivered_at\
+        \ IS NULL GROUP BY last_error\")).rows;\n out.adminEvents=(await db.query(\"\
+        SELECT role,target_type,COUNT(*)::int count FROM notifications WHERE role\
+        \ IN ('admin','superadmin') AND created_at>NOW()-INTERVAL '24 hours' GROUP\
+        \ BY role,target_type\")).rows;\n const devices=(await db.query(`SELECT dt.token,u.role,dt.platform\
+        \ FROM device_tokens dt JOIN app_users u ON u.id=dt.user_id\n WHERE u.role\
+        \ IN ('admin','superadmin') AND dt.enabled AND u.deleted_at IS NULL AND u.status<>'blocked'\n\
+        \ ORDER BY dt.updated_at DESC LIMIT 10`)).rows;\n out.fcm={oauth:false,dryRunOnly:true,checked:0,valid:0,errors:[]};\n\
+        \ if(env.fcmProjectId&&env.fcmClientEmail&&env.fcmPrivateKey){try{\n  const\
+        \ credential=admin.credential.cert({projectId:env.fcmProjectId,clientEmail:env.fcmClientEmail,privateKey:env.fcmPrivateKey});\n\
+        \  out.fcm.oauth=Boolean((await timeout(credential.getAccessToken())).access_token);\n\
+        \  const app=admin.initializeApp({credential});\n  for(const d of devices){out.fcm.checked++;try{await\
+        \ timeout(app.messaging().send({token:d.token,notification:{title:'Проверка\
+        \ настройки',body:'Валидация без доставки'},data:{targetType:'diagnostic'}},true));out.fcm.valid++;}catch(e){out.fcm.errors.push({role:d.role,platform:d.platform,code:e.code||e.name});}}\n\
+        \ }catch(e){out.fcm.error=e.code||e.name;}}\n await db.query('ROLLBACK');console.log(JSON.stringify(out));\n\
+        \ }finally{await db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
+        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAumiD9Ft9K1xVRPwyJYeJ\nxV1fAy/0/72HiZx6x4Y/Qi1I2WDOlu04hOWVuNQ4AVClt/KAdfJ86RP7oXEJvB8U\n\
+        VrOgXcQhT/Yg/5/GxhD2NSWAUz/9lw2AGeSI2GpQOtft/xnmaH8yH3MxiwFlrAiA\neMicXn38Yd5OHMXGB5lU+/0i6MG2VFeu1SBQ2Xs5DrXZXQXGwBISiHu6KgakWq/T\n\
+        WSKT9G8ai3owA5EPrFCb2NNZezjTVJMOYUoi9uvZI8cO8IKRN8RsGxPCIPVisfrb\n3TC8AmT/na6UmxgQuMPmsD3p+Am8uG7Z6NqSBukNlI2FonRWWaYfLp/pJcnsBAEY\n\
+        YhrdCsqzHCDalkEiceInvlKn71bvn1X6XetHrUFXQnNEkt/aGs/B5O6GLael3m6H\nH8zY5vm1DEo/tudo367+y/RTX9I3fNqaV/5CDyjxKHhfbe6GFKy8nCoPsuhFJiLS\n\
+        rB8dXGd4Ix0oMapjeNgys2VUE451mz/8R5LIiHNgAXxlAgMBAAE=\n-----END PUBLIC KEY-----\n\
+        OWNER_KEY\ncat > host-audit.py <<'HOST_AUDIT'\nimport json,subprocess,sys\n\
+        from pathlib import Path\np=Path(sys.argv[1]);r=json.loads((p/'report.json').read_text())\n\
+        r['containers']={}\nfor service in ['api','worker']:\n q=subprocess.run(['docker','compose','-p','domly-backend','ps','-q',service],capture_output=True,text=True,timeout=10)\n\
+        \ cid=q.stdout.strip()\n if not cid:r['containers'][service]={'found':False};continue\n\
+        \ q=subprocess.run(['docker','inspect','--format','{{json .State}}',cid],capture_output=True,text=True,timeout=10)\n\
+        \ state=json.loads(q.stdout);r['containers'][service]={k:state.get(k) for\
+        \ k in ['Status','Running','OOMKilled','Restarting','StartedAt']}\n q=subprocess.run(['docker','logs','--since','60m',cid],capture_output=True,text=True,timeout=15)\n\
+        \ logs=q.stdout+q.stderr\n r['containers'][service]['logCounts']={x:logs.count(x)\
+        \ for x in ['PushDeliveryFailed','[fcm] push failed','[notifications] Outbox\
+        \ processing failed','ENOTFOUND','EAI_AGAIN','ECONNREFUSED']}\n(p/'report.json').write_text(json.dumps(r))\n\
+        HOST_AUDIT\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
+        $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-push-audit-XXXXXX')\n[[ \"$remote_dir\"\
+        \ =~ ^/tmp/domly-push-audit-[A-Za-z0-9]+$ ]]\ntrap 'ssh -i ~/.ssh/deploy_key\
+        \ -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm -rf -- $remote_dir\"\
+        \ >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes\
+        \ audit.js owner-public.pem host-audit.py \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
+        \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"\
+        set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && timeout 240 docker\
+        \ compose -p domly-backend exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
+        \ && python3 '$remote_dir/host-audit.py' '$remote_dir' && openssl rand -out\
+        \ '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc -salt -pbkdf2 -in '$remote_dir/report.json'\
+        \ -out '$remote_dir/report.enc' -pass file:'$remote_dir/key.bin' && openssl\
+        \ pkeyutl -encrypt -pubin -inkey '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep\
+        \ -pkeyopt rsa_oaep_md:sha256 -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\
+        \nmkdir -m 700 -p encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\" \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\"\
+        \ encrypted-report/\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: admin-push-audit-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
