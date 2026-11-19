@@ -65,7 +65,14 @@ jobs:
         \  const app=admin.initializeApp({credential});\n  for(const d of devices){out.fcm.checked++;try{await\
         \ timeout(app.messaging().send({token:d.token,notification:{title:'Проверка\
         \ настройки',body:'Валидация без доставки'},data:{targetType:'diagnostic'}},true));out.fcm.valid++;}catch(e){out.fcm.errors.push({role:d.role,platform:d.platform,code:e.code||e.name});}}\n\
-        \ }catch(e){out.fcm.error=e.code||e.name;\n const message=String(e.message??'').toLowerCase();out.fcm.failureClassification={invalidGrant:message.includes('invalid_grant'),invalidJwtSignature:message.includes('invalid\
+        \ }catch(e){out.fcm.error=e.code||e.name;\n const message=String(e.message??'').toLowerCase();\n\
+        \ const phrases=['certificate','self signed','unable to verify','issuer','econnreset','enotfound','eai_again','econnrefused','etimedout','timeout','fetch\
+        \ failed','invalid_client','invalid_scope','invalid_grant','invalid jwt','unauthorized','401','403','404','429','500','502','503','disabled','deleted','access\
+        \ denied','permission','error fetching access token','error while making request','unexpected\
+        \ response','invalid response','ssl','tls','connection','socket','empty','json','und_err','unsupported','proxy','end\
+        \ of','network','error obtaining','stream'];\n out.fcm.errorKeywords=phrases.filter(x=>message.includes(x));\n\
+        \ out.fcm.causeCode=typeof e.cause?.code==='string'&&/^[A-Z_0-9-]{1,80}$/.test(e.cause.code)?e.cause.code:null;\n\
+        out.fcm.failureClassification={invalidGrant:message.includes('invalid_grant'),invalidJwtSignature:message.includes('invalid\
         \ jwt signature'),pemParseFailure:message.includes('parse private key')||message.includes('pem'),accountDisabled:message.includes('disabled'),accountNotFound:message.includes('not\
         \ found'),clockError:message.includes('clock')||message.includes('iat')||message.includes('expired'),networkError:message.includes('network')||message.includes('getaddrinfo')||message.includes('timed\
         \ out')};}}\n await db.query('ROLLBACK');console.log(JSON.stringify(out));\n\
