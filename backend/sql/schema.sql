@@ -1221,7 +1221,7 @@ CREATE TABLE IF NOT EXISTS moon_ai_outbox (
  installation_id UUID REFERENCES assistant_installations(id),
  chat_id UUID NOT NULL REFERENCES chats(id),
  payment_id UUID REFERENCES payments(id),
- kind TEXT NOT NULL CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install')),
+ kind TEXT NOT NULL CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification','package_renewal')),
  dedupe_key TEXT NOT NULL UNIQUE,
  payload JSONB NOT NULL,
  state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','processing','sent','cancelled','failed','uncertain')),
@@ -1368,7 +1368,7 @@ CREATE TABLE IF NOT EXISTS area_package_adjustments (
 );
 ALTER TABLE moon_ai_outbox DROP CONSTRAINT IF EXISTS moon_ai_outbox_kind_check;
 ALTER TABLE moon_ai_outbox ADD CONSTRAINT moon_ai_outbox_kind_check
- CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification'));
+ CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification','package_renewal'));
 
 -- Persist immediately in the same transaction as the quality-team assignment.
 -- No customer files, phone numbers, or documents are copied into chat messages.
@@ -1879,7 +1879,7 @@ END $$;
 DROP TRIGGER IF EXISTS address_change_guard ON customer_addresses;
 CREATE TRIGGER address_change_guard BEFORE INSERT OR UPDATE ON customer_addresses FOR EACH ROW EXECUTE FUNCTION domly_address_change_guard();
 ALTER TABLE moon_ai_outbox DROP CONSTRAINT IF EXISTS moon_ai_outbox_kind_check;
-ALTER TABLE moon_ai_outbox ADD CONSTRAINT moon_ai_outbox_kind_check CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification'));
+ALTER TABLE moon_ai_outbox ADD CONSTRAINT moon_ai_outbox_kind_check CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification','package_renewal'));
 
 CREATE OR REPLACE FUNCTION domly_payment_zone_guard() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE address_uuid UUID;

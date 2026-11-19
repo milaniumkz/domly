@@ -1,4 +1,5 @@
 import test from 'node:test';
+import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Database } from '../infrastructure/db/Database';
@@ -88,4 +89,19 @@ test('authorized quarterly rate update preserves other fields and is idempotent'
     await db.query("DELETE FROM audit_logs WHERE entity_id=$1 AND action='catalog.quarterly.rate.authorized'",[id]);
     await db.query('DELETE FROM catalog_packages WHERE id=$1',[id]);await db.close();
   }
+});
+
+
+test('schema reapplication preserves queued package renewal jobs', {skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async()=>{
+ const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!),user=randomUUID(),chat=randomUUID(),job=randomUUID();
+ try {
+  await db.query("INSERT INTO app_users(id,phone,role) VALUES($1,$2,'customer')",[user,'migration-renewal-'+user]);
+  await db.query("INSERT INTO chats(id,type,customer_id) VALUES($1,'assistant',$2)",[chat,user]);
+  await db.query("INSERT INTO moon_ai_outbox(id,customer_id,chat_id,kind,dedupe_key,payload) VALUES($1,$2,$3,'package_renewal',$4,'{}')",[job,user,chat,'migration-renewal:'+job]);
+  await db.query(fs.readFileSync('sql/schema.sql','utf8'));
+  const row=(await db.query('SELECT kind,state,payload FROM moon_ai_outbox WHERE id=$1',[job])).rows[0];
+  assert.equal(row.kind,'package_renewal');assert.equal(row.state,'pending');assert.deepEqual(row.payload,{});
+ } finally {
+  await db.query('DELETE FROM moon_ai_outbox WHERE id=$1',[job]);await db.query('DELETE FROM chats WHERE id=$1',[chat]);await db.query('DELETE FROM app_users WHERE id=$1',[user]);await db.close();
+ }
 });
