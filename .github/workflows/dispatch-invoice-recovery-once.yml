@@ -1,4 +1,4 @@
-name: Verify installed Firebase IPv4 transport without sending
+name: Deploy checked Firebase IPv4 repair once
 'on':
   push:
     branches:
@@ -7,82 +7,28 @@ name: Verify installed Firebase IPv4 transport without sending
     - .github/workflows/dispatch-invoice-recovery-once.yml
 permissions:
   contents: read
+  actions: write
 jobs:
-  audit:
+  dispatch:
     runs-on: ubuntu-latest
-    environment: production
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-    - name: Validate FCM without sending and encrypt aggregate report
+    - name: Release an unstarted duplicate and dispatch standard checked main deployment
       env:
-        VPS_HOST: ${{ secrets.VPS_HOST }}
-        VPS_USER: ${{ secrets.VPS_USER }}
-        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
-      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
-        \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
-        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Pool}=require('pg');const\
-        \ {FcmService,buildFcmMessage}=require('./dist/modules/integrations');\n(async()=>{const\
-        \ db=new Pool({connectionString:process.env.DATABASE_URL});try{\n await db.query('BEGIN\
-        \ READ ONLY');await db.query(\"SET LOCAL statement_timeout='10s'\");\n const\
-        \ devices=(await db.query(`SELECT dt.token,dt.platform FROM device_tokens\
-        \ dt JOIN app_users u ON u.id=dt.user_id\n WHERE u.role IN ('admin','superadmin')\
-        \ AND dt.enabled AND u.deleted_at IS NULL AND u.status<>'blocked' ORDER BY\
-        \ dt.updated_at DESC LIMIT 10`)).rows;\n const fcm=new FcmService();fcm.init();\n\
-        \ const out={at:new Date().toISOString(),agentIPv4:fcm.httpAgent?.options?.family===4,legacyHttpsTransport:fcm.messaging?.useLegacyTransport===true,checked:devices.length,dryRunOnly:true};\n\
-        \ if(devices.length){const result=await fcm.messaging.sendEachForMulticast(buildFcmMessage(devices.map(d=>d.token),'Проверка\
-        \ настройки','Валидация без доставки',{targetType:'diagnostic'}),true);out.valid=result.successCount;out.failed=result.failureCount;out.errors=result.responses.flatMap((r,i)=>r.error?[{platform:devices[i].platform,code:r.error.code}]:[]);}\n\
-        \ out.queue=(await db.query(`SELECT COALESCE(n.role::text,u.role::text,'unknown')\
-        \ role,COUNT(*) FILTER(WHERE d.delivered_at IS NULL)::int pending,MAX(d.delivered_at)\
-        \ last_processed_at,MIN(d.available_at) FILTER(WHERE d.delivered_at IS NULL)\
-        \ next_retry FROM notification_deliveries d JOIN notifications n ON n.id=d.notification_id\
-        \ LEFT JOIN app_users u ON u.id=n.user_id GROUP BY COALESCE(n.role::text,u.role::text,'unknown')`)).rows;\n\
-        \ for(let attempt=0;attempt<12&&out.queue.some(x=>['admin','superadmin'].includes(x.role)&&x.pending>0);attempt++){await\
-        \ new Promise(r=>setTimeout(r,10000));out.queue=(await db.query(`SELECT COALESCE(n.role::text,u.role::text,'unknown')\
-        \ role,COUNT(*) FILTER(WHERE d.delivered_at IS NULL)::int pending,MAX(d.delivered_at)\
-        \ last_processed_at,MIN(d.available_at) FILTER(WHERE d.delivered_at IS NULL)\
-        \ next_retry FROM notification_deliveries d JOIN notifications n ON n.id=d.notification_id\
-        \ LEFT JOIN app_users u ON u.id=n.user_id GROUP BY COALESCE(n.role::text,u.role::text,'unknown')`)).rows;}\n\
-        \ out.verifiedAt=new Date().toISOString();\n out.adminAndroidTokens=(await\
-        \ db.query(`SELECT dt.enabled,COUNT(*)::int count FROM device_tokens dt JOIN\
-        \ app_users u ON u.id=dt.user_id WHERE u.role IN ('admin','superadmin') AND\
-        \ dt.platform='android' GROUP BY dt.enabled`)).rows;\n await db.query('ROLLBACK');console.log(JSON.stringify(out));\n\
-        \ }finally{await db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
-        \nAUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
-        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAumiD9Ft9K1xVRPwyJYeJ\nxV1fAy/0/72HiZx6x4Y/Qi1I2WDOlu04hOWVuNQ4AVClt/KAdfJ86RP7oXEJvB8U\n\
-        VrOgXcQhT/Yg/5/GxhD2NSWAUz/9lw2AGeSI2GpQOtft/xnmaH8yH3MxiwFlrAiA\neMicXn38Yd5OHMXGB5lU+/0i6MG2VFeu1SBQ2Xs5DrXZXQXGwBISiHu6KgakWq/T\n\
-        WSKT9G8ai3owA5EPrFCb2NNZezjTVJMOYUoi9uvZI8cO8IKRN8RsGxPCIPVisfrb\n3TC8AmT/na6UmxgQuMPmsD3p+Am8uG7Z6NqSBukNlI2FonRWWaYfLp/pJcnsBAEY\n\
-        YhrdCsqzHCDalkEiceInvlKn71bvn1X6XetHrUFXQnNEkt/aGs/B5O6GLael3m6H\nH8zY5vm1DEo/tudo367+y/RTX9I3fNqaV/5CDyjxKHhfbe6GFKy8nCoPsuhFJiLS\n\
-        rB8dXGd4Ix0oMapjeNgys2VUE451mz/8R5LIiHNgAXxlAgMBAAE=\n-----END PUBLIC KEY-----\n\
-        OWNER_KEY\ncat > host-audit.py <<'HOST_AUDIT'\nimport json,subprocess,sys\n\
-        from pathlib import Path\np=Path(sys.argv[1]);r=json.loads((p/'report.json').read_text())\n\
-        r['containers']={}\nfor service in ['api','worker']:\n q=subprocess.run(['docker','compose','-p','domly-backend','ps','-q',service],capture_output=True,text=True,timeout=10)\n\
-        \ cid=q.stdout.strip()\n if not cid:r['containers'][service]={'found':False};continue\n\
-        \ q=subprocess.run(['docker','inspect','--format','{{json .State}}',cid],capture_output=True,text=True,timeout=10)\n\
-        \ state=json.loads(q.stdout);r['containers'][service]={k:state.get(k) for\
-        \ k in ['Status','Running','OOMKilled','Restarting','StartedAt']}\n q=subprocess.run(['docker','logs','--since','60m',cid],capture_output=True,text=True,timeout=15)\n\
-        \ logs=q.stdout+q.stderr\n r['containers'][service]['logCounts']={x:logs.count(x)\
-        \ for x in ['PushDeliveryFailed','[fcm] push failed','[notifications] Outbox\
-        \ processing failed','ENOTFOUND','EAI_AGAIN','ECONNREFUSED']}\n(p/'report.json').write_text(json.dumps(r))\n\
-        HOST_AUDIT\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
-        $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-push-audit-XXXXXX')\n[[ \"$remote_dir\"\
-        \ =~ ^/tmp/domly-push-audit-[A-Za-z0-9]+$ ]]\ntrap 'ssh -i ~/.ssh/deploy_key\
-        \ -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm -rf -- $remote_dir\"\
-        \ >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes\
-        \ audit.js owner-public.pem host-audit.py \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
-        \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"\
-        set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && timeout 240 docker\
-        \ compose -p domly-backend exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
-        \ && python3 '$remote_dir/host-audit.py' '$remote_dir' && openssl rand -out\
-        \ '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc -salt -pbkdf2 -in '$remote_dir/report.json'\
-        \ -out '$remote_dir/report.enc' -pass file:'$remote_dir/key.bin' && openssl\
-        \ pkeyutl -encrypt -pubin -inkey '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep\
-        \ -pkeyopt rsa_oaep_md:sha256 -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\
-        \nmkdir -m 700 -p encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes\
-        \ \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\" \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\"\
-        \ encrypted-report/\n"
-    - uses: actions/upload-artifact@v4
-      with:
-        name: admin-push-audit-encrypted
-        path: encrypted-report/
-        retention-days: 1
-        if-no-files-found: error
+        GH_TOKEN: ${{ github.token }}
+      run: "set -euo pipefail\nrepo=milaniumkz/domly\nexpected=4f83041957c42f5724baa0550df46dbdf6b221da\n\
+        test \"$(gh api \"repos/$repo/git/ref/heads/main\" --jq .object.sha)\" = \"\
+        $expected\"\ntest \"$(gh api \"repos/$repo/actions/runs/44512439179\" --jq\
+        \ .conclusion)\" = success\ngh api \"repos/$repo/actions/runs?head_sha=$expected&per_page=10\"\
+        \ > runs.json\nqueued=$(python3 - <<'PYCODE'\nimport json\nruns=json.load(open('runs.json'))['workflow_runs']\n\
+        ids=[str(r['id']) for r in runs if r['path']=='.github/workflows/deploy.yml'\
+        \ and r['event']=='push' and r['status'] in ['queued','pending','in_progress']]\n\
+        assert len(ids)<=1\nprint(ids[0] if ids else '')\nPYCODE\n)\nif [ -n \"$queued\"\
+        \ ]; then\n gh api \"repos/$repo/actions/runs/$queued/jobs\" > jobs.json\n\
+        \ python3 - <<'PYCODE'\nimport json\njobs=json.load(open('jobs.json'))['jobs']\n\
+        assert all(j['status']=='queued' or j.get('conclusion')=='skipped' for j in\
+        \ jobs), 'Only a fully unstarted automatic deployment may be replaced'\nPYCODE\n\
+        \ gh api -X POST \"repos/$repo/actions/runs/$queued/cancel\"\nfi\ngh api -X\
+        \ POST \"repos/$repo/actions/workflows/deploy.yml/dispatches\" --input - <<'JSON'\n\
+        {\"ref\":\"main\",\"inputs\":{\"mode\":\"deploy\",\"reuse_web_from_run\":\"\
+        44066261691\"}}\nJSON\n"
