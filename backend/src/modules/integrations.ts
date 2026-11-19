@@ -1,5 +1,6 @@
 import {residentialComplexHouses} from './residentialComplexHouses';
 import admin from 'firebase-admin';
+import { Agent as HttpsAgent } from 'node:https';
 import crypto from 'crypto';
 import { Client as MinioClient } from 'minio';
 import { Queue } from 'bullmq';
@@ -64,18 +65,27 @@ export function buildFcmMessage(tokens: string[], title: string, body: string, d
 
 export class FcmService {
   private initialized = false;
+  private messaging?: admin.messaging.Messaging;
+  private readonly httpAgent = new HttpsAgent({family: 4, keepAlive: true});
+
+  constructor(private readonly firebase: typeof admin = admin) {}
 
   private init(): void {
     if (this.initialized || !env.fcmProjectId || !env.fcmClientEmail || !env.fcmPrivateKey) return;
-    if (!admin.apps.length) {
-      admin.initializeApp({
-        credential: admin.credential.cert({
+    if (!this.firebase.apps.length) {
+      this.firebase.initializeApp({
+        credential: this.firebase.credential.cert({
           projectId: env.fcmProjectId,
           clientEmail: env.fcmClientEmail,
           privateKey: env.fcmPrivateKey,
-        }),
+        }, this.httpAgent),
+        httpAgent: this.httpAgent,
       });
     }
+    this.messaging = this.firebase.messaging();
+    // Multicast HTTP/2 sessions do not use the configured HTTPS Agent. Keep
+    // OAuth and FCM delivery on the same verified IPv4 HTTPS transport.
+    this.messaging.enableLegacyHttpTransport();
     this.initialized = true;
   }
 
@@ -83,7 +93,7 @@ export class FcmService {
     this.init();
     if (!this.initialized || tokens.length === 0) return { sent: 0, failed: 0, skipped: true };
     try {
-      const result = await admin.messaging().sendEachForMulticast(buildFcmMessage(tokens, title, body, data));
+      const result = await this.messaging!.sendEachForMulticast(buildFcmMessage(tokens, title, body, data));
       const invalidTokens = result.responses.flatMap((response,index) =>
         ['messaging/registration-token-not-registered','messaging/invalid-registration-token'].includes(response.error?.code ?? '') ? [tokens[index]] : []);
       return { sent: result.successCount, failed: result.failureCount, skipped: false, invalidTokens,
