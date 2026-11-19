@@ -33,10 +33,18 @@ jobs:
         \ cid=q.stdout.strip()\n if not cid:r['containers'][service]={'found':False};continue\n\
         \ q=subprocess.run(['docker','inspect','--format','{{json .State}}',cid],capture_output=True,text=True,timeout=10)\n\
         \ state=json.loads(q.stdout);r['containers'][service]={k:state.get(k) for\
-        \ k in ['Status','Running','OOMKilled','Restarting','StartedAt']}\n q=subprocess.run(['docker','logs','--since','60m',cid],capture_output=True,text=True,timeout=15)\n\
-        \ logs=q.stdout+q.stderr\n r['containers'][service]['logCounts']={x:logs.count(x)\
-        \ for x in ['PushDeliveryFailed','[fcm] push failed','[notifications] Outbox\
-        \ processing failed','ENOTFOUND','EAI_AGAIN','ECONNREFUSED']}\nq=subprocess.run(['ps','-e','-o','comm='],capture_output=True,text=True,timeout=10)\n\
+        \ k in ['Status','Running','OOMKilled','Restarting','StartedAt','ExitCode']}\n\
+        \ q=subprocess.run(['docker','logs','--since','60m',cid],capture_output=True,text=True,timeout=15)\n\
+        \ logs=q.stdout+q.stderr\n import re\n error_lines=[]\n for line in logs.splitlines():\n\
+        \  if not re.search(r'(?i)error|fatal|exception|cannot|syntax|not found',line):continue\n\
+        \  line=re.sub(r'https?://[^\\s]+','[url]',line)\n  line=re.sub(r'[\\w.+-]+@[\\\
+        w.-]+','[email]',line)\n  line=re.sub(r'\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b','[id]',line,flags=re.I)\n\
+        \  line=re.sub(r'\\+?\\b[0-9]{10,15}\\b','[number]',line)\n  line=re.sub(r'[A-Za-z0-9+/=_-]{45,}','[opaque]',line)\n\
+        \  if re.search(r'(?i)private.key|password|authorization|client.secret|access.token',line):continue\n\
+        \  error_lines.append(line[:300])\n r['containers'][service]['sanitizedErrors']=error_lines[-12:]\n\
+        \ r['containers'][service]['logCounts']={x:logs.count(x) for x in ['PushDeliveryFailed','[fcm]\
+        \ push failed','[notifications] Outbox processing failed','ENOTFOUND','EAI_AGAIN','ECONNREFUSED']}\n\
+        q=subprocess.run(['ps','-e','-o','comm='],capture_output=True,text=True,timeout=10)\n\
         comm=q.stdout.splitlines();r['buildProcesses']={name:sum(name in x for x in\
         \ comm) for name in ['apk','npm','node','docker','buildkit']}\nq=subprocess.run(['docker','compose','-p','domly-backend','exec','-T','api','node','-e','console.log(process.env.APP_RELEASE||\"\
         unknown\")'],capture_output=True,text=True,timeout=10)\nr['apiRelease']=q.stdout.strip()\
@@ -51,16 +59,15 @@ jobs:
         \ \"rm -rf -- $remote_dir\" >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key\
         \ -o IdentitiesOnly=yes audit.js owner-public.pem host-audit.py \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
         \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"\
-        set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && timeout 240 docker\
-        \ compose -p domly-backend exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
-        \ && python3 '$remote_dir/host-audit.py' '$remote_dir' && openssl rand -out\
-        \ '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc -salt -pbkdf2 -in '$remote_dir/report.json'\
-        \ -out '$remote_dir/report.enc' -pass file:'$remote_dir/key.bin' && openssl\
-        \ pkeyutl -encrypt -pubin -inkey '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep\
-        \ -pkeyopt rsa_oaep_md:sha256 -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\
-        \nmkdir -m 700 -p encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes\
-        \ \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\" \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\"\
-        \ encrypted-report/\n"
+        set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && printf '{}' >\
+        \ '$remote_dir/report.json' && python3 '$remote_dir/host-audit.py' '$remote_dir'\
+        \ && openssl rand -out '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc\
+        \ -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
+        \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey\
+        \ '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256\
+        \ -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\nmkdir -m 700 -p\
+        \ encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
     - uses: actions/upload-artifact@v4
       with:
         name: admin-push-audit-encrypted
