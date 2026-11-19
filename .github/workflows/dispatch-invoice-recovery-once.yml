@@ -77,7 +77,7 @@ jobs:
         \ jwt signature'),pemParseFailure:message.includes('parse private key')||message.includes('pem'),accountDisabled:message.includes('disabled'),accountNotFound:message.includes('not\
         \ found'),clockError:message.includes('clock')||message.includes('iat')||message.includes('expired'),networkError:message.includes('network')||message.includes('getaddrinfo')||message.includes('timed\
         \ out')};}}\n if(!out.fcm.oauth && env.fcmProjectId&&env.fcmClientEmail&&env.fcmPrivateKey){\n\
-        \  try{const agent=new(require('node:https').Agent)({family:4});const credential=admin.credential.cert({projectId:env.fcmProjectId,clientEmail:env.fcmClientEmail,privateKey:env.fcmPrivateKey},agent);out.fcm.ipv4OAuth=Boolean((await\
+        \  try{const agent=new(require('node:https').Agent)({family:4});const credential=admin.credential.cert({clientEmail:env.fcmClientEmail,privateKey:env.fcmPrivateKey,projectId:env.fcmProjectId},agent);out.fcm.ipv4OAuth=Boolean((await\
         \ timeout(credential.getAccessToken())).access_token);}catch(e){out.fcm.ipv4OAuth=false;out.fcm.ipv4Error=e.code||e.name;const\
         \ m=String(e.message??'').toLowerCase();out.fcm.ipv4SystemCodes=[...new Set((m.match(/\\\
         b(?:enetunreach|ehostunreach|eaddrnotavail|econnreset|econnrefused|etimedout|eai_again|enotfound|eacces|eperm|epipe|eproto)\\\
