@@ -308,6 +308,25 @@ test('FcmService skips push safely when FCM is not configured', async () => {
   assert.deepEqual(result, { sent: 0, failed: 0, skipped: true });
 });
 
+test('FCM uses IPv4 for credential exchange and multicast delivery and retires invalid tokens', async () => {
+  const previous={project:env.fcmProjectId,email:env.fcmClientEmail,key:env.fcmPrivateKey};
+  Object.assign(env,{fcmProjectId:'fixture',fcmClientEmail:'fixture@example.invalid',fcmPrivateKey:'fixture-not-a-key'});
+  let options:any,credentialAgent:any,legacy=0,requests=0;
+  const sdk:any={apps:[],credential:{cert:(_account:any,agent:any)=>{credentialAgent=agent;return {fixture:true};}},
+    initializeApp:(value:any)=>{options=value;sdk.apps.push({});},messaging:()=>({
+      enableLegacyHttpTransport:()=>{legacy++;},
+      sendEachForMulticast:async(message:any)=>{requests++;assert.deepEqual(message.tokens,['valid','expired']);
+       return {successCount:1,failureCount:1,responses:[{success:true},{success:false,error:{code:'messaging/registration-token-not-registered'}}]};}
+    })};
+  try {
+    const service=new FcmService(sdk);const result=await service.send(['valid','expired'],'Тест','Проверка');
+    assert.equal(credentialAgent.options.family,4);assert.equal(options.httpAgent,credentialAgent);
+    assert.equal(credentialAgent.options.keepAlive,true);assert.equal(credentialAgent.options.rejectUnauthorized,undefined);
+    assert.equal(legacy,1);assert.deepEqual(result.invalidTokens,['expired']);assert.equal(result.retryableFailed,0);
+    await service.send(['valid','expired'],'Тест','Проверка');assert.equal(legacy,1);assert.equal(requests,2);
+  } finally {Object.assign(env,{fcmProjectId:previous.project,fcmClientEmail:previous.email,fcmPrivateKey:previous.key});options?.httpAgent.destroy();}
+});
+
 test('WapiOtpService returns friendly integration error on provider failure', async () => {
   const originalFetch = globalThis.fetch;
   const originalToken = env.wapiToken;
