@@ -36,29 +36,39 @@ jobs:
         \ count,MAX(dt.updated_at) last_registered_at\n FROM device_tokens dt JOIN\
         \ app_users u ON u.id=dt.user_id WHERE u.deleted_at IS NULL AND u.status<>'blocked'\n\
         \ GROUP BY u.role,dt.platform,dt.enabled`)).rows;\n out.deliveries=(await\
-        \ db.query(`SELECT COALESCE(n.role::text,u.role::text,'unknown') role,COUNT(*) FILTER(WHERE\
-        \ d.created_at>NOW()-INTERVAL '24 hours')::int created_24h,\n COUNT(*) FILTER(WHERE\
-        \ d.delivered_at>NOW()-INTERVAL '24 hours')::int processed_24h,\n COUNT(*)\
-        \ FILTER(WHERE d.delivered_at IS NULL)::int pending,\n MAX(d.attempts) max_attempts,MAX(d.delivered_at)\
-        \ last_processed_at,MIN(d.created_at) FILTER(WHERE d.delivered_at IS NULL)\
-        \ oldest_pending_at\n FROM notification_deliveries d JOIN notifications n\
-        \ ON n.id=d.notification_id LEFT JOIN app_users u ON u.id=n.user_id GROUP\
-        \ BY COALESCE(n.role::text,u.role::text,'unknown')`)).rows;\n out.queueErrors=(await db.query(\"\
-        SELECT last_error,COUNT(*)::int count FROM notification_deliveries WHERE delivered_at\
-        \ IS NULL GROUP BY last_error\")).rows;\n out.adminEvents=(await db.query(\"\
-        SELECT role,target_type,COUNT(*)::int count FROM notifications WHERE role\
-        \ IN ('admin','superadmin') AND created_at>NOW()-INTERVAL '24 hours' GROUP\
-        \ BY role,target_type\")).rows;\n const devices=(await db.query(`SELECT dt.token,u.role,dt.platform\
-        \ FROM device_tokens dt JOIN app_users u ON u.id=dt.user_id\n WHERE u.role\
-        \ IN ('admin','superadmin') AND dt.enabled AND u.deleted_at IS NULL AND u.status<>'blocked'\n\
-        \ ORDER BY dt.updated_at DESC LIMIT 10`)).rows;\n out.fcm={oauth:false,dryRunOnly:true,checked:0,valid:0,errors:[]};\n\
-        \ if(env.fcmProjectId&&env.fcmClientEmail&&env.fcmPrivateKey){try{\n  const\
-        \ credential=admin.credential.cert({projectId:env.fcmProjectId,clientEmail:env.fcmClientEmail,privateKey:env.fcmPrivateKey});\n\
+        \ db.query(`SELECT COALESCE(n.role::text,u.role::text,'unknown') role,COUNT(*)\
+        \ FILTER(WHERE d.created_at>NOW()-INTERVAL '24 hours')::int created_24h,\n\
+        \ COUNT(*) FILTER(WHERE d.delivered_at>NOW()-INTERVAL '24 hours')::int processed_24h,\n\
+        \ COUNT(*) FILTER(WHERE d.delivered_at IS NULL)::int pending,\n MAX(d.attempts)\
+        \ max_attempts,MAX(d.delivered_at) last_processed_at,MIN(d.created_at) FILTER(WHERE\
+        \ d.delivered_at IS NULL) oldest_pending_at\n FROM notification_deliveries\
+        \ d JOIN notifications n ON n.id=d.notification_id LEFT JOIN app_users u ON\
+        \ u.id=n.user_id GROUP BY COALESCE(n.role::text,u.role::text,'unknown')`)).rows;\n\
+        \ out.queueErrors=(await db.query(\"SELECT last_error,COUNT(*)::int count\
+        \ FROM notification_deliveries WHERE delivered_at IS NULL GROUP BY last_error\"\
+        )).rows;\n out.adminEvents=(await db.query(\"SELECT role,target_type,COUNT(*)::int\
+        \ count FROM notifications WHERE role IN ('admin','superadmin') AND created_at>NOW()-INTERVAL\
+        \ '24 hours' GROUP BY role,target_type\")).rows;\n const devices=(await db.query(`SELECT\
+        \ dt.token,u.role,dt.platform FROM device_tokens dt JOIN app_users u ON u.id=dt.user_id\n\
+        \ WHERE u.role IN ('admin','superadmin') AND dt.enabled AND u.deleted_at IS\
+        \ NULL AND u.status<>'blocked'\n ORDER BY dt.updated_at DESC LIMIT 10`)).rows;\n\
+        \ out.keyCheck={explicitKey:!!process.env.FCM_PRIVATE_KEY,inlineAccount:!!process.env.FCM_SERVICE_ACCOUNT_JSON,encodedAccount:!!process.env.FCM_SERVICE_ACCOUNT_BASE64,fileAccount:!!process.env.FCM_SERVICE_ACCOUNT_FILE};\n\
+        \ try{const crypto=require('node:crypto');const key=crypto.createPrivateKey(env.fcmPrivateKey);out.keyCheck.pemParses=true;out.keyCheck.keyType=key.asymmetricKeyType;\n\
+        \ const url='https://www.googleapis.com/robot/v1/metadata/x509/'+encodeURIComponent(env.fcmClientEmail);\n\
+        \ const response=await fetch(url,{signal:AbortSignal.timeout(10000)});out.keyCheck.publicCertificatesHttp=response.status;\n\
+        \ if(response.ok){const certificates=await response.json();const pub=crypto.createPublicKey(key).export({type:'spki',format:'pem'});out.keyCheck.matchesRegisteredGoogleCertificate=Object.values(certificates).some(cert=>new\
+        \ crypto.X509Certificate(cert).publicKey.export({type:'spki',format:'pem'})===pub);}\n\
+        \ }catch(e){out.keyCheck.pemParses=out.keyCheck.pemParses??false;out.keyCheck.errorKind=e.code||e.name;}\n\
+        \ out.fcm={oauth:false,dryRunOnly:true,checked:0,valid:0,errors:[]};\n if(env.fcmProjectId&&env.fcmClientEmail&&env.fcmPrivateKey){try{\n\
+        \  const credential=admin.credential.cert({projectId:env.fcmProjectId,clientEmail:env.fcmClientEmail,privateKey:env.fcmPrivateKey});\n\
         \  out.fcm.oauth=Boolean((await timeout(credential.getAccessToken())).access_token);\n\
         \  const app=admin.initializeApp({credential});\n  for(const d of devices){out.fcm.checked++;try{await\
         \ timeout(app.messaging().send({token:d.token,notification:{title:'Проверка\
         \ настройки',body:'Валидация без доставки'},data:{targetType:'diagnostic'}},true));out.fcm.valid++;}catch(e){out.fcm.errors.push({role:d.role,platform:d.platform,code:e.code||e.name});}}\n\
-        \ }catch(e){out.fcm.error=e.code||e.name;}}\n await db.query('ROLLBACK');console.log(JSON.stringify(out));\n\
+        \ }catch(e){out.fcm.error=e.code||e.name;\n const message=String(e.message??'').toLowerCase();out.fcm.failureClassification={invalidGrant:message.includes('invalid_grant'),invalidJwtSignature:message.includes('invalid\
+        \ jwt signature'),pemParseFailure:message.includes('parse private key')||message.includes('pem'),accountDisabled:message.includes('disabled'),accountNotFound:message.includes('not\
+        \ found'),clockError:message.includes('clock')||message.includes('iat')||message.includes('expired'),networkError:message.includes('network')||message.includes('getaddrinfo')||message.includes('timed\
+        \ out')};}}\n await db.query('ROLLBACK');console.log(JSON.stringify(out));\n\
         \ }finally{await db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
         AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
         MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAumiD9Ft9K1xVRPwyJYeJ\nxV1fAy/0/72HiZx6x4Y/Qi1I2WDOlu04hOWVuNQ4AVClt/KAdfJ86RP7oXEJvB8U\n\
