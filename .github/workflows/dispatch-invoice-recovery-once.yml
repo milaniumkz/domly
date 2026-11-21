@@ -37,12 +37,30 @@ jobs:
         \ const payments=(await db.query(`SELECT id,status,provider,created_at,updated_at,invoice_requested_at,paid_at\
         \ IS NOT NULL is_paid,\n invoice_phone IS NOT NULL has_invoice_phone,regexp_replace(COALESCE(invoice_phone,''),'[^0-9]','','g')\
         \ ~ '^7[0-9]{10}$' stored_phone_matches_required_format\n FROM payments WHERE\
-        \ customer_id=$1 ORDER BY created_at DESC LIMIT 10`,[id])).rows;\n result.addresses=(await\
-        \ db.query(`SELECT is_primary,service_status,area>0 has_area,verified_area>0\
-        \ has_verified_area,area_reverification_required FROM customer_addresses WHERE\
-        \ user_id=$1`,[id])).rows;\n result.qualityChecks=(await db.query(`SELECT\
-        \ status,document_file_id IS NOT NULL has_document,customer_package_id IS\
-        \ NOT NULL linked_to_package,order_id IS NOT NULL linked_to_order,created_at,updated_at\
+        \ customer_id=$1 ORDER BY created_at DESC LIMIT 10`,[id])).rows;\n result.coverage=(await\
+        \ db.query(`SELECT a.is_primary,domly_service_zones_enforced() enforced,\n\
+        \ domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude)\
+        \ allowed,\n a.latitude IS NOT NULL AND a.longitude IS NOT NULL has_coordinates,\n\
+        \ domly_city_key(a.city)='астана' city_is_astana,domly_address_key(a.house)='3'\
+        \ house_is_three,\n EXISTS(SELECT 1 FROM service_zones z WHERE z.active AND\
+        \ domly_city_key(z.city)=domly_city_key(a.city) AND domly_polygon_contains(z.polygon,a.latitude,a.longitude))\
+        \ point_inside_active_zone,\n (SELECT COUNT(*)::int FROM connected_houses\
+        \ h WHERE domly_city_key(h.city)=domly_city_key(a.city) AND domly_address_key(h.house)=domly_address_key(a.house)\n\
+        \ AND (domly_street_key(h.street_ru)=domly_street_key(a.street) OR domly_street_key(h.street_kk)=domly_street_key(a.street)))\
+        \ exact_house_records,\n (SELECT COUNT(*)::int FROM connected_houses h JOIN\
+        \ service_zones z ON z.id=h.zone_id WHERE h.active AND z.active AND domly_city_key(h.city)=domly_city_key(a.city)\
+        \ AND domly_city_key(z.city)=domly_city_key(a.city) AND domly_address_key(h.house)=domly_address_key(a.house)\n\
+        \ AND (domly_street_key(h.street_ru)=domly_street_key(a.street) OR domly_street_key(h.street_kk)=domly_street_key(a.street)))\
+        \ exact_active_house_records,\n (SELECT COUNT(*)::int FROM connected_houses\
+        \ h JOIN service_zones z ON z.id=h.zone_id WHERE h.active AND z.active AND\
+        \ domly_city_key(h.city)=domly_city_key(a.city) AND domly_city_key(z.city)=domly_city_key(a.city)\
+        \ AND domly_address_key(h.house)=domly_address_key(a.house)\n AND domly_street_key(regexp_replace(lower(h.street_ru),'^(мкрн?|микрорайон)[.]?[[:space:]]*','','g'))=domly_street_key(regexp_replace(lower(a.street),'^(мкрн?|микрорайон)[.]?[[:space:]]*','','g')))\
+        \ active_house_records_without_district_prefix\n FROM customer_addresses a\
+        \ WHERE a.user_id=$1`,[id])).rows;\n result.addresses=(await db.query(`SELECT\
+        \ is_primary,service_status,area>0 has_area,verified_area>0 has_verified_area,area_reverification_required\
+        \ FROM customer_addresses WHERE user_id=$1`,[id])).rows;\n result.qualityChecks=(await\
+        \ db.query(`SELECT status,document_file_id IS NOT NULL has_document,customer_package_id\
+        \ IS NOT NULL linked_to_package,order_id IS NOT NULL linked_to_order,created_at,updated_at\
         \ FROM quality_check_requests WHERE customer_id=$1 ORDER BY created_at DESC\
         \ LIMIT 10`,[id])).rows;\n result.packages=(await db.query(`SELECT status,total_cleanings,available_cleanings,created_at,updated_at\
         \ FROM customer_packages WHERE customer_id=$1 ORDER BY created_at DESC LIMIT\
