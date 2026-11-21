@@ -1,4 +1,4 @@
-name: Deploy checked Astana city coverage
+name: Enable user-authorized Astana city coverage excluding suburbs
 'on':
   push:
     branches:
@@ -7,29 +7,118 @@ name: Deploy checked Astana city coverage
     - .github/workflows/dispatch-invoice-recovery-once.yml
 permissions:
   contents: read
-  actions: write
+  actions: read
 jobs:
-  dispatch:
+  audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    environment: production
+    timeout-minutes: 10
     steps:
-    - name: Release an unstarted duplicate and dispatch standard checked main deployment
+    - name: Require successful checked main deployment
       env:
         GH_TOKEN: ${{ github.token }}
-      run: "set -euo pipefail\nrepo=milaniumkz/domly\nexpected=7d1771469875cf0b1d9c6850dfd9ee27015f551b\n\
-        test \"$(gh api \"repos/$repo/git/ref/heads/main\" --jq .object.sha)\" = \"\
-        $expected\"\ntest \"$(gh api \"repos/$repo/actions/runs/44878960770\" --jq\
-        \ .conclusion)\" = success\ngh api \"repos/$repo/actions/runs?head_sha=$expected&per_page=10\"\
-        \ > runs.json\nqueued=$(python3 - <<'PYCODE'\nimport json\nruns=json.load(open('runs.json'))['workflow_runs']\n\
-        ids=[str(r['id']) for r in runs if r['path']=='.github/workflows/deploy.yml'\
-        \ and r['event']=='push' and r['status'] in ['queued','pending','in_progress']]\n\
-        assert len(ids)<=1\nprint(ids[0] if ids else '')\nPYCODE\n)\nif [ -n \"$queued\"\
-        \ ]; then\n gh api \"repos/$repo/actions/runs/$queued/jobs\" > jobs.json\n\
-        \ python3 - <<'PYCODE'\nimport json\njobs=json.load(open('jobs.json'))['jobs']\n\
-        assert all(j['status']=='queued' or j.get('conclusion')=='skipped' for j in\
-        \ jobs), 'Only a fully unstarted automatic deployment may be replaced'\nPYCODE\n\
-        \ gh api -X POST \"repos/$repo/actions/runs/$queued/cancel\"\nfi\ngh api -X\
-        \ POST \"repos/$repo/actions/workflows/deploy.yml/dispatches\" --input - <<'JSON'\n\
-        {\"ref\":\"main\",\"inputs\":{\"mode\":\"deploy\",\"reuse_web_from_run\":\"\
-        44066261691\"}}\nJSON\n"
+      run: 'set -euo pipefail
+
+        python3 - <<''PYCODE''
+
+        import json,subprocess
+
+        def api(path):return json.loads(subprocess.check_output([''gh'',''api'',''repos/milaniumkz/domly/''+path]))
+
+        assert api(''git/ref/heads/main'')[''object''][''sha'']==''7d1771469875cf0b1d9c6850dfd9ee27015f551b''
+
+        r=api(''actions/runs/44879643919'')
+
+        assert r[''head_sha'']==''7d1771469875cf0b1d9c6850dfd9ee27015f551b'' and r[''conclusion'']==''success''
+        and r[''path'']==''.github/workflows/deploy.yml''
+
+        PYCODE
+
+        '
+    - name: Back up database, enable Astana city policy and verify selected customer
+        eligibility
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
+        \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
+        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Database}=require('./dist/infrastructure/db/Database');const\
+        \ fs=require('fs');const crypto=require('crypto');\n(async()=>{if(process.env.APP_RELEASE!=='7d1771469875cf0b1d9c6850dfd9ee27015f551b')throw\
+        \ Error('unexpected_release');const db=new Database(process.env.DATABASE_URL);try{\n\
+        \ const boundary=JSON.parse(fs.readFileSync('./docs/service-areas/astana-city.geojson','utf8'));\n\
+        \ if(boundary.properties.source!=='https://www.openstreetmap.org/relation/3087156'||boundary.geometry.type!=='MultiPolygon')throw\
+        \ Error('unexpected_public_boundary');\n const rings=boundary.geometry.coordinates.map(p=>p[0]);const\
+        \ area=r=>Math.abs(r.reduce((sum,p,i)=>{const q=r[(i+1)%r.length];return sum+p[0]*q[1]-q[0]*p[1];},0));rings.sort((a,b)=>area(b)-area(a));\n\
+        \ const legacyPolygon=rings[0].map(([lng,lat])=>({lat,lng}));\n const result=await\
+        \ db.atomic(async()=>{\n  await db.query(\"SET LOCAL statement_timeout='20s'\"\
+        );await db.query(\"SELECT pg_advisory_xact_lock(hashtextextended('service-citywide:astana',0))\"\
+        );\n  if(!(await db.query('SELECT domly_service_zones_enforced() enabled')).rows[0].enabled)throw\
+        \ Error('service_zone_protection_disabled');\n  const zones=(await db.query(\"\
+        SELECT id,name_ru,covers_entire_city FROM service_zones WHERE domly_city_key(city)='астана'\
+        \ ORDER BY created_at,id FOR UPDATE\")).rows;\n  const preferred=zones.filter(z=>z.name_ru==='Астана'||z.covers_entire_city);let\
+        \ zone;\n  if(preferred.length===1)zone=preferred[0];else if(zones.length===1)zone=zones[0];else\
+        \ throw Error('astana_zone_missing_or_ambiguous');\n  const targetHash='df16f55e998ce5c6df122df600c26fe8c46f70e19840c0f557aca7b5f3aa7a3a';\n\
+        \  const users=(await db.query(\"SELECT id FROM app_users WHERE role='customer'\
+        \ AND encode(sha256(convert_to(regexp_replace(phone,'[^0-9]','','g'),'UTF8')),'hex')=$1\"\
+        ,[targetHash])).rows;\n  if(users.length!==1)throw Error('selected_customer_not_unique');const\
+        \ customerId=users[0].id;\n  const address=(await db.query(\"SELECT id,verified_area\
+        \ FROM customer_addresses WHERE user_id=$1 AND is_primary=TRUE\",[customerId])).rows;\n\
+        \  if(address.length!==1)throw Error('selected_primary_address_not_unique');\n\
+        \  const before=address[0];\n  await db.query(\"UPDATE service_zones SET active=TRUE,covers_entire_city=TRUE,city_boundary=$2,polygon=$3,name_ru='Астана\
+        \ — весь город',name_kk='Астана — бүкіл қала' WHERE id=$1\",[zone.id,boundary,legacyPolygon]);\n\
+        \  const tests=[['Астана',null,'мкр. Самал','3',null,null,true],['Нұр-Сұлтан',null,'Городская\
+        \ улица','15',null,null,true],['Астана',null,'Центр','1',51.1282804,71.4304708,true],['Астана',null,'Пригородная\
+        \ точка','1',50.9754092,71.3549460,false],['Астана','Косшы','Абая','1',null,null,false],['Косшы',null,'Абая','1',null,null,false],['Астана','Коянды','Абая','1',null,null,false],['Астана',null,'посёлок\
+        \ Талапкер','1',null,null,false]];\n  for(const t of tests){const expected=t[6];const\
+        \ actual=(await db.query('SELECT domly_service_location_allowed($1,$2,$3,$4,$5,$6)\
+        \ allowed',t.slice(0,6))).rows[0].allowed;if(actual!==expected)throw Error('city_policy_validation_failed');}\n\
+        \  const refreshed=await db.query(\"UPDATE customer_addresses SET service_status='active',updated_at=NOW()\
+        \ WHERE domly_city_key(city)='астана' AND service_status='outside_service_area'\
+        \ AND NOT area_reverification_required AND domly_service_location_allowed(city,settlement,street,house,latitude,longitude)\
+        \ RETURNING id\");\n  await db.query('SELECT domly_assert_service_address($1,FALSE),domly_assert_service_address($1,TRUE)',[before.id]);\n\
+        \  const after=(await db.query('SELECT verified_area FROM customer_addresses\
+        \ WHERE id=$1',[before.id])).rows[0];\n  if(String(before.verified_area)!==String(after.verified_area))throw\
+        \ Error('verified_area_changed');\n  await db.query(\"INSERT INTO audit_logs(action,entity_type,entity_id,payload)\
+        \ VALUES('zone.citywide.enabled','service_zone',$1,$2)\",[zone.id,{source:'user_authorized_astana_citywide',city:'Астана',suburbsExcluded:true,publicBoundarySource:boundary.properties.source,boundarySha256:crypto.createHash('sha256').update(JSON.stringify(boundary)).digest('hex'),refreshedAddresses:refreshed.rowCount}]);\n\
+        \  return {cityWideAstanaEnabled:true,suburbsExcluded:true,publicBoundaryValidated:true,directoryUpdated:true,refreshedAddressCount:refreshed.rowCount,selectedAddressAllowed:true,verifiedAreaPreserved:true,paymentOrPackageCreated:false,invoiceSent:false};\n\
+        \ });console.log(JSON.stringify(result));\n}finally{await db.close();}})().catch(e=>{console.error(e.code||e.message||e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
+        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAtpV7I990CLe7oiiBN+m9\nX7TcrpQ9mOEII5AAl9M30pOTPqq1J5Y+nJlhPZAPzutFZVbF0la9iQAoH5/H7sf6\n\
+        9ceTX5eJ3qeSCcx+P0iCyKW2mcmi7ov7kaqOuqiagN8zDRdyknrAELVMaQICSBUs\nGs7yAUZblblJTPQLoV0ZycxNrSOSCNqqh3tOtIOrZBjJMclLfd53keDMsxhls0k+\n\
+        ivHkNJ0P3LyFkmYcDw6PEaMlFOsus5UK356pCMXPV8wpnef+44MEYiFV90cKRAY0\n35e+JjAbeEoUGHKi+HxGUc7h3HdIN4XyIUuHdgbpUZJeFocElNvIFmXulmqOzd/6\n\
+        0exu9EUkZmkqzGF9U5KouIuw82jRSTvfTYE0CJF+JYUE7QfN0ehWXjEJYPIo2/tM\nOjuZG5BnOJN+cDggJ5XLZrIGxJdz6P9KqfIbUuVuKHO/HA2ApgjVe2GvWPMgVbU+\n\
+        31f0te3sAhwXN8ieQDqw27LXBZt8MBRUefQxrfeakZb5AgMBAAE=\n-----END PUBLIC KEY-----\n\
+        OWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
+        $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-error-audit-XXXXXX')\n\
+        [[ \"$remote_dir\" =~ ^/tmp/domly-invoice-error-audit-[A-Za-z0-9]+$ ]]\ntrap\
+        \ 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ \"rm -rf -- $remote_dir\" >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key\
+        \ -o IdentitiesOnly=yes audit.js owner-public.pem \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
+        \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"\
+        set -euo pipefail; test \\\"\\$(cat '$DEPLOY_PATH/REVISION')\\\" = 7d1771469875cf0b1d9c6850dfd9ee27015f551b;\
+        \ cd '$DEPLOY_PATH/current' && umask 077 && backup_dir='$DEPLOY_PATH/backups/city-coverage-'\\\
+        $(date +%Y%m%d-%H%M%S) && mkdir -p \\\"\\$backup_dir\\\" && postgres_container=\\\
+        $(docker ps -q --filter label=com.docker.compose.project=domly-backend --filter\
+        \ label=com.docker.compose.service=postgres) && test -n \\\"\\$postgres_container\\\
+        \" && docker exec \\\"\\$postgres_container\\\" sh -c 'pg_dump -U \\\"\\${POSTGRES_USER:-domly}\\\
+        \" \\\"\\${POSTGRES_DB:-domly}\\\"' > \\\"\\$backup_dir/postgres.sql\\\" &&\
+        \ test -s \\\"\\$backup_dir/postgres.sql\\\" && timeout 240 docker compose\
+        \ -p domly-backend exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
+        \ && openssl rand -out '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc\
+        \ -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
+        \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey\
+        \ '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256\
+        \ -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\nmkdir -m 700 -p\
+        \ encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: astana-citywide-verification-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
 
