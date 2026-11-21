@@ -398,6 +398,9 @@ CREATE TABLE IF NOT EXISTS service_zones (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE service_zones ADD COLUMN IF NOT EXISTS covers_entire_city BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE service_zones ADD COLUMN IF NOT EXISTS city_boundary JSONB;
+
 CREATE TABLE IF NOT EXISTS cleaner_zones (
   cleaner_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
   zone_id UUID NOT NULL REFERENCES service_zones(id) ON DELETE CASCADE,
@@ -1804,27 +1807,44 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN RETURN FALSE;
 END $$;
 CREATE OR REPLACE FUNCTION domly_city_key(value TEXT) RETURNS TEXT LANGUAGE SQL IMMUTABLE AS $$
- SELECT CASE WHEN domly_address_key(regexp_replace(lower(coalesce(value,'')),'^(город[[:space:]]+|г[.][[:space:]]*|г[[:space:]]+)','')) IN ('астана','astana','нурсултан','nursultan') THEN 'астана' ELSE domly_address_key(regexp_replace(lower(coalesce(value,'')),'^(город[[:space:]]+|г[.][[:space:]]*|г[[:space:]]+)','')) END
+ SELECT CASE WHEN domly_address_key(regexp_replace(lower(coalesce(value,'')),'^(город[[:space:]]+|г[.][[:space:]]*|г[[:space:]]+)','')) IN ('астана','astana','нурсултан','nursultan','нұрсұлтан') THEN 'астана' ELSE domly_address_key(regexp_replace(lower(coalesce(value,'')),'^(город[[:space:]]+|г[.][[:space:]]*|г[[:space:]]+)','')) END
 $$;
 -- Match Russian/Kazakh street spelling and explicit street-type labels, never house prefixes.
 CREATE OR REPLACE FUNCTION domly_street_key(value TEXT) RETURNS TEXT LANGUAGE SQL IMMUTABLE AS $$
  SELECT regexp_replace(regexp_replace(' '||domly_normalize_address(value)||' ',
   ' (проспект|пр т|прт|пр|улица|ул|дангили|дангил|кошеси|коше|бульвар|бул|переулок|пер|шоссе) ', ' ', 'g'), '[[:space:]]+', '', 'g')
 $$;
+-- A city-wide policy accepts manually entered city addresses, while explicit
+-- rural settlements and supplied points beyond the city boundary stay excluded.
+CREATE OR REPLACE FUNCTION domly_rural_service_location(city_value TEXT,settlement_value TEXT,street_value TEXT) RETURNS BOOLEAN LANGUAGE SQL IMMUTABLE AS $$
+ SELECT (NULLIF(trim(coalesce(settlement_value,'')),'') IS NOT NULL AND domly_city_key(settlement_value)<>domly_city_key(city_value))
+ OR lower(trim(coalesce(street_value,''))) ~ '^(пос[её]лок|пос[.]|п[.]|пгт|село|с[.]|аул|ауыл|кент|village|settlement)([[:space:].,]|$)'
+ OR (domly_city_key(city_value)='астана' AND domly_normalize_address(street_value) ~ '^(косшы|косши|kosshy|qosshy|коянди|караоткель|караоткел|каражар|талапкер)([[:space:],.]|$)')
+$$;
 CREATE OR REPLACE FUNCTION domly_location_in_service_zone(city_value TEXT,street_value TEXT,house_value TEXT,lat NUMERIC,lng NUMERIC) RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
- SELECT EXISTS(SELECT 1 FROM connected_houses h JOIN service_zones z ON z.id=h.zone_id
+ SELECT CASE WHEN EXISTS(SELECT 1 FROM service_zones z WHERE z.active AND z.covers_entire_city AND domly_city_key(z.city)=domly_city_key(city_value))
+ THEN NOT domly_rural_service_location(city_value,NULL,street_value)
+ AND NULLIF(trim(coalesce(street_value,'')),'') IS NOT NULL AND NULLIF(trim(coalesce(house_value,'')),'') IS NOT NULL
+ AND EXISTS(SELECT 1 FROM service_zones z WHERE z.active AND z.covers_entire_city AND domly_city_key(z.city)=domly_city_key(city_value)
+   AND ((lat IS NULL AND lng IS NULL) OR domly_polygon_contains(COALESCE(z.city_boundary,z.polygon),lat,lng)))
+ ELSE (EXISTS(SELECT 1 FROM connected_houses h JOIN service_zones z ON z.id=h.zone_id
   WHERE h.active AND z.active AND domly_city_key(h.city)=domly_city_key(city_value)
    AND domly_city_key(z.city)=domly_city_key(city_value)
    AND (domly_street_key(h.street_ru)=domly_street_key(street_value) OR (NULLIF(h.street_kk,'') IS NOT NULL AND domly_street_key(h.street_kk)=domly_street_key(street_value)))
    AND domly_street_key(street_value)<>'' AND domly_address_key(h.house)=domly_address_key(house_value))
- OR EXISTS(SELECT 1 FROM service_zones z WHERE z.active AND domly_city_key(z.city)=domly_city_key(city_value) AND domly_polygon_contains(z.polygon,lat,lng))
+ OR EXISTS(SELECT 1 FROM service_zones z WHERE z.active AND domly_city_key(z.city)=domly_city_key(city_value) AND domly_polygon_contains(z.polygon,lat,lng))) END
+$$;
+CREATE OR REPLACE FUNCTION domly_service_location_allowed(city_value TEXT,settlement_value TEXT,street_value TEXT,house_value TEXT,lat NUMERIC,lng NUMERIC) RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
+ SELECT domly_location_in_service_zone(city_value,street_value,house_value,lat,lng)
+ AND NOT (EXISTS(SELECT 1 FROM service_zones z WHERE z.active AND z.covers_entire_city AND domly_city_key(z.city)=domly_city_key(city_value))
+ AND domly_rural_service_location(city_value,settlement_value,street_value))
 $$;
 CREATE OR REPLACE FUNCTION domly_assert_service_address(address_uuid UUID,require_area BOOLEAN DEFAULT TRUE) RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE a customer_addresses%ROWTYPE;
 BEGIN
  IF NOT domly_service_zones_enforced() THEN RETURN; END IF;
  SELECT * INTO a FROM customer_addresses WHERE id=address_uuid;
- IF NOT FOUND OR a.service_status='needs_new_address' OR NOT domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude) THEN
+ IF NOT FOUND OR a.service_status='needs_new_address' OR NOT domly_service_location_allowed(a.city,a.settlement,a.street,a.house,a.latitude,a.longitude) THEN
   RAISE EXCEPTION USING ERRCODE='PZ001',MESSAGE='Адрес вне активных зон обслуживания. Можно отправить только заявку на подключение адреса.';
  END IF;
  IF a.area_reverification_required AND (require_area OR EXISTS(SELECT 1 FROM app_users WHERE id=a.user_id AND settings->>'requiresAddressReverification'='true')) THEN
@@ -1855,7 +1875,7 @@ BEGIN
  IF NOT domly_service_zones_enforced() THEN RETURN NEW; END IF;
  IF TG_OP='INSERT' THEN
   IF EXISTS(SELECT 1 FROM app_users WHERE id=NEW.user_id AND settings->>'requiresAddressReverification'='true') THEN NEW.area_reverification_required:=TRUE;NEW.area_invalidated_at:=NOW();NEW.verified_area:=NULL; END IF;
-  NEW.service_status:=CASE WHEN domly_location_in_service_zone(NEW.city,NEW.street,NEW.house,NEW.latitude,NEW.longitude) THEN 'active' ELSE 'outside_service_area' END;
+  NEW.service_status:=CASE WHEN domly_service_location_allowed(NEW.city,NEW.settlement,NEW.street,NEW.house,NEW.latitude,NEW.longitude) THEN 'active' ELSE 'outside_service_area' END;
   RETURN NEW;
  END IF;
  IF (domly_address_key(NEW.city),domly_address_key(NEW.settlement),domly_address_key(NEW.street),domly_address_key(NEW.house),domly_address_key(NEW.apartment))
@@ -1864,9 +1884,9 @@ BEGIN
   NEW.area_reverification_required:=OLD.area_reverification_required OR OLD.verified_area IS NOT NULL OR OLD.service_status='needs_new_address';
   NEW.area_invalidated_at:=NOW();
   IF (domly_address_key(NEW.city),domly_address_key(NEW.settlement),domly_address_key(NEW.street),domly_address_key(NEW.house)) IS DISTINCT FROM (domly_address_key(OLD.city),domly_address_key(OLD.settlement),domly_address_key(OLD.street),domly_address_key(OLD.house)) AND NEW.latitude IS NOT DISTINCT FROM OLD.latitude AND NEW.longitude IS NOT DISTINCT FROM OLD.longitude THEN NEW.latitude:=NULL;NEW.longitude:=NULL; END IF;
-  NEW.service_status:=CASE WHEN domly_location_in_service_zone(NEW.city,NEW.street,NEW.house,NEW.latitude,NEW.longitude) THEN 'active' ELSE 'outside_service_area' END;
+  NEW.service_status:=CASE WHEN domly_service_location_allowed(NEW.city,NEW.settlement,NEW.street,NEW.house,NEW.latitude,NEW.longitude) THEN 'active' ELSE 'outside_service_area' END;
  ELSIF NEW.verified_area IS NOT NULL AND OLD.area_reverification_required THEN
-  IF OLD.service_status='needs_new_address' OR NOT domly_location_in_service_zone(OLD.city,OLD.street,OLD.house,OLD.latitude,OLD.longitude) THEN RAISE EXCEPTION USING ERRCODE='PZ001',MESSAGE='Сначала укажите адрес в активной зоне.'; END IF;
+  IF OLD.service_status='needs_new_address' OR NOT domly_service_location_allowed(OLD.city,OLD.settlement,OLD.street,OLD.house,OLD.latitude,OLD.longitude) THEN RAISE EXCEPTION USING ERRCODE='PZ001',MESSAGE='Сначала укажите адрес в активной зоне.'; END IF;
   IF NOT EXISTS(SELECT 1 FROM quality_check_requests q JOIN files f ON f.id=q.document_file_id
    WHERE q.address_id=OLD.id AND q.customer_id=OLD.user_id AND q.status NOT IN ('rejected','cancelled')
     AND f.owner_id=OLD.user_id AND f.created_at>=OLD.area_invalidated_at) THEN

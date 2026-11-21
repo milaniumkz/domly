@@ -1,6 +1,7 @@
 import {serviceCoverageRouter} from '../http/routes/serviceCoverage';
 import {checkServiceAddress,invalidateServiceAddress,requestAddressConnection} from '../modules/serviceCoverage';
 import test from 'node:test';
+import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import express from 'express';
 import {randomUUID} from 'node:crypto';
@@ -260,5 +261,35 @@ test('bot audit descriptions, ownership and safe financial details',{skip:!proce
  }finally{
   await new Promise<void>(r=>server.close(()=>r()));configureAuthDatabase(null);
   await db.query('DELETE FROM audit_logs WHERE id=ANY($1::uuid[])',[[event,legacy,human]]);await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('UPDATE customer_packages SET purchase_payment_id=NULL WHERE id=$1',[purchase]);await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[catalog]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[admin,customer,cleaner]]);await db.close();
+ }
+});
+
+
+test('city-wide Astana accepts city addresses but excludes settlements and outside coordinates',{skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async()=>{
+ const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!),zone=randomUUID(),user=randomUUID(),address=randomUUID();
+ const boundary=JSON.parse(fs.readFileSync('docs/service-areas/astana-city.geojson','utf8'));
+ const previousCoverage=(await db.query("SELECT value FROM app_settings WHERE key='enforceServiceZones'")).rows[0];
+ const allowed=async(city:string,settlement:string|null,street:string,lat:number|null=null,lng:number|null=null)=>
+  (await db.query('SELECT domly_service_location_allowed($1,$2,$3,$4,$5,$6) AS allowed',[city,settlement,street,'3',lat,lng])).rows[0].allowed;
+ try {
+  await db.query("INSERT INTO app_settings(key,value) VALUES('enforceServiceZones','true') ON CONFLICT(key) DO UPDATE SET value='true'");
+  await db.query("INSERT INTO service_zones(id,name_ru,city,covers_entire_city,city_boundary,active) VALUES($1,'City-wide fixture','Астана',TRUE,$2,TRUE)",[zone,boundary]);
+  for(const city of ['Астана','Astana','г. Астана','Нур-Султан','Нұр-Сұлтан'])assert.equal(await allowed(city,null,'мкр. Самал'),true,city);
+  assert.equal(await allowed('Астана',null,'Новый городской адрес без записи в справочнике'),true);
+  assert.equal(await allowed('Астана',null,'улица Косшыгулы'),true);
+  assert.equal(await allowed('Астана',null,'Центр',51.1282804,71.4304708),true);
+  assert.equal(await allowed('Астана',null,'Ложная метка города',50.9754092,71.3549460),false,'Kosshy point is outside the public city boundary');
+  assert.equal(await allowed('Косшы',null,'Абая'),false);
+  for(const settlement of ['Косшы','Коянды','Талапкер'])assert.equal(await allowed('Астана',settlement,'Абая'),false,settlement);
+  for(const street of ['посёлок Косшы','п. Коянды','село Талапкер','аул Каражар','Қосшы вне зоны','Коянды, улица Абая'])assert.equal(await allowed('Астана',null,street),false,street);
+  assert.equal(await allowed('Астана',null,'Самал',51.1,null),false);
+  await db.query("INSERT INTO app_users(id,phone,role) VALUES($1,$2,'customer')",[user,'citywide-'+user]);
+  await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area,verified_area) VALUES($1,$2,'Астана','мкр. Самал','3',89,89)",[address,user]);
+  await checkServiceAddress(db,address);assert.equal(Number((await db.query('SELECT verified_area FROM customer_addresses WHERE id=$1',[address])).rows[0].verified_area),89);
+  await db.query('UPDATE service_zones SET active=FALSE WHERE id=$1',[zone]);assert.equal(await allowed('Астана',null,'Новый городской адрес без записи в справочнике'),false);
+ } finally {
+  await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);await db.query('DELETE FROM app_users WHERE id=$1',[user]);await db.query('DELETE FROM service_zones WHERE id=$1',[zone]);
+  if(previousCoverage)await db.query("UPDATE app_settings SET value=$1 WHERE key='enforceServiceZones'",[previousCoverage.value]);else await db.query("DELETE FROM app_settings WHERE key='enforceServiceZones'");
+  await db.close();
  }
 });

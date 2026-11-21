@@ -17,7 +17,7 @@ export function serviceCoverageRouter(db:Database,notifications:NotificationServ
    void(async()=>{
     const a=body?.data;
     if(body?.ok&&a?.id&&a.user_id===req.user?.id&&(await db.query('SELECT domly_service_zones_enforced() AS enabled')).rows[0].enabled){
-     const covered=(await db.query('SELECT domly_location_in_service_zone($1,$2,$3,$4,$5) AS covered',[a.city,a.street,a.house,a.latitude,a.longitude])).rows[0].covered;
+     const covered=(await db.query('SELECT domly_service_location_allowed($1,$2,$3,$4,$5,$6) AS covered',[a.city,a.settlement,a.street,a.house,a.latitude,a.longitude])).rows[0].covered;
      a.service_available=covered&&a.service_status!=='needs_new_address';
      if(!covered)await requestAddressConnection(db,notifications,a.id,req.user!.id);
      else if(a.area_reverification_required)await notifications.create({userId:req.user!.id,titleRu:'Подтвердите площадь нового адреса',bodyRu:'Новый адрес сохранён. Загрузите новый технический план квартиры для подтверждения площади. Нажмите на уведомление, чтобы открыть загрузку документа.',targetType:'area_verification',targetId:a.id,dedupeKey:'new-address-plan:'+a.id+':'+new Date(a.area_invalidated_at).toISOString()});
@@ -27,7 +27,7 @@ export function serviceCoverageRouter(db:Database,notifications:NotificationServ
   }) as typeof res.json;
   next();
  });
- r.get('/addresses',auth(['customer']),asyncHandler(async(req,res)=>{ok(res,(await db.query(`SELECT a.*,CASE WHEN domly_service_zones_enforced() THEN a.service_status<>'needs_new_address' AND domly_location_in_service_zone(a.city,a.street,a.house,a.latitude,a.longitude) ELSE lower(a.city) IN ('астана','astana') END AS service_available,
+ r.get('/addresses',auth(['customer']),asyncHandler(async(req,res)=>{ok(res,(await db.query(`SELECT a.*,CASE WHEN domly_service_zones_enforced() THEN a.service_status<>'needs_new_address' AND domly_service_location_allowed(a.city,a.settlement,a.street,a.house,a.latitude,a.longitude) ELSE lower(a.city) IN ('астана','astana') END AS service_available,
  EXISTS(SELECT 1 FROM quality_check_requests q JOIN files f ON f.id=q.document_file_id WHERE q.address_id=a.id AND q.status IN ('pending','approved') AND (a.area_invalidated_at IS NULL OR f.created_at>=a.area_invalidated_at)) AS area_proof_submitted
  FROM customer_addresses a WHERE user_id=$1 ORDER BY is_primary DESC,created_at DESC`,[req.user!.id])).rows);}));
  r.use(asyncHandler(async(req,res,next)=>{
