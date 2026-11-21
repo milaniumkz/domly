@@ -1,4 +1,4 @@
-name: Final verification of permanent Firebase and migration repair
+name: Read-only authorized package and invoice error diagnosis
 'on':
   push:
     branches:
@@ -13,80 +13,73 @@ jobs:
     environment: production
     timeout-minutes: 10
     steps:
-    - name: Validate FCM without sending and encrypt aggregate report
+    - name: Read selected customer transaction state without sending or changing data
       env:
         VPS_HOST: ${{ secrets.VPS_HOST }}
         VPS_USER: ${{ secrets.VPS_USER }}
         DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
       run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
         \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
-        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Pool}=require('pg');const\
-        \ {FcmService,buildFcmMessage}=require('./dist/modules/integrations');\n(async()=>{const\
-        \ db=new Pool({connectionString:process.env.DATABASE_URL});try{\n await db.query('BEGIN\
-        \ READ ONLY');await db.query(\"SET LOCAL statement_timeout='10s'\");\n const\
-        \ devices=(await db.query(`SELECT dt.token,dt.platform FROM device_tokens\
-        \ dt JOIN app_users u ON u.id=dt.user_id\n WHERE u.role IN ('admin','superadmin')\
-        \ AND dt.enabled AND u.deleted_at IS NULL AND u.status<>'blocked' ORDER BY\
-        \ dt.updated_at DESC LIMIT 10`)).rows;\n const fcm=new FcmService();fcm.init();\n\
-        \ const out={at:new Date().toISOString(),release:process.env.APP_RELEASE,agentIPv4:fcm.httpAgent?.options?.family===4,legacyHttpsTransport:fcm.messaging?.useLegacyTransport===true,checked:devices.length,dryRunOnly:true};\n\
-        \ if(out.release!=='4f83041957c42f5724baa0550df46dbdf6b221da')throw new Error('unexpected_release');\n\
-        \ out.schemaAllowsRenewal=(await db.query(\"SELECT pg_get_constraintdef(oid)\
-        \ AS definition FROM pg_constraint WHERE conname='moon_ai_outbox_kind_check'\
-        \ AND conrelid='moon_ai_outbox'::regclass\")).rows.some(x=>x.definition.includes('package_renewal'));\n\
-        \ if(devices.length){const result=await fcm.messaging.sendEachForMulticast(buildFcmMessage(devices.map(d=>d.token),'Проверка\
-        \ настройки','Валидация без доставки',{targetType:'diagnostic'}),true);out.valid=result.successCount;out.failed=result.failureCount;out.errors=result.responses.flatMap((r,i)=>r.error?[{platform:devices[i].platform,code:r.error.code}]:[]);}\n\
-        \ out.queue=(await db.query(`SELECT COALESCE(n.role::text,u.role::text,'unknown')\
-        \ role,COUNT(*) FILTER(WHERE d.delivered_at IS NULL)::int pending,MAX(d.delivered_at)\
-        \ last_processed_at,MIN(d.available_at) FILTER(WHERE d.delivered_at IS NULL)\
-        \ next_retry FROM notification_deliveries d JOIN notifications n ON n.id=d.notification_id\
-        \ LEFT JOIN app_users u ON u.id=n.user_id GROUP BY COALESCE(n.role::text,u.role::text,'unknown')`)).rows;\n\
-        \ for(let attempt=0;attempt<12&&out.queue.some(x=>['admin','superadmin'].includes(x.role)&&x.pending>0);attempt++){await\
-        \ new Promise(r=>setTimeout(r,10000));out.queue=(await db.query(`SELECT COALESCE(n.role::text,u.role::text,'unknown')\
-        \ role,COUNT(*) FILTER(WHERE d.delivered_at IS NULL)::int pending,MAX(d.delivered_at)\
-        \ last_processed_at,MIN(d.available_at) FILTER(WHERE d.delivered_at IS NULL)\
-        \ next_retry FROM notification_deliveries d JOIN notifications n ON n.id=d.notification_id\
-        \ LEFT JOIN app_users u ON u.id=n.user_id GROUP BY COALESCE(n.role::text,u.role::text,'unknown')`)).rows;}\n\
-        \ out.verifiedAt=new Date().toISOString();\n out.adminAndroidTokens=(await\
-        \ db.query(`SELECT dt.enabled,COUNT(*)::int count FROM device_tokens dt JOIN\
-        \ app_users u ON u.id=dt.user_id WHERE u.role IN ('admin','superadmin') AND\
-        \ dt.platform='android' GROUP BY dt.enabled`)).rows;\n await db.query('ROLLBACK');console.log(JSON.stringify(out));\n\
-        \ }finally{await db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
+        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Pool}=require('pg');\n\
+        (async()=>{const selectedHash='df16f55e998ce5c6df122df600c26fe8c46f70e19840c0f557aca7b5f3aa7a3a';\n\
+        const db=new Pool({connectionString:process.env.DATABASE_URL});try{\n await\
+        \ db.query('BEGIN READ ONLY');await db.query(\"SET LOCAL statement_timeout='10s'\"\
+        );\n const users=(await db.query(\"SELECT id FROM app_users WHERE role='customer'\
+        \ AND encode(sha256(convert_to(regexp_replace(phone,'[^0-9]','','g'),'UTF8')),'hex')=$1\"\
+        ,[selectedHash])).rows;\n const result={at:new Date().toISOString(),matchingCustomers:users.length};\n\
+        \ if(users.length===1){const id=users[0].id;\n result.events=(await db.query(`SELECT\
+        \ started_at,finished_at,source,result,http_status,error_code,CASE WHEN source='server'\
+        \ THEN failure_reason END failure_reason,platform,app_version,\n regexp_replace(action,'[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}','[id]','g')\
+        \ action\n FROM tech_events WHERE user_id=$1 AND started_at>NOW()-INTERVAL\
+        \ '7 days'\n AND (action ~ '^(POST|PATCH|PUT|DELETE) ' OR result IN ('failure','interrupted','reported'))\
+        \ AND (action ILIKE '%payment%' OR action ILIKE '%package%' OR action ILIKE\
+        \ '%order%' OR source='client') ORDER BY started_at DESC LIMIT 100`,[id])).rows;\n\
+        \ const payments=(await db.query(`SELECT id,status,provider,created_at,updated_at,invoice_requested_at,paid_at\
+        \ IS NOT NULL is_paid,\n invoice_phone IS NOT NULL has_invoice_phone,regexp_replace(COALESCE(invoice_phone,''),'[^0-9]','','g')\
+        \ ~ '^7[0-9]{10}$' stored_phone_matches_required_format\n FROM payments WHERE\
+        \ customer_id=$1 ORDER BY created_at DESC LIMIT 10`,[id])).rows;\n result.addresses=(await\
+        \ db.query(`SELECT is_primary,service_status,area>0 has_area,verified_area>0\
+        \ has_verified_area,area_reverification_required FROM customer_addresses WHERE\
+        \ user_id=$1`,[id])).rows;\n result.qualityChecks=(await db.query(`SELECT\
+        \ status,document_file_id IS NOT NULL has_document,customer_package_id IS\
+        \ NOT NULL linked_to_package,order_id IS NOT NULL linked_to_order,created_at,updated_at\
+        \ FROM quality_check_requests WHERE customer_id=$1 ORDER BY created_at DESC\
+        \ LIMIT 10`,[id])).rows;\n result.packages=(await db.query(`SELECT status,total_cleanings,available_cleanings,created_at,updated_at\
+        \ FROM customer_packages WHERE customer_id=$1 ORDER BY created_at DESC LIMIT\
+        \ 10`,[id])).rows;\n result.idempotency=(await db.query(`SELECT regexp_replace(scope,'[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}','[id]','g')\
+        \ scope,status_code,recovery_safe,created_at,completed_at,response->>'code'\
+        \ error_code FROM api_idempotency WHERE user_id=$1 ORDER BY created_at DESC\
+        \ LIMIT 20`,[id])).rows;\n result.payments=payments.map(({id,...row})=>row);\n\
+        \ result.delivery=(await db.query(`SELECT kind,state,failure_code,created_at,run_after,started_at,finished_at,\n\
+        \ payload#>>'{apiDelivery,phase}' phase,payload#>>'{apiDelivery,attempt}'\
+        \ attempt\n FROM moon_ai_outbox WHERE customer_id=$1 AND kind='invoice' ORDER\
+        \ BY created_at DESC LIMIT 20`,[id])).rows;\n }\n await db.query('ROLLBACK');console.log(JSON.stringify(result));\n\
+        }finally{await db.end();}})().catch(e=>{console.error(e.code||e.name);process.exitCode=1;});\n\
         \nAUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
-        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAumiD9Ft9K1xVRPwyJYeJ\nxV1fAy/0/72HiZx6x4Y/Qi1I2WDOlu04hOWVuNQ4AVClt/KAdfJ86RP7oXEJvB8U\n\
-        VrOgXcQhT/Yg/5/GxhD2NSWAUz/9lw2AGeSI2GpQOtft/xnmaH8yH3MxiwFlrAiA\neMicXn38Yd5OHMXGB5lU+/0i6MG2VFeu1SBQ2Xs5DrXZXQXGwBISiHu6KgakWq/T\n\
-        WSKT9G8ai3owA5EPrFCb2NNZezjTVJMOYUoi9uvZI8cO8IKRN8RsGxPCIPVisfrb\n3TC8AmT/na6UmxgQuMPmsD3p+Am8uG7Z6NqSBukNlI2FonRWWaYfLp/pJcnsBAEY\n\
-        YhrdCsqzHCDalkEiceInvlKn71bvn1X6XetHrUFXQnNEkt/aGs/B5O6GLael3m6H\nH8zY5vm1DEo/tudo367+y/RTX9I3fNqaV/5CDyjxKHhfbe6GFKy8nCoPsuhFJiLS\n\
-        rB8dXGd4Ix0oMapjeNgys2VUE451mz/8R5LIiHNgAXxlAgMBAAE=\n-----END PUBLIC KEY-----\n\
-        OWNER_KEY\ncat > host-audit.py <<'HOST_AUDIT'\nimport json,subprocess,sys\n\
-        from pathlib import Path\np=Path(sys.argv[1]);r=json.loads((p/'report.json').read_text())\n\
-        r['containers']={}\nfor service in ['api','worker']:\n q=subprocess.run(['docker','compose','-p','domly-backend','ps','-q',service],capture_output=True,text=True,timeout=10)\n\
-        \ cid=q.stdout.strip()\n if not cid:r['containers'][service]={'found':False};continue\n\
-        \ q=subprocess.run(['docker','inspect','--format','{{json .State}}',cid],capture_output=True,text=True,timeout=10)\n\
-        \ state=json.loads(q.stdout);r['containers'][service]={k:state.get(k) for\
-        \ k in ['Status','Running','OOMKilled','Restarting','StartedAt']}\n q=subprocess.run(['docker','logs','--since','60m',cid],capture_output=True,text=True,timeout=15)\n\
-        \ logs=q.stdout+q.stderr\n r['containers'][service]['logCounts']={x:logs.count(x)\
-        \ for x in ['PushDeliveryFailed','[fcm] push failed','[notifications] Outbox\
-        \ processing failed','ENOTFOUND','EAI_AGAIN','ECONNREFUSED']}\n(p/'report.json').write_text(json.dumps(r))\n\
-        HOST_AUDIT\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
-        $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-push-audit-XXXXXX')\n[[ \"$remote_dir\"\
-        \ =~ ^/tmp/domly-push-audit-[A-Za-z0-9]+$ ]]\ntrap 'ssh -i ~/.ssh/deploy_key\
-        \ -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm -rf -- $remote_dir\"\
-        \ >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes\
-        \ audit.js owner-public.pem host-audit.py \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
+        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAtpV7I990CLe7oiiBN+m9\nX7TcrpQ9mOEII5AAl9M30pOTPqq1J5Y+nJlhPZAPzutFZVbF0la9iQAoH5/H7sf6\n\
+        9ceTX5eJ3qeSCcx+P0iCyKW2mcmi7ov7kaqOuqiagN8zDRdyknrAELVMaQICSBUs\nGs7yAUZblblJTPQLoV0ZycxNrSOSCNqqh3tOtIOrZBjJMclLfd53keDMsxhls0k+\n\
+        ivHkNJ0P3LyFkmYcDw6PEaMlFOsus5UK356pCMXPV8wpnef+44MEYiFV90cKRAY0\n35e+JjAbeEoUGHKi+HxGUc7h3HdIN4XyIUuHdgbpUZJeFocElNvIFmXulmqOzd/6\n\
+        0exu9EUkZmkqzGF9U5KouIuw82jRSTvfTYE0CJF+JYUE7QfN0ehWXjEJYPIo2/tM\nOjuZG5BnOJN+cDggJ5XLZrIGxJdz6P9KqfIbUuVuKHO/HA2ApgjVe2GvWPMgVbU+\n\
+        31f0te3sAhwXN8ieQDqw27LXBZt8MBRUefQxrfeakZb5AgMBAAE=\n-----END PUBLIC KEY-----\n\
+        OWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
+        $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-error-audit-XXXXXX')\n\
+        [[ \"$remote_dir\" =~ ^/tmp/domly-invoice-error-audit-[A-Za-z0-9]+$ ]]\ntrap\
+        \ 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ \"rm -rf -- $remote_dir\" >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key\
+        \ -o IdentitiesOnly=yes audit.js owner-public.pem \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
         \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"\
         set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && timeout 240 docker\
         \ compose -p domly-backend exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
-        \ && python3 '$remote_dir/host-audit.py' '$remote_dir' && openssl rand -out\
-        \ '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc -salt -pbkdf2 -in '$remote_dir/report.json'\
-        \ -out '$remote_dir/report.enc' -pass file:'$remote_dir/key.bin' && openssl\
-        \ pkeyutl -encrypt -pubin -inkey '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep\
-        \ -pkeyopt rsa_oaep_md:sha256 -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\
-        \nmkdir -m 700 -p encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes\
-        \ \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\" \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\"\
-        \ encrypted-report/\n"
+        \ && openssl rand -out '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc\
+        \ -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
+        \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey\
+        \ '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256\
+        \ -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\nmkdir -m 700 -p\
+        \ encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
     - uses: actions/upload-artifact@v4
       with:
-        name: admin-push-audit-encrypted
+        name: invoice-error-audit-encrypted
         path: encrypted-report/
         retention-days: 1
         if-no-files-found: error
