@@ -1,4 +1,4 @@
-import {isBookableDate, validateBookingStart} from '../../modules/bookingValidation';
+import {isBookableDate, isBookableStart, validateBookingStart} from '../../modules/bookingValidation';
 import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
 import { UnitOfWork } from '../../domain/repositories/UnitOfWork';
 import { timeToMinutes } from '../../shared/Month';
@@ -34,9 +34,10 @@ export class CalendarBookingService {
     const closedDays = await this.repo.getClosedDays(start, end);
     const slots = await this.repo.getCleaningSlotsForMonth(start, end, apartment.district);
 
+    const now = Date.now();
     const grouped = new Map<string, number>();
     for (const slot of slots) {
-      if (!isBookableDate(slot.date) || slot.isClosed || slot.availableCapacity <= 0 || closedDays.has(slot.date)) continue;
+      if (!isBookableStart(slot.date,slot.startTime,now) || slot.isClosed || slot.availableCapacity <= 0 || closedDays.has(slot.date)) continue;
       grouped.set(slot.date, (grouped.get(slot.date) ?? 0) + 1);
     }
 
@@ -46,14 +47,15 @@ export class CalendarBookingService {
   }
 
   async getAvailableTimeSlots(date: string, apartmentId: string): Promise<CleaningSlot[]> {
-    if (!isBookableDate(date)) return [];
+    const now = Date.now();
+    if (!isBookableDate(date,now)) return [];
     const apartment = await this.repo.getApartment(apartmentId);
     if (!apartment) throw new Error('Apartment not found');
     const durationHours = this.estimateCleaningDuration(apartment.area);
     const slots = await this.repo.getCleaningSlots(date, apartment.district);
 
     return slots.filter((slot) => {
-      if (slot.isClosed || slot.availableCapacity <= 0) return false;
+      if (!isBookableStart(date,slot.startTime,now) || slot.isClosed || slot.availableCapacity <= 0) return false;
       const duration = (timeToMinutes(slot.endTime) - timeToMinutes(slot.startTime)) / 60;
       return duration >= durationHours;
     });

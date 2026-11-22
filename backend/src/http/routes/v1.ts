@@ -22,7 +22,7 @@ import { customerMonthlyProgress,normalizeCustomerTierRules,customerTierDiscount
 import {addonBonusPercent,topUpPendingBonus} from '../../modules/bonusPolicy';
 import {idempotent,idempotentTransaction} from '../../common/idempotency';
 import {ensureChecklistReport,saveChecklist} from '../../modules/checklists';
-import {validateBookingStart, fitsBookingHours, validateBookingHours, isBookableDate, hasBookingLeadTime, validateBookingLeadTime} from '../../modules/bookingValidation';
+import {validateBookingStart, fitsBookingHours, validateBookingHours, isBookableDate, isBookableStart, hasBookingLeadTime, validateBookingLeadTime} from '../../modules/bookingValidation';
 import {revokeRealtimeSessions} from '../../realtime/sse';
 import {inspectUpload,registerUploadedFile} from '../../technical/files';
 import {ensureGuestSession, guestSession, bindGuestSession, matchMoonPaymentStatus, ensureAssistantChat, queueMoonInvoice, queueAssistantMessage, acceptMoonChatEvent, verifyMoonToken, moonAiReady} from '../../modules/moonAi';
@@ -2297,7 +2297,8 @@ export function buildV1Router(deps: {
 
   const availableSlots = async (req: any) => {
     const date = String(req.query.date);
-    if (!isBookableDate(date)) return [];
+    const now = Date.now();
+    if (!isBookableDate(date,now)) return [];
     const settings = await readAppSettings(deps.db);
     const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
     const addonIds = String(req.query.addonIds ?? '').split(',').map((id) => id.trim()).filter(Boolean);
@@ -2359,7 +2360,7 @@ export function buildV1Router(deps: {
       duration=await estimateCleaningDurationMinutes(deps.db,purchase.address_id,extra,tariff)+prepaid.reduce((sum,item)=>sum+(item.separate?0:Number(item.durationMinutes??0)),0);
     }
     const intervals = slots.filter((start: string) => {
-      if(!fitsBookingHours(start,duration)|| (isPostRenovation(tariff)&&!hasBookingLeadTime(date,start,24)))return false;
+      if(!isBookableStart(date,start,now)||!fitsBookingHours(start,duration)|| (isPostRenovation(tariff)&&!hasBookingLeadTime(date,start,24)))return false;
       if(!usage?.managed)return true;
       const period=bookingPeriod(usage.periods,date,start);
       if(!period || new Date(period.ends_at).getTime()<=Date.now())return false;

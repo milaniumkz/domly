@@ -2054,6 +2054,38 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       } finally {await db.query('DELETE FROM quality_check_requests WHERE id=$1',[check]);}
     });
 
+    await t.test('21:00 cutoff removes next-morning slots and rejects stale booking and reschedule requests',async t=>{
+      const worker=randomUUID(),order=randomUUID();
+      try {
+        await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'night-cutoff-'+worker]);
+        await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
+        const schedule=(await db.query("INSERT INTO cleaner_work_schedule_requests(cleaner_id,week_start,days,status) VALUES($1,'2039-07-04','[]','approved') RETURNING id",[worker])).rows[0];
+        await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2039-07-06','08:00','18:00',$2)",[worker,schedule.id]);
+        await db.query("INSERT INTO service_orders(id,customer_id,status,scheduled_date,start_time,end_time) VALUES($1,$2,'waiting_cleaner','2039-07-07','08:00','10:00')",[order,customer]);
+        t.mock.timers.enable({apis:['Date'],now:Date.parse('2039-07-05T20:59:59+05:00')});
+        const path='/scheduling/available-slots?date=2039-07-06&durationMinutes=90';
+        const before=await request(path,'GET',undefined,true);assert.equal(before.status,200);
+        assert.ok(before.json.data.some((row:any)=>row.startTime==='08:00'));
+        t.mock.timers.setTime(Date.parse('2039-07-05T21:00:00+05:00'));
+        const after=await request(path,'GET',undefined,true);assert.equal(after.status,200);
+        assert.ok(after.json.data.some((row:any)=>row.startTime==='12:00'));
+        assert.ok(after.json.data.every((row:any)=>row.startTime>='12:00'));
+        for(const time of ['08:00','11:59']){
+          const denied=await request('/orders','POST',{customerPackageId:randomUUID(),date:'2039-07-06',startTime:time},true);
+          assert.equal(denied.status,400);assert.equal(denied.json.code,'next_morning_booking_closed');
+          const moved=await request('/orders/'+order+'/reschedule','POST',{date:'2039-07-06',startTime:time},true);
+          assert.equal(moved.status,400);assert.equal(moved.json.code,'next_morning_booking_closed');
+        }
+        const unchanged=(await db.query('SELECT scheduled_date::text,start_time::text FROM service_orders WHERE id=$1',[order])).rows[0];
+        assert.equal(unchanged.scheduled_date,'2039-07-07');assert.equal(unchanged.start_time,'08:00:00');
+      } finally {
+        t.mock.timers.reset();
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
+        await db.query('DELETE FROM cleaner_profiles WHERE user_id=$1',[worker]);
+        await db.query('DELETE FROM app_users WHERE id=$1',[worker]);
+      }
+    });
+
     await t.test('concurrent admin assignments cannot double-book a cleaner',async()=>{
       const ids=[randomUUID(),randomUUID()];
       try {
