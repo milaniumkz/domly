@@ -1,4 +1,4 @@
-name: Deploy checked 21:00 next-morning booking cutoff
+name: Verify deployed 21:00 booking policy without customer data
 'on':
   push:
     branches:
@@ -7,29 +7,83 @@ name: Deploy checked 21:00 next-morning booking cutoff
     - .github/workflows/dispatch-invoice-recovery-once.yml
 permissions:
   contents: read
-  actions: write
+  actions: read
 jobs:
-  dispatch:
+  verify:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 5
     steps:
-    - name: Release an unstarted duplicate and dispatch standard checked main deployment
+    - name: Require successful checked main deployment
       env:
         GH_TOKEN: ${{ github.token }}
-      run: "set -euo pipefail\nrepo=milaniumkz/domly\nexpected=247451056aad92a61aa5d284afdb262866d41994\n\
-        test \"$(gh api \"repos/$repo/git/ref/heads/main\" --jq .object.sha)\" = \"\
-        $expected\"\ntest \"$(gh api \"repos/$repo/actions/runs/45025188844\" --jq\
-        \ .conclusion)\" = success\ngh api \"repos/$repo/actions/runs?head_sha=$expected&per_page=10\"\
-        \ > runs.json\nqueued=$(python3 - <<'PYCODE'\nimport json\nruns=json.load(open('runs.json'))['workflow_runs']\n\
-        ids=[str(r['id']) for r in runs if r['path']=='.github/workflows/deploy.yml'\
-        \ and r['event']=='push' and r['status'] in ['queued','pending','in_progress']]\n\
-        assert len(ids)<=1\nprint(ids[0] if ids else '')\nPYCODE\n)\nif [ -n \"$queued\"\
-        \ ]; then\n gh api \"repos/$repo/actions/runs/$queued/jobs\" > jobs.json\n\
-        \ python3 - <<'PYCODE'\nimport json\njobs=json.load(open('jobs.json'))['jobs']\n\
-        assert all(j['status']=='queued' or j.get('conclusion')=='skipped' for j in\
-        \ jobs), 'Only a fully unstarted automatic deployment may be replaced'\nPYCODE\n\
-        \ gh api -X POST \"repos/$repo/actions/runs/$queued/cancel\"\nfi\ngh api -X\
-        \ POST \"repos/$repo/actions/workflows/deploy.yml/dispatches\" --input - <<'JSON'\n\
-        {\"ref\":\"main\",\"inputs\":{\"mode\":\"deploy\",\"reuse_web_from_run\":\"\
-        44066261691\"}}\nJSON\n"
+      run: 'set -euo pipefail
+
+        python3 - <<''PYCODE''
+
+        import json,subprocess
+
+        def api(path):return json.loads(subprocess.check_output([''gh'',''api'',''repos/milaniumkz/domly/''+path]))
+
+        assert api(''git/ref/heads/main'')[''object''][''sha'']==''247451056aad92a61aa5d284afdb262866d41994''
+
+        r=api(''actions/runs/45025708205'')
+
+        assert r[''head_sha'']==''247451056aad92a61aa5d284afdb262866d41994'' and r[''conclusion'']==''success''
+        and r[''path'']==''.github/workflows/deploy.yml''
+
+        PYCODE
+
+        '
+    - name: Assert deployed booking rules using synthetic dates only
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: 'set -euo pipefail
+
+        umask 077
+
+        mkdir -p ~/.ssh
+
+        printf ''%s'' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
+
+        printf ''%s\n'' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+        cat > verify.js <<''VERIFY_JS''
+
+        const assert=require(''node:assert/strict'');
+
+        assert.equal(process.env.APP_RELEASE,''247451056aad92a61aa5d284afdb262866d41994'');
+
+        const {isBookableStart,validateBookingStart,fitsBookingHours}=require(''./dist/modules/bookingValidation'');
+
+        const before=Date.parse(''2026-11-22T20:59:59+05:00''),after=Date.parse(''2026-11-22T21:00:00+05:00'');
+
+        assert.equal(isBookableStart(''2026-11-23'',''08:00'',before),true);
+
+        assert.equal(isBookableStart(''2026-11-23'',''08:00'',after),false);
+
+        assert.equal(isBookableStart(''2026-11-23'',''12:00'',after),true);
+
+        assert.equal(isBookableStart(''2026-11-24'',''08:00'',after),true);
+
+        assert.throws(()=>validateBookingStart(''2026-11-23'',''08:00'',after),e=>e.code===''next_morning_booking_closed'');
+
+        assert.doesNotThrow(()=>validateBookingStart(''2026-11-23'',''12:00'',after));
+
+        assert.equal(fitsBookingHours(''18:00'',600),true);assert.equal(fitsBookingHours(''18:05'',180),false);
+
+        console.log(JSON.stringify({releaseMatches:true,cutoff21Verified:true,nextDayMorningBlocked:true,nextDayNoonAllowed:true,laterDaysUnaffected:true,lastStart18Preserved:true,customerDataRead:false,customerDataChanged:false}));
+
+        VERIFY_JS
+
+        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "test
+        \"\$(cat ''$DEPLOY_PATH/REVISION'')\" = 247451056aad92a61aa5d284afdb262866d41994 && cd ''$DEPLOY_PATH/current''
+        && docker compose -p domly-backend exec -T api node -" < verify.js
+
+        '
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
 
