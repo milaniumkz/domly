@@ -47,8 +47,7 @@ jobs:
 
         result.attempts=(await db.query(`SELECT started_at,finished_at,source,action,result,http_status,error_code,platform,app_version
         FROM tech_events WHERE user_id=$1 AND started_at>NOW()-INTERVAL ''1 day''
-        AND (action IN (''POST /api/v1/files'',''POST /api/v1/cleaner/verification'',''GET
-        /api/v1/cleaner/profile'') OR (source=''client'' AND result IN (''failure'',''interrupted'',''reported'')))
+        AND action IN (''POST /api/v1/files'',''POST /api/v1/cleaner/verification'')
         ORDER BY started_at DESC LIMIT 100`,[id])).rows;
 
         result.fileCounts=(await db.query(`SELECT COUNT(*)::int uploaded_last_day,COUNT(*)
