@@ -1994,6 +1994,26 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM files WHERE id=$1',[ownFile]);
       }
     });
+    await t.test('quality visit time reaches existing admin cards and details in Astana local time',async()=>{
+      const check=randomUUID();
+      try {
+        await db.query("INSERT INTO quality_check_requests(id,customer_id,requested_area,status) VALUES($1,$2,89,'pending')",[check,customer]);
+        const unscheduled=(await request('/admin/quality')).json.data.find((row:any)=>row.id===check);
+        assert.equal(unscheduled.preferredDate,null);assert.equal(unscheduled.preferredTime,null);
+        // The bot stores a timestamp; installed admin clients consume these two aliases.
+        await db.query("UPDATE quality_check_requests SET status='scheduled',scheduled_at='2039-01-04T21:30:00Z' WHERE id=$1",[check]);
+        const list=await request('/admin/quality');assert.equal(list.status,200);
+        const card=list.json.data.find((row:any)=>row.id===check);
+        const details=await request('/admin/quality-checks/'+check+'/details');assert.equal(details.status,200);
+        for(const row of [card,details.json.data.qualityCheck]){
+          assert.equal(row.preferredDate,'05.01.2039');assert.equal(row.preferredTime,'02:30');
+          assert.equal(new Date(row.scheduled_at).toISOString(),'2039-01-04T21:30:00.000Z');
+        }
+        assert.equal(card.review_status,'scheduled');assert.equal(card.status,'open');
+        assert.equal((await request('/admin/quality-checks/'+check+'/details','GET',undefined,true)).status,403);
+      } finally {await db.query('DELETE FROM quality_check_requests WHERE id=$1',[check]);}
+    });
+
     await t.test('concurrent admin assignments cannot double-book a cleaner',async()=>{
       const ids=[randomUUID(),randomUUID()];
       try {
