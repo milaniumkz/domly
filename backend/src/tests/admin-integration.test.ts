@@ -1230,6 +1230,46 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[[order,late]]);
       }
     });
+    await t.test('verification uploads survive reopening without sending drafts for review or approving a selfie',async()=>{
+      const worker=randomUUID(),other=randomUUID(),files:string[]=[];
+      for(const id of [worker,other])await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','pending')",[id,'verification-draft-'+id]);
+      await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[worker]);
+      const token=signAccessToken({id:worker,role:'cleaner',phone:'fixture'});
+      const profile=async(id=worker)=>(await (await fetch(base+'/cleaner/profile',{headers:{Authorization:'Bearer '+signAccessToken({id,role:'cleaner',phone:'fixture'})}})).json() as any).data.profile;
+      const upload=async(type:string)=>{
+        const pixels=Buffer.from(Array.from({length:640*480*3},(_,i)=>((Math.floor(i/3)%640)>>2)%2===((Math.floor(i/(640*3)))>>2)%2?210:40));
+        const bytes=await sharp(pixels,{raw:{width:640,height:480,channels:3}}).jpeg().toBuffer();
+        const form=new FormData();form.append('folder','cleaner_verification/'+worker);form.append('documentType',type);form.append('file',new Blob([new Uint8Array(bytes)],{type:'image/jpeg'}),'verification.jpg');
+        const response=await fetch(base+'/files',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});assert.equal(response.status,201);
+        const row=(await response.json() as any).data;files.push(row.id);return row;
+      };
+      try {
+        const first=await upload('selfie');
+        assert.ok((await profile()).selfieUrl);assert.equal((await profile()).profile_photo_url,null);
+        assert.equal((await profile(other)).selfieUrl,undefined);
+        assert.equal((await db.query('SELECT COUNT(*)::int n FROM cleaner_documents WHERE cleaner_id=$1',[worker])).rows[0].n,0);
+        assert.equal((await db.query('SELECT COUNT(*)::int n FROM notifications WHERE target_id=$1',[worker])).rows[0].n,0);
+        const second=await upload('selfie');assert.notEqual(second.id,first.id);
+        assert.equal((await db.query("SELECT file_id FROM cleaner_verification_drafts WHERE cleaner_id=$1 AND document_type='selfieUrl'",[worker])).rows[0].file_id,second.id);
+        const stored=(await db.query('SELECT public_url FROM files WHERE id=$1',[second.id])).rows[0].public_url;
+        assert.equal((await db.query('SELECT verification_status FROM cleaner_profiles WHERE user_id=$1',[worker])).rows[0].verification_status,'pending');
+        const invalid=await fetch(base+'/cleaner/verification',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({selfieUrl:stored,idDocumentUrl:'https://example.com/not-owned'})});assert.equal(invalid.status,400);
+        assert.equal((await db.query('SELECT COUNT(*)::int n FROM cleaner_verification_drafts WHERE cleaner_id=$1',[worker])).rows[0].n,1);
+        const sent=await fetch(base+'/cleaner/verification',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({selfieUrl:stored})});assert.equal(sent.status,201);
+        assert.equal((await db.query('SELECT COUNT(*)::int n FROM cleaner_verification_drafts WHERE cleaner_id=$1',[worker])).rows[0].n,0);
+        assert.ok((await profile()).selfieUrl);assert.equal((await profile()).profile_photo_url,null);
+        await db.query("UPDATE cleaner_documents SET status='rejected' WHERE cleaner_id=$1",[worker]);assert.equal((await profile()).selfieUrl,undefined);
+      } finally {
+        await db.query('DELETE FROM notifications WHERE target_id=$1',[worker]);
+        await db.query('DELETE FROM cleaner_documents WHERE cleaner_id=$1',[worker]);
+        await db.query('DELETE FROM cleaner_verification_drafts WHERE cleaner_id=$1',[worker]);
+        await db.query('DELETE FROM tech_files WHERE file_id=ANY($1::uuid[])',[files]);
+        await db.query('DELETE FROM files WHERE id=ANY($1::uuid[])',[files]);
+        await db.query('DELETE FROM cleaner_profiles WHERE user_id=$1',[worker]);
+        await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[worker,other]]);
+      }
+    });
+
     await t.test('uploads and photo reports use signed media across customer, Pro and admin without opening private storage',async()=>{
       const order=randomUUID();let uploaded:any;
       const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});

@@ -1,3 +1,4 @@
+import {saveCleanerVerificationDraft,cleanerVerificationFields} from '../../modules/cleanerVerificationDrafts';
 import {customerCrmRouter} from './customerCrm';
 import {refreshPackageUsage,validatePackagePeriod,bookingPeriod,packageBookingCapacity} from '../../modules/packageUsage';
 import {publicCatalogPackage, acceptPackageTerms, validatePackageBody, isPostRenovation} from '../../modules/packageTerms';
@@ -580,6 +581,9 @@ export function buildV1Router(deps: {
       [req.user!.id, env.minioBucket, objectKey, req.file.mimetype, req.file.size, publicUrl],
     )).rows);
     await registerUploadedFile(deps.db,req,row);
+    if(req.user!.role==='cleaner' && /^cleaner_(verification|documents)(\/|$)/.test(rawFolder)) {
+      await saveCleanerVerificationDraft(deps.db,req.user!.id,String(req.body.documentType??''),(row as any).id);
+    }
     ok(res, row, 201);
   }));
 
@@ -920,7 +924,7 @@ export function buildV1Router(deps: {
       `SELECT z.* FROM cleaner_zones cz JOIN service_zones z ON z.id=cz.zone_id WHERE cz.cleaner_id=$1 ORDER BY z.city, z.name_ru`,
       [req.user!.id],
     )).rows;
-    ok(res, { profile, documents, zones });
+    ok(res, { profile:profile?{...profile,...await cleanerVerificationFields(deps.db,req.user!.id)}:profile, documents, zones });
   }));
 
   router.patch('/cleaner/profile', auth(['cleaner']), asyncHandler(async (req, res) => {
@@ -1039,9 +1043,10 @@ export function buildV1Router(deps: {
       if (!file) throw new ApiError(400, 'invalid_document', 'Загрузите собственное фото или документ через приложение.');
       ownedDocuments.push({item, file});
     }
+    const submitted=await deps.db.transaction(async tx=>{
     const savedDocuments = [];
     for (const {item, file} of ownedDocuments) {
-      const document = first((await deps.db.query(
+      const document = first((await tx.query(
         `INSERT INTO cleaner_documents (cleaner_id, type, file_id, status)
          VALUES ($1,$2,$3,'pending')
          RETURNING *`,
@@ -1049,13 +1054,16 @@ export function buildV1Router(deps: {
       )).rows);
       savedDocuments.push({ file, document });
     }
-    const profile = first((await deps.db.query(
+    const profile = first((await tx.query(
       `INSERT INTO cleaner_profiles (user_id, registration_status, verification_status)
        VALUES ($1,'pending','pending')
        ON CONFLICT (user_id) DO UPDATE SET registration_status='pending', verification_status='pending', updated_at=NOW()
        RETURNING *`,
       [req.user!.id],
     )).rows);
+    await tx.query('DELETE FROM cleaner_verification_drafts WHERE cleaner_id=$1 AND file_id=ANY($2::uuid[])',[req.user!.id,ownedDocuments.map(({file})=>file.id)]);
+    return {profile,documents:savedDocuments};
+    });
     await deps.notifications.createAdminEvent({
       event: 'new_cleaner',
       titleRu: 'Новая уборщица на проверку',
@@ -1064,7 +1072,7 @@ export function buildV1Router(deps: {
       targetId: req.user!.id,
       dedupeKey: `cleaner-verification-${req.user!.id}`,
     });
-    ok(res, { ok: true, cleanerId: req.user!.id, status: 'pending', profile, documents: savedDocuments }, 201);
+    ok(res, { ok: true, cleanerId: req.user!.id, status: 'pending', ...submitted }, 201);
   }));
 
   router.get('/catalog/packages', asyncHandler(async (_req, res) => {
