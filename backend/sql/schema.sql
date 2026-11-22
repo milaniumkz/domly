@@ -877,6 +877,15 @@ CREATE TABLE IF NOT EXISTS bonus_transactions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Uploaded verification files survive screen/process restarts without entering admin review.
+CREATE TABLE IF NOT EXISTS cleaner_verification_drafts (
+ cleaner_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+ document_type TEXT NOT NULL CHECK(document_type IN ('selfieUrl','selfieWithIdUrl','idDocumentUrl','policeClearanceUrl','psychDispenserUrl','phthisiatricianUrl','residenceProofUrl')),
+ file_id UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(cleaner_id,document_type)
+);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
