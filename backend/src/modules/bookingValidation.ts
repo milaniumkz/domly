@@ -12,6 +12,13 @@ export function isBookableDate(date: string, now = Date.now()): boolean {
     date >= earliestBookingDate(now);
 }
 
+/** At 21:00 Astana time, tomorrow's starts before noon close for new bookings. */
+export function isBookableStart(date: string, time: string, now = Date.now()): boolean {
+  if (!isBookableDate(date, now) || !/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(time)) return false;
+  const local = new Date(now + 5 * 60 * 60 * 1000);
+  return date !== earliestBookingDate(now) || local.getUTCHours() < 21 || time >= '12:00';
+}
+
 /** Service dates are local to Kazakhstan (UTC+5), independently of server TZ. */
 export function validateBookingStart(date: unknown, time: unknown, now = Date.now()) {
   const day = String(date ?? '');
@@ -25,6 +32,9 @@ export function validateBookingStart(date: unknown, time: unknown, now = Date.no
   }
   if (day < earliestBookingDate(now)) {
     throw new ApiError(400, 'booking_from_tomorrow', 'Заказать уборку можно только с завтрашнего дня. Выберите другую дату.');
+  }
+  if (!isBookableStart(day, clock, now)) {
+    throw new ApiError(400, 'next_morning_booking_closed', 'После 21:00 по Астане уборку на завтра можно заказать с 12:00. Выберите более позднее время или другую дату.');
   }
   const timestamp = Date.parse(day + 'T' + (clock.length === 5 ? clock + ':00' : clock) + '+05:00');
   if (!Number.isFinite(timestamp) || timestamp <= now) {
