@@ -3121,7 +3121,10 @@ export function buildV1Router(deps: {
 
   router.get('/admin/quality-checks/:id/details', auth(['admin', 'superadmin']), asyncHandler(async (req, res) => {
     const qualityCheck = first((await deps.db.query(
-      `SELECT q.*, u.full_name AS customer_name, u.phone AS customer_phone, u.email AS customer_email,
+      `SELECT q.*,
+              to_char(q.scheduled_at AT TIME ZONE 'Asia/Almaty','DD.MM.YYYY') AS "preferredDate",
+              to_char(q.scheduled_at AT TIME ZONE 'Asia/Almaty','HH24:MI') AS "preferredTime",
+              u.full_name AS customer_name, u.phone AS customer_phone, u.email AS customer_email,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.area, ca.verified_area,
               ${areaPlanEvidenceColumns}
        FROM quality_check_requests q
@@ -4820,6 +4823,8 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
     addCommon('q', ['u.full_name', 'u.phone', 'ca.street', 'ca.house']);
     return done(
       `SELECT q.*, q.status AS review_status,
+              to_char(q.scheduled_at AT TIME ZONE 'Asia/Almaty','DD.MM.YYYY') AS "preferredDate",
+              to_char(q.scheduled_at AT TIME ZONE 'Asia/Almaty','HH24:MI') AS "preferredTime",
               CASE WHEN q.status IN ('pending','scheduled') THEN 'open' ELSE q.status::text END AS status,
               u.full_name AS customer_name, u.phone AS customer_phone,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.area, ca.verified_area,
