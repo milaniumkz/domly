@@ -1,4 +1,4 @@
-name: Send explicitly authorized one-time 43 KZT control invoice and trace acceptance
+name: Encrypted read-only trace of authorized 43 KZT control invoice
 'on':
   push:
     branches:
@@ -8,78 +8,82 @@ name: Send explicitly authorized one-time 43 KZT control invoice and trace accep
 permissions:
   contents: read
 jobs:
-  control:
+  audit:
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 5
-    concurrency:
-      group: support-kaspi-control-20261123
-      cancel-in-progress: false
+    timeout-minutes: 10
     steps:
-    - name: Create and dispatch one small standalone control invoice, then read its
-        status
+    - name: Read only control invoice technical metadata and encrypt locally before
+        upload
       env:
         VPS_HOST: ${{ secrets.VPS_HOST }}
         VPS_USER: ${{ secrets.VPS_USER }}
         DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
       run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
         \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
-        \ }}\" > ~/.ssh/known_hosts\ncat > control.js <<'CONTROL_JS'\nconst {Database}=require('./dist/infrastructure/db/Database');\n\
-        const {env}=require('./dist/common/env');\nconst {queueMoonInvoice,moonAiReady}=require('./dist/modules/moonAi');\n\
-        (async()=>{const db=new Database(process.env.DATABASE_URL);try{\nconst selector='5ffab48e3e5f2935c3e84a50fe61dde6412d3be882c059d57cee08b25411001e',operation='support-kaspi-control-20261123:'+selector;\n\
-        const endpoint=new URL(env.moonAiChannelUrl);\nif(!moonAiReady()||endpoint.protocol!=='https:'||!(endpoint.hostname==='mooonai.com'||endpoint.hostname.endsWith('.mooonai.com')))throw\
-        \ Error('invoice_integration_not_ready');\nconst prepared=await db.atomic(async()=>{\n\
-        \ await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[operation]);\n\
-        \ const users=(await db.query(\"SELECT id,regexp_replace(phone,'[^0-9]','','g')\
-        \ phone FROM app_users WHERE role='customer' AND deleted_at IS NULL AND encode(sha256(convert_to(regexp_replace(phone,'[^0-9]','','g'),'UTF8')),'hex')=$1\"\
-        ,[selector])).rows;\n if(users.length!==1)throw Error('target_account_not_unique');const\
-        \ user=users[0];\n const prior=(await db.query(\"SELECT p.id,o.id outbox_id\
+        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Pool}=require('pg');\n\
+        (async()=>{const db=new Pool({connectionString:process.env.DATABASE_URL});try{\n\
+        const operation='support-kaspi-control-20261123:5ffab48e3e5f2935c3e84a50fe61dde6412d3be882c059d57cee08b25411001e';\n\
+        const rows=(await db.query(\"SELECT p.id,p.status,p.external_id IS NOT NULL\
+        \ has_external_invoice,p.paid_at IS NOT NULL paid,p.created_at,o.provider_thread_id,o.state,o.failure_code\
         \ FROM payments p LEFT JOIN moon_ai_outbox o ON o.payment_id=p.id AND o.kind='invoice'\
-        \ WHERE p.customer_id=$1 AND p.payload->>'supportTestKey'=$2\",[user.id,operation])).rows;\n\
-        \ if(prior.length){if(prior.length!==1)throw Error('test_operation_not_unique');return\
-        \ {...prior[0],created:false};}\n const open=(await db.query(\"SELECT 1 FROM\
-        \ payments WHERE customer_id=$1 AND status='invoice_requested' AND amount=43\
-        \ AND regexp_replace(invoice_phone,'[^0-9]','','g')=$2 LIMIT 1\",[user.id,user.phone])).rows.length;\n\
-        \ if(open)throw Error('another_control_amount_invoice_already_open');\n const\
-        \ p=(await db.query(\"INSERT INTO payments(customer_id,provider,status,amount,bonus_amount,invoice_phone,payload)\
-        \ VALUES($1,'kaspi','pending',43,0,$2,$3) RETURNING *\",[user.id,user.phone,{kind:'support_test_invoice',supportTestKey:operation,createdBy:'support',description:'Контрольный\
-        \ счёт проверки выставления',noServiceEntitlement:true}])).rows[0];\n // An\
-        \ operator-issued standalone control invoice creates no package or service\
-        \ order.\n // Keep the usual payment identity, request text and callback contract.\n\
-        \ await queueMoonInvoice(db,p,'Контрольный счёт на 43 тенге для проверки выставления.\
-        \ Это не покупка пакета и не заказ уборки. Не списывай деньги автоматически.');\n\
-        \ const o=(await db.query(\"UPDATE moon_ai_outbox SET state='processing',started_at=NOW(),payload=payload||$2::jsonb\
-        \ WHERE payment_id=$1 AND kind='invoice' AND state='pending' RETURNING id,payload\"\
-        ,[p.id,{operatorInitiatedControl:true,apiDelivery:{phase:'claimed',attempt:1}}])).rows[0];\n\
-        \ if(!o)throw Error('control_lease_not_acquired');\n await db.query(\"INSERT\
-        \ INTO audit_logs(action,entity_type,entity_id,payload) VALUES('payment.control_invoice_requested','payment',$1,$2)\"\
-        ,[p.id,{source:'support',userAuthorized:true,amount:43,outboxId:o.id,noPackageOrOrderCreated:true}]);\n\
-        \ return {id:p.id,outbox_id:o.id,text:o.payload.text,created:true};\n});\n\
-        let result={testAmount:43,createdNew:prepared.created,networkAttempted:false,automaticPaymentPerformed:false,packageOrOrderCreated:false};\n\
-        if(prepared.created){\n const leased=await db.query(`UPDATE moon_ai_outbox\
-        \ SET payload=jsonb_set(payload,'{apiDelivery,phase}','\"http_started\"'::jsonb)\
-        \ WHERE id=$1 AND state='processing' RETURNING id`,[prepared.outbox_id]);\n\
-        \ if(!leased.rows.length)throw Error('control_lease_lost');\n const body={thread_id:prepared.outbox_id,source:env.moonAiSource+'_invoice',from_type:'user',message_type:'text',data:{text:prepared.text}};\n\
-        \ result.networkAttempted=true;\n try{\n  const response=await fetch(endpoint,{method:'POST',headers:{'X-API-Key':env.moonAiChannelApiKey,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});\n\
-        \  const value=await response.json().catch(()=>null);result.httpStatus=response.status;result.apiAccepted=response.ok&&value?.accepted===true&&value.external_thread_id===prepared.outbox_id;\n\
-        \  if(result.apiAccepted)await db.query(\"UPDATE moon_ai_outbox SET state='sent',provider_thread_id=$2,failure_code=NULL,finished_at=NOW()\
-        \ WHERE id=$1\",[prepared.outbox_id,value.thread_id??null]);\n  else await\
-        \ db.query(\"UPDATE moon_ai_outbox SET state=$2,failure_code=$3,finished_at=NOW()\
-        \ WHERE id=$1\",[prepared.outbox_id,response.ok||response.status>=500?'uncertain':'failed',response.ok?'invalid_acceptance':'http_'+response.status]);\n\
-        \ }catch(e){result.transportError=e.cause?.code||e.code||e.name;await db.query(\"\
-        UPDATE moon_ai_outbox SET state='uncertain',failure_code=$2,finished_at=NOW()\
-        \ WHERE id=$1\",[prepared.outbox_id,String(result.transportError).slice(0,100)]);}\n\
-        }\nconst state=async()=>{\n const p=(await db.query('SELECT status,external_id\
-        \ IS NOT NULL has_external_invoice,paid_at IS NOT NULL paid FROM payments\
-        \ WHERE id=$1',[prepared.id])).rows[0];\n const o=(await db.query('SELECT\
-        \ state,failure_code FROM moon_ai_outbox WHERE id=$1',[prepared.outbox_id])).rows[0];\n\
-        \ const callbacks=(await db.query(\"SELECT status FROM moon_ai_payment_callbacks\
-        \ WHERE payment_id=$1 ORDER BY received_at DESC LIMIT 5\",[prepared.id])).rows;\n\
-        \ return {paymentStatus:p.status,hasExternalInvoice:p.has_external_invoice,paid:p.paid,deliveryState:o?.state,deliveryFailure:o?.failure_code,callbackStatuses:callbacks.map(r=>r.status),invoiceConfirmed:callbacks.some(r=>r.status==='invoice_sent'||r.status==='paid')||p.paid};\n\
-        };\nfor(let i=0;i<6;i++){const status=await state();if(status.invoiceConfirmed||['failed','uncertain'].includes(status.deliveryState)){result={...result,...status};break;}await\
-        \ new Promise(r=>setTimeout(r,10000));}\nresult={...result,...await state()};console.log(JSON.stringify(result));\n\
-        }finally{await db.close();}})().catch(e=>{console.error('Control invoice failed:',e.code||e.message||e.name);process.exitCode=1;});\n\
-        CONTROL_JS\nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
-        \ \"cd '$DEPLOY_PATH/current' && timeout 150 docker compose -p domly-backend\
-        \ exec -T api node -\" < control.js\n"
-
+        \ WHERE p.payload->>'supportTestKey'=$1\",[operation])).rows;\nif(rows.length!==1)throw\
+        \ Error('test_not_unique');const p=rows[0];\nconst callbacks=(await db.query('SELECT\
+        \ status,resolution FROM moon_ai_payment_callbacks WHERE payment_id=$1 ORDER\
+        \ BY received_at DESC LIMIT 10',[p.id])).rows;\nconst result={testAmount:43,paymentStatus:p.status,paid:p.paid,hasExternalInvoice:p.has_external_invoice,deliveryState:p.state,deliveryFailure:p.failure_code,callbacks,invoiceConfirmed:callbacks.some(c=>c.status==='invoice_sent'||c.status==='paid')||p.paid};\n\
+        result.callbackHttp=(await db.query(\"SELECT result,http_status,error_code\
+        \ FROM tech_events WHERE fields->>'paymentId'=$1 AND started_at>=$2 AND action\
+        \ LIKE '%moon-ai%' ORDER BY started_at DESC LIMIT 10\",[p.id,p.created_at])).rows;\n\
+        if(!result.invoiceConfirmed&&p.provider_thread_id&&process.env.MOON_AI_REST_API_KEY){\n\
+        \ const base='https://core.mooonai.com/api/v1/organizations/'+process.env.MOON_AI_ORGANIZATION_ID+'/agents/'+process.env.MOON_AI_AGENT_ID;\n\
+        \ result.providerReads=[];\n for(const [label,path] of [['thread','/threads/'+encodeURIComponent(p.provider_thread_id)],['messages','/threads/'+encodeURIComponent(p.provider_thread_id)+'/messages?limit=50']]){\n\
+        \  const info={label};try{\n   const response=await fetch(base+path,{headers:{Authorization:'Bearer\
+        \ '+process.env.MOON_AI_REST_API_KEY},signal:AbortSignal.timeout(15000)});info.httpStatus=response.status;\n\
+        \   const value=await response.json().catch(()=>null);info.keys=value&&typeof\
+        \ value==='object'?Object.keys(value).filter(k=>/^[a-z_]{1,40}$/.test(k)).slice(0,30):[];\n\
+        \   const state=value?.status??value?.data?.status;if(['active','paused','completed','failed','error','processing','queued','running','stopped','closed'].includes(state))info.threadState=state;\n\
+        \   const messages=Array.isArray(value)?value:([value?.results,value?.messages,value?.data?.results,value?.data?.messages,value?.data].find(Array.isArray)??[]);\n\
+        \   info.messageCount=messages.length;\n   const checks={insufficient_balance:/insufficient\
+        \ (balance|funds|credits)|недостаточно (средств|баланса)|баланс.*(исчерпан|законч)/i,quota_exceeded:/quota.*exceed|квот.*(исчерпан|превыш)/i,rate_limit:/rate.?limit|too\
+        \ many requests/i,authentication_error:/unauthori[sz]ed|invalid.?api.?key|authentication\
+        \ failed|неверн.*(токен|ключ)/i,permission_denied:/permission denied|forbidden|доступ\
+        \ запрещен/i,tool_execution_error:/tool.*(failed|error)|ошибка.*(функци|интеграци)|failed\
+        \ to (create|execute)/i,invoice_creation_error:/не удалось (создать|выставить).*сч[её]т|invoice.*(failed|error)/i};\n\
+        \   const tools=new Set(),flags=new Set();let visited=0;\n   const walk=(v,depth=0)=>{if(depth>12||++visited>10000||v==null)return;\n\
+        \    if(Array.isArray(v)){for(const item of v)walk(item,depth+1);return;}\n\
+        \    if(typeof v==='object'){\n     if(['user','customer'].includes(v.from_type??v.role))return;\n\
+        \     if(['create_order','create_payment','set_info','get_info'].includes(v.function?.name))tools.add(v.function.name);\n\
+        \     if(['create_order','create_payment','set_info','get_info'].includes(v.name))tools.add(v.name);\n\
+        \     for(const [k,x] of Object.entries(v))if(!/token|secret|authorization|api.?key|phone|arguments|parameters/i.test(k))walk(x,depth+1);return;\n\
+        \    }\n    if(typeof v==='string')for(const [flag,pattern] of Object.entries(checks))if(pattern.test(v))flags.add(flag);\n\
+        \   };\n   walk(value);info.toolNames=[...tools];info.errorFlags=[...flags];\n\
+        \  }catch(e){info.error=e.cause?.code||e.code||e.name;}result.providerReads.push(info);\n\
+        \ }\n}\nconsole.log(JSON.stringify(result));\n}finally{await db.end();}})().catch(e=>{console.error(e.code||e.message||e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
+        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAtpV7I990CLe7oiiBN+m9\nX7TcrpQ9mOEII5AAl9M30pOTPqq1J5Y+nJlhPZAPzutFZVbF0la9iQAoH5/H7sf6\n\
+        9ceTX5eJ3qeSCcx+P0iCyKW2mcmi7ov7kaqOuqiagN8zDRdyknrAELVMaQICSBUs\nGs7yAUZblblJTPQLoV0ZycxNrSOSCNqqh3tOtIOrZBjJMclLfd53keDMsxhls0k+\n\
+        ivHkNJ0P3LyFkmYcDw6PEaMlFOsus5UK356pCMXPV8wpnef+44MEYiFV90cKRAY0\n35e+JjAbeEoUGHKi+HxGUc7h3HdIN4XyIUuHdgbpUZJeFocElNvIFmXulmqOzd/6\n\
+        0exu9EUkZmkqzGF9U5KouIuw82jRSTvfTYE0CJF+JYUE7QfN0ehWXjEJYPIo2/tM\nOjuZG5BnOJN+cDggJ5XLZrIGxJdz6P9KqfIbUuVuKHO/HA2ApgjVe2GvWPMgVbU+\n\
+        31f0te3sAhwXN8ieQDqw27LXBZt8MBRUefQxrfeakZb5AgMBAAE=\n-----END PUBLIC KEY-----\n\
+        OWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
+        $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-error-audit-XXXXXX')\n\
+        [[ \"$remote_dir\" =~ ^/tmp/domly-invoice-error-audit-[A-Za-z0-9]+$ ]]\ntrap\
+        \ 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ \"rm -rf -- $remote_dir\" >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key\
+        \ -o IdentitiesOnly=yes audit.js owner-public.pem \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
+        \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"\
+        set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && timeout 240 docker\
+        \ compose -p domly-backend exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
+        \ && openssl rand -out '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc\
+        \ -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
+        \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey\
+        \ '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256\
+        \ -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\nmkdir -m 700 -p\
+        \ encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: kaspi-control-trace-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
