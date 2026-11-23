@@ -1,4 +1,4 @@
-name: Clarify provider control trace error using encrypted authorized metadata
+name: Locate only the control invoice thread by its unique payment reference
 'on':
   push:
     branches:
@@ -42,14 +42,23 @@ jobs:
         \ try{const check=await fetch(base+'/channels/',{headers:{Authorization:'Bearer\
         \ '+credential},signal:AbortSignal.timeout(15000)});result.providerChannelReadStatus=check.status;await\
         \ check.body?.cancel();}catch(e){result.providerChannelReadError=e.cause?.code||e.code||e.name;}\n\
-        \n for(const [label,path] of [['thread','/threads/'+encodeURIComponent(p.provider_thread_id)],['messages','/threads/'+encodeURIComponent(p.provider_thread_id)+'/messages?limit=50']]){\n\
+        \n let readThreadId=p.provider_thread_id;\n try{\n  const lookup=await fetch(base+'/threads?'+new\
+        \ URLSearchParams({message_text:p.id,messengers:'api',limit:'5'}),{headers:{Authorization:'Bearer\
+        \ '+process.env.MOON_AI_REST_API_KEY},signal:AbortSignal.timeout(15000)});\n\
+        \  const value=await lookup.json().catch(()=>null);const list=Array.isArray(value?.results)?value.results:[];\n\
+        \  result.exactControlLookup={httpStatus:lookup.status,count:list.length,storedThreadIdMatched:list.some(r=>String(r.id)===p.provider_thread_id)};\n\
+        \  if(lookup.ok&&list.length===1){const item=list[0];readThreadId=String(item.id);result.exactControlLookup.threadState=item.status;result.exactControlLookup.hasError=item.has_error===true;if(['operator','blocked'].includes(item.pause_reason))result.exactControlLookup.pauseReason=item.pause_reason;}\n\
+        \ }catch(e){result.exactControlLookup={error:e.cause?.code||e.code||e.name};}\n\
+        \ result.controlPaymentId=p.id;result.providerThreadId=readThreadId;\n for(const\
+        \ [label,path] of [['thread','/threads/'+encodeURIComponent(readThreadId)],['messages','/threads/'+encodeURIComponent(readThreadId)+'/messages?limit=50']]){\n\
         \  const info={label};try{\n   const response=await fetch(base+path,{headers:{Authorization:'Bearer\
         \ '+process.env.MOON_AI_REST_API_KEY},signal:AbortSignal.timeout(15000)});info.httpStatus=response.status;\n\
         \   const value=await response.json().catch(()=>null);info.keys=value&&typeof\
         \ value==='object'?Object.keys(value).filter(k=>/^[a-z_]{1,40}$/.test(k)).slice(0,30):[];\n\
         \   const state=value?.status??value?.thread_status??value?.data?.status;if(['active','paused','completed','failed','error','processing','queued','running','stopped','closed'].includes(state))info.threadState=state;info.threadHasError=value?.has_error===true;if(['operator','blocked'].includes(value?.pause_reason))info.pauseReason=value.pause_reason;\n\
         \   const messages=Array.isArray(value)?value:([value?.results,value?.messages,value?.data?.results,value?.data?.messages,value?.data].find(Array.isArray)??[]);\n\
-        \   info.messageCount=messages.length;\n   const checks={internal_server_error:/internal\
+        \   info.messageCount=messages.length;\n   info.systemEvents=[...new Set(messages.map(m=>m.from_type).filter(t=>typeof\
+        \ t==='string'&&/^system_[a-z_]{1,70}$/.test(t)))];\n\n   const checks={internal_server_error:/internal\
         \ server error|internal_server_error/i,insufficient_balance:/insufficient\
         \ (balance|funds|credits)|недостаточно (средств|баланса)|баланс.*(исчерпан|законч)/i,quota_exceeded:/quota.*exceed|квот.*(исчерпан|превыш)/i,rate_limit:/rate.?limit|too\
         \ many requests/i,authentication_error:/unauthori[sz]ed|invalid.?api.?key|authentication\
