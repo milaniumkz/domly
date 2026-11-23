@@ -1,4 +1,4 @@
-name: Verify deployed 21:00 booking policy without customer data
+name: Send explicitly authorized one-time 43 KZT control invoice and trace acceptance
 'on':
   push:
     branches:
@@ -7,83 +7,79 @@ name: Verify deployed 21:00 booking policy without customer data
     - .github/workflows/dispatch-invoice-recovery-once.yml
 permissions:
   contents: read
-  actions: read
 jobs:
-  verify:
+  control:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 5
+    concurrency:
+      group: support-kaspi-control-20261123
+      cancel-in-progress: false
     steps:
-    - name: Require successful checked main deployment
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: 'set -euo pipefail
-
-        python3 - <<''PYCODE''
-
-        import json,subprocess
-
-        def api(path):return json.loads(subprocess.check_output([''gh'',''api'',''repos/milaniumkz/domly/''+path]))
-
-        assert api(''git/ref/heads/main'')[''object''][''sha'']==''247451056aad92a61aa5d284afdb262866d41994''
-
-        r=api(''actions/runs/45025708205'')
-
-        assert r[''head_sha'']==''247451056aad92a61aa5d284afdb262866d41994'' and r[''conclusion'']==''success''
-        and r[''path'']==''.github/workflows/deploy.yml''
-
-        PYCODE
-
-        '
-    - name: Assert deployed booking rules using synthetic dates only
+    - name: Create and dispatch one small standalone control invoice, then read its
+        status
       env:
         VPS_HOST: ${{ secrets.VPS_HOST }}
         VPS_USER: ${{ secrets.VPS_USER }}
         DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
-      run: 'set -euo pipefail
-
-        umask 077
-
-        mkdir -p ~/.ssh
-
-        printf ''%s'' "${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
-
-        printf ''%s\n'' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-
-        cat > verify.js <<''VERIFY_JS''
-
-        const assert=require(''node:assert/strict'');
-
-        assert.equal(process.env.APP_RELEASE,''247451056aad92a61aa5d284afdb262866d41994'');
-
-        const {isBookableStart,validateBookingStart,fitsBookingHours}=require(''./dist/modules/bookingValidation'');
-
-        const before=Date.parse(''2026-11-22T20:59:59+05:00''),after=Date.parse(''2026-11-22T21:00:00+05:00'');
-
-        assert.equal(isBookableStart(''2026-11-23'',''08:00'',before),true);
-
-        assert.equal(isBookableStart(''2026-11-23'',''08:00'',after),false);
-
-        assert.equal(isBookableStart(''2026-11-23'',''12:00'',after),true);
-
-        assert.equal(isBookableStart(''2026-11-24'',''08:00'',after),true);
-
-        assert.throws(()=>validateBookingStart(''2026-11-23'',''08:00'',after),e=>e.code===''next_morning_booking_closed'');
-
-        assert.doesNotThrow(()=>validateBookingStart(''2026-11-23'',''12:00'',after));
-
-        assert.equal(fitsBookingHours(''18:00'',600),true);assert.equal(fitsBookingHours(''18:05'',180),false);
-
-        console.log(JSON.stringify({releaseMatches:true,cutoff21Verified:true,nextDayMorningBlocked:true,nextDayNoonAllowed:true,laterDaysUnaffected:true,lastStart18Preserved:true,customerDataRead:false,customerDataChanged:false}));
-
-        VERIFY_JS
-
-        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "test
-        \"\$(cat ''$DEPLOY_PATH/REVISION'')\" = 247451056aad92a61aa5d284afdb262866d41994 && cd ''$DEPLOY_PATH/current''
-        && docker compose -p domly-backend exec -T api node -" < verify.js
-
-        '
-concurrency:
-  group: production-deploy
-  cancel-in-progress: false
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
+        \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
+        \ }}\" > ~/.ssh/known_hosts\ncat > control.js <<'CONTROL_JS'\nconst {Database}=require('./dist/infrastructure/db/Database');\n\
+        const {env}=require('./dist/common/env');\nconst {queueMoonInvoice,moonAiReady}=require('./dist/modules/moonAi');\n\
+        (async()=>{const db=new Database(process.env.DATABASE_URL);try{\nconst selector='5ffab48e3e5f2935c3e84a50fe61dde6412d3be882c059d57cee08b25411001e',operation='support-kaspi-control-20261123:'+selector;\n\
+        const endpoint=new URL(env.moonAiChannelUrl);\nif(!moonAiReady()||endpoint.protocol!=='https:'||!(endpoint.hostname==='mooonai.com'||endpoint.hostname.endsWith('.mooonai.com')))throw\
+        \ Error('invoice_integration_not_ready');\nconst prepared=await db.atomic(async()=>{\n\
+        \ await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[operation]);\n\
+        \ const users=(await db.query(\"SELECT id,regexp_replace(phone,'[^0-9]','','g')\
+        \ phone FROM app_users WHERE role='customer' AND deleted_at IS NULL AND encode(sha256(convert_to(regexp_replace(phone,'[^0-9]','','g'),'UTF8')),'hex')=$1\"\
+        ,[selector])).rows;\n if(users.length!==1)throw Error('target_account_not_unique');const\
+        \ user=users[0];\n const prior=(await db.query(\"SELECT p.id,o.id outbox_id\
+        \ FROM payments p LEFT JOIN moon_ai_outbox o ON o.payment_id=p.id AND o.kind='invoice'\
+        \ WHERE p.customer_id=$1 AND p.payload->>'supportTestKey'=$2\",[user.id,operation])).rows;\n\
+        \ if(prior.length){if(prior.length!==1)throw Error('test_operation_not_unique');return\
+        \ {...prior[0],created:false};}\n const open=(await db.query(\"SELECT 1 FROM\
+        \ payments WHERE customer_id=$1 AND status='invoice_requested' AND amount=43\
+        \ AND regexp_replace(invoice_phone,'[^0-9]','','g')=$2 LIMIT 1\",[user.id,user.phone])).rows.length;\n\
+        \ if(open)throw Error('another_control_amount_invoice_already_open');\n const\
+        \ p=(await db.query(\"INSERT INTO payments(customer_id,provider,status,amount,bonus_amount,invoice_phone,payload)\
+        \ VALUES($1,'kaspi','pending',43,0,$2,$3) RETURNING *\",[user.id,user.phone,{kind:'support_test_invoice',supportTestKey:operation,createdBy:'support',description:'Контрольный\
+        \ счёт проверки выставления',noServiceEntitlement:true}])).rows[0];\n // An\
+        \ operator-issued standalone control invoice creates no package or service\
+        \ order.\n // Keep the usual payment identity, request text and callback contract.\n\
+        \ await queueMoonInvoice(db,p,'Контрольный счёт на 43 тенге для проверки выставления.\
+        \ Это не покупка пакета и не заказ уборки. Не списывай деньги автоматически.');\n\
+        \ const o=(await db.query(\"UPDATE moon_ai_outbox SET state='processing',started_at=NOW(),payload=payload||$2::jsonb\
+        \ WHERE payment_id=$1 AND kind='invoice' AND state='pending' RETURNING id,payload\"\
+        ,[p.id,{operatorInitiatedControl:true,apiDelivery:{phase:'claimed',attempt:1}}])).rows[0];\n\
+        \ if(!o)throw Error('control_lease_not_acquired');\n await db.query(\"INSERT\
+        \ INTO audit_logs(action,entity_type,entity_id,payload) VALUES('payment.control_invoice_requested','payment',$1,$2)\"\
+        ,[p.id,{source:'support',userAuthorized:true,amount:43,outboxId:o.id,noPackageOrOrderCreated:true}]);\n\
+        \ return {id:p.id,outbox_id:o.id,text:o.payload.text,created:true};\n});\n\
+        let result={testAmount:43,createdNew:prepared.created,networkAttempted:false,automaticPaymentPerformed:false,packageOrOrderCreated:false};\n\
+        if(prepared.created){\n const leased=await db.query(`UPDATE moon_ai_outbox\
+        \ SET payload=jsonb_set(payload,'{apiDelivery,phase}','\"http_started\"'::jsonb)\
+        \ WHERE id=$1 AND state='processing' RETURNING id`,[prepared.outbox_id]);\n\
+        \ if(!leased.rows.length)throw Error('control_lease_lost');\n const body={thread_id:prepared.outbox_id,source:env.moonAiSource+'_invoice',from_type:'user',message_type:'text',data:{text:prepared.text}};\n\
+        \ result.networkAttempted=true;\n try{\n  const response=await fetch(endpoint,{method:'POST',headers:{'X-API-Key':env.moonAiChannelApiKey,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});\n\
+        \  const value=await response.json().catch(()=>null);result.httpStatus=response.status;result.apiAccepted=response.ok&&value?.accepted===true&&value.external_thread_id===prepared.outbox_id;\n\
+        \  if(result.apiAccepted)await db.query(\"UPDATE moon_ai_outbox SET state='sent',provider_thread_id=$2,failure_code=NULL,finished_at=NOW()\
+        \ WHERE id=$1\",[prepared.outbox_id,value.thread_id??null]);\n  else await\
+        \ db.query(\"UPDATE moon_ai_outbox SET state=$2,failure_code=$3,finished_at=NOW()\
+        \ WHERE id=$1\",[prepared.outbox_id,response.ok||response.status>=500?'uncertain':'failed',response.ok?'invalid_acceptance':'http_'+response.status]);\n\
+        \ }catch(e){result.transportError=e.cause?.code||e.code||e.name;await db.query(\"\
+        UPDATE moon_ai_outbox SET state='uncertain',failure_code=$2,finished_at=NOW()\
+        \ WHERE id=$1\",[prepared.outbox_id,String(result.transportError).slice(0,100)]);}\n\
+        }\nconst state=async()=>{\n const p=(await db.query('SELECT status,external_id\
+        \ IS NOT NULL has_external_invoice,paid_at IS NOT NULL paid FROM payments\
+        \ WHERE id=$1',[prepared.id])).rows[0];\n const o=(await db.query('SELECT\
+        \ state,failure_code FROM moon_ai_outbox WHERE id=$1',[prepared.outbox_id])).rows[0];\n\
+        \ const callbacks=(await db.query(\"SELECT status FROM moon_ai_payment_callbacks\
+        \ WHERE payment_id=$1 ORDER BY received_at DESC LIMIT 5\",[prepared.id])).rows;\n\
+        \ return {paymentStatus:p.status,hasExternalInvoice:p.has_external_invoice,paid:p.paid,deliveryState:o?.state,deliveryFailure:o?.failure_code,callbackStatuses:callbacks.map(r=>r.status),invoiceConfirmed:callbacks.some(r=>r.status==='invoice_sent'||r.status==='paid')||p.paid};\n\
+        };\nfor(let i=0;i<6;i++){const status=await state();if(status.invoiceConfirmed||['failed','uncertain'].includes(status.deliveryState)){result={...result,...status};break;}await\
+        \ new Promise(r=>setTimeout(r,10000));}\nresult={...result,...await state()};console.log(JSON.stringify(result));\n\
+        }finally{await db.close();}})().catch(e=>{console.error('Control invoice failed:',e.code||e.message||e.name);process.exitCode=1;});\n\
+        CONTROL_JS\nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ \"cd '$DEPLOY_PATH/current' && timeout 150 docker compose -p domly-backend\
+        \ exec -T api node -\" < control.js\n"
 
