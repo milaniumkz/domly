@@ -1,4 +1,4 @@
-name: Locate only the control invoice thread by its unique payment reference
+name: Recheck same authorized control invoice without any sends
 'on':
   push:
     branches:
@@ -30,7 +30,8 @@ jobs:
         \ WHERE p.payload->>'supportTestKey'=$1\",[operation])).rows;\nif(rows.length!==1)throw\
         \ Error('test_not_unique');const p=rows[0];\nconst callbacks=(await db.query('SELECT\
         \ status,resolution FROM moon_ai_payment_callbacks WHERE payment_id=$1 ORDER\
-        \ BY received_at DESC LIMIT 10',[p.id])).rows;\nconst result={testAmount:43,paymentStatus:p.status,paid:p.paid,hasExternalInvoice:p.has_external_invoice,deliveryState:p.state,deliveryFailure:p.failure_code,callbacks,invoiceConfirmed:callbacks.some(c=>c.status==='invoice_sent'||c.status==='paid')||p.paid};\n\
+        \ BY received_at DESC LIMIT 10',[p.id])).rows;\nconst result={checkedAt:new\
+        \ Date().toISOString(),testAmount:43,paymentStatus:p.status,paid:p.paid,hasExternalInvoice:p.has_external_invoice,deliveryState:p.state,deliveryFailure:p.failure_code,callbacks,invoiceConfirmed:callbacks.some(c=>c.status==='invoice_sent'||c.status==='paid')||p.paid};\n\
         result.callbackHttp=(await db.query(\"SELECT result,http_status,error_code\
         \ FROM tech_events WHERE fields->>'paymentId'=$1 AND started_at>=$2 AND action\
         \ LIKE '%moon-ai%' ORDER BY started_at DESC LIMIT 10\",[p.id,p.created_at])).rows;\n\
@@ -57,7 +58,8 @@ jobs:
         \ value==='object'?Object.keys(value).filter(k=>/^[a-z_]{1,40}$/.test(k)).slice(0,30):[];\n\
         \   const state=value?.status??value?.thread_status??value?.data?.status;if(['active','paused','completed','failed','error','processing','queued','running','stopped','closed'].includes(state))info.threadState=state;info.threadHasError=value?.has_error===true;if(['operator','blocked'].includes(value?.pause_reason))info.pauseReason=value.pause_reason;\n\
         \   const messages=Array.isArray(value)?value:([value?.results,value?.messages,value?.data?.results,value?.data?.messages,value?.data].find(Array.isArray)??[]);\n\
-        \   info.messageCount=messages.length;\n   info.systemEvents=[...new Set(messages.map(m=>m.from_type).filter(t=>typeof\
+        \   info.messageCount=messages.length;info.latestMessageAt=messages[0]?.at??null;\n\
+        \   info.systemEvents=[...new Set(messages.map(m=>m.from_type).filter(t=>typeof\
         \ t==='string'&&/^system_[a-z_]{1,70}$/.test(t)))];\n\n   const checks={internal_server_error:/internal\
         \ server error|internal_server_error/i,insufficient_balance:/insufficient\
         \ (balance|funds|credits)|недостаточно (средств|баланса)|баланс.*(исчерпан|законч)/i,quota_exceeded:/quota.*exceed|квот.*(исчерпан|превыш)/i,rate_limit:/rate.?limit|too\
