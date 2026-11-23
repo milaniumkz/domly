@@ -1,4 +1,4 @@
-name: Recheck same authorized control invoice without any sends
+name: Guarded single recheck of same control invoice after provider balance failure
 'on':
   push:
     branches:
@@ -11,80 +11,79 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 10
+    timeout-minutes: 7
     steps:
-    - name: Read only control invoice technical metadata and encrypt locally before
-        upload
+    - name: Retry same authorized test only after proving no prior invoice; encrypt
+        result
       env:
         VPS_HOST: ${{ secrets.VPS_HOST }}
         VPS_USER: ${{ secrets.VPS_USER }}
         DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
       run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
         \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
-        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Pool}=require('pg');\n\
-        (async()=>{const db=new Pool({connectionString:process.env.DATABASE_URL});try{\n\
+        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\nconst {Database}=require('./dist/infrastructure/db/Database');\n\
+        const {env}=require('./dist/common/env');\n(async()=>{const db=new Database(process.env.DATABASE_URL);try{\n\
         const operation='support-kaspi-control-20261123:5ffab48e3e5f2935c3e84a50fe61dde6412d3be882c059d57cee08b25411001e';\n\
-        const rows=(await db.query(\"SELECT p.id,p.status,p.external_id IS NOT NULL\
-        \ has_external_invoice,p.paid_at IS NOT NULL paid,p.created_at,o.provider_thread_id,o.state,o.failure_code\
-        \ FROM payments p LEFT JOIN moon_ai_outbox o ON o.payment_id=p.id AND o.kind='invoice'\
-        \ WHERE p.payload->>'supportTestKey'=$1\",[operation])).rows;\nif(rows.length!==1)throw\
-        \ Error('test_not_unique');const p=rows[0];\nconst callbacks=(await db.query('SELECT\
-        \ status,resolution FROM moon_ai_payment_callbacks WHERE payment_id=$1 ORDER\
-        \ BY received_at DESC LIMIT 10',[p.id])).rows;\nconst result={checkedAt:new\
-        \ Date().toISOString(),testAmount:43,paymentStatus:p.status,paid:p.paid,hasExternalInvoice:p.has_external_invoice,deliveryState:p.state,deliveryFailure:p.failure_code,callbacks,invoiceConfirmed:callbacks.some(c=>c.status==='invoice_sent'||c.status==='paid')||p.paid};\n\
-        result.callbackHttp=(await db.query(\"SELECT result,http_status,error_code\
-        \ FROM tech_events WHERE fields->>'paymentId'=$1 AND started_at>=$2 AND action\
-        \ LIKE '%moon-ai%' ORDER BY started_at DESC LIMIT 10\",[p.id,p.created_at])).rows;\n\
-        if(!result.invoiceConfirmed&&p.provider_thread_id&&process.env.MOON_AI_REST_API_KEY){\n\
-        \ const base='https://core.mooonai.com/api/v1/organizations/'+process.env.MOON_AI_ORGANIZATION_ID+'/agents/'+process.env.MOON_AI_AGENT_ID;\n\
-        \ result.providerReads=[];\n const credential=process.env.MOON_AI_REST_API_KEY;result.restCredentialStyle=credential.split('.').length===3?'jwt':'opaque';\n\
-        \ if(result.restCredentialStyle==='jwt'){try{const claim=JSON.parse(Buffer.from(credential.split('.')[1],'base64url').toString());result.restCredentialExpired=typeof\
-        \ claim.exp==='number'&&claim.exp*1000<=Date.now();}catch{result.restCredentialMalformed=true;}}\n\
-        \ try{const check=await fetch(base+'/channels/',{headers:{Authorization:'Bearer\
-        \ '+credential},signal:AbortSignal.timeout(15000)});result.providerChannelReadStatus=check.status;await\
-        \ check.body?.cancel();}catch(e){result.providerChannelReadError=e.cause?.code||e.code||e.name;}\n\
-        \n let readThreadId=p.provider_thread_id;\n try{\n  const lookup=await fetch(base+'/threads?'+new\
-        \ URLSearchParams({message_text:p.id,messengers:'api',limit:'5'}),{headers:{Authorization:'Bearer\
-        \ '+process.env.MOON_AI_REST_API_KEY},signal:AbortSignal.timeout(15000)});\n\
-        \  const value=await lookup.json().catch(()=>null);const list=Array.isArray(value?.results)?value.results:[];\n\
-        \  result.exactControlLookup={httpStatus:lookup.status,count:list.length,storedThreadIdMatched:list.some(r=>String(r.id)===p.provider_thread_id)};\n\
-        \  if(lookup.ok&&list.length===1){const item=list[0];readThreadId=String(item.id);result.exactControlLookup.threadState=item.status;result.exactControlLookup.hasError=item.has_error===true;if(['operator','blocked'].includes(item.pause_reason))result.exactControlLookup.pauseReason=item.pause_reason;}\n\
-        \ }catch(e){result.exactControlLookup={error:e.cause?.code||e.code||e.name};}\n\
-        \ result.controlPaymentId=p.id;result.providerThreadId=readThreadId;\n for(const\
-        \ [label,path] of [['thread','/threads/'+encodeURIComponent(readThreadId)],['messages','/threads/'+encodeURIComponent(readThreadId)+'/messages?limit=50']]){\n\
-        \  const info={label};try{\n   const response=await fetch(base+path,{headers:{Authorization:'Bearer\
-        \ '+process.env.MOON_AI_REST_API_KEY},signal:AbortSignal.timeout(15000)});info.httpStatus=response.status;\n\
-        \   const value=await response.json().catch(()=>null);info.keys=value&&typeof\
-        \ value==='object'?Object.keys(value).filter(k=>/^[a-z_]{1,40}$/.test(k)).slice(0,30):[];\n\
-        \   const state=value?.status??value?.thread_status??value?.data?.status;if(['active','paused','completed','failed','error','processing','queued','running','stopped','closed'].includes(state))info.threadState=state;info.threadHasError=value?.has_error===true;if(['operator','blocked'].includes(value?.pause_reason))info.pauseReason=value.pause_reason;\n\
-        \   const messages=Array.isArray(value)?value:([value?.results,value?.messages,value?.data?.results,value?.data?.messages,value?.data].find(Array.isArray)??[]);\n\
-        \   info.messageCount=messages.length;info.latestMessageAt=messages[0]?.at??null;\n\
-        \   info.systemEvents=[...new Set(messages.map(m=>m.from_type).filter(t=>typeof\
-        \ t==='string'&&/^system_[a-z_]{1,70}$/.test(t)))];\n\n   const checks={internal_server_error:/internal\
-        \ server error|internal_server_error/i,insufficient_balance:/insufficient\
-        \ (balance|funds|credits)|недостаточно (средств|баланса)|баланс.*(исчерпан|законч)/i,quota_exceeded:/quota.*exceed|квот.*(исчерпан|превыш)/i,rate_limit:/rate.?limit|too\
-        \ many requests/i,authentication_error:/unauthori[sz]ed|invalid.?api.?key|authentication\
-        \ failed|неверн.*(токен|ключ)/i,permission_denied:/permission denied|forbidden|доступ\
-        \ запрещен/i,tool_execution_error:/tool.*(failed|error)|ошибка.*(функци|интеграци)|failed\
-        \ to (create|execute)/i,invoice_creation_error:/не удалось (создать|выставить).*сч[её]т|invoice.*(failed|error)/i};\n\
-        \   const tools=new Set(),flags=new Set();let visited=0;\n   const walk=(v,depth=0)=>{if(depth>12||++visited>10000||v==null)return;\n\
-        \    if(Array.isArray(v)){for(const item of v)walk(item,depth+1);return;}\n\
-        \    if(typeof v==='object'){\n     if(['user','customer'].includes(v.from_type??v.role))return;\n\
-        \     if(['create_order','create_payment','set_info','get_info'].includes(v.function?.name))tools.add(v.function.name);\n\
-        \     if(['create_order','create_payment','set_info','get_info'].includes(v.name))tools.add(v.name);\n\
-        \     for(const [k,x] of Object.entries(v))if(!/token|secret|authorization|api.?key|phone|arguments|parameters/i.test(k))walk(x,depth+1);return;\n\
-        \    }\n    if(typeof v==='string')for(const [flag,pattern] of Object.entries(checks))if(pattern.test(v))flags.add(flag);\n\
-        \   };\n   walk(value);info.toolNames=[...tools];info.errorFlags=[...flags];\n\
-        \  }catch(e){info.error=e.cause?.code||e.code||e.name;}result.providerReads.push(info);\n\
-        \ }\n}\nconsole.log(JSON.stringify(result));\n}finally{await db.end();}})().catch(e=>{console.error(e.code||e.message||e.name);process.exitCode=1;});\n\
-        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
-        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAtpV7I990CLe7oiiBN+m9\nX7TcrpQ9mOEII5AAl9M30pOTPqq1J5Y+nJlhPZAPzutFZVbF0la9iQAoH5/H7sf6\n\
-        9ceTX5eJ3qeSCcx+P0iCyKW2mcmi7ov7kaqOuqiagN8zDRdyknrAELVMaQICSBUs\nGs7yAUZblblJTPQLoV0ZycxNrSOSCNqqh3tOtIOrZBjJMclLfd53keDMsxhls0k+\n\
-        ivHkNJ0P3LyFkmYcDw6PEaMlFOsus5UK356pCMXPV8wpnef+44MEYiFV90cKRAY0\n35e+JjAbeEoUGHKi+HxGUc7h3HdIN4XyIUuHdgbpUZJeFocElNvIFmXulmqOzd/6\n\
-        0exu9EUkZmkqzGF9U5KouIuw82jRSTvfTYE0CJF+JYUE7QfN0ehWXjEJYPIo2/tM\nOjuZG5BnOJN+cDggJ5XLZrIGxJdz6P9KqfIbUuVuKHO/HA2ApgjVe2GvWPMgVbU+\n\
-        31f0te3sAhwXN8ieQDqw27LXBZt8MBRUefQxrfeakZb5AgMBAAE=\n-----END PUBLIC KEY-----\n\
-        OWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
-        $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-error-audit-XXXXXX')\n\
+        const base='https://core.mooonai.com/api/v1/organizations/'+env.moonAiOrganizationId+'/agents/'+env.moonAiAgentId;\n\
+        const rows=(await db.query(\"SELECT p.*,o.id outbox_id,o.state delivery_state,o.payload\
+        \ delivery_payload FROM payments p JOIN moon_ai_outbox o ON o.payment_id=p.id\
+        \ AND o.kind='invoice' WHERE p.payload->>'supportTestKey'=$1\",[operation])).rows;\n\
+        if(rows.length!==1)throw Error('control_payment_not_unique');const initial=rows[0];\n\
+        if(Number(initial.amount)!==43||initial.order_id||initial.customer_package_id||initial.paid_at||initial.status!=='invoice_requested')throw\
+        \ Error('control_payment_guard');\nconst request=async path=>{const response=await\
+        \ fetch(base+path,{headers:{Authorization:'Bearer '+env.moonAiRestApiKey},signal:AbortSignal.timeout(15000)});if(!response.ok)throw\
+        \ Error('provider_read_http_'+response.status);return response.json();};\n\
+        const matches=await request('/threads?'+new URLSearchParams({message_text:initial.id,messengers:'api',limit:'5'}));\n\
+        if(matches.results?.length!==1)throw Error('control_thread_not_unique');const\
+        \ thread=matches.results[0];\nconst prior=await request('/threads/'+encodeURIComponent(thread.id)+'/messages?limit=50');\n\
+        if(!initial.delivery_payload.controlRetryAfterFunding20261123){\n if(prior.count!==2||!prior.results?.some(m=>m.from_type==='system_insufficient_balance')||prior.results.some(m=>!['user','system_insufficient_balance'].includes(m.from_type)))throw\
+        \ Error('provider_activity_changed_do_not_retry');\n}\nconst retry=await db.atomic(async()=>{\n\
+        \ await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[operation]);\n\
+        \ const payment=(await db.query('SELECT * FROM payments WHERE id=$1 FOR UPDATE',[initial.id])).rows[0];\n\
+        \ const out=(await db.query('SELECT * FROM moon_ai_outbox WHERE id=$1 FOR\
+        \ UPDATE',[initial.outbox_id])).rows[0];\n if(out.payload.controlRetryAfterFunding20261123)return\
+        \ {dispatch:false,retryAt:out.payload.controlRetryAfterFunding20261123};\n\
+        \ if(payment.status!=='invoice_requested'||payment.paid_at||Number(payment.amount)!==43||out.state!=='sent')throw\
+        \ Error('retry_payment_guard');\n if((await db.query('SELECT 1 FROM moon_ai_payment_callbacks\
+        \ WHERE payment_id=$1 LIMIT 1',[payment.id])).rows.length)throw Error('callback_already_exists_do_not_retry');\n\
+        \ const at=new Date().toISOString();\n await db.query(\"UPDATE payments SET\
+        \ invoice_requested_at=NOW(),updated_at=NOW() WHERE id=$1\",[payment.id]);\n\
+        \ await db.query(\"UPDATE moon_ai_outbox SET state='processing',started_at=NOW(),finished_at=NULL,payload=payload||$2::jsonb\
+        \ WHERE id=$1\",[out.id,{controlRetryAfterFunding20261123:at,apiDelivery:{phase:'http_started',attempt:2}}]);\n\
+        \ await db.query(\"INSERT INTO audit_logs(action,entity_type,entity_id,payload)\
+        \ VALUES('payment.control_invoice_recheck','payment',$1,$2)\",[payment.id,{source:'support',reason:'user_requested_recheck_after_confirmed_provider_balance_failure',previousNoInvoiceConfirmed:true,amount:43,samePayment:true,outboxId:out.id}]);\n\
+        \ return {dispatch:true,retryAt:at,text:out.payload.text};\n});\nconst result={checkedAt:new\
+        \ Date().toISOString(),testAmount:43,samePayment:true,retryDispatched:retry.dispatch,automaticPaymentPerformed:false};\n\
+        if(retry.dispatch){\n const endpoint=new URL(env.moonAiChannelUrl);if(endpoint.protocol!=='https:'||!(endpoint.hostname==='mooonai.com'||endpoint.hostname.endsWith('.mooonai.com')))throw\
+        \ Error('invalid_channel_url');\n try{\n  const response=await fetch(endpoint,{method:'POST',headers:{'X-API-Key':env.moonAiChannelApiKey,'Content-Type':'application/json'},body:JSON.stringify({thread_id:initial.outbox_id,source:env.moonAiSource+'_invoice',from_type:'user',message_type:'text',data:{text:retry.text}}),signal:AbortSignal.timeout(15000)});\n\
+        \  const value=await response.json().catch(()=>null);result.httpStatus=response.status;result.apiAccepted=response.ok&&value?.accepted===true&&value.external_thread_id===initial.outbox_id;\n\
+        \  await db.query(\"UPDATE moon_ai_outbox SET state=$2,provider_thread_id=COALESCE($3,provider_thread_id),failure_code=$4,finished_at=NOW()\
+        \ WHERE id=$1\",[initial.outbox_id,result.apiAccepted?'sent':response.ok||response.status>=500?'uncertain':'failed',result.apiAccepted?value.thread_id:null,result.apiAccepted?null:response.ok?'invalid_acceptance':'http_'+response.status]);\n\
+        \ }catch(e){result.transportError=e.cause?.code||e.code||e.name;await db.query(\"\
+        UPDATE moon_ai_outbox SET state='uncertain',failure_code=$2,finished_at=NOW()\
+        \ WHERE id=$1\",[initial.outbox_id,String(result.transportError).slice(0,100)]);}\n\
+        }\nfor(let i=0;i<9;i++){\n const callbacks=(await db.query('SELECT status,resolution\
+        \ FROM moon_ai_payment_callbacks WHERE payment_id=$1 ORDER BY received_at\
+        \ DESC LIMIT 10',[initial.id])).rows;\n const payment=(await db.query('SELECT\
+        \ status,paid_at IS NOT NULL paid FROM payments WHERE id=$1',[initial.id])).rows[0];\n\
+        \ result.paymentStatus=payment.status;result.paid=payment.paid;result.callbackStatuses=callbacks.map(c=>c.status);result.invoiceConfirmed=payment.paid||callbacks.some(c=>c.status==='invoice_sent'||c.status==='paid');\n\
+        \ if(result.invoiceConfirmed)break;\n if(result.transportError||result.apiAccepted===false)break;\n\
+        \ try{\n  const messages=await request('/threads/'+encodeURIComponent(thread.id)+'/messages?limit=50');\n\
+        \  const fresh=(messages.results??[]).filter(m=>Date.parse(m.at)>=Date.parse(retry.retryAt)-2000);\n\
+        \  result.newMessageCount=fresh.length;\n  result.newSystemEvents=[...new\
+        \ Set(fresh.map(m=>m.from_type).filter(t=>typeof t==='string'&&/^system_[a-z_]{1,70}$/.test(t)))];\n\
+        \  result.newToolCalls=fresh.filter(m=>['tool','tool_call'].includes(m.message_type)).length;\n\
+        \  if(result.newSystemEvents.some(t=>['system_insufficient_balance','system_usage_limit_exceeded','system_integration_error','system_kaspi_pay_payment_error','system_integration_disconnected','system_integration_phone_required'].includes(t)))break;\n\
+        \ }catch(e){result.providerReadError=e.message||e.name;}\n await new Promise(r=>setTimeout(r,10000));\n\
+        }\nconsole.log(JSON.stringify(result));\n}finally{await db.close();}})().catch(e=>{console.error('Guarded\
+        \ control retry:',e.code||e.message||e.name);process.exitCode=1;});\nAUDIT_JS\n\
+        cat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAtpV7I990CLe7oiiBN+m9\n\
+        X7TcrpQ9mOEII5AAl9M30pOTPqq1J5Y+nJlhPZAPzutFZVbF0la9iQAoH5/H7sf6\n9ceTX5eJ3qeSCcx+P0iCyKW2mcmi7ov7kaqOuqiagN8zDRdyknrAELVMaQICSBUs\n\
+        Gs7yAUZblblJTPQLoV0ZycxNrSOSCNqqh3tOtIOrZBjJMclLfd53keDMsxhls0k+\nivHkNJ0P3LyFkmYcDw6PEaMlFOsus5UK356pCMXPV8wpnef+44MEYiFV90cKRAY0\n\
+        35e+JjAbeEoUGHKi+HxGUc7h3HdIN4XyIUuHdgbpUZJeFocElNvIFmXulmqOzd/6\n0exu9EUkZmkqzGF9U5KouIuw82jRSTvfTYE0CJF+JYUE7QfN0ehWXjEJYPIo2/tM\n\
+        OjuZG5BnOJN+cDggJ5XLZrIGxJdz6P9KqfIbUuVuKHO/HA2ApgjVe2GvWPMgVbU+\n31f0te3sAhwXN8ieQDqw27LXBZt8MBRUefQxrfeakZb5AgMBAAE=\n\
+        -----END PUBLIC KEY-----\nOWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key\
+        \ -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-error-audit-XXXXXX')\n\
         [[ \"$remote_dir\" =~ ^/tmp/domly-invoice-error-audit-[A-Za-z0-9]+$ ]]\ntrap\
         \ 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
         \ \"rm -rf -- $remote_dir\" >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key\
@@ -105,4 +104,6 @@ jobs:
         path: encrypted-report/
         retention-days: 1
         if-no-files-found: error
-
+concurrency:
+  group: support-kaspi-control-20261123
+  cancel-in-progress: false
