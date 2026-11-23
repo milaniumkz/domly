@@ -1,0 +1,29 @@
+name: DomLY isolated local AI lab
+on:
+  push:
+    branches: [support/local-sales-lab-20261123]
+    paths: [.github/workflows/local-sales-lab.yml]
+permissions:
+  contents: read
+concurrency:
+  group: domly-isolated-ai-lab
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - name: Inspect resources for isolated model without reading business data
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SSH_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s' "$SSH_KEY" | base64 -d > ~/.ssh/lab-key
+          chmod 600 ~/.ssh/lab-key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/lab-key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" 'uname -m; nproc; free -m; df -h /opt; uptime; if command -v nvidia-smi >/dev/null; then nvidia-smi --query-gpu=name,memory.total --format=csv,noheader; else echo no-nvidia-gpu; fi; systemctl is-active caddy || true; if test -f /etc/caddy/Caddyfile; then awk "/domly\\.kz|^[[:space:]]*(root|reverse_proxy|file_server|handle|handle_path|import|redir)/" /etc/caddy/Caddyfile; fi'
