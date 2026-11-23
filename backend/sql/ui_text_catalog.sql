@@ -1047,7 +1047,7 @@ Email: milaniumkz@yandex.kz','1. Модель работы DomLY принима�
 ('t_a35e75f01c0b649a','Номер должен начинаться с +','Сан + әрпінен басталуы керек','Номер должен начинаться с +','["lib/utils/form_validator.dart"]'::jsonb),
 ('t_246c7b5e3a49acdc','Номер подтверждён: {p0}','Нөмір расталды: {p0}','Номер подтверждён: {p0}','["lib/screens/client/profile_screen.dart"]'::jsonb),
 ('t_4a2765349018da06','Номер телефона','Телефон нөмірі','Номер телефона','["lib/screens/common/kaspi_invoice_request_dialog.dart","lib/screens/phone_auth_screen.dart"]'::jsonb),
-('t_ed08277fb175c2d9','Норма: {p0} м² • Максимум: {p1} м²','','Норма: {p0} м² • Максимум: {p1} м²','["lib/screens/cleaner/cleaner_calendar_screen.dart"]'::jsonb),
+('t_ed08277fb175c2d9','Норма: {p0} м² • Максимум: {p1} м²','Қалыпты көлем: {p0} м² • Ең жоғары көлем: {p1} м²','Норма: {p0} м² • Максимум: {p1} м²','["lib/screens/cleaner/cleaner_calendar_screen.dart"]'::jsonb),
 ('t_2f283dd90282bf2e','Ноябрь','Қараша','Ноябрь','["lib/screens/cleaner/cleaner_calendar_screen.dart"]'::jsonb),
 ('t_cb7dc2dcca8b0fd5','Нужен номер KASPI.KZ','KASPI.KZ нөмірі керек','Нужен номер KASPI.KZ','["lib/screens/client/orders_screen.dart","lib/utils/order_display.dart"]'::jsonb),
 ('t_6fc84e2e624f22dd','Нужна авторизация','Авторизация қажет','Нужна авторизация','["lib/screens/cleaner/cleaner_orders_screen.dart","lib/screens/client/orders_screen.dart"]'::jsonb),
