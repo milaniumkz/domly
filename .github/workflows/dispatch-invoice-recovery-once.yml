@@ -1,4 +1,4 @@
-name: Encrypted read-only trace of authorized 43 KZT control invoice
+name: Clarify provider control trace error using encrypted authorized metadata
 'on':
   push:
     branches:
@@ -36,14 +36,21 @@ jobs:
         \ LIKE '%moon-ai%' ORDER BY started_at DESC LIMIT 10\",[p.id,p.created_at])).rows;\n\
         if(!result.invoiceConfirmed&&p.provider_thread_id&&process.env.MOON_AI_REST_API_KEY){\n\
         \ const base='https://core.mooonai.com/api/v1/organizations/'+process.env.MOON_AI_ORGANIZATION_ID+'/agents/'+process.env.MOON_AI_AGENT_ID;\n\
-        \ result.providerReads=[];\n for(const [label,path] of [['thread','/threads/'+encodeURIComponent(p.provider_thread_id)],['messages','/threads/'+encodeURIComponent(p.provider_thread_id)+'/messages?limit=50']]){\n\
+        \ result.providerReads=[];\n const credential=process.env.MOON_AI_REST_API_KEY;result.restCredentialStyle=credential.split('.').length===3?'jwt':'opaque';\n\
+        \ if(result.restCredentialStyle==='jwt'){try{const claim=JSON.parse(Buffer.from(credential.split('.')[1],'base64url').toString());result.restCredentialExpired=typeof\
+        \ claim.exp==='number'&&claim.exp*1000<=Date.now();}catch{result.restCredentialMalformed=true;}}\n\
+        \ try{const check=await fetch(base+'/channels/',{headers:{Authorization:'Bearer\
+        \ '+credential},signal:AbortSignal.timeout(15000)});result.providerChannelReadStatus=check.status;await\
+        \ check.body?.cancel();}catch(e){result.providerChannelReadError=e.cause?.code||e.code||e.name;}\n\
+        \n for(const [label,path] of [['thread','/threads/'+encodeURIComponent(p.provider_thread_id)],['messages','/threads/'+encodeURIComponent(p.provider_thread_id)+'/messages?limit=50']]){\n\
         \  const info={label};try{\n   const response=await fetch(base+path,{headers:{Authorization:'Bearer\
         \ '+process.env.MOON_AI_REST_API_KEY},signal:AbortSignal.timeout(15000)});info.httpStatus=response.status;\n\
         \   const value=await response.json().catch(()=>null);info.keys=value&&typeof\
         \ value==='object'?Object.keys(value).filter(k=>/^[a-z_]{1,40}$/.test(k)).slice(0,30):[];\n\
-        \   const state=value?.status??value?.data?.status;if(['active','paused','completed','failed','error','processing','queued','running','stopped','closed'].includes(state))info.threadState=state;\n\
+        \   const state=value?.status??value?.thread_status??value?.data?.status;if(['active','paused','completed','failed','error','processing','queued','running','stopped','closed'].includes(state))info.threadState=state;info.threadHasError=value?.has_error===true;if(['operator','blocked'].includes(value?.pause_reason))info.pauseReason=value.pause_reason;\n\
         \   const messages=Array.isArray(value)?value:([value?.results,value?.messages,value?.data?.results,value?.data?.messages,value?.data].find(Array.isArray)??[]);\n\
-        \   info.messageCount=messages.length;\n   const checks={insufficient_balance:/insufficient\
+        \   info.messageCount=messages.length;\n   const checks={internal_server_error:/internal\
+        \ server error|internal_server_error/i,insufficient_balance:/insufficient\
         \ (balance|funds|credits)|недостаточно (средств|баланса)|баланс.*(исчерпан|законч)/i,quota_exceeded:/quota.*exceed|квот.*(исчерпан|превыш)/i,rate_limit:/rate.?limit|too\
         \ many requests/i,authentication_error:/unauthori[sz]ed|invalid.?api.?key|authentication\
         \ failed|неверн.*(токен|ключ)/i,permission_denied:/permission denied|forbidden|доступ\
@@ -87,3 +94,4 @@ jobs:
         path: encrypted-report/
         retention-days: 1
         if-no-files-found: error
+
