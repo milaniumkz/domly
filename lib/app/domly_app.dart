@@ -50,6 +50,7 @@ import '../screens/cleaner/cleaner_checklist_screen.dart';
 import '../screens/cleaner/cleaner_dashboard_screen.dart';
 import '../screens/cleaner/cleaner_orders_screen.dart';
 import '../screens/cleaner/cleaner_profile_screen.dart';
+import '../screens/cleaner/cleaner_rating_screen.dart';
 import '../screens/cleaner/cleaner_verification_screen.dart';
 import '../screens/cleaner/cleaner_messages_screen.dart';
 import '../screens/phone_auth_screen.dart';
@@ -1209,6 +1210,7 @@ class _DomlyAppState extends State<DomlyApp> {
       case '/cleaner/earnings':
       case '/cleaner/bonus':
       case '/cleaner/checklist':
+      case '/cleaner/rating':
       case '/cleaner/profile':
       case '/cleaner/verification':
       case '/cleaner/orders':
@@ -1383,6 +1385,10 @@ class _DomlyAppState extends State<DomlyApp> {
           );
         }
         return CleanerChecklistScreen(orderId: checklistOrderId);
+      case '/cleaner/rating':
+        return CleanerRatingScreen(
+          focusReviewId: _routeParam(settings, 'reviewId'),
+        );
       case '/cleaner/profile':
         return const CleanerProfileScreen();
       case '/cleaner/verification':

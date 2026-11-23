@@ -1,4 +1,4 @@
-import {approvedWorkStartSql} from './workingSchedule';
+import {cleanerSlotAllowedSql,orderAreaSql,assertCleanerCapacity} from './cleanerCapacity';
 import {translateKazakh,sendLocalizedPush} from '../localization';
 import {scheduleSignupFollowup, scheduleCheckoutFollowup} from './moonAi';
 import { Queryable } from '../domain/repositories/UnitOfWork';
@@ -208,7 +208,7 @@ export class NotificationService {
         const active = (await this.db.query(`SELECT 1 FROM order_offers f JOIN service_orders o ON o.id=f.order_id
           WHERE f.order_id=$1 AND f.cleaner_id=$2 AND f.status='offered' AND f.expires_at>NOW()
           AND o.status IN ('pending_assignment','waiting_cleaner') AND o.cleaner_id IS NULL
-          AND ${approvedWorkStartSql('f.cleaner_id','o.scheduled_date','o.start_time')} LIMIT 1`,
+          AND ${cleanerSlotAllowedSql('f.cleaner_id','o.scheduled_date','o.start_time','o.end_time','o.estimated_duration_minutes',orderAreaSql('o'),'o.id')} LIMIT 1`,
           [input.targetId,input.userId])).rows.length;
         if (!active) return; // An offer can expire or be cancelled while delivery is queued.
       }
@@ -489,6 +489,7 @@ export class SchedulingService {
       if (Number(order.payable_amount) > 0) throw new ApiError(409, 'payment_required', 'Сначала оплатите допуслуги.');
       if (!['pending_assignment','waiting_cleaner','assigned'].includes(order.status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ нельзя назначить повторно.');
       if (order.status === 'assigned' && order.cleaner_id === cleanerId) return {order, changed: false};
+      await assertCleanerCapacity(tx,cleanerId,order.scheduled_date,order.start_time,order.end_time,Number(order.estimated_duration_minutes),orderId);
       const overlap = (await tx.query(`SELECT id FROM service_orders WHERE cleaner_id=$1
         AND status NOT IN ('cancelled','completed') AND scheduled_date+start_time<cleaning_end_at($2::date,$3::time,$4::time,(SELECT estimated_duration_minutes FROM service_orders WHERE id=$5)) AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$2::date+$3::time AND id<>$5 LIMIT 1`,
         [cleanerId,order.scheduled_date,order.start_time,order.end_time,orderId])).rows;
@@ -512,20 +513,20 @@ export class SchedulingService {
     return !overlap;
   }
 
-  async availableCleaners(date: string, startTime: string, endTime: string, zoneId?: string, queryable: Queryable = this.db, requireWorkingHours=false, durationMinutes?:number) {
-    const zoneJoin = zoneId ? `JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$5` : '';
-    const params = zoneId ? [date, startTime, endTime, durationMinutes ?? null, zoneId] : [date, startTime, endTime, durationMinutes ?? null];
+  async availableCleaners(date: string, startTime: string, endTime: string, zoneId?: string, queryable: Queryable = this.db, requireWorkingHours=false, durationMinutes?:number, area=0, excludeOrderId?:string) {
+    const zoneJoin = zoneId ? `JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$7` : '';
+    const params = [date,startTime,endTime,durationMinutes??null,area,excludeOrderId??null,...(zoneId?[zoneId]:[])];
     return (await queryable.query(
       `SELECT u.id, u.full_name, u.phone
        FROM app_users u
        JOIN cleaner_profiles cp ON cp.user_id=u.id
        ${zoneJoin}
-       WHERE u.role='cleaner' AND u.status='approved' AND cp.verification_status='approved'
-       ${requireWorkingHours ? 'AND '+approvedWorkStartSql('u.id','$1','$2') : ''}
+       WHERE u.role='cleaner' AND u.status='approved' AND cp.verification_status='approved' AND $5::numeric>=0
+       ${requireWorkingHours ? 'AND '+cleanerSlotAllowedSql('u.id','$1','$2','$3','$4','$5','$6') : ''}
        AND NOT EXISTS (
          SELECT 1 FROM service_orders o
          WHERE o.cleaner_id=u.id
-         AND o.status NOT IN ('cancelled','completed')
+         AND o.status NOT IN ('cancelled','completed') AND ($6::uuid IS NULL OR o.id<>$6)
          AND o.scheduled_date+o.start_time < cleaning_end_at($1::date,$2::time,$3::time,$4::int) AND cleaning_end_at(o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes)>$1::date+$2::time
        )
        ORDER BY u.created_at ASC, u.id ASC`,
@@ -533,7 +534,7 @@ export class SchedulingService {
     )).rows;
   }
 
-  async availableSlotCounts(date: string, slots: Array<{ startTime: string; endTime: string; durationMinutes?:number }>, zoneId?: string, options: {excludeOrderId?:string;cleanerId?:string} = {}) {
+  async availableSlotCounts(date: string, slots: Array<{ startTime: string; endTime: string; durationMinutes?:number }>, zoneId?: string, options: {excludeOrderId?:string;cleanerId?:string;area?:number} = {}) {
     if (!slots.length) return [];
     // Count all requested intervals in one round trip. Do not transfer every
     // cleaner's name/phone five times just to calculate array lengths.
@@ -541,10 +542,10 @@ export class SchedulingService {
       SELECT s.ordinal, (
         SELECT COUNT(*)::int FROM app_users u
         JOIN cleaner_profiles cp ON cp.user_id=u.id
-        ${zoneId ? 'JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$7' : ''}
+        ${zoneId ? 'JOIN cleaner_zones cz ON cz.cleaner_id=u.id AND cz.zone_id=$8' : ''}
         WHERE u.role='cleaner' AND u.status='approved' AND cp.verification_status='approved'
           AND ($6::uuid IS NULL OR u.id=$6)
-          AND ${approvedWorkStartSql('u.id','$1','s.starts')}
+          AND ${cleanerSlotAllowedSql('u.id','$1','s.starts','s.ends','s.minutes','$7','$5')}
           AND NOT EXISTS (
             SELECT 1 FROM service_orders o WHERE o.cleaner_id=u.id
               AND ($5::uuid IS NULL OR o.id<>$5)
@@ -554,14 +555,14 @@ export class SchedulingService {
       ) AS count
       FROM unnest($2::time[], $3::time[], $4::int[]) WITH ORDINALITY AS s(starts,ends,minutes,ordinal)
       ORDER BY s.ordinal`,
-    [date,slots.map(s=>s.startTime),slots.map(s=>s.endTime),slots.map(s=>s.durationMinutes??null),options.excludeOrderId??null,options.cleanerId??null,...(zoneId?[zoneId]:[])])).rows;
+    [date,slots.map(s=>s.startTime),slots.map(s=>s.endTime),slots.map(s=>s.durationMinutes??null),options.excludeOrderId??null,options.cleanerId??null,options.area??0,...(zoneId?[zoneId]:[])])).rows;
     return rows.map(row=>({...slots[Number(row.ordinal)-1],cleanersCount:row.count}));
   }
 
   async offerNextCleaner(orderId: string, excludeCleanerIds: string[] = [], ttlMinutes = 2) {
     return this.db.transaction(async client => {
       const order = first<any>((await client.query(
-        `SELECT * FROM service_orders WHERE id=$1 FOR UPDATE`,
+        `SELECT o.*,${orderAreaSql('o')} AS capacity_area FROM service_orders o WHERE o.id=$1 FOR UPDATE`,
         [orderId],
       )).rows);
       if (!order || Number(order.payable_amount ?? 0) > 0 || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status)) return null;
@@ -573,7 +574,8 @@ export class SchedulingService {
         [orderId],
       )).rows);
       if (active) return active;
-      const cleaners = await this.availableCleaners(order.scheduled_date, order.start_time, order.end_time, undefined, client,true,Number(order.estimated_duration_minutes));
+      const area=Number(order.capacity_area??order.area??0);
+      const cleaners = await this.availableCleaners(order.scheduled_date, order.start_time, order.end_time, undefined, client,true,Number(order.estimated_duration_minutes),area,orderId);
       const history = (await client.query<{cleaner_id: string}>(
         'SELECT cleaner_id FROM order_offers WHERE order_id=$1 ORDER BY created_at ASC, id ASC',
         [orderId],
@@ -608,7 +610,7 @@ export class SchedulingService {
        JOIN app_users u ON u.id=o.customer_id
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
        LEFT JOIN catalog_packages pkg ON pkg.id=o.package_id
-       WHERE ${approvedWorkStartSql('oo.cleaner_id','o.scheduled_date','o.start_time')} AND oo.cleaner_id=$1 AND oo.status='offered' AND oo.expires_at > NOW() AND o.cleaner_id IS NULL AND o.status IN ('pending_assignment','waiting_cleaner') AND o.payable_amount <= 0
+       WHERE ${cleanerSlotAllowedSql('oo.cleaner_id','o.scheduled_date','o.start_time','o.end_time','o.estimated_duration_minutes',orderAreaSql('o'),'o.id')} AND oo.cleaner_id=$1 AND oo.status='offered' AND oo.expires_at > NOW() AND o.cleaner_id IS NULL AND o.status IN ('pending_assignment','waiting_cleaner') AND o.payable_amount <= 0
        ORDER BY oo.created_at ASC`,
       [cleanerId],
     )).rows;
@@ -644,8 +646,7 @@ export class SchedulingService {
       const order=first<any>((await client.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[orderId])).rows);
       if(!order)throw new ApiError(404,'not_found','Заказ не найден.');
       if(Number(order.payable_amount ?? 0) > 0 || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status))throw new ApiError(409,'order_unavailable','Заказ уже недоступен для принятия.');
-      const working=(await client.query(`SELECT 1 WHERE ${approvedWorkStartSql('$1','$2','$3')}`,[cleanerId,order.scheduled_date,order.start_time])).rows[0];
-      if(!working)throw new ApiError(409,'outside_working_hours','Начало заказа не входит в утверждённый график работы.');
+      await assertCleanerCapacity(client,cleanerId,order.scheduled_date,order.start_time,order.end_time,Number(order.estimated_duration_minutes),orderId);
       const overlap=(await client.query(`SELECT id FROM service_orders WHERE cleaner_id=$1
         AND status NOT IN ('cancelled','completed') AND scheduled_date+start_time<cleaning_end_at($2::date,$3::time,$4::time,(SELECT estimated_duration_minutes FROM service_orders WHERE id=$5)) AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$2::date+$3::time AND id<>$5 LIMIT 1`,[cleanerId,order.scheduled_date,order.start_time,order.end_time,orderId])).rows;
       if(overlap.length)throw new ApiError(400,'cleaner_unavailable','Это время уже занято другим заказом.');

@@ -79,4 +79,22 @@ void main() {
             ?.arguments,
         {'orderId': 'order-4'});
   });
+  test(
+      'received cleaner reviews open rating, keeping review IDs out of order links',
+      () {
+    for (final payload in [
+      {'targetType': 'review', 'targetId': 'review-1'},
+      {'targetType': 'user', 'targetId': 'review:review-1'},
+    ]) {
+      final link = notificationDestination(payload, cleaner: true)!;
+      expect(link.route, '/cleaner/rating');
+      expect(link.arguments, {'reviewId': 'review-1'});
+      expect(link.arguments?.containsKey('orderId'), false);
+    }
+    expect(
+        notificationDestination({'targetType': 'user', 'targetId': 'user-1'},
+                cleaner: true)
+            ?.route,
+        '/cleaner/profile');
+  });
 }

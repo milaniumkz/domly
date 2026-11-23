@@ -1,3 +1,4 @@
+import {assertCleanerCapacity} from '../../modules/cleanerCapacity';
 import {saveCleanerVerificationDraft,cleanerVerificationFields} from '../../modules/cleanerVerificationDrafts';
 import {customerCrmRouter} from './customerCrm';
 import {refreshPackageUsage,validatePackagePeriod,bookingPeriod,packageBookingCapacity} from '../../modules/packageUsage';
@@ -1551,7 +1552,7 @@ export function buildV1Router(deps: {
     validateBookingHours(String(req.body.startTime), duration);
     const end = addMinutes(String(req.body.startTime), duration);
     if(req.botOrdering){
-      const free=await deps.scheduling.availableCleaners(String(req.body.date),String(req.body.startTime),end,undefined,deps.db,true,duration);
+      const free=await deps.scheduling.availableCleaners(String(req.body.date),String(req.body.startTime),end,undefined,deps.db,true,duration,Number(serviceAddress?.area??50));
       await checkBotBookingCapacity(deps.db,req.user!.id,String(req.body.date),String(req.body.startTime),duration,free.length);
       if(addonAmount>0)throw new ApiError(409,'addons_payment_required','Оплатите допуслуги в составе пакета до бронирования ботом.');
     }
@@ -1567,9 +1568,9 @@ export function buildV1Router(deps: {
       if (!reserved) throw new ApiError(400, 'no_cleanings_left', 'В пакете не осталось доступных уборок.');
       const created = first<{ id: string }>((await tx.query(
         `INSERT INTO service_orders
-         (customer_id, customer_package_id, address_id, package_id, scheduled_date, start_time, end_time, estimated_duration_minutes, addon_amount, total_amount, payable_amount, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$9,$10) RETURNING *`,
-        [req.user!.id, customerPackage.id, customerPackage.address_id, customerPackage.package_id, req.body.date, req.body.startTime, end, duration, addonAmount, initialStatus],
+         (customer_id, customer_package_id, address_id, package_id, scheduled_date, start_time, end_time, estimated_duration_minutes, addon_amount, total_amount, payable_amount, status, area)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$9,$10,$11) RETURNING *`,
+        [req.user!.id, customerPackage.id, customerPackage.address_id, customerPackage.package_id, req.body.date, req.body.startTime, end, duration, addonAmount, initialStatus,Number(serviceAddress?.area??50)],
       )).rows);
       for (const addon of addons) {
         await tx.query(
@@ -2093,6 +2094,7 @@ export function buildV1Router(deps: {
       validateBookingHours(String(startTime),duration);
       const endTime = addMinutes(String(startTime),duration);
       if (current.cleaner_id) {
+        await assertCleanerCapacity(tx,current.cleaner_id,date,String(startTime),endTime,duration,current.id);
         const overlap = first((await tx.query(`SELECT id FROM service_orders
           WHERE cleaner_id=$1 AND status NOT IN ('cancelled','completed')
           AND scheduled_date+start_time<cleaning_end_at($2::date,$3::time,$4::time,$6::int)
@@ -2324,12 +2326,14 @@ export function buildV1Router(deps: {
       ? Number(req.query.durationMinutes)
       : await estimateCleaningDurationMinutes(deps.db, req.query.addressId ? String(req.query.addressId) : undefined, addons);
     let editedOrder:any;
+    let slotAddressId=req.query.addressId?String(req.query.addressId):null;
     let tariff:any;
     let usage:any;
     if(req.query.orderId){
       editedOrder=first<any>((await deps.db.query('SELECT * FROM service_orders WHERE id=$1 AND customer_id=$2',[String(req.query.orderId),req.user!.id])).rows);
       if(!editedOrder)throw new ApiError(404,'not_found','Заказ не найден.');
       if(!['assigned','waiting_cleaner','pending_assignment','pending_payment'].includes(editedOrder.status))throw new ApiError(409,'order_not_editable','Этот заказ нельзя перенести.');
+      slotAddressId=editedOrder.address_id;
       tariff=await purchaseTariff(deps.db,editedOrder.customer_package_id);
       if(editedOrder.customer_package_id){
         usage=await refreshPackageUsage(deps.db,editedOrder.customer_package_id);
@@ -2352,6 +2356,7 @@ export function buildV1Router(deps: {
     }else if(req.query.customerPackageId){
       const purchase=first<any>((await deps.db.query('SELECT id,address_id,purchase_config FROM customer_packages WHERE id=$1 AND customer_id=$2',[String(req.query.customerPackageId),req.user!.id])).rows);
       if(!purchase)throw new ApiError(404,'not_found','Пакет не найден.');
+      slotAddressId=purchase.address_id;
       tariff=await purchaseTariff(deps.db,purchase.id);
       usage=await refreshPackageUsage(deps.db,purchase.id);
       const prepaid=await prepaidBookingAddons(deps.db,purchase);
@@ -2366,7 +2371,8 @@ export function buildV1Router(deps: {
       if(!period || new Date(period.ends_at).getTime()<=Date.now())return false;
       return packageBookingCapacity(usage.periods,date,start,editedOrder?.usage_period_id)>0;
     }).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration), durationMinutes: duration}));
-    const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined,{excludeOrderId:editedOrder?.id,cleanerId:editedOrder?.cleaner_id});
+    const slotArea=slotAddressId?Number((await deps.db.query('SELECT COALESCE(verified_area,area) area FROM customer_addresses WHERE id=$1',[slotAddressId])).rows[0]?.area??50):50;
+    const counts = await deps.scheduling.availableSlotCounts(date, intervals, req.query.zoneId ? String(req.query.zoneId) : undefined,{excludeOrderId:editedOrder?.id,cleanerId:editedOrder?.cleaner_id,area:slotArea});
     const available = counts.filter(slot => slot.cleanersCount > 0).map(slot => ({...slot, durationMinutes: duration}));
     return available;
   };
@@ -2523,10 +2529,22 @@ export function buildV1Router(deps: {
     }
     if (!updates.length) throw new ApiError(400, 'empty_update', 'Нет данных для обновления заказа.');
     values.push(new Date());
-    const row = first((await deps.db.query(
-      `UPDATE service_orders SET ${updates.join(', ')}, updated_at=$${values.length} WHERE id=$1 RETURNING *`,
-      values,
-    )).rows);
+    const row = await deps.db.transaction(async tx=>{
+      await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[bookingLock]);
+      const owner=(await tx.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[req.params.id])).rows[0];
+      if(owner?.cleaner_id)await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[owner.cleaner_id]);
+      const current=(await tx.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[req.params.id])).rows[0];
+      if(current&&current.cleaner_id!==owner?.cleaner_id)throw new ApiError(409,'order_changed','Назначение изменилось. Обновите заказ.');
+      const updated=first<any>((await tx.query(`UPDATE service_orders SET ${updates.join(', ')},updated_at=$${values.length} WHERE id=$1 RETURNING *`,values)).rows);
+      if(updated?.cleaner_id&&!['cancelled','completed'].includes(updated.status)&&['scheduledDate','startTime','endTime'].some(k=>Object.prototype.hasOwnProperty.call(req.body,k))){
+        await assertCleanerCapacity(tx,updated.cleaner_id,updated.scheduled_date,updated.start_time,updated.end_time,Number(updated.estimated_duration_minutes),updated.id);
+        const busy=(await tx.query(`SELECT id FROM service_orders o WHERE o.cleaner_id=$1 AND o.id<>$2 AND o.status NOT IN ('cancelled','completed')
+          AND o.scheduled_date+o.start_time<cleaning_end_at($3::date,$4::time,$5::time,$6::int)
+          AND cleaning_end_at(o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes)>$3::date+$4::time LIMIT 1`,[updated.cleaner_id,updated.id,updated.scheduled_date,updated.start_time,updated.end_time,updated.estimated_duration_minutes])).rows[0];
+        if(busy)throw new ApiError(409,'cleaner_unavailable','Это время уже занято другим заказом.');
+      }
+      return updated;
+    });
     if (!row) throw new ApiError(404, 'not_found', 'Заказ не найден. Обновите страницу.');
     await recordAudit('order.updated', 'order', String(req.params.id), { fields: Object.keys(req.body) }, req.user?.id);
     ok(res, row);
@@ -3900,7 +3918,14 @@ export function buildV1Router(deps: {
   router.post('/reviews', auth(['customer','cleaner']), asyncHandler(async (req,res)=>{
     const result=await saveOrderReview(deps.db,req.user!,req.body);
     if(result.created) {
-      await deps.notifications.create({userId:result.target,titleRu:'Новая оценка по заказу',bodyRu:`Оценка: ${result.review.rating} из 5.`,targetType:'review',targetId:result.review.id});
+      const toCleaner=req.user!.role==='customer';
+      const comment=String(result.review.comment??'').trim().slice(0,600);
+      // Older Pro apps already understand user -> profile. New apps recognize
+      // the review: reference and open the received review directly.
+      await deps.notifications.create({userId:result.target,titleRu:'Новая оценка по заказу',
+        bodyRu:`Оценка: ${result.review.rating} из 5.${comment?'\n'+comment:''}${toCleaner?'\nОтзывы: Профиль → Рейтинг.':''}`,
+        bodyKk:`Баға: 5 ішінен ${result.review.rating}.${comment?'\n'+comment:''}${toCleaner?'\nПікірлер: Профиль → Рейтинг.':''}`,
+        targetType:toCleaner?'user':'order',targetId:toCleaner?'review:'+result.review.id:String(req.body.orderId),dedupeKey:'received-review:'+result.review.id});
       await deps.notifications.createAdminEvent({event:'review',titleRu:'Новый отзыв',bodyRu:`Участник заказа оставил оценку ${result.review.rating}.`,targetType:'review',targetId:result.review.id,dedupeKey:`review-${result.review.id}`});
     }
     ok(res,result.review,result.created?201:200);

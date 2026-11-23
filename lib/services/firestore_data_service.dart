@@ -1864,7 +1864,7 @@ class FirestoreDataService {
           ((entry['totalMinutes'] as num?)?.toInt() ?? 0) + minutes;
     }
     for (final entry in grouped.values) {
-      entry['isFull'] = ((entry['totalSqm'] as num?)?.toDouble() ?? 0) >= 220;
+      entry['isFull'] = ((entry['totalSqm'] as num?)?.toDouble() ?? 0) >= 250;
     }
     return grouped.values.toList();
   }
@@ -8685,7 +8685,6 @@ class FirestoreDataService {
       return slotDate.year == targetDate.year &&
           slotDate.month == targetDate.month &&
           slotDate.day == targetDate.day &&
-          status != 'completed' &&
           status != 'cancelled' &&
           status != 'canceled';
     }).toList()
@@ -8717,10 +8716,11 @@ class FirestoreDataService {
         'limitHours': 8.5,
         'remainingMinutes': (510 - occupiedMinutes).clamp(0, 510),
         'totalArea': totalArea,
-        'limitArea': 220,
-        'remainingArea': ((220 - totalArea).clamp(0, 220) * 10).round() / 10,
+        'standardArea': 220,
+        'limitArea': 250,
+        'remainingArea': ((250 - totalArea).clamp(0, 250) * 10).round() / 10,
         'totalAddonCount': totalAddonCount,
-        'overbooked': occupiedMinutes > 510,
+        'overbooked': occupiedMinutes > 510 || totalArea > 250,
       },
       'slots': slots,
       'localFallback': true,

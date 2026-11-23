@@ -250,7 +250,7 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                               'p0': (summary['totalArea'] ?? 0)
                                                   .toString(),
                                               'p1':
-                                                  (summary['limitArea'] ?? 220)
+                                                  (summary['limitArea'] ?? 250)
                                                       .toString()
                                             }),
                                             style: TextStyle(
@@ -258,6 +258,22 @@ class _CleanerCalendarScreenState extends State<CleanerCalendarScreen> {
                                               color: DomlyPalette.foreground(
                                                   DomlyColors.muted),
                                             ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Норма: {p0} м² • Максимум: {p1} м²'
+                                                .tr(params: {
+                                              'p0': (summary['standardArea'] ??
+                                                      220)
+                                                  .toString(),
+                                              'p1':
+                                                  (summary['limitArea'] ?? 250)
+                                                      .toString(),
+                                            }),
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: DomlyPalette.foreground(
+                                                    DomlyColors.muted)),
                                           ),
                                           const SizedBox(height: 2),
                                           Text(

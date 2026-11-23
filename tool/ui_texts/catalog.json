@@ -7369,6 +7369,13 @@
     ]
   },
   {
+    "key": "t_ed08277fb175c2d9",
+    "source": "Норма: {p0} м² • Максимум: {p1} м²",
+    "locations": [
+      "lib/screens/cleaner/cleaner_calendar_screen.dart"
+    ]
+  },
+  {
     "key": "t_2f283dd90282bf2e",
     "source": "Ноябрь",
     "locations": [
