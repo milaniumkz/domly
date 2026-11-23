@@ -1,3 +1,5 @@
+import {assertCleanerCapacity} from './cleanerCapacity';
+import {bookingLock} from './botBookingCapacity';
 import {customerTierDiscount,discountedServicePrice} from './customerProgress';
 import {durationAfterAddonChange} from './cleaningDuration';
 import {notifySpecialistAddons} from './specialistAddons';
@@ -9,8 +11,12 @@ import { ApiError } from '../common/api';
 export async function updateOrderAddons(db: Database, orderId: string, customerId: string, desired: any[],notifications?:NotificationService) {
   if (!Array.isArray(desired) || desired.length>100) throw new ApiError(400,'invalid_addons','Проверьте список услуг.');
   return db.atomic(()=>db.transaction(async tx => {
+    await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[bookingLock]);
+    const owner=(await tx.query('SELECT cleaner_id FROM service_orders WHERE id=$1 AND customer_id=$2',[orderId,customerId])).rows[0];
+    if(owner?.cleaner_id)await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[owner.cleaner_id]);
     const order = first<any>((await tx.query('SELECT * FROM service_orders WHERE id=$1 AND customer_id=$2 FOR UPDATE',[orderId,customerId])).rows);
     if (!order) throw new ApiError(404,'order_not_found','Заказ не найден.');
+    if(order.cleaner_id!==owner?.cleaner_id)throw new ApiError(409,'order_changed','Назначение изменилось. Обновите заказ.');
     if (['completed','cancelled'].includes(order.status)) throw new ApiError(409,'order_not_editable','Этот заказ нельзя изменить.');
     const invoice = first((await tx.query("SELECT id FROM payments WHERE order_id=$1 AND status IN ('pending','invoice_requested') LIMIT 1",[orderId])).rows);
     if (invoice) throw new ApiError(409,'pending_invoice','Сначала оплатите или отмените выставленный счёт.');
@@ -43,6 +49,7 @@ export async function updateOrderAddons(db: Database, orderId: string, customerI
     const oldDuration = existing.filter(row=>row.requires_customer_approval!==true).reduce((sum,row)=>sum+Number(row.duration_minutes),0);
     const duration = durationAfterAddonChange(order,oldDuration,Number(totals.duration));
     if (order.cleaner_id) {
+      await assertCleanerCapacity(tx,order.cleaner_id,order.scheduled_date,order.start_time,order.end_time,duration,orderId);
       const overlap=first((await tx.query(`SELECT id FROM service_orders WHERE cleaner_id=$1
         AND id<>$3 AND status NOT IN ('cancelled','completed') AND scheduled_date+start_time<($2::date+$4::time+$5::int*INTERVAL '1 minute')
         AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$2::date+$4::time LIMIT 1`,[order.cleaner_id,order.scheduled_date,order.id,order.start_time,duration])).rows);

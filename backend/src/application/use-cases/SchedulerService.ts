@@ -1,3 +1,4 @@
+import {cleanerAreaNorm,cleanerDailyAreaMaximum} from '../../modules/cleanerCapacity';
 import {cleaningDurationMinutes} from '../../modules/cleaningDuration';
 import { Cleaner, CleanerDayLoad, CleanerMonthlyStats } from '../../domain/entities/Cleaner';
 import { FairnessScoreSnapshot } from '../../domain/entities/Assignment';
@@ -76,7 +77,7 @@ export class SchedulerService {
     const projectedApartments = cleaner.monthlyAssignedApartments + 1;
     const dayProjectedHours = currentDayLoad.assignedHours + order.estimatedDurationHours;
     const dayProjectedArea = currentDayLoad.assignedArea + order.area;
-    const fitsDailyLimit = dayProjectedHours <= cleaner.dailyWorkLimitHours;
+    const fitsDailyLimit = dayProjectedHours <= cleaner.dailyWorkLimitHours && dayProjectedArea <= cleanerDailyAreaMaximum;
     const fitsTimeWindow = !currentDayLoad.intervals.some((interval) =>
       overlaps(interval.startTime, interval.endTime, order.startTime, order.endTime)
     );
@@ -91,10 +92,10 @@ export class SchedulerService {
       ? 0
       : projectedApartments / monthContext.averageApartments;
 
-    // Daily target is soft: under 200 m² gets a bonus, overfilled days get penalized.
-    const dailyTargetGap = Math.max(200 - dayProjectedArea, 0);
-    const dailyTargetScore = dayProjectedArea >= 200
-      ? 1 + ((dayProjectedArea - 200) / 200)
+    // 220 m² is the soft target; 250 m² is the hard ceiling.
+    const dailyTargetGap = Math.max(cleanerAreaNorm - dayProjectedArea, 0);
+    const dailyTargetScore = dayProjectedArea >= cleanerAreaNorm
+      ? 1 + ((dayProjectedArea - cleanerAreaNorm) / cleanerAreaNorm)
       : 0.7 - Math.min(dailyTargetGap / 400, 0.4);
 
     const districtScore = cleaner.preferredZones.includes(order.district) ? 0.75 : 1.15;

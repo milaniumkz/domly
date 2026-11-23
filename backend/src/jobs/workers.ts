@@ -1,6 +1,6 @@
 import {queuePackageRenewals} from '../modules/packageRenewal';
 import {processPackageUsage} from '../modules/packageUsage';
-import {approvedWorkStartSql} from '../modules/workingSchedule';
+import {cleanerSlotAllowedSql,orderAreaSql} from '../modules/cleanerCapacity';
 import {anonymizeExpiredAccountDeletions} from '../modules/accountDeletion';
 import {processNotificationDeliveries} from '../modules/notificationDelivery';
 import {translateKazakh,sendLocalizedPush} from '../localization';
@@ -82,7 +82,7 @@ workers.push(new Worker('cleaner-alarms', async (job) => {
   const active=(await db.query(`SELECT 1 FROM order_offers f JOIN service_orders o ON o.id=f.order_id
     WHERE f.order_id=$1 AND f.cleaner_id=$2 AND f.status='offered' AND f.expires_at>NOW()
     AND o.status IN ('pending_assignment','waiting_cleaner') AND o.cleaner_id IS NULL
-    AND ${approvedWorkStartSql('f.cleaner_id','o.scheduled_date','o.start_time')} LIMIT 1`,[orderId,cleanerId])).rows.length;
+    AND ${cleanerSlotAllowedSql('f.cleaner_id','o.scheduled_date','o.start_time','o.end_time','o.estimated_duration_minutes',orderAreaSql('o'),'o.id')} LIMIT 1`,[orderId,cleanerId])).rows.length;
   if(!active)return;
 
   await sendLocalizedPush(db,fcm,{userId:cleanerId,titleRu:titleRu ?? 'Новый заказ',bodyRu:bodyRu ?? 'Вам поступил новый заказ. Откройте приложение.'},{

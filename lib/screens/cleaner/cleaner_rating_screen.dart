@@ -7,7 +7,8 @@ import '../../ui/domly_ui.dart';
 import '../../localization/translation_controller.dart';
 
 class CleanerRatingScreen extends StatefulWidget {
-  const CleanerRatingScreen({super.key});
+  const CleanerRatingScreen({super.key, this.focusReviewId});
+  final String? focusReviewId;
 
   @override
   State<CleanerRatingScreen> createState() => _CleanerRatingScreenState();
@@ -91,7 +92,12 @@ class _CleanerRatingScreenState extends State<CleanerRatingScreen> {
                           ),
                         );
                       }
-                      final reviews = reviewsSnap.data ?? [];
+                      final reviews = List<Map<String, dynamic>>.from(
+                          reviewsSnap.data ?? []);
+                      final focused = reviews
+                          .indexWhere((r) => r['id'] == widget.focusReviewId);
+                      if (focused > 0)
+                        reviews.insert(0, reviews.removeAt(focused));
                       final stats = _computeStats(reviews, profile);
                       return ListView(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),

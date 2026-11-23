@@ -1672,6 +1672,21 @@ RETURNS TIMESTAMP LANGUAGE SQL IMMUTABLE AS $$
  ELSE (end_clock-start_clock)+CASE WHEN end_clock<start_clock THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END END
 $$;
 
+-- One policy for customer slot previews, offers and atomic assignment checks.
+-- Completed visits still consume the day's area. Exclude the edited visit once.
+CREATE OR REPLACE FUNCTION domly_cleaner_slot_allowed(cleaner UUID,service_day DATE,start_clock TIME,end_clock TIME,duration_minutes INTEGER,incoming_area NUMERIC,exclude_order UUID DEFAULT NULL)
+RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
+ SELECT incoming_area>=0 AND incoming_area<=250
+ AND EXISTS(SELECT 1 FROM cleaner_working_days wd JOIN cleaner_work_schedule_requests wr ON wr.id=wd.request_id
+   WHERE wr.status='approved' AND wd.cleaner_id=cleaner AND wd.work_date=service_day
+   AND wd.start_time<=start_clock AND wd.end_time>=start_clock
+   AND GREATEST(cleaning_end_at(service_day,start_clock,end_clock,duration_minutes),cleaning_end_at(service_day,start_clock,end_clock,0))<=service_day+wd.end_time+INTERVAL '2 hours')
+ AND incoming_area+COALESCE((SELECT SUM(COALESCE(NULLIF(o.area,0),a.verified_area,a.area,0))
+   FROM service_orders o LEFT JOIN customer_addresses a ON a.id=o.address_id
+   WHERE o.cleaner_id=cleaner AND o.scheduled_date=service_day
+   AND o.status NOT IN ('cancelled','draft') AND (exclude_order IS NULL OR o.id<>exclude_order)),0)<=250
+$$;
+
 -- Correct future estimates to the services actually attached to each visit.
 DO $$
 DECLARE changed_count INTEGER;
@@ -1984,3 +1999,12 @@ CREATE INDEX IF NOT EXISTS admin_customer_notes_customer_idx ON admin_customer_n
 ALTER TABLE moon_ai_outbox DROP CONSTRAINT IF EXISTS moon_ai_outbox_kind_check;
 ALTER TABLE moon_ai_outbox ADD CONSTRAINT moon_ai_outbox_kind_check
  CHECK(kind IN ('invoice','message','abandoned_checkout','inactive_signup','inactive_install','area_verification','address_reverification','package_renewal'));
+
+
+-- Backfill received-review notification links for already installed Pro clients.
+UPDATE notifications n SET target_type='user',target_id='review:'||r.id::text,
+ body_ru='Оценка: '||r.rating::text||' из 5.'||CASE WHEN NULLIF(trim(r.comment),'') IS NULL THEN '' ELSE E'\n'||left(trim(r.comment),600) END||E'\nОтзывы: Профиль → Рейтинг.',
+ body_kk='Баға: 5 ішінен '||r.rating::text||'.'||CASE WHEN NULLIF(trim(r.comment),'') IS NULL THEN '' ELSE E'\n'||left(trim(r.comment),600) END||E'\nПікірлер: Профиль → Рейтинг.'
+FROM reviews r WHERE n.target_type='review' AND n.target_id=r.id::text
+ AND n.user_id=r.cleaner_id AND r.author_role='customer';
+-- End received-review notification backfill.

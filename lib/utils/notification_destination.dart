@@ -55,6 +55,12 @@ NotificationDestination? notificationDestination(Map<String, dynamic> item,
     return NotificationDestination(
         cleaner ? '/cleaner/earnings' : '/client/payment-history');
   }
+  if (cleaner &&
+      (type == 'review' || (type == 'user' && id.startsWith('review:')))) {
+    return NotificationDestination('/cleaner/rating', {
+      'reviewId': id.startsWith('review:') ? id.substring(7) : id,
+    });
+  }
   if (type == 'profile_photo')
     return NotificationDestination(cleaner ? '/cleaner/profile' : orders);
   if ({'cleaner', 'cleaner_profile', 'verification_status'}.contains(type)) {

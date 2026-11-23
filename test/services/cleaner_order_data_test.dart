@@ -134,6 +134,8 @@ void main() {
     expect(summary['occupiedHours'], '5.7');
     expect(summary['remainingMinutes'], 171);
     expect(summary['totalArea'], 155.7);
-    expect(summary['remainingArea'], 64.3);
+    expect(summary['standardArea'], 220);
+    expect(summary['limitArea'], 250);
+    expect(summary['remainingArea'], 94.3);
   });
 }

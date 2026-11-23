@@ -43,6 +43,10 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     const res=await fetch(base+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
     return {status:res.status,json:await res.json() as any};
   }
+  async function approvedFixtureShift(worker:string,date:string,start='08:00',end='18:00') {
+    const r=(await db.query("INSERT INTO cleaner_work_schedule_requests(cleaner_id,week_start,days,status) VALUES($1,date_trunc('week',$2::date)::date,'[]','approved') RETURNING id",[worker,date])).rows[0];
+    await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(cleaner_id,work_date) DO UPDATE SET start_time=EXCLUDED.start_time,end_time=EXCLUDED.end_time,request_id=EXCLUDED.request_id",[worker,date,start,end,r.id]);
+  }
   try {
     for(const [id,role] of [[admin,'superadmin'],[cleaner,'cleaner'],[customer,'customer']])await db.query("INSERT INTO app_users(id,phone,role,status,full_name) VALUES($1,$2,$3,'pending','Тестовая анкета')",[id,'admin-test-'+id,role]);
     await db.query('INSERT INTO cleaner_profiles(user_id) VALUES($1)',[cleaner]);
@@ -280,7 +284,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal((await service.availableCleaners(date,'18:00','21:00',undefined,db,true)).some((c:any)=>c.id===worker),true);
         const revision=await send('/cleaner/work-schedule',{weekStart:week,days:days.map(day=>({...day,startTime:'13:00'})),clientRequestId:'work-2'});
         assert.deepEqual(await service.cleanerOffers(worker),[]);
-        await assert.rejects(()=>service.acceptOffer(order,worker),(error:any)=>error.code==='outside_working_hours');
+        await assert.rejects(()=>service.acceptOffer(order,worker),(error:any)=>error.code==='cleaner_capacity_exceeded');
         assert.equal((await request('/admin/work-schedules/'+id+'/review','POST',{decision:'approved'})).status,409);
         await request('/admin/work-schedules/'+revision.json.data.id+'/review','POST',{decision:'approved'});
         const renewed=await service.offerNextCleaner(order) as any;await service.acceptOfferById(renewed.id,worker);
@@ -433,8 +437,14 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("INSERT INTO order_addons(order_id,addon_id,quantity,price,duration_minutes,payment_status,requires_customer_approval) VALUES($1,$2,2,1000,392,'paid',FALSE)",[busy,addon]);
         const preserved=await request(path+'&orderId='+busy+'&addonsDetailed='+encodeURIComponent(JSON.stringify([{id:addon,quantity:2}])),'GET',undefined,true);
         assert.ok(preserved.json.data.some((slot:any)=>slot.startTime==='08:00'&&slot.endTime==='17:12'&&slot.durationMinutes===552));
-        const moved=await request('/orders/'+busy+'/reschedule','POST',{date:'2039-04-03',time:'14:00',addonsDetailed:[{id:addon,quantity:2}]},true);
-        assert.equal(moved.status,200,JSON.stringify(moved.json));assert.equal(moved.json.data.order.end_time,'23:12:00');assert.equal(Number(moved.json.data.order.estimated_duration_minutes),552);
+        const tooLate=await request('/orders/'+busy+'/reschedule','POST',{date:'2039-04-03',time:'14:00',addonsDetailed:[{id:addon,quantity:2}]},true);
+        assert.equal(tooLate.status,409);assert.equal(tooLate.json.code,'cleaner_capacity_exceeded');
+        const moved=await request('/orders/'+busy+'/reschedule','POST',{date:'2039-04-03',time:'08:00',addonsDetailed:[{id:addon,quantity:2}]},true);
+        assert.equal(moved.status,200,JSON.stringify(moved.json));assert.equal(moved.json.data.order.end_time,'17:12:00');assert.equal(Number(moved.json.data.order.estimated_duration_minutes),552);
+        const blockedAdmin=await request('/admin/orders/'+busy,'PATCH',{startTime:'18:00',endTime:'23:00'});
+        assert.equal(blockedAdmin.status,409);assert.equal(blockedAdmin.json.code,'cleaner_capacity_exceeded');
+        assert.equal((await db.query('SELECT start_time::text FROM service_orders WHERE id=$1',[busy])).rows[0].start_time,'08:00:00');
+
         const other=await request('/scheduling/available-slots?date=2039-04-02&orderId='+busy);assert.equal(other.status,404);
         const unavailable=await request('/scheduling/available-slots?date=2039-04-05&orderId='+busy,'GET',undefined,true);assert.deepEqual(unavailable.json.data,[]);
         for(const quantity of [0,51])assert.equal((await request(path+'&addonsDetailed='+encodeURIComponent(JSON.stringify([{id:addon,quantity}])),'GET',undefined,true)).status,400);
@@ -449,13 +459,17 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("UPDATE cleaner_profiles SET verification_status='pending' WHERE user_id=$1",[cleaner]);
       }
     });
-    await t.test('evening slots allow late finishes and fixed extras are consumed only once',async()=>{
+    await t.test('evening slots respect approved shift end plus two hours; fixed extras are consumed only once',async()=>{
       await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
       await db.query("UPDATE cleaner_profiles SET verification_status='approved' WHERE user_id=$1",[cleaner]);
       try {
         const evening=await request('/scheduling/available-slots?date=2039-02-03&durationMinutes=180');
         assert.equal(evening.status,200);
-        assert.ok(evening.json.data.some((slot:any)=>slot.startTime==='18:00'&&slot.endTime==='21:00'&&slot.durationMinutes===180));
+        assert.equal(evening.json.data.some((slot:any)=>slot.startTime==='18:00'),false);
+        assert.ok(evening.json.data.some((slot:any)=>slot.startTime==='16:00'&&slot.endTime==='19:00'));
+        // A later approved shift can still take longer evening work.
+        await approvedFixtureShift(cleaner,'2039-02-03','08:00','23:00');
+        await approvedFixtureShift(cleaner,'2039-02-04','08:00','23:00');
         const longer=await request('/scheduling/available-slots?date=2039-02-03&durationMinutes=240');
         assert.equal(longer.status,200);
         assert.ok(longer.json.data.some((slot:any)=>slot.startTime==='16:00'&&slot.endTime==='20:00'));
@@ -496,6 +510,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         }
 
       } finally {
+        await db.query("UPDATE cleaner_working_days SET end_time='18:00' WHERE cleaner_id=$1 AND work_date IN ('2039-02-03','2039-02-04')",[cleaner]);
         await db.query("UPDATE app_users SET status='pending' WHERE id=$1",[cleaner]);
         await db.query("UPDATE cleaner_profiles SET verification_status='pending' WHERE user_id=$1",[cleaner]);
       }
@@ -618,6 +633,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       try{
         await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'proposal-'+worker]);
         await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
+        await approvedFixtureShift(worker,'2039-06-01');
         await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,area,status) VALUES($1,$3,$4,'2039-06-01','10:00','12:00',120,100,'in_progress'),($2,$3,$4,'2039-06-01','13:00','14:00',60,100,'assigned')",[order,next,customer,worker]);
         await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes,paid_separately) VALUES($1,'Духовка',3000,25,FALSE),($2,'Химчистка',50000,90,TRUE)",[addon,special]);
         const first=await propose([{key:addon,label:'Духовка',quantity:2,price:1}]);
@@ -1087,6 +1103,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       try {
         await db.query("INSERT INTO app_users(id,phone,role,status,full_name) VALUES($1,$2,'customer','approved','Клиент заказа'),($3,$4,'cleaner','approved','Уборщица заказа')",[owner,phone,worker,'admin-order-worker-'+worker]);
         await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
+        await approvedFixtureShift(worker,'2038-01-01');
         await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,apartment,area) VALUES($1,$2,'Астана','Тестовая','1','12',100)",[address,owner]);
         await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Пакет заказа',4,800)",[pkg]);
         await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,$4,4,4,'active')",[purchase,owner,pkg,address]);
@@ -1186,6 +1203,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
     await t.test('rescheduling and cancellation notify both parties and retain history',async()=>{
       const order=randomUUID();
       await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status,scheduled_date,start_time,end_time,estimated_duration_minutes) VALUES($1,$2,$3,'assigned','2031-01-01','10:00','12:00',120)",[order,customer,cleaner]);
+      await approvedFixtureShift(cleaner,'2031-01-02');
       try {
         const move=await request(`/orders/${order}/reschedule`,'POST',{date:'2031-01-02',time:'13:00'},true);
         assert.equal(move.status,200);
@@ -1312,7 +1330,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       const token=signAccessToken({id:cleaner,role:'cleaner',phone:'fixture'});
       const outsider=signAccessToken({id:other,role:'cleaner',phone:'fixture'});
       async function review(asCleaner:boolean,rating:number) {
-        if(!asCleaner)return request('/reviews','POST',{orderId:order,rating,cleanerId:other},true);
+        if(!asCleaner)return request('/reviews','POST',{orderId:order,rating,comment:'Тестовый отзыв клиента',cleanerId:other},true);
         const res=await fetch(base+'/reviews',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({orderId:order,rating})});
         return {status:res.status,json:await res.json() as any};
       }
@@ -1326,13 +1344,30 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const pro=await review(true,4);assert.equal(pro.status,201);assert.equal(pro.json.data.author_role,'cleaner');
         assert.equal((await review(true,4)).status,200);
         const client=await review(false,5);assert.equal(client.status,201);assert.equal(client.json.data.cleaner_id,cleaner);
+        const received=(await (await fetch(base+'/reviews',{headers:{Authorization:'Bearer '+token}})).json() as any).data;
+        assert.ok(received.some((r:any)=>r.id===client.json.data.id&&r.author_role==='customer'&&r.comment==='Тестовый отзыв клиента'));
+        const notice=(await db.query("SELECT * FROM notifications WHERE user_id=$1 AND dedupe_key=$2",[cleaner,'received-review:'+client.json.data.id])).rows[0];
+        assert.equal(notice.target_type,'user');assert.equal(notice.target_id,'review:'+client.json.data.id);
+        assert.ok(notice.body_ru.includes('Тестовый отзыв клиента'));assert.ok(notice.body_ru.includes('Профиль → Рейтинг'));
+        const hidden=(await (await fetch(base+'/reviews',{headers:{Authorization:'Bearer '+outsider}})).json() as any).data;
+        assert.equal(hidden.some((r:any)=>r.id===client.json.data.id),false);
+        await db.query("INSERT INTO notifications(user_id,title_ru,body_ru,target_type,target_id) VALUES($1,'legacy','old','review',$2),($3,'legacy-other','unchanged','review',$4)",[cleaner,client.json.data.id,customer,pro.json.data.id]);
+        await db.query("INSERT INTO notifications(role,title_ru,body_ru,target_type,target_id) VALUES('admin','legacy-admin','unchanged','review',$1)",[client.json.data.id]);
+        const backfill=readFileSync('sql/schema.sql','utf8').split('-- Backfill received-review notification links for already installed Pro clients.')[1].split('-- End received-review notification backfill.')[0];
+        await db.query(backfill);await db.query(backfill);
+        const legacy=(await db.query("SELECT * FROM notifications WHERE title_ru='legacy' AND user_id=$1",[cleaner])).rows[0];
+        assert.equal(legacy.target_type,'user');assert.equal(legacy.target_id,'review:'+client.json.data.id);assert.ok(legacy.body_ru.includes('Тестовый отзыв клиента'));
+        const others=(await db.query("SELECT * FROM notifications WHERE title_ru IN ('legacy-other','legacy-admin') AND target_id=ANY($1::text[])",[[pro.json.data.id,client.json.data.id]])).rows;
+        assert.equal(others.length,2);assert.ok(others.every((n:any)=>n.target_type==='review'&&n.body_ru==='unchanged'));
+
+
         assert.equal((await review(false,5)).status,200);
         assert.equal(Number((await db.query('SELECT COUNT(*) AS count FROM reviews WHERE order_id=$1',[order])).rows[0].count),2);
         assert.equal(Number((await db.query('SELECT rating FROM app_users WHERE id=$1',[customer])).rows[0].rating),4);
         assert.equal(Number((await db.query('SELECT rating FROM app_users WHERE id=$1',[cleaner])).rows[0].rating),5);
       } finally {
         const reviews=(await db.query('SELECT id FROM reviews WHERE order_id=$1',[order])).rows.map((r:any)=>r.id);
-        if(reviews.length)await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[reviews]);
+        if(reviews.length)await db.query("DELETE FROM notifications WHERE target_id=ANY($1::text[]) OR dedupe_key=ANY($2::text[])",[reviews.flatMap((id:any)=>[id,'review:'+id]),reviews.map((id:any)=>'received-review:'+id)]);
         await db.query('DELETE FROM reviews WHERE order_id=$1',[order]);
         await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
         await db.query('DELETE FROM app_users WHERE id=$1',[other]);
@@ -1622,18 +1657,20 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const quote=await request('/packages/quote','POST',{packageId:pkg,area:67},true);
         assert.equal(quote.json.data.estimatedDurationMinutes,1675);assert.equal(quote.json.data.minimumBookingLeadHours,24);
         const slots=await request('/scheduling/available-slots?date=2039-02-03&customerPackageId='+purchase,'GET',undefined,true);
-        assert.equal(slots.status,200);assert.ok(slots.json.data.length>0);
-        assert.ok(slots.json.data.every((s:any)=>s.durationMinutes===1675));
+        assert.equal(slots.status,200);assert.deepEqual(slots.json.data,[]);
+        await db.query('UPDATE customer_addresses SET area=20 WHERE id=$1',[address]);
+        const fitting=await request('/scheduling/available-slots?date=2039-02-03&customerPackageId='+purchase,'GET',undefined,true);
+        assert.ok(fitting.json.data.length>0);assert.ok(fitting.json.data.every((s:any)=>s.durationMinutes===500));
         const booked=await request('/orders','POST',{customerPackageId:purchase,date:'2039-02-03',startTime:'08:00'},true);
         assert.equal(booked.status,201,JSON.stringify(booked.json));visit=booked.json.data.order.id;
-        assert.equal(booked.json.data.order.estimated_duration_minutes,1675);
-        assert.equal(booked.json.data.order.end_time,'11:55:00');
+        assert.equal(booked.json.data.order.estimated_duration_minutes,500);
+        assert.equal(booked.json.data.order.end_time,'16:20:00');
         const end=(await db.query('SELECT cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)::text AS end FROM service_orders WHERE id=$1',[visit])).rows[0].end;
-        assert.equal(end,'2039-02-04 11:55:00');
+        assert.equal(end,'2039-02-03 16:20:00');
         await db.query("UPDATE service_orders SET estimated_duration_minutes=107,end_time='09:47' WHERE id=$1",[visit]);
         const moved=await request('/orders/'+visit+'/reschedule','POST',{date:'2039-02-04',startTime:'08:00'},true);
         assert.equal(moved.status,200,JSON.stringify(moved.json));
-        assert.equal(moved.json.data.estimated_duration_minutes,1675);
+        assert.equal(moved.json.data.estimated_duration_minutes,500);
       }finally{
         if(visit){await db.query('DELETE FROM notifications WHERE target_id=$1',[visit]);await db.query('DELETE FROM order_offers WHERE order_id=$1',[visit]);await db.query('DELETE FROM service_orders WHERE id=$1',[visit]);}
         await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
@@ -2088,6 +2125,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
 
     await t.test('concurrent admin assignments cannot double-book a cleaner',async()=>{
       const ids=[randomUUID(),randomUUID()];
+      await approvedFixtureShift(cleaner,'2035-01-01');
       try {
         for(const id of ids)await db.query("INSERT INTO service_orders(id,customer_id,status,scheduled_date,start_time,end_time) VALUES($1,$2,'pending_assignment','2035-01-01','10:00','12:00')",[id,customer]);
         const results=await Promise.all(ids.map(id=>request('/admin/orders/'+id+'/assign-cleaner','POST',{cleanerId:cleaner})));
@@ -2101,6 +2139,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
 
     await t.test('concurrent rescheduling cannot double-book an assigned cleaner',async()=>{
       const ids=[randomUUID(),randomUUID()];
+      await approvedFixtureShift(cleaner,'2035-02-03');
       try {
         for(let i=0;i<ids.length;i++)await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,status,scheduled_date,start_time,end_time,estimated_duration_minutes) VALUES($1,$2,$3,'assigned',$4,'10:00','12:00',120)",[ids[i],customer,cleaner,'2035-02-0'+(i+1)]);
         const results=await Promise.all(ids.map(id=>request('/orders/'+id+'/reschedule','POST',{date:'2035-02-03',startTime:'10:00'},true)));
