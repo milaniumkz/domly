@@ -2618,6 +2618,12 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         ],
       ),
       actions: [
+        TextButton.icon(
+          onPressed: () =>
+              _copyAdminOrder(data, customer: customer, cleaner: cleaner),
+          icon: const Icon(Icons.copy_outlined),
+          label: Text('Скопировать'.tr()),
+        ),
         TextButton(
           onPressed: () => _openOrderDetails(context, data, displayId),
           child: Text('Детали'.tr()),
@@ -2672,6 +2678,103 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           ),
       ],
     );
+  }
+
+  Future<void> _copyAdminOrder(
+    Map<String, dynamic> data, {
+    required Map<String, dynamic> customer,
+    required Map<String, dynamic> cleaner,
+  }) async {
+    final cleanerId = (data['cleanerId'] ?? data['assignedCleanerId'] ?? '')
+        .toString()
+        .trim();
+    final area = _firstText([data['area'], data['apartmentArea']]);
+    String money(Object? value) =>
+        value == null ? '—' : _moneyText(_moneyValue(value));
+    final rows = <String, String>{
+      'Заказ': orderDisplayId(data),
+      'Тип': data['type'] == 'package_purchase' ? 'Покупка пакета' : 'Уборка',
+      'Клиент': _personName(customer, data, prefix: 'customer'),
+      'Телефон клиента': _personPhone(customer, data, prefix: 'customer'),
+      'Адрес': _firstText([data['address']]),
+      'Дом': _firstText([data['house']]),
+      'Квартира': _firstText([data['apartment']]),
+      'Подъезд': _firstText([data['entrance']]),
+      'Этаж': _firstText([data['floor']]),
+      'Домофон': _firstText([data['intercom']]),
+      'Площадь': area == '—' ? '—' : '$area м²',
+      'Пакет': _firstText([
+        data['package'],
+        data['packageName'],
+        data['frequencyLabel'],
+      ]),
+      'Уборок заказано': _adminOrderCleaningsText(data),
+      'Дата': _adminOrderDateText(data),
+      'Время': _adminOrderTimeText(data),
+      'Статус': _orderStatusLabel(_adminOrderDisplayStatus(data)),
+      'Оплата': paymentStatusLabel((data['paymentStatus'] ?? '—').toString()),
+      'Сумма': money(data['price'] ?? data['amount']),
+      'К доплате': money(data['payableAmount']),
+      'Бонусы': money(data['bonusAppliedAmount']),
+      'Уборщица': cleanerId.isEmpty
+          ? 'не назначена'
+          : _personName(cleaner, data, prefix: 'cleaner'),
+      'Телефон уборщицы': cleanerId.isEmpty
+          ? '—'
+          : _personPhone(cleaner, data, prefix: 'cleaner'),
+      'Назначение': _adminOrderAssignmentText(data),
+      'Район': _firstText([data['serviceArea'], data['district']]),
+      'Кластер': _firstText([data['clusterName']]),
+      'Комментарий': _firstText([
+        data['access_comment'],
+        data['comment'],
+        data['note'],
+      ]),
+      'Создан': _formatAdminDateTime(data['createdAt'] ?? data['created_at']),
+    };
+    final addons = _adminOrderAddonReceiptItems(data);
+    if (addons.isEmpty) rows['Доп. услуги'] = 'нет';
+    for (final (index, addon) in addons.indexed) {
+      rows['Доп. услуга ${index + 1}'] = [
+        addon.name,
+        if (addon.quantity != null) 'Количество: ${addon.quantity}',
+        if (addon.price != null && addon.price! > 0)
+          'Цена: ${_moneyText(addon.price!)}',
+      ].join(' · ');
+    }
+    final separateAddons = [
+      for (final source in [data['addonsDetailed'], data['addons']])
+        if (source is Iterable)
+          for (final item in source)
+            if (item is Map &&
+                (item['separatePayment'] == true ||
+                    item['paidSeparately'] == true ||
+                    item['paid_separately'] == true))
+              item,
+      ...?data['separatePaymentAddons'] as List?,
+    ];
+    if (separateAddons.isNotEmpty) {
+      rows['Оплачиваются отдельно'] =
+          _formatAddonLabels({'addonsDetailed': separateAddons});
+    }
+    final text = rows.entries
+        .map(
+          (row) =>
+              '${row.key}: ${row.value.replaceAll(RegExp(r'\s+'), ' ').trim()}',
+        )
+        .join('\n');
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Данные заказа скопированы'.tr())));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось скопировать данные заказа'.tr())),
+      );
+    }
   }
 
   Future<void> _openOrderDetails(
@@ -3708,6 +3811,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final explicit = _moneyValue(
       data['cleaningsCount'] ??
           data['totalCleanings'] ??
+          data['totalVisits'] ??
           data['visitsCount'] ??
           data['includedVisits'],
     );
