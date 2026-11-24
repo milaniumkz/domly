@@ -1,0 +1,29 @@
+name: Public address search check
+on:
+  push:
+    branches: [support/mangilik-el-address-20261124]
+    paths: [.github/workflows/address-search-check.yml]
+permissions:
+  contents: read
+jobs:
+  public-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read public suggestions only
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.parse,json,time
+          cases=[('Мангилик Ел 61','Астана'),('Мәңгілік Ел 61','Астана'),('Мангилик Ел 61',''),('Мангилик Ель 61','Астана'),('Мангилик Ел','Астана')]
+          for search,city in cases:
+              params=urllib.parse.urlencode({'search':search,'city':city,'lang':'ru','limit':100})
+              start=time.monotonic()
+              try:
+                  with urllib.request.urlopen('https://domly.kz/api/v1/geo/address-suggestions?'+params,timeout=35) as r:
+                      data=json.load(r)
+                  value=data.get('data',data)
+                  rows=value.get('suggestions',[])
+                  print(json.dumps({'query':search,'city':city,'seconds':round(time.monotonic()-start,2),'source':value.get('source'),'total':len(rows),'rows':[{k:row.get(k) for k in ['id','source','label','city','street','house','lat','lng']} for row in rows]},ensure_ascii=False),flush=True)
+              except Exception as e:
+                  print(json.dumps({'query':search,'city':city,'error':str(e)},ensure_ascii=False),flush=True)
+          PY
