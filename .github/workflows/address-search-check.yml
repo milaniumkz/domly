@@ -1,4 +1,4 @@
-name: Public address search check
+name: Correct Mangilik El 61 directory entry
 on:
   push:
     branches: [support/mangilik-el-address-20261124]
@@ -26,4 +26,53 @@ jobs:
                   print(json.dumps({'query':search,'city':city,'seconds':round(time.monotonic()-start,2),'source':value.get('source'),'total':len(rows),'rows':[{k:row.get(k) for k in ['id','source','label','city','street','house','lat','lng']} for row in rows]},ensure_ascii=False),flush=True)
               except Exception as e:
                   print(json.dumps({'query':search,'city':city,'error':str(e)},ensure_ascii=False),flush=True)
+          PY
+
+  directory-correction:
+    needs: public-search
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    concurrency:
+      group: production-ops
+      cancel-in-progress: false
+    steps:
+      - name: Add verified public house and preserve audit evidence
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          SSH_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s' "$SSH_KEY" | base64 -d > ~/.ssh/address-key
+          chmod 600 ~/.ssh/address-key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          base64 -d > add-address.cjs <<'SCRIPT'
+          Ly8gUHVibGljIGNhdGFsb2d1ZSBjb3JyZWN0aW9uIG9ubHkuIE5vIGN1c3RvbWVycywgb3JkZXJzLCBwYXltZW50cyBvciBmaWxlcyBhcmUgcmVhZC4KY29uc3Qge0RhdGFiYXNlfT1yZXF1aXJlKCcuL2Rpc3QvaW5mcmFzdHJ1Y3R1cmUvZGIvRGF0YWJhc2UnKTsKY29uc3QgZGI9bmV3IERhdGFiYXNlKHByb2Nlc3MuZW52LkRBVEFCQVNFX1VSTCk7CmNvbnN0IGlucHV0PXtjaXR5OifQkNGB0YLQsNC90LAnLHN0cmVldFJ1OifQv9GA0L7RgdC/0LXQutGCINCc0LDQvdCz0LjQu9C40Log0JXQuycsc3RyZWV0S2s6J9Cc05nSo9Cz0ZbQu9GW0Log0JXQuyDQtNCw0qPSk9GL0LvRiycsaG91c2U6JzYxJyxjb21wbGV4OidOZXhwbyBVbmlvbicsbGF0OjUxLjA4NDIyNSxsbmc6NzEuNDIxNTA5fTsKY29uc3Qgc291cmNlPSdodHRwczovL3lhbmRleC5rei9tYXBzL3J1LzE2My9hc3RhbmEvaG91c2UvbWFuZ2dpbGlrX2VsX2RhbmdnaHlseV82MS9ZMGdZY2dWaFRFVU9RRnRyZlh4NWRYNWhZUT09Lyc7CmFzeW5jIGZ1bmN0aW9uIGFwcGx5KCl7cmV0dXJuIGRiLnRyYW5zYWN0aW9uKGFzeW5jIHR4PT57CiAgYXdhaXQgdHgucXVlcnkoIlNFVCBMT0NBTCBsb2NrX3RpbWVvdXQ9JzVzJyIpOwogIGF3YWl0IHR4LnF1ZXJ5KCJTRUxFQ1QgcGdfYWR2aXNvcnlfeGFjdF9sb2NrKGhhc2h0ZXh0KCdhZGRyZXNzLWRpcmVjdG9yeTphc3RhbmE6bWFuZ2lsaWstZWw6NjEnKSkiKTsKICBjb25zdCB6b25lPShhd2FpdCB0eC5xdWVyeShgU0VMRUNUIGlkIEZST00gc2VydmljZV96b25lcyBXSEVSRSBhY3RpdmUgQU5EIGNvdmVyc19lbnRpcmVfY2l0eQogICAgQU5EIGRvbWx5X2NpdHlfa2V5KGNpdHkpPWRvbWx5X2NpdHlfa2V5KCQxKQogICAgQU5EIGRvbWx5X3BvbHlnb25fY29udGFpbnMoQ09BTEVTQ0UoY2l0eV9ib3VuZGFyeSxwb2x5Z29uKSwkMjo6bnVtZXJpYywkMzo6bnVtZXJpYykKICAgIE9SREVSIEJZIGNyZWF0ZWRfYXQsaWQgTElNSVQgMWAsW2lucHV0LmNpdHksaW5wdXQubGF0LGlucHV0LmxuZ10pKS5yb3dzWzBdOwogIGlmKCF6b25lKXRocm93IEVycm9yKCdWZXJpZmllZCBob3VzZSBjb29yZGluYXRlcyBtdXN0IGJlIHdpdGhpbiBhbiBleGlzdGluZyBhY3RpdmUgY2l0eSBib3VuZGFyeTsgbm8gem9uZXMgd2lsbCBiZSBjaGFuZ2VkLicpOwogIGNvbnN0IHByZXZpb3VzPShhd2FpdCB0eC5xdWVyeShgU0VMRUNUICogRlJPTSBjb25uZWN0ZWRfaG91c2VzCiAgICBXSEVSRSBkb21seV9jaXR5X2tleShjaXR5KT1kb21seV9jaXR5X2tleSgkMSkKICAgICAgQU5EIChkb21seV9zdHJlZXRfa2V5KHN0cmVldF9ydSk9ZG9tbHlfc3RyZWV0X2tleSgkMikgT1IgZG9tbHlfc3RyZWV0X2tleShzdHJlZXRfa2spPWRvbWx5X3N0cmVldF9rZXkoJDIpKQogICAgICBBTkQgZG9tbHlfYWRkcmVzc19rZXkoaG91c2UpPWRvbWx5X2FkZHJlc3Nfa2V5KCQzKSBGT1IgVVBEQVRFYCxbaW5wdXQuY2l0eSxpbnB1dC5zdHJlZXRSdSxpbnB1dC5ob3VzZV0pKS5yb3dzOwogIGlmKHByZXZpb3VzLmxlbmd0aD4xKXRocm93IEVycm9yKCdBbWJpZ3VvdXMgZGlyZWN0b3J5IGVudHJpZXM7IG5vIGNoYW5nZXMgbWFkZS4nKTsKICBjb25zdCBvbGQ9cHJldmlvdXNbMF07CiAgaWYob2xkPy5hY3RpdmUgJiYgb2xkLmNpdHk9PT1pbnB1dC5jaXR5ICYmIG9sZC5zdHJlZXRfcnU9PT1pbnB1dC5zdHJlZXRSdSAmJiBvbGQuc3RyZWV0X2trPT09aW5wdXQuc3RyZWV0S2sKICAgICAgJiYgb2xkLnpvbmVfaWQ9PT16b25lLmlkICYmIE51bWJlcihvbGQubGF0aXR1ZGUpPT09aW5wdXQubGF0ICYmIE51bWJlcihvbGQubG9uZ2l0dWRlKT09PWlucHV0LmxuZyl7CiAgICByZXR1cm4ge2FscmVhZHlBcHBsaWVkOnRydWUsaWQ6b2xkLmlkLGFkZHJlc3M6aW5wdXQsc291cmNlfTsKICB9CiAgbGV0IGN1cnJlbnQ7CiAgaWYob2xkKXsKICAgIGN1cnJlbnQ9KGF3YWl0IHR4LnF1ZXJ5KGBVUERBVEUgY29ubmVjdGVkX2hvdXNlcyBTRVQgY2l0eT0kMixzdHJlZXRfcnU9JDMsc3RyZWV0X2trPSQ0LAogICAgICBsYXRpdHVkZT0kNSxsb25naXR1ZGU9JDYsem9uZV9pZD0kNyxhY3RpdmU9VFJVRSwKICAgICAgcmVzaWRlbnRpYWxfY29tcGxleF9ydT1DT0FMRVNDRShOVUxMSUYocmVzaWRlbnRpYWxfY29tcGxleF9ydSwnJyksJDgpLAogICAgICByZXNpZGVudGlhbF9jb21wbGV4X2trPUNPQUxFU0NFKE5VTExJRihyZXNpZGVudGlhbF9jb21wbGV4X2trLCcnKSwkOCkKICAgICAgV0hFUkUgaWQ9JDEgUkVUVVJOSU5HICpgLFtvbGQuaWQsaW5wdXQuY2l0eSxpbnB1dC5zdHJlZXRSdSxpbnB1dC5zdHJlZXRLayxpbnB1dC5sYXQsaW5wdXQubG5nLHpvbmUuaWQsaW5wdXQuY29tcGxleF0pKS5yb3dzWzBdOwogIH1lbHNlewogICAgY3VycmVudD0oYXdhaXQgdHgucXVlcnkoYElOU0VSVCBJTlRPIGNvbm5lY3RlZF9ob3VzZXMKICAgICAgKGNpdHksc3RyZWV0X3J1LHN0cmVldF9rayxob3VzZSxyZXNpZGVudGlhbF9jb21wbGV4X3J1LHJlc2lkZW50aWFsX2NvbXBsZXhfa2ssbGF0aXR1ZGUsbG9uZ2l0dWRlLHpvbmVfaWQsYWN0aXZlKQogICAgICBWQUxVRVMoJDEsJDIsJDMsJDQsJDUsJDUsJDYsJDcsJDgsVFJVRSkgUkVUVVJOSU5HICpgLAogICAgICBbaW5wdXQuY2l0eSxpbnB1dC5zdHJlZXRSdSxpbnB1dC5zdHJlZXRLayxpbnB1dC5ob3VzZSxpbnB1dC5jb21wbGV4LGlucHV0LmxhdCxpbnB1dC5sbmcsem9uZS5pZF0pKS5yb3dzWzBdOwogIH0KICBjb25zdCBhbGxvd2VkPShhd2FpdCB0eC5xdWVyeSgnU0VMRUNUIGRvbWx5X2xvY2F0aW9uX2luX3NlcnZpY2Vfem9uZSgkMSwkMiwkMywkNDo6bnVtZXJpYywkNTo6bnVtZXJpYykgQVMgYWxsb3dlZCcsCiAgICBbaW5wdXQuY2l0eSxpbnB1dC5zdHJlZXRSdSxpbnB1dC5ob3VzZSxpbnB1dC5sYXQsaW5wdXQubG5nXSkpLnJvd3NbMF07CiAgaWYoYWxsb3dlZD8uYWxsb3dlZCE9PXRydWUpdGhyb3cgRXJyb3IoJ0hvdXNlIGlzIG5vdCBlbGlnaWJsZSB1bmRlciBleGlzdGluZyBzZXJ2aWNlIHBvbGljeTsgdHJhbnNhY3Rpb24gcm9sbGVkIGJhY2suJyk7CiAgYXdhaXQgdHgucXVlcnkoYElOU0VSVCBJTlRPIGF1ZGl0X2xvZ3MoYWN0aW9uLGVudGl0eV90eXBlLGVudGl0eV9pZCxwYXlsb2FkKQogICAgVkFMVUVTKCdhZGRyZXNzLmRpcmVjdG9yeS5jb3JyZWN0ZWQnLCdjb25uZWN0ZWRfaG91c2UnLCQxLCQyOjpqc29uYilgLFtjdXJyZW50LmlkLEpTT04uc3RyaW5naWZ5KHtwcmV2aW91cyxjdXJyZW50LHNvdXJjZSxvcGVyYXRpb25JZDpwcm9jZXNzLmVudi5HSVRIVUJfUlVOX0lELHJlYXNvbjonT3duZXIgcmVwb3J0ZWQgTWFuZ2lsaWsgRWwgNjEgbWlzc2luZzsgcHVibGljIG1hcCBjb25maXJtcyBob3VzZSBhbmQgY29vcmRpbmF0ZXMuJ30pXSk7CiAgcmV0dXJuIHthcHBsaWVkOnRydWUscHJldmlvdXMsY3VycmVudCxzb3VyY2V9Owp9KTt9CmFwcGx5KCkudGhlbihyZXN1bHQ9PmNvbnNvbGUubG9nKEpTT04uc3RyaW5naWZ5KHJlc3VsdCkpKS5jYXRjaChlPT57Y29uc29sZS5lcnJvcihlLm1lc3NhZ2UpO3Byb2Nlc3MuZXhpdENvZGU9MTt9KS5maW5hbGx5KCgpPT5kYi5jbG9zZSgpKTsK
+          SCRIPT
+          node --check add-address.cjs
+          scp -i ~/.ssh/address-key -o IdentitiesOnly=yes add-address.cjs "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/shared/mangilik-61-${{ github.run_id }}.cjs"
+          ssh -i ~/.ssh/address-key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "set -eu; umask 077; mkdir -p '$DEPLOY_PATH/backups/address-directory'; cd '$DEPLOY_PATH/current'; docker compose -p domly-backend exec -T -e GITHUB_RUN_ID='${{ github.run_id }}' api node < '$DEPLOY_PATH/shared/mangilik-61-${{ github.run_id }}.cjs' > '$DEPLOY_PATH/backups/address-directory/${{ github.run_id }}.json'; cat '$DEPLOY_PATH/backups/address-directory/${{ github.run_id }}.json'; docker compose -p domly-backend exec -T -e GITHUB_RUN_ID='${{ github.run_id }}' api node < '$DEPLOY_PATH/shared/mangilik-61-${{ github.run_id }}.cjs'"
+      - name: Verify public Russian and Kazakh search and application health
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.parse,json
+          ids=set()
+          for search in ['Мангилик Ел 61','мангилик ел 61','проспект Мангилик Ел 61','Мәңгілік Ел 61']:
+              params=urllib.parse.urlencode({'search':search,'city':'Астана','lang':'ru','limit':100})
+              with urllib.request.urlopen('https://domly.kz/api/v1/geo/address-suggestions?'+params,timeout=30) as r:
+                  data=json.load(r)['data']
+              found=[row for row in data['suggestions'] if str(row.get('house'))=='61' and row.get('connected') is True]
+              assert len(found)==1,(search,found)
+              ids.add(found[0]['id'])
+              print(json.dumps({'query':search,'found':found[0]},ensure_ascii=False))
+          assert len(ids)==1,'Different directory entries for the same house'
+          for path in ['/ready','/customer/','/pro/','/admin/']:
+              with urllib.request.urlopen('https://domly.kz'+path,timeout=15) as r:
+                  assert r.status==200
+              print(path,'OK')
           PY
