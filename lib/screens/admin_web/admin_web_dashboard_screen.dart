@@ -2738,7 +2738,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       rows['Доп. услуга ${index + 1}'] = [
         addon.name,
         if (addon.quantity != null) 'Количество: ${addon.quantity}',
-        if (addon.price != null) 'Цена: ${_moneyText(addon.price!)}',
+        if (addon.price != null && addon.price! > 0)
+          'Цена: ${_moneyText(addon.price!)}',
       ].join(' · ');
     }
     final separateAddons = [
