@@ -1,3 +1,4 @@
+import '../../ui/admin_booking_calendar.dart';
 import '../../ui/admin_customer_crm.dart';
 import '../../ui/admin_cancelled_sales.dart';
 import '../../ui/admin_filter_panel.dart';
@@ -319,7 +320,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
-          Container(
+          if (currentSection.key != 'calendar' || MediaQuery.sizeOf(context).width > 640) Container(
             margin: const EdgeInsets.only(right: 12, top: 10, bottom: 10),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -342,7 +343,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               ],
             ),
           ),
-          Padding(
+          if (currentSection.key != 'calendar' || MediaQuery.sizeOf(context).width > 640) Padding(
             padding: EdgeInsets.only(right: 16),
             child: Center(
               child: Text(
@@ -366,7 +367,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                const minContentWidth = 980.0;
+                final minContentWidth = currentSection.key == 'calendar' ? 0.0 : 980.0;
                 final contentWidth = constraints.maxWidth < minContentWidth
                     ? minContentWidth
                     : constraints.maxWidth;
@@ -481,6 +482,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   }
 
   Widget _buildHeader(_AdminSection currentSection) {
+    if (currentSection.key == 'calendar') return _headerTitleBlock(currentSection);
     final isNarrowHeader = MediaQuery.of(context).size.width < 900;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -874,6 +876,13 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               'Назначение, контроль статусов и ручные действия по заказам.',
           icon: Icons.receipt_long_outlined,
           builder: _orders,
+        ),
+        _AdminSection(
+          key: 'calendar',
+          title: 'Календарь',
+          subtitle: 'Записи клинеров, рабочие часы и площадь на каждый день.',
+          icon: Icons.calendar_month_outlined,
+          builder: () => AdminBookingCalendar(onOpenOrder: (order) => _openOrderDetails(context, mapAdminOrder(order), orderDisplayId(order))),
         ),
         _AdminSection(
           key: 'work_schedules',

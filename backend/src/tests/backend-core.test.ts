@@ -1375,3 +1375,9 @@ test('legacy calendar counts and time choices use the same 21:00 booking cutoff'
     assert.throws(()=>service.validatePackageBookingSelection([{date:'2039-07-06',startTime:'08:00',endTime:'10:00'}],{cleaningCount:1,allowSameDay:false}),(e:any)=>e.code==='next_morning_booking_closed');
   } finally {t.mock.timers.reset();}
 });
+
+test('admin calendar defaults follow Astana month boundaries, not server UTC',async()=>{
+ const {calendarRange}=await import('../http/routes/adminCalendar');
+ assert.deepEqual(calendarRange({},Date.parse('2026-11-30T20:30:00Z')),{from:'2026-12-01',to:'2026-12-31',today:'2026-12-01'});
+ assert.deepEqual(calendarRange({},Date.parse('2026-12-31T20:30:00Z')),{from:'2027-01-01',to:'2027-01-31',today:'2027-01-01'});
+});
