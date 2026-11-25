@@ -1636,6 +1636,54 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
       }
     });
+    await t.test('large booking API reserves a whole team, consumes one visit and exposes both participants to installed Pro clients',async()=>{
+      const address=randomUUID(),pkg=randomUUID(),purchase=randomUUID(),workers=[randomUUID(),randomUUID(),randomUUID()],day='2043-06-03';
+      const key='team-api-'+randomUUID();let visit='';
+      async function pro(id:string,path:string,method='GET',body?:object){
+        const res=await fetch(base+path,{method,headers:{Authorization:'Bearer '+signAccessToken({id,role:'cleaner',phone:'team-fixture'}),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+        return {status:res.status,json:await res.json() as any};
+      }
+      try{
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area,verified_area) VALUES($1,$2,'Астана','Team API','1',400,400)",[address,customer]);
+        await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Team API fixture',4,1,0,95)",[pkg]);
+        await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,$4,4,4,'active')",[purchase,customer,pkg,address]);
+        for(const worker of workers){
+          await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'team-api-'+worker]);
+          await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
+          await approvedFixtureShift(worker,day);
+        }
+        const slots=await request('/scheduling/available-slots?date='+day+'&customerPackageId='+purchase,'GET',undefined,true);
+        assert.equal(slots.status,200);assert.ok(slots.json.data.length>0);
+        const first=slots.json.data.find((s:any)=>s.startTime==='08:00');assert.equal(first.requiredCleaners,2);assert.equal(first.durationMinutes,320);
+        const empty=await request('/scheduling/available-slots?date=2043-06-04&customerPackageId='+purchase,'GET',undefined,true);assert.deepEqual(empty.json.data,[]);
+        const body={customerPackageId:purchase,date:day,startTime:'08:00',idempotencyKey:key};
+        const created=await request('/orders','POST',body,true);assert.equal(created.status,201,JSON.stringify(created.json));visit=created.json.data.order.id;
+        assert.equal(created.json.data.order.required_cleaners,2);assert.equal(created.json.data.order.estimated_duration_minutes,320);
+        assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,3);
+        assert.equal((await request('/orders','POST',body,true)).json.data.order.id,visit);
+        const blocked=await request('/orders','POST',{...body,idempotencyKey:key+'-second'},true);assert.equal(blocked.status,409);
+        const offers=(await db.query("SELECT * FROM order_offers WHERE order_id=$1 AND status='offered' ORDER BY cleaner_id",[visit])).rows;assert.equal(offers.length,2);
+        for(const offer of offers)assert.equal((await pro(offer.cleaner_id,'/cleaner/offers/'+offer.id+'/accept','POST',{})).status,200);
+        for(const offer of offers){
+          const list=await pro(offer.cleaner_id,'/orders');const own=list.json.data.find((o:any)=>o.id===visit);
+          assert.ok(own);assert.equal(own.cleaner_id,offer.cleaner_id);assert.equal(Number(own.area),200);assert.equal(own.team_members.length,2);
+          const calendar=await pro(offer.cleaner_id,'/cleaner/orders');assert.ok(calendar.json.data.some((o:any)=>o.id===visit));
+          const detail=await pro(offer.cleaner_id,'/orders/'+visit+'/details');assert.equal(detail.status,200);assert.equal(detail.json.data.order.cleaner_id,offer.cleaner_id);
+          const checklist=await pro(offer.cleaner_id,'/orders/'+visit+'/checklist');assert.equal(checklist.status,200);assert.equal(checklist.json.data.report.cleaner_id,offer.cleaner_id);
+        }
+        const memberRows=(await db.query('SELECT * FROM order_team_members WHERE order_id=$1 ORDER BY slot_number',[visit])).rows;
+        const replacement=workers.find(id=>!memberRows.some(m=>m.cleaner_id===id))!;
+        const assigned=await request('/admin/orders/'+visit+'/assign-cleaner','POST',{cleanerId:replacement,teamSlot:memberRows[0].slot_number});assert.equal(assigned.status,200,JSON.stringify(assigned.json));
+        const preserved=(await db.query('SELECT * FROM order_team_members WHERE order_id=$1 ORDER BY slot_number',[visit])).rows;
+        assert.equal(preserved[0].cleaner_id,replacement);assert.equal(preserved[1].cleaner_id,memberRows[1].cleaner_id);
+        const moved=await request('/orders/'+visit+'/reschedule','POST',{date:'2043-06-04',startTime:'08:00'},true);assert.equal(moved.status,409);
+        assert.equal((await db.query('SELECT scheduled_date::text AS service_day FROM service_orders WHERE id=$1',[visit])).rows[0].service_day,day);
+      }finally{
+        if(visit){await db.query('DELETE FROM notifications WHERE target_id=$1',[visit]);await db.query('DELETE FROM service_orders WHERE id=$1',[visit]);}
+        await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
+        await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[workers]);
+      }
+    });
     await t.test('renovation duration and lead policy reach quote, availability and created order without a client update',async()=>{
       const pkg=randomUUID(),address=randomUUID(),purchase=randomUUID(),worker=randomUUID();let visit='';
       try{
@@ -1646,7 +1694,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'renovation-'+worker]);
         await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
         const schedule=(await db.query("INSERT INTO cleaner_work_schedule_requests(cleaner_id,week_start,days,status) VALUES($1,'2039-01-31','[]','approved') RETURNING id",[worker])).rows[0];
-        await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2039-02-03','08:00','18:00',$2)",[worker,schedule.id]);
+        await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2039-02-03','08:00','18:00',$2),($1,'2039-02-04','08:00','18:00',$2)",[worker,schedule.id]);
         const local=new Date(Date.now()+5*3600000);
         if(local.getUTCHours()*60+local.getUTCMinutes()>8*60){
           const date=new Date(Date.now()+29*3600000).toISOString().slice(0,10);

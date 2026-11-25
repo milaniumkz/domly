@@ -1,3 +1,4 @@
+import {teamOffers,assignTeamMember} from './cleaningTeam';
 import {cleanerSlotAllowedSql,orderAreaSql,assertCleanerCapacity} from './cleanerCapacity';
 import {translateKazakh,sendLocalizedPush} from '../localization';
 import {scheduleSignupFollowup, scheduleCheckoutFollowup} from './moonAi';
@@ -208,7 +209,7 @@ export class NotificationService {
         const active = (await this.db.query(`SELECT 1 FROM order_offers f JOIN service_orders o ON o.id=f.order_id
           WHERE f.order_id=$1 AND f.cleaner_id=$2 AND f.status='offered' AND f.expires_at>NOW()
           AND o.status IN ('pending_assignment','waiting_cleaner') AND o.cleaner_id IS NULL
-          AND ${cleanerSlotAllowedSql('f.cleaner_id','o.scheduled_date','o.start_time','o.end_time','o.estimated_duration_minutes',orderAreaSql('o'),'o.id')} LIMIT 1`,
+          AND ${cleanerSlotAllowedSql('f.cleaner_id','o.scheduled_date','o.start_time','o.end_time','o.estimated_duration_minutes',"domly_order_cleaner_area(o.id,f.cleaner_id)",'o.id')} LIMIT 1`,
           [input.targetId,input.userId])).rows.length;
         if (!active) return; // An offer can expire or be cancelled while delivery is queued.
       }
@@ -479,8 +480,9 @@ export class PaymentService {
 export class SchedulingService {
   constructor(private readonly db: Database) {}
 
-  async assignOrder(orderId: string, cleanerId: string, actorId: string, comment?: string) {
+  async assignOrder(orderId: string, cleanerId: string, actorId: string, comment?: string, teamSlot?:number) {
     return this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(hashtextextended('domly:booking-create-reschedule',0))");
       // Match acceptOffer's lock order so assignments and offers share one schedule lock.
       const cleaner = (await tx.query("SELECT id FROM app_users WHERE id=$1 AND role='cleaner' FOR UPDATE", [cleanerId])).rows[0];
       if (!cleaner) throw new ApiError(400, 'cleaner_required', 'Выберите уборщицу для назначения заказа.');
@@ -488,9 +490,10 @@ export class SchedulingService {
       if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
       if (Number(order.payable_amount) > 0) throw new ApiError(409, 'payment_required', 'Сначала оплатите допуслуги.');
       if (!['pending_assignment','waiting_cleaner','assigned'].includes(order.status)) throw new ApiError(409, 'invalid_transition', 'Этот заказ нельзя назначить повторно.');
+      const team=await assignTeamMember(tx,order,cleanerId,actorId,teamSlot);if(team!==undefined)return team;
       if (order.status === 'assigned' && order.cleaner_id === cleanerId) return {order, changed: false};
       await assertCleanerCapacity(tx,cleanerId,order.scheduled_date,order.start_time,order.end_time,Number(order.estimated_duration_minutes),orderId);
-      const overlap = (await tx.query(`SELECT id FROM service_orders WHERE cleaner_id=$1
+      const overlap = (await tx.query(`SELECT id FROM cleaner_order_workloads WHERE cleaner_id=$1
         AND status NOT IN ('cancelled','completed') AND scheduled_date+start_time<cleaning_end_at($2::date,$3::time,$4::time,(SELECT estimated_duration_minutes FROM service_orders WHERE id=$5)) AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$2::date+$3::time AND id<>$5 LIMIT 1`,
         [cleanerId,order.scheduled_date,order.start_time,order.end_time,orderId])).rows;
       if (overlap.length) throw new ApiError(400, 'cleaner_unavailable', 'Уборщица занята на это время. Выберите другую.');
@@ -503,7 +506,7 @@ export class SchedulingService {
 
   async cleanerAvailable(cleanerId: string, date: string, startTime: string, endTime: string, excludeOrderId?: string): Promise<boolean> {
     const overlap = first<{ id: string }>((await this.db.query(
-      `SELECT id FROM service_orders
+      `SELECT id FROM cleaner_order_workloads
        WHERE cleaner_id=$1  AND status NOT IN ('cancelled','completed')
        AND scheduled_date+start_time < cleaning_end_at($2::date,$3::time,$4::time,(SELECT estimated_duration_minutes FROM service_orders WHERE id=$5)) AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$2::date+$3::time
        AND ($5::uuid IS NULL OR id<>$5::uuid)
@@ -524,7 +527,7 @@ export class SchedulingService {
        WHERE u.role='cleaner' AND u.status='approved' AND cp.verification_status='approved' AND $5::numeric>=0
        ${requireWorkingHours ? 'AND '+cleanerSlotAllowedSql('u.id','$1','$2','$3','$4','$5','$6') : ''}
        AND NOT EXISTS (
-         SELECT 1 FROM service_orders o
+         SELECT 1 FROM cleaner_order_workloads o
          WHERE o.cleaner_id=u.id
          AND o.status NOT IN ('cancelled','completed') AND ($6::uuid IS NULL OR o.id<>$6)
          AND o.scheduled_date+o.start_time < cleaning_end_at($1::date,$2::time,$3::time,$4::int) AND cleaning_end_at(o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes)>$1::date+$2::time
@@ -547,7 +550,7 @@ export class SchedulingService {
           AND ($6::uuid IS NULL OR u.id=$6)
           AND ${cleanerSlotAllowedSql('u.id','$1','s.starts','s.ends','s.minutes','$7','$5')}
           AND NOT EXISTS (
-            SELECT 1 FROM service_orders o WHERE o.cleaner_id=u.id
+            SELECT 1 FROM cleaner_order_workloads o WHERE o.cleaner_id=u.id
               AND ($5::uuid IS NULL OR o.id<>$5)
               AND o.status NOT IN ('cancelled','completed')
               AND o.scheduled_date+o.start_time<cleaning_end_at($1::date,s.starts,s.ends,s.minutes) AND cleaning_end_at(o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes)>$1::date+s.starts
@@ -561,10 +564,13 @@ export class SchedulingService {
 
   async offerNextCleaner(orderId: string, excludeCleanerIds: string[] = [], ttlMinutes = 2) {
     return this.db.transaction(async client => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('domly:booking-create-reschedule',0))");
       const order = first<any>((await client.query(
         `SELECT o.*,${orderAreaSql('o')} AS capacity_area FROM service_orders o WHERE o.id=$1 FOR UPDATE`,
         [orderId],
       )).rows);
+      if(!order || Number(order.payable_amount??0)>0 || !['pending_assignment','waiting_cleaner'].includes(order.status))return null;
+      if(order) { const team=await teamOffers(client,order,excludeCleanerIds,ttlMinutes); if(team!==undefined)return team; }
       if (!order || Number(order.payable_amount ?? 0) > 0 || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status)) return null;
       if (!order?.scheduled_date || !order.start_time || !order.end_time) {
         throw new ApiError(400, 'invalid_order_time', 'У заказа не указаны дата и время.');
@@ -610,7 +616,7 @@ export class SchedulingService {
        JOIN app_users u ON u.id=o.customer_id
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
        LEFT JOIN catalog_packages pkg ON pkg.id=o.package_id
-       WHERE ${cleanerSlotAllowedSql('oo.cleaner_id','o.scheduled_date','o.start_time','o.end_time','o.estimated_duration_minutes',orderAreaSql('o'),'o.id')} AND oo.cleaner_id=$1 AND oo.status='offered' AND oo.expires_at > NOW() AND o.cleaner_id IS NULL AND o.status IN ('pending_assignment','waiting_cleaner') AND o.payable_amount <= 0
+       WHERE ${cleanerSlotAllowedSql('oo.cleaner_id','o.scheduled_date','o.start_time','o.end_time','o.estimated_duration_minutes',"domly_order_cleaner_area(o.id,oo.cleaner_id)",'o.id')} AND oo.cleaner_id=$1 AND oo.status='offered' AND oo.expires_at > NOW() AND o.cleaner_id IS NULL AND o.status IN ('pending_assignment','waiting_cleaner') AND o.payable_amount <= 0
        ORDER BY oo.created_at ASC`,
       [cleanerId],
     )).rows;
@@ -642,12 +648,36 @@ export class SchedulingService {
 
   async acceptOffer(orderId: string, cleanerId: string) {
     return this.db.transaction(async client=>{
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('domly:booking-create-reschedule',0))");
       await client.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[cleanerId]);
       const order=first<any>((await client.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[orderId])).rows);
       if(!order)throw new ApiError(404,'not_found','Заказ не найден.');
+      if(Number(order.payable_amount??0)>0)throw new ApiError(409,'order_unavailable','Заказ уже недоступен для принятия.');
+      const member=(await client.query<any>('SELECT * FROM order_team_members WHERE order_id=$1 AND cleaner_id=$2 FOR UPDATE',[orderId,cleanerId])).rows[0];
+      if(member){
+        if(['accepted','in_progress','completed'].includes(member.status))return order;
+        const verified=(await client.query("SELECT 1 FROM app_users u JOIN cleaner_profiles cp ON cp.user_id=u.id WHERE u.id=$1 AND u.status='approved' AND cp.verification_status='approved'",[cleanerId])).rows.length;
+        if(!verified)throw new ApiError(409,'cleaner_not_approved','Клинер должен пройти проверку перед принятием заказа.');
+        if(Number(order.payable_amount)>0 || !['pending_assignment','waiting_cleaner'].includes(order.status))throw new ApiError(409,'order_unavailable','Заказ уже недоступен.');
+        const offered=(await client.query("SELECT id FROM order_offers WHERE order_id=$1 AND cleaner_id=$2 AND status='offered' AND expires_at>NOW() FOR UPDATE",[orderId,cleanerId])).rows[0];
+        if(!offered)throw new ApiError(409,'offer_unavailable','Предложение уже недоступно.');
+        await assertCleanerCapacity(client,cleanerId,order.scheduled_date,order.start_time,order.end_time,Number(order.estimated_duration_minutes),orderId);
+        const conflict=(await client.query(`SELECT id FROM cleaner_order_workloads WHERE cleaner_id=$1 AND id<>$2 AND status NOT IN ('cancelled','completed','draft')
+          AND scheduled_date+start_time<cleaning_end_at($3::date,$4::time,$5::time,$6::int)
+          AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$3::date+$4::time LIMIT 1`,[cleanerId,orderId,order.scheduled_date,order.start_time,order.end_time,order.estimated_duration_minutes])).rows.length;
+        if(conflict)throw new ApiError(409,'cleaner_unavailable','Это время занято другим заказом.');
+        await client.query("UPDATE order_team_members SET status='accepted',accepted_at=NOW(),updated_at=NOW() WHERE id=$1",[member.id]);
+        await client.query('INSERT INTO chat_participants(chat_id,user_id) SELECT id,$2 FROM chats WHERE order_id=$1 ON CONFLICT DO NOTHING',[orderId,cleanerId]);
+        await client.query("UPDATE order_offers SET status='accepted' WHERE order_id=$1 AND cleaner_id=$2",[orderId,cleanerId]);
+        const pending=(await client.query("SELECT id FROM order_team_members WHERE order_id=$1 AND status<>'accepted'",[orderId])).rows.length;
+        if(pending)return order;
+        const primary=(await client.query('SELECT cleaner_id FROM order_team_members WHERE order_id=$1 ORDER BY slot_number LIMIT 1',[orderId])).rows[0].cleaner_id;
+        await client.query("INSERT INTO order_status_history(order_id,old_status,new_status,actor_id,comment) VALUES($1,$2,'assigned',$3,'Вся команда приняла заказ')",[orderId,order.status,cleanerId]);
+        return (await client.query("UPDATE service_orders SET cleaner_id=$2,status='assigned',updated_at=NOW() WHERE id=$1 RETURNING *",[orderId,primary])).rows[0];
+      }
       if(Number(order.payable_amount ?? 0) > 0 || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status))throw new ApiError(409,'order_unavailable','Заказ уже недоступен для принятия.');
       await assertCleanerCapacity(client,cleanerId,order.scheduled_date,order.start_time,order.end_time,Number(order.estimated_duration_minutes),orderId);
-      const overlap=(await client.query(`SELECT id FROM service_orders WHERE cleaner_id=$1
+      const overlap=(await client.query(`SELECT id FROM cleaner_order_workloads WHERE cleaner_id=$1
         AND status NOT IN ('cancelled','completed') AND scheduled_date+start_time<cleaning_end_at($2::date,$3::time,$4::time,(SELECT estimated_duration_minutes FROM service_orders WHERE id=$5)) AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$2::date+$3::time AND id<>$5 LIMIT 1`,[cleanerId,order.scheduled_date,order.start_time,order.end_time,orderId])).rows;
       if(overlap.length)throw new ApiError(400,'cleaner_unavailable','Это время уже занято другим заказом.');
       const current=first((await client.query(`SELECT id FROM order_offers WHERE order_id=$1 AND cleaner_id=$2 AND status='offered' AND expires_at>NOW() FOR UPDATE`,[orderId,cleanerId])).rows);
@@ -661,7 +691,9 @@ export class SchedulingService {
 
   async declineOffer(orderId: string, cleanerId: string) {
     await this.db.transaction(async client => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('domly:booking-create-reschedule',0))");
       const order=first<any>((await client.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[orderId])).rows);
+      if(order)await client.query("UPDATE order_team_members SET cleaner_id=NULL,status='reserved',updated_at=NOW() WHERE order_id=$1 AND cleaner_id=$2 AND status='offered'",[orderId,cleanerId]);
       if (!order || order.cleaner_id || !['pending_assignment','waiting_cleaner'].includes(order.status)) throw new ApiError(409,'order_unavailable','Заказ уже недоступен.');
       const declined=(await client.query(`UPDATE order_offers SET status='declined' WHERE order_id=$1 AND cleaner_id=$2 AND status='offered' AND expires_at>NOW() RETURNING id`,[orderId,cleanerId])).rows;
       if (!declined.length) throw new ApiError(409,'offer_unavailable','Предложение уже недоступно.');

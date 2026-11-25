@@ -9,7 +9,7 @@ export async function requestAccountDeletion(db: Database, userId: string) {
     const existing=(await tx.query(`SELECT * FROM account_deletion_requests WHERE user_id=$1
       AND restored_at IS NULL AND anonymized_at IS NULL FOR UPDATE`,[userId])).rows[0];
     if(user.deleted_at && existing)return {deleted:true,restoreUntil:existing.restore_until};
-    const busy=(await tx.query(`SELECT id FROM service_orders WHERE (customer_id=$1 OR cleaner_id=$1)
+    const busy=(await tx.query(`SELECT id FROM service_orders WHERE (customer_id=$1 OR cleaner_id=$1 OR EXISTS(SELECT 1 FROM order_team_members tm WHERE tm.order_id=service_orders.id AND tm.cleaner_id=$1))
       AND status NOT IN ('completed','cancelled','canceled') LIMIT 1`,[userId])).rows[0];
     if(busy)throw new ApiError(409,'active_orders','Завершите или отмените текущие заказы перед удалением аккаунта.');
     const profile=(await tx.query('SELECT * FROM cleaner_profiles WHERE user_id=$1 FOR UPDATE',[userId])).rows[0];
