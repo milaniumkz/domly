@@ -608,7 +608,8 @@ export class SchedulingService {
   async cleanerOffers(cleanerId: string) {
     return (await this.db.query(
       `SELECT oo.*, o.numeric_id AS order_number, o.scheduled_date, o.start_time, o.end_time,
-              o.estimated_duration_minutes, COALESCE(ca.verified_area,ca.area,o.area) AS area, ca.city, ca.street, ca.house, ca.apartment,
+              o.estimated_duration_minutes, o.required_cleaners, o.labor_duration_minutes, COALESCE(ca.verified_area,ca.area,o.area) AS service_area,
+              COALESCE((SELECT m.allocated_area FROM order_team_members m WHERE m.order_id=o.id AND m.cleaner_id=oo.cleaner_id),ca.verified_area,ca.area,o.area) AS area, ca.city, ca.street, ca.house, ca.apartment,
               pkg.name_ru AS package_name_ru,
               u.full_name AS customer_name, u.phone AS customer_phone
        FROM order_offers oo

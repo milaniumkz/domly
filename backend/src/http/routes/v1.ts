@@ -1729,13 +1729,13 @@ export function buildV1Router(deps: {
     )).rows);
     const nextOffer = await deps.scheduling.declineOfferById(String(req.params.id), req.user!.id);
     if (nextOffer) {
-      await deps.notifications.create({
-        userId: (nextOffer as any).cleaner_id,
+      for(const memberOffer of (nextOffer as any).teamOffers??[nextOffer])await deps.notifications.create({
+        userId: memberOffer.cleaner_id,
         titleRu: 'Новый заказ',
         bodyRu: 'Вам поступил новый заказ на подтверждение.',
         targetType: 'order_offer',
         targetId: (nextOffer as any).order_id,
-        dedupeKey: `order-offer-${(nextOffer as any).order_id}-${(nextOffer as any).cleaner_id}-${new Date((nextOffer as any).expires_at).toISOString()}`,
+        dedupeKey: `order-offer-${(nextOffer as any).order_id}-${memberOffer.cleaner_id}-${new Date(memberOffer.expires_at).toISOString()}`,
       });
     } else {
       await deps.notifications.createAdminEvent({
@@ -1765,13 +1765,13 @@ export function buildV1Router(deps: {
   router.post('/orders/:id/offers/decline', auth(['cleaner']), asyncHandler(async (req, res) => {
     const nextOffer = await deps.scheduling.declineOffer(String(req.params.id), req.user!.id);
     if (nextOffer) {
-      await deps.notifications.create({
-        userId: (nextOffer as any).cleaner_id,
+      for(const memberOffer of (nextOffer as any).teamOffers??[nextOffer])await deps.notifications.create({
+        userId: memberOffer.cleaner_id,
         titleRu: 'Новый заказ',
         bodyRu: 'Вам поступил новый заказ на подтверждение.',
         targetType: 'order_offer',
         targetId: String(req.params.id),
-        dedupeKey: `order-offer-${String(req.params.id)}-${(nextOffer as any).cleaner_id}-${new Date((nextOffer as any).expires_at).toISOString()}`,
+        dedupeKey: `order-offer-${String(req.params.id)}-${memberOffer.cleaner_id}-${new Date(memberOffer.expires_at).toISOString()}`,
       });
     } else {
       await deps.notifications.createAdminEvent({
