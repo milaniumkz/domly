@@ -8,7 +8,7 @@ export const bookingLock='domly:booking-create-reschedule';
  */
 export async function pendingBookingCount(db:Database,date:string,start:string,duration:number){
  return Number((await db.query(`SELECT COUNT(*)::int AS count FROM service_orders o
-  WHERE o.cleaner_id IS NULL AND o.status NOT IN ('cancelled','completed')
+  WHERE o.cleaner_id IS NULL AND NOT EXISTS(SELECT 1 FROM order_team_members tm WHERE tm.order_id=o.id) AND o.status NOT IN ('cancelled','completed')
   AND o.scheduled_date+o.start_time < $1::date+$2::time+$3::int*INTERVAL '1 minute'
   AND cleaning_end_at(o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes)>$1::date+$2::time`,[date,start,duration])).rows[0].count);
 }

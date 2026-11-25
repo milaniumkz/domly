@@ -955,6 +955,7 @@ test('order offers repeat full rounds for one, two and three available cleaners'
     let available=ids.map(id=>({id}));
     const offers: any[]=[];
     const query=async(sql:string,values:any[]=[]) => {
+      if(sql.includes('pg_advisory_xact_lock') || sql.includes('order_team_members'))return {rows:[]};
       if(sql.includes('domly_service_zones_enforced'))return {rows:[{allowed:true}]};
       if(sql.includes('FROM service_orders')&&sql.includes('FOR UPDATE')) return {rows:[{id:'order',status:orderStatus,scheduled_date:'2030-01-02',start_time:'10:00',end_time:'12:00'}]};
       if(sql.includes("SET status='declined'")) {
@@ -1001,6 +1002,7 @@ test('order offers repeat full rounds for one, two and three available cleaners'
 test('unpaid extras block cleaner dispatch and acceptance even with stale assignment status', async () => {
   let reads = 0;
   const db = {transaction: async (fn: any) => fn({query: async (sql: string) => {
+    if (sql.includes('pg_advisory_xact_lock'))return {rows:[]};
     if (sql.includes('FROM service_orders')) {
       reads++;
       return {rows: [{id: 'order', status: 'pending_assignment', payable_amount: '1500.00'}]};

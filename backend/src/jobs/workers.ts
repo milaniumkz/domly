@@ -82,7 +82,7 @@ workers.push(new Worker('cleaner-alarms', async (job) => {
   const active=(await db.query(`SELECT 1 FROM order_offers f JOIN service_orders o ON o.id=f.order_id
     WHERE f.order_id=$1 AND f.cleaner_id=$2 AND f.status='offered' AND f.expires_at>NOW()
     AND o.status IN ('pending_assignment','waiting_cleaner') AND o.cleaner_id IS NULL
-    AND ${cleanerSlotAllowedSql('f.cleaner_id','o.scheduled_date','o.start_time','o.end_time','o.estimated_duration_minutes',orderAreaSql('o'),'o.id')} LIMIT 1`,[orderId,cleanerId])).rows.length;
+    AND ${cleanerSlotAllowedSql('f.cleaner_id','o.scheduled_date','o.start_time','o.end_time','o.estimated_duration_minutes',"domly_order_cleaner_area(o.id,f.cleaner_id)",'o.id')} LIMIT 1`,[orderId,cleanerId])).rows.length;
   if(!active)return;
 
   await sendLocalizedPush(db,fcm,{userId:cleanerId,titleRu:titleRu ?? 'Новый заказ',bodyRu:bodyRu ?? 'Вам поступил новый заказ. Откройте приложение.'},{
@@ -165,13 +165,13 @@ workers.push(new Worker('maintenance', async (job) => {
     )).rows.map((row) => row.cleaner_id);
     const offer = await scheduling.offerNextCleaner(orderId, excluded, ttlMinutes) as any;
     if (offer) {
-      await notifyUser(
-        offer.cleaner_id,
+      for(const memberOffer of offer.teamOffers??[offer])await notifyUser(
+        memberOffer.cleaner_id,
         'Новый заказ',
         'Вам поступил новый заказ на подтверждение.',
         'order_offer',
         orderId,
-        `order-offer-${orderId}-${offer.cleaner_id}-${new Date(offer.expires_at).toISOString()}`,
+        `order-offer-${orderId}-${memberOffer.cleaner_id}-${new Date(memberOffer.expires_at).toISOString()}`,
       );
     } else {
       await notifyRole(

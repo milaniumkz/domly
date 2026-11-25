@@ -1,3 +1,4 @@
+import {teamDurationAfterAddonChange,assertTeamInterval} from './cleaningTeam';
 import {assertCleanerCapacity} from './cleanerCapacity';
 import {bookingLock} from './botBookingCapacity';
 import {customerTierDiscount,discountedServicePrice} from './customerProgress';
@@ -47,10 +48,16 @@ export async function updateOrderAddons(db: Database, orderId: string, customerI
       COALESCE(SUM(price*quantity) FILTER (WHERE payment_status<>'paid' AND paid_separately=FALSE AND requires_customer_approval IS DISTINCT FROM TRUE),0) AS pending,
       COALESCE(SUM(duration_minutes) FILTER (WHERE requires_customer_approval IS DISTINCT FROM TRUE),0) AS duration FROM order_addons WHERE order_id=$1`,[orderId])).rows);
     const oldDuration = existing.filter(row=>row.requires_customer_approval!==true).reduce((sum,row)=>sum+Number(row.duration_minutes),0);
-    const duration = durationAfterAddonChange(order,oldDuration,Number(totals.duration));
-    if (order.cleaner_id) {
+    const team=(await tx.query<any>('SELECT * FROM order_team_members WHERE order_id=$1 ORDER BY slot_number',[orderId])).rows;
+    const timing=team.length?teamDurationAfterAddonChange(order,oldDuration,Number(totals.duration),team.filter(m=>m.status!=='completed').length):null;
+    const duration=timing?.duration??durationAfterAddonChange(order,oldDuration,Number(totals.duration));
+    if(timing){
+      await assertTeamInterval(tx,order,duration);
+      await tx.query('UPDATE service_orders SET labor_duration_minutes=$2 WHERE id=$1',[orderId,timing.labor]);
+    }
+    if (order.cleaner_id && !team.length) {
       await assertCleanerCapacity(tx,order.cleaner_id,order.scheduled_date,order.start_time,order.end_time,duration,orderId);
-      const overlap=first((await tx.query(`SELECT id FROM service_orders WHERE cleaner_id=$1
+      const overlap=first((await tx.query(`SELECT id FROM cleaner_order_workloads WHERE cleaner_id=$1
         AND id<>$3 AND status NOT IN ('cancelled','completed') AND scheduled_date+start_time<($2::date+$4::time+$5::int*INTERVAL '1 minute')
         AND cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)>$2::date+$4::time LIMIT 1`,[order.cleaner_id,order.scheduled_date,order.id,order.start_time,duration])).rows);
       if (overlap) throw new ApiError(409,'cleaner_unavailable','Дополнительные услуги пересекаются со следующим заказом уборщицы.');

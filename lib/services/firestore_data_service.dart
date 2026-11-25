@@ -1872,6 +1872,7 @@ class FirestoreDataService {
   bool _isActiveAdminAssignment(Map<String, dynamic> item) {
     final status =
         (item['orderStatus'] ?? item['status'] ?? '').toString().toLowerCase();
+    if (item['teamReservation'] == true && !{'cancelled', 'canceled', 'completed', 'draft'}.contains(status)) return true;
     return const {
       'assigned',
       'confirmed',
@@ -1920,7 +1921,7 @@ class FirestoreDataService {
   }
 
   Stream<List<Map<String, dynamic>>> adminAssignmentItemsStream() {
-    if (!_isDebugAdmin) return adminOrdersStream();
+    if (!_isDebugAdmin) return adminOrdersStream().map(expandAdminTeamAssignments);
     return _combineLatestLists(
       adminOrdersStream(),
       adminScheduleSlotsStream(),
@@ -10248,6 +10249,7 @@ class FirestoreDataService {
   Future<Map<String, dynamic>> getAvailableDates({
     required String subscriptionId,
     required DateTime month,
+    List<Map<String, dynamic>> newAddonsDetailed = const [],
   }) async {
     if (_isDebugCustomer) {
       if (!await _debugOwnsSubscription(subscriptionId)) {
@@ -10276,6 +10278,7 @@ class FirestoreDataService {
     return _getAvailableDatesDirect(
       subscriptionId: subscriptionId,
       month: month,
+      newAddonsDetailed: newAddonsDetailed,
     );
   }
 
@@ -10319,6 +10322,7 @@ class FirestoreDataService {
   Future<Map<String, dynamic>> _getAvailableDatesDirect({
     required String subscriptionId,
     required DateTime month,
+    List<Map<String, dynamic>> newAddonsDetailed = const [],
   }) async {
     final subscription = await _loadOwnedSubscription(subscriptionId);
     final monthStart = DateTime(month.year, month.month, 1);
@@ -10358,6 +10362,7 @@ class FirestoreDataService {
         loadSlots: (dateKey) => _loadBackendAvailableSlots(
             dateKey: dateKey,
             customerPackageId: subscriptionId,
+            newAddonsDetailed: newAddonsDetailed,
             addressId: (subscription['addressId'] ?? '').toString()));
     return {'ok': true, 'dates': dates, 'backend': true};
   }
@@ -12505,10 +12510,11 @@ class FirestoreDataService {
     required String time,
     required String address,
     String scopeType = 'order',
+    int? teamSlot,
   }) async {
     await BackendApiService.instance.postMap(
       '/admin/orders/$orderId/assign-cleaner',
-      body: {'cleanerId': cleanerId},
+      body: {'cleanerId': cleanerId, if (teamSlot != null) 'teamSlot':teamSlot},
     );
   }
 

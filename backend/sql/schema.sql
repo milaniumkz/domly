@@ -1672,6 +1672,53 @@ RETURNS TIMESTAMP LANGUAGE SQL IMMUTABLE AS $$
  ELSE (end_clock-start_clock)+CASE WHEN end_clock<start_clock THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END END
 $$;
 
+-- Team assignments are additive: historical single-cleaner orders retain their
+-- original representation and remain executable without migration of bookings.
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS required_cleaners INTEGER NOT NULL DEFAULT 1 CHECK(required_cleaners>0);
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS labor_duration_minutes INTEGER;
+CREATE TABLE IF NOT EXISTS order_team_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES service_orders(id) ON DELETE CASCADE,
+  cleaner_id UUID REFERENCES app_users(id),
+  slot_number INTEGER NOT NULL CHECK(slot_number>=0),
+  allocated_area NUMERIC(10,2) NOT NULL CHECK(allocated_area>=0 AND allocated_area<=250),
+  status TEXT NOT NULL DEFAULT 'reserved' CHECK(status IN ('reserved','offered','accepted','in_progress','completed')),
+  accepted_at TIMESTAMPTZ, started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(order_id,slot_number), UNIQUE(order_id,cleaner_id)
+);
+CREATE INDEX IF NOT EXISTS order_team_members_cleaner_idx ON order_team_members(cleaner_id,order_id);
+CREATE TABLE IF NOT EXISTS team_photo_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES service_orders(id) ON DELETE CASCADE,
+  cleaner_id UUID NOT NULL REFERENCES app_users(id),
+  photo_urls JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(order_id,cleaner_id)
+);
+CREATE OR REPLACE VIEW cleaner_order_workloads AS
+ SELECT o.id,o.cleaner_id,o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes,o.status,
+   COALESCE(NULLIF(o.area,0),a.verified_area,a.area,0) AS area,o.total_amount
+ FROM service_orders o LEFT JOIN customer_addresses a ON a.id=o.address_id
+ WHERE o.cleaner_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM order_team_members tm WHERE tm.order_id=o.id)
+ UNION ALL
+ SELECT o.id,m.cleaner_id,o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes,o.status,
+   m.allocated_area AS area,
+   (FLOOR(o.total_amount*100/o.required_cleaners)+CASE WHEN m.slot_number<MOD(ROUND(o.total_amount*100)::bigint,o.required_cleaners) THEN 1 ELSE 0 END)/100 AS total_amount
+ FROM order_team_members m JOIN service_orders o ON o.id=m.order_id WHERE m.cleaner_id IS NOT NULL;
+CREATE OR REPLACE FUNCTION domly_order_has_cleaner(target_order UUID,actor UUID)
+RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM order_team_members m WHERE m.order_id=target_order AND m.cleaner_id=actor
+   AND m.status IN ('accepted','in_progress','completed'))
+ OR EXISTS(SELECT 1 FROM service_orders o WHERE o.id=target_order AND o.cleaner_id=actor
+   AND NOT EXISTS(SELECT 1 FROM order_team_members m WHERE m.order_id=o.id))
+$$;
+CREATE OR REPLACE FUNCTION domly_order_cleaner_area(target_order UUID,actor UUID)
+RETURNS NUMERIC LANGUAGE SQL STABLE AS $$
+ SELECT COALESCE((SELECT allocated_area FROM order_team_members WHERE order_id=target_order AND cleaner_id=actor),
+   (SELECT COALESCE(NULLIF(o.area,0),a.verified_area,a.area,0) FROM service_orders o LEFT JOIN customer_addresses a ON a.id=o.address_id WHERE o.id=target_order))
+$$;
+
 -- One policy for customer slot previews, offers and atomic assignment checks.
 -- Completed visits still consume the day's area. Exclude the edited visit once.
 CREATE OR REPLACE FUNCTION domly_cleaner_slot_allowed(cleaner UUID,service_day DATE,start_clock TIME,end_clock TIME,duration_minutes INTEGER,incoming_area NUMERIC,exclude_order UUID DEFAULT NULL)
@@ -1681,8 +1728,8 @@ RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
    WHERE wr.status='approved' AND wd.cleaner_id=cleaner AND wd.work_date=service_day
    AND wd.start_time<=start_clock AND wd.end_time>=start_clock
    AND GREATEST(cleaning_end_at(service_day,start_clock,end_clock,duration_minutes),cleaning_end_at(service_day,start_clock,end_clock,0))<=service_day+wd.end_time+INTERVAL '2 hours')
- AND incoming_area+COALESCE((SELECT SUM(COALESCE(NULLIF(o.area,0),a.verified_area,a.area,0))
-   FROM service_orders o LEFT JOIN customer_addresses a ON a.id=o.address_id
+ AND incoming_area+COALESCE((SELECT SUM(o.area)
+   FROM cleaner_order_workloads o
    WHERE o.cleaner_id=cleaner AND o.scheduled_date=service_day
    AND o.status NOT IN ('cancelled','draft') AND (exclude_order IS NULL OR o.id<>exclude_order)),0)<=250
 $$;

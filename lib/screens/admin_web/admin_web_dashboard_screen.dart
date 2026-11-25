@@ -2243,7 +2243,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               }
               final cleanerName =
                   (data['cleanerName'] ?? data['cleanerId'] ?? '—').toString();
-              if (_cleanerFilter != 'Все' && cleanerName != _cleanerFilter) {
+              if (_cleanerFilter != 'Все' && cleanerName != _cleanerFilter && !(data['team_members'] as List? ?? const []).whereType<Map>().any((m) => m['name'] == _cleanerFilter)) {
                 return false;
               }
               final serviceArea =
@@ -2274,6 +2274,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 data['clusterName'],
                 data['serviceArea'],
                 data['assignmentStatus'],
+                _teamOrderSummary(data),
                 status,
               ].join(' ').toLowerCase();
               return haystack.contains(query);
@@ -2611,6 +2612,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               _miniInfo('Назначение', _adminOrderAssignmentText(data)),
             ],
           ),
+          if (_teamOrderSummary(data).isNotEmpty) ...[const SizedBox(height:12),_adminOrderLongInfo('Команда',_teamOrderSummary(data))],
           if (addonLabels.isNotEmpty) ...[
             SizedBox(height: 12),
             _adminOrderLongInfo('Доп. услуги', addonLabels),
@@ -2680,6 +2682,12 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
   }
 
+  String _teamOrderSummary(Map<String, dynamic> order) {
+    const labels = {'reserved': 'Зарезервирован', 'offered': 'Ожидает ответа', 'accepted': 'Принял', 'in_progress': 'В работе', 'completed': 'Завершил'};
+    final crew = (order['team_members'] as List? ?? const []).whereType<Map>();
+    return crew.map((member) => '${(member['slot'] as num? ?? 0).toInt() + 1}. ${member['name'] ?? 'Подбираем замену'} · ${member['phone'] ?? '—'} · ${member['area']} м² · ${labels[member['status']] ?? member['status']}').join('\n');
+  }
+
   Future<void> _copyAdminOrder(
     Map<String, dynamic> data, {
     required Map<String, dynamic> customer,
@@ -2723,6 +2731,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           ? '—'
           : _personPhone(cleaner, data, prefix: 'cleaner'),
       'Назначение': _adminOrderAssignmentText(data),
+      if (_teamOrderSummary(data).isNotEmpty) 'Команда': _teamOrderSummary(data),
       'Район': _firstText([data['serviceArea'], data['district']]),
       'Кластер': _firstText([data['clusterName']]),
       'Комментарий': _firstText([
@@ -2844,6 +2853,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           'Уборщица': cleanerName,
           if (cleanerId.trim().isNotEmpty) 'Телефон уборщицы': cleanerPhone,
         }),
+        if (_teamOrderSummary(data).isNotEmpty) _detailSection('Команда', {'Участники': _teamOrderSummary(data)}),
         _detailSection('Адрес и доступ', {
           'Адрес': (data['address'] ?? '—').toString(),
           'Подъезд': (data['entrance'] ?? '—').toString(),
@@ -5697,7 +5707,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     for (final order in allOrders) {
       final orderId = (order['id'] ?? order['orderId'] ?? '').toString().trim();
       if (orderId == targetId ||
-          (order['cleanerId'] ?? '').toString() != cleanerId ||
+          ((order['cleanerId'] ?? '').toString() != cleanerId && !(order['team_members'] as List? ?? const []).whereType<Map>().any((m) => m['cleaner_id'] == cleanerId)) ||
           !_adminActiveAssignedOrder(order) ||
           _adminDateKey(_adminOrderDate(order)) != targetDateKey) {
         continue;
@@ -5982,6 +5992,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           prefix: 'cleaner',
         ).compareTo(_personName(b, const {}, prefix: 'cleaner')),
       );
+    final crew = (order['team_members'] as List? ?? const []).whereType<Map>().toList();
+    int? selectedTeamSlot = crew.isEmpty ? null : ((crew.firstWhere((m) => m['cleaner_id'] == null, orElse: () => crew.first)['slot'] as num?)?.toInt() ?? 0);
     String? selectedCleanerId;
     String? selectedCleanerName;
     final timeController = TextEditingController(
@@ -6040,9 +6052,15 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     _adminWarningBox(assignError),
                   ],
                   const SizedBox(height: 12),
+                  if (crew.isNotEmpty) DropdownButtonFormField<int>(
+                    initialValue: selectedTeamSlot,
+                    decoration: const InputDecoration(labelText: 'Участник команды для назначения или замены'),
+                    items: crew.map((m) => DropdownMenuItem<int>(value:(m['slot'] as num).toInt(),child:Text('${(m['slot'] as num).toInt()+1}. ${m['name'] ?? 'Не назначен'}'))).toList(),
+                    onChanged: assigning ? null : (value) => setModalState(() {selectedTeamSlot=value;selectedCleanerId=null;selectedCleanerName=null;}),
+                  ),
                   DropdownButtonFormField<String>(
                     initialValue: selectedCleanerId,
-                    items: freeCleaners
+                    items: freeCleaners.where((cleaner) => !crew.any((member) => member['slot'] != selectedTeamSlot && member['cleaner_id'] == cleaner['id']))
                         .map(
                           (cleaner) => DropdownMenuItem<String>(
                             value: cleaner['id'].toString(),
@@ -6103,6 +6121,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                   time: timeController.text.trim(),
                                   address: addressController.text.trim(),
                                   scopeType: scopeType,
+                                  teamSlot: selectedTeamSlot,
                                 );
                                 if (!context.mounted) {
                                   return;

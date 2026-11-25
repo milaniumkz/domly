@@ -38,6 +38,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
   final Map<String, List<Map<String, dynamic>>> _selectedNewAddonsByDate =
       <String, List<Map<String, dynamic>>>{};
   String? _pendingAddonDateKey;
+  int _availabilityRequestId = 0;
   DateTime _visibleMonth = DateTime(
     LaunchConfig.bookingFloor(DateTime.now()).year,
     LaunchConfig.bookingFloor(DateTime.now()).month,
@@ -478,18 +479,20 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
   }
 
   Future<void> _loadAvailableDates() async {
+    final requestId = ++_availabilityRequestId;
     setState(() => _loadingDates = true);
     try {
       final result = await _data.getAvailableDates(
         subscriptionId: widget.subscriptionId,
         month: _visibleMonth,
+        newAddonsDetailed: _selectedNewAddonsByDate[_pendingAddonDateKey] ?? const [],
       );
       final dates = (result['dates'] as List? ?? const [])
           .map((item) => (item as Map)['date']?.toString() ?? '')
           .where((item) => item.isNotEmpty)
           .where((item) => !_isPastDateKey(item))
           .toSet();
-      if (!mounted) {
+      if (!mounted || requestId != _availabilityRequestId) {
         return;
       }
       setState(() {
@@ -497,9 +500,10 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         _removePastSelections();
       });
     } catch (error) {
-      if (!mounted) {
+      if (!mounted || requestId != _availabilityRequestId) {
         return;
       }
+      setState(() => _availableDateKeys = {});
       showDomlySnackBar(
         context,
         title: 'Не удалось загрузить даты',
@@ -507,7 +511,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
         type: DomlySnackBarType.error,
       );
     } finally {
-      if (mounted) {
+      if (mounted && requestId == _availabilityRequestId) {
         setState(() => _loadingDates = false);
       }
     }
@@ -780,15 +784,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                               ],
                             ),
                             const SizedBox(height: 14),
-                            if (_loadingDates)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
-                            else
-                              Stack(
+                            Stack(
                                 children: [
                                   Column(
                                     crossAxisAlignment:
@@ -809,20 +805,18 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                         ),
                                       ),
                                       AbsorbPointer(
-                                        absorbing: _loadingSlotsDateKey != null,
+                                        absorbing: _loadingSlotsDateKey != null || _loadingDates,
                                         child: Localizations.override(
                                           context: context,
                                           locale:
                                               Localizations.localeOf(context),
                                           child: CalendarDatePicker(
                                             key: ValueKey(
-                                              '${_visibleMonth.year}-${_visibleMonth.month}',
+                                              'package-calendar-${widget.subscriptionId}',
                                             ),
                                             initialDate: _initialCalendarDate(),
-                                            firstDate:
-                                                LaunchConfig.bookingFloor(
-                                              DateTime.now(),
-                                            ),
+                                            selectableDayPredicate: (date) => _availableDateKeys.contains(_toDateKey(date)) || _selectedTimes.containsKey(_toDateKey(date)),
+                                            firstDate: DateTime.now(),
                                             lastDate: DateTime(
                                               DateTime.now().year + 1,
                                             ),
@@ -853,7 +847,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                       ),
                                     ],
                                   ),
-                                  if (_loadingSlotsDateKey != null)
+                                  if (_loadingSlotsDateKey != null || _loadingDates)
                                     Positioned.fill(
                                       child: DecoratedBox(
                                         decoration: BoxDecoration(
@@ -878,7 +872,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                               ),
                                               const SizedBox(height: 12),
                                               Text(
-                                                "Подбираем слоты на {p0}".tr(
+                                                _loadingSlotsDateKey == null ? 'Выберите даты'.tr() : "Подбираем слоты на {p0}".tr(
                                                     params: {
                                                       'p0': (_formatDateKey(
                                                               _loadingSlotsDateKey!))
@@ -1140,7 +1134,8 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       }
       _pendingAddonDateKey = dateKey;
     });
-    if (chooseTime) await _selectTimeForDate(dateKey);
+    await _loadAvailableDates();
+    if (chooseTime && mounted) await _selectTimeForDate(dateKey);
     _scrollToSelectedBlock();
     return true;
   }
@@ -2048,6 +2043,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
           _selectedTimes[dateKey] = selectedTime;
           if (_pendingAddonDateKey == dateKey) _pendingAddonDateKey = null;
         });
+        await _loadAvailableDates();
       }
     } catch (error) {
       if (mounted)
@@ -2478,10 +2474,15 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     return dateStart.isBefore(todayStart);
   }
 
-  DateTime _initialCalendarDate() {
+  DateTime? _initialCalendarDate() {
     final floor = LaunchConfig.bookingFloor(DateTime.now());
-    final visible = DateTime(_visibleMonth.year, _visibleMonth.month);
-    return visible.isBefore(floor) ? floor : visible;
+    final end = DateTime(DateTime.now().year + 1);
+    final candidates = {..._availableDateKeys, ..._selectedTimes.keys}.toList()..sort();
+    for (final key in candidates) {
+      final date = DateTime.tryParse(key);
+      if (date != null && !date.isBefore(floor) && !date.isAfter(end) && date.year == _visibleMonth.year && date.month == _visibleMonth.month) return date;
+    }
+    return null;
   }
 
   String _toDateKey(DateTime date) {
@@ -2612,7 +2613,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
                                             Text(
                                               "{p0} исполн.".tr(params: {
                                                 'p0':
-                                                    (slot['availableCleaners'])
+                                                    (slot['requiredCleaners'] ?? slot['availableCleaners'])
                                                         .toString()
                                               }),
                                               style: TextStyle(

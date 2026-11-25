@@ -150,3 +150,24 @@ String adminOrderTimeText(Map<String, dynamic> order) {
         date: date, durationMinutes: duration);
   return clocks.isEmpty ? raw : clocks.first;
 }
+
+/// Expand a customer order only for staff schedule views. Orders, prices and
+/// package counters remain a single customer-facing record.
+List<Map<String, dynamic>> expandAdminTeamAssignments(
+    List<Map<String, dynamic>> orders) {
+  return orders.expand((order) {
+    final crew =
+        (order['team_members'] as List? ?? const []).whereType<Map>().toList();
+    if (crew.isEmpty) return [order];
+    return crew
+        .where((member) => member['cleaner_id'] != null)
+        .map((member) => <String, dynamic>{
+              ...order,
+              'cleanerId': member['cleaner_id'],
+              'cleanerName': member['name'],
+              'cleanerPhone': member['phone'],
+              'area': num.tryParse('${member['area']}') ?? 0,
+              'teamReservation': true,
+            });
+  }).toList();
+}

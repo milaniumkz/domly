@@ -4,7 +4,11 @@ export const defaultRequiredTasks = ['Протереть пыль','Пропыл
 export async function ensureChecklistReport(db: Database, order: any) {
   return db.transaction(async tx=>{
     await tx.query('SELECT id FROM service_orders WHERE id=$1 FOR UPDATE',[order.id]);
-    const existing=(await tx.query('SELECT * FROM checklist_reports WHERE order_id=$1 ORDER BY created_at LIMIT 1',[order.id])).rows[0];
+    if(!order.report_cleaner_id){
+      const member=(await tx.query<{cleaner_id:string}>('SELECT cleaner_id FROM order_team_members WHERE order_id=$1 AND cleaner_id IS NOT NULL ORDER BY slot_number LIMIT 1',[order.id])).rows[0];
+      if(member)order={...order,cleaner_id:member.cleaner_id,report_cleaner_id:member.cleaner_id};
+    }
+    const existing=(await tx.query('SELECT * FROM checklist_reports WHERE order_id=$1 AND ($2::uuid IS NULL OR cleaner_id=$2) ORDER BY created_at LIMIT 1',[order.id,order.report_cleaner_id??null])).rows[0];
     if(existing && (existing.requirements_initialized || ['completed','cancelled'].includes(order.status))) return existing;
     const report=existing ?? (await tx.query("INSERT INTO checklist_reports(order_id,cleaner_id,status) VALUES($1,$2,'open') RETURNING *",[order.id,order.cleaner_id??null])).rows[0];
     const templates=(await tx.query(`SELECT i.title_ru,i.title_kk FROM checklist_templates t JOIN checklist_template_items i ON i.template_id=t.id WHERE t.active AND (t.package_id=$1 OR t.package_id IS NULL) ORDER BY i.sort_order,i.id`,[order.package_id??null])).rows;
@@ -23,7 +27,7 @@ export async function ensureChecklistReport(db: Database, order: any) {
   });
 }
 export async function saveChecklist(db:Database, order:any, actor:string, titles:string[], note:string) {
-  const report=await ensureChecklistReport(db,order);
+  const report=await ensureChecklistReport(db,{...order,report_cleaner_id:order.report_cleaner_id??(Number(order.required_cleaners)>1?actor:null)});
   return db.transaction(async tx=>{
     const state=(await tx.query('SELECT status FROM service_orders WHERE id=$1 FOR UPDATE',[order.id])).rows[0];
     if(!['assigned','start_pending','in_progress'].includes(state?.status))throw new ApiError(409,'invalid_transition','Чек-лист завершённого заказа нельзя изменить.');
