@@ -9,6 +9,32 @@ List<String> bookingAddonIds(Map<String, dynamic> selection) {
   return ids.toList();
 }
 
+/// Move only a visit draft: scheduled visits and their extras stay independent.
+bool movePendingBookingAddons({
+  required String? fromDateKey,
+  required String toDateKey,
+  required Map<String, String> selectedTimes,
+  required Map<String, List<Map<String, dynamic>>> paidByDate,
+  required Map<String, List<Map<String, dynamic>>> newByDate,
+}) {
+  if (fromDateKey == null ||
+      fromDateKey == toDateKey ||
+      selectedTimes.containsKey(fromDateKey) ||
+      selectedTimes.containsKey(toDateKey) ||
+      paidByDate.containsKey(toDateKey) ||
+      newByDate.containsKey(toDateKey)) {
+    return false;
+  }
+  for (final selections in [paidByDate, newByDate]) {
+    final items = selections.remove(fromDateKey);
+    if (items != null) {
+      selections[toDateKey] =
+          items.map((item) => Map<String, dynamic>.from(item)).toList();
+    }
+  }
+  return true;
+}
+
 bool addonPaidSeparately(Map item) =>
     (item['separatePayment'] ??
         item['separate'] ??
