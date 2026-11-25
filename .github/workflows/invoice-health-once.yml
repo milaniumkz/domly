@@ -1,0 +1,95 @@
+name: Read-only encrypted invoice health diagnosis
+'on':
+  push:
+    branches:
+    - support/invoice-health-20261125
+    paths:
+    - .github/workflows/invoice-health-once.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - name: Read invoice technical statuses and encrypt on VPS without sends or changes
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
+        \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
+        \ }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\n// Read-only billing\
+        \ diagnosis. No customer details, amounts, messages or credentials in the\
+        \ report.\nconst {Pool}=require('pg');\n(async()=>{\n const db=new Pool({connectionString:process.env.DATABASE_URL});\n\
+        \ try {\n  await db.query('BEGIN READ ONLY');await db.query(\"SET LOCAL statement_timeout='10s'\"\
+        );\n  const report={checkedAt:new Date().toISOString(),configuration:{enabled:process.env.MOON_AI_ENABLED==='true',channelConfigured:Boolean(process.env.MOON_AI_CHANNEL_URL&&process.env.MOON_AI_CHANNEL_API_KEY),callbackConfigured:Boolean(process.env.MOON_AI_WEBHOOK_TOKEN)}};\n\
+        \  report.paymentCounts=(await db.query(\"SELECT status,COUNT(*)::int count\
+        \ FROM payments WHERE provider='kaspi' AND created_at>NOW()-INTERVAL '24 hours'\
+        \ GROUP BY status\")).rows;\n  report.invoiceQueue=(await db.query(\"SELECT\
+        \ state,failure_code,COUNT(*)::int count,MIN(created_at) oldest,MAX(created_at)\
+        \ newest FROM moon_ai_outbox WHERE kind='invoice' AND created_at>NOW()-INTERVAL\
+        \ '24 hours' GROUP BY state,failure_code\")).rows;\n  report.callbacks=(await\
+        \ db.query(\"SELECT status,resolution,COUNT(*)::int count,MAX(received_at)\
+        \ latest FROM moon_ai_payment_callbacks WHERE received_at>NOW()-INTERVAL '24\
+        \ hours' GROUP BY status,resolution\")).rows;\n  report.httpErrors=(await\
+        \ db.query(\"SELECT http_status,error_code,COUNT(*)::int count,MAX(started_at)\
+        \ latest FROM tech_events WHERE source='server' AND started_at>NOW()-INTERVAL\
+        \ '24 hours' AND result='failure' AND (action ILIKE '%payment%' OR action\
+        \ ILIKE '%package%' OR action ILIKE '%moon-ai%') GROUP BY http_status,error_code\
+        \ ORDER BY latest DESC LIMIT 20\")).rows;\n  const rows=(await db.query(\"\
+        SELECT p.id,p.created_at,p.status,p.external_id IS NOT NULL has_external_invoice,o.provider_thread_id,o.state,o.failure_code,o.payload#>>'{apiDelivery,phase}'\
+        \ phase FROM payments p LEFT JOIN moon_ai_outbox o ON o.payment_id=p.id AND\
+        \ o.kind='invoice' WHERE p.provider='kaspi' AND p.created_at>NOW()-INTERVAL\
+        \ '24 hours' ORDER BY p.created_at DESC LIMIT 20\")).rows;\n  report.recentInvoices=rows.map(({id,provider_thread_id,...safe})=>safe);\n\
+        \  await db.query('ROLLBACK');\n  report.provider=[];\n  if(process.env.MOON_AI_REST_API_KEY){\n\
+        \   const base='https://core.mooonai.com/api/v1/organizations/'+process.env.MOON_AI_ORGANIZATION_ID+'/agents/'+process.env.MOON_AI_AGENT_ID;\n\
+        \   const read=async path=>{const r=await fetch(base+path,{headers:{Authorization:'Bearer\
+        \ '+process.env.MOON_AI_REST_API_KEY},signal:AbortSignal.timeout(15000)});return\
+        \ {http:r.status,data:await r.json().catch(()=>null)};};\n   for(const row\
+        \ of rows.filter(r=>!['paid','cancelled','refunded'].includes(r.status)).slice(0,3)){\n\
+        \    const result={createdAt:row.created_at};\n    try {\n     const lookup=await\
+        \ read('/threads?'+new URLSearchParams({message_text:row.id,messengers:'api',limit:'5'}));\n\
+        \     result.lookupHttp=lookup.http;const matches=lookup.data?.results??[];result.matchingThreads=matches.length;\n\
+        \     if(matches.length===1){\n      const thread=matches[0];result.state=['active','paused','closed','completed','failed','processing'].includes(thread.status)?thread.status:'other';result.hasError=thread.has_error===true;\n\
+        \      const messages=await read('/threads/'+encodeURIComponent(thread.id)+'/messages?limit=50');result.messagesHttp=messages.http;\n\
+        \      const flags=new Set();let visited=0;\n      const patterns={insufficient_balance:/insufficient\
+        \ (balance|funds|credits)|недостаточно (средств|баланса)|баланс.*(исчерпан|законч)/i,quota_exceeded:/quota.*exceed|квот.*(исчерпан|превыш)/i,rate_limit:/rate.?limit|too\
+        \ many requests/i,internal_server_error:/internal.server.error/i,authentication_error:/unauthori[sz]ed|invalid.api.key|authentication\
+        \ failed/i,invoice_creation_error:/не удалось (создать|выставить).*сч[её]т|invoice.*(failed|error)/i};\n\
+        \      const walk=(v,depth=0)=>{if(v==null||depth>12||++visited>10000)return;if(Array.isArray(v)){for(const\
+        \ x of v)walk(x,depth+1);}else if(typeof v==='object'){if(['user','customer'].includes(v.from_type??v.role))return;for(const[k,x]of\
+        \ Object.entries(v))if(!/token|secret|authorization|key|phone|arguments|parameters/i.test(k))walk(x,depth+1);}else\
+        \ if(typeof v==='string'){for(const[k,p]of Object.entries(patterns))if(p.test(v))flags.add(k);}};\n\
+        \      walk(messages.data);result.errorFlags=[...flags];\n     }\n    }catch(e){result.errorKind=['TimeoutError','AbortError','TypeError'].includes(e.name)?e.name:'provider_read_failed';}\n\
+        \    report.provider.push(result);\n   }\n  }\n  console.log(JSON.stringify(report));\n\
+        \ }finally{await db.end();}\n})().catch(e=>{console.error('READ_ONLY_DIAGNOSIS_FAILED',e.code||e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\n\
+        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAtpV7I990CLe7oiiBN+m9\nX7TcrpQ9mOEII5AAl9M30pOTPqq1J5Y+nJlhPZAPzutFZVbF0la9iQAoH5/H7sf6\n\
+        9ceTX5eJ3qeSCcx+P0iCyKW2mcmi7ov7kaqOuqiagN8zDRdyknrAELVMaQICSBUs\nGs7yAUZblblJTPQLoV0ZycxNrSOSCNqqh3tOtIOrZBjJMclLfd53keDMsxhls0k+\n\
+        ivHkNJ0P3LyFkmYcDw6PEaMlFOsus5UK356pCMXPV8wpnef+44MEYiFV90cKRAY0\n35e+JjAbeEoUGHKi+HxGUc7h3HdIN4XyIUuHdgbpUZJeFocElNvIFmXulmqOzd/6\n\
+        0exu9EUkZmkqzGF9U5KouIuw82jRSTvfTYE0CJF+JYUE7QfN0ehWXjEJYPIo2/tM\nOjuZG5BnOJN+cDggJ5XLZrIGxJdz6P9KqfIbUuVuKHO/HA2ApgjVe2GvWPMgVbU+\n\
+        31f0te3sAhwXN8ieQDqw27LXBZt8MBRUefQxrfeakZb5AgMBAAE=\n-----END PUBLIC KEY-----\n\
+        OWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"\
+        $VPS_USER@$VPS_HOST\" 'mktemp -d /tmp/domly-invoice-error-audit-XXXXXX')\n\
+        [[ \"$remote_dir\" =~ ^/tmp/domly-invoice-error-audit-[A-Za-z0-9]+$ ]]\ntrap\
+        \ 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ \"rm -rf -- $remote_dir\" >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key\
+        \ -o IdentitiesOnly=yes audit.js owner-public.pem \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
+        \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"\
+        set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && timeout 240 docker\
+        \ compose -p domly-backend exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
+        \ && openssl rand -out '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc\
+        \ -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
+        \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey\
+        \ '$remote_dir/owner-public.pem' -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256\
+        \ -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\nmkdir -m 700 -p\
+        \ encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: invoice-health-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
