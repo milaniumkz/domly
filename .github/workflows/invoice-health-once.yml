@@ -34,23 +34,28 @@ jobs:
         \ db.query(\"SELECT status,resolution,COUNT(*)::int count,MAX(received_at)\
         \ latest FROM moon_ai_payment_callbacks WHERE received_at>NOW()-INTERVAL '24\
         \ hours' GROUP BY status,resolution\")).rows;\n  report.httpErrors=(await\
-        \ db.query(\"SELECT http_status,error_code,COUNT(*)::int count,MAX(started_at)\
-        \ latest FROM tech_events WHERE source='server' AND started_at>NOW()-INTERVAL\
-        \ '24 hours' AND result='failure' AND (action ILIKE '%payment%' OR action\
-        \ ILIKE '%package%' OR action ILIKE '%moon-ai%') GROUP BY http_status,error_code\
+        \ db.query(\"SELECT regexp_replace(split_part(action,'?',1),'[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}','[id]','g')\
+        \ action,http_status,error_code,COUNT(*)::int count,MAX(started_at) latest\
+        \ FROM tech_events WHERE source='server' AND started_at>NOW()-INTERVAL '24\
+        \ hours' AND result='failure' AND (action ILIKE '%payment%' OR action ILIKE\
+        \ '%package%' OR action ILIKE '%moon-ai%') GROUP BY action,http_status,error_code\
         \ ORDER BY latest DESC LIMIT 20\")).rows;\n  const rows=(await db.query(\"\
         SELECT p.id,p.created_at,p.status,p.external_id IS NOT NULL has_external_invoice,o.provider_thread_id,o.state,o.failure_code,o.payload#>>'{apiDelivery,phase}'\
         \ phase FROM payments p LEFT JOIN moon_ai_outbox o ON o.payment_id=p.id AND\
         \ o.kind='invoice' WHERE p.provider='kaspi' AND p.created_at>NOW()-INTERVAL\
         \ '24 hours' ORDER BY p.created_at DESC LIMIT 20\")).rows;\n  report.recentInvoices=rows.map(({id,provider_thread_id,...safe})=>safe);\n\
-        \  await db.query('ROLLBACK');\n  report.provider=[];\n  if(process.env.MOON_AI_REST_API_KEY){\n\
-        \   const base='https://core.mooonai.com/api/v1/organizations/'+process.env.MOON_AI_ORGANIZATION_ID+'/agents/'+process.env.MOON_AI_AGENT_ID;\n\
+        \  await db.query('ROLLBACK');\n  report.provider=[];\n  const key=process.env.MOON_AI_REST_API_KEY;report.restCredentialConfigured=Boolean(key);if(key?.split('.').length===3){try{const\
+        \ c=JSON.parse(Buffer.from(key.split('.')[1],'base64url').toString());report.restCredentialExpired=typeof\
+        \ c.exp==='number'&&c.exp*1000<=Date.now();}catch{report.restCredentialMalformed=true;}}\n\
+        \  if(process.env.MOON_AI_REST_API_KEY){\n   const base='https://core.mooonai.com/api/v1/organizations/'+process.env.MOON_AI_ORGANIZATION_ID+'/agents/'+process.env.MOON_AI_AGENT_ID;\n\
         \   const read=async path=>{const r=await fetch(base+path,{headers:{Authorization:'Bearer\
-        \ '+process.env.MOON_AI_REST_API_KEY},signal:AbortSignal.timeout(15000)});return\
-        \ {http:r.status,data:await r.json().catch(()=>null)};};\n   for(const row\
-        \ of rows.filter(r=>!['paid','cancelled','refunded'].includes(r.status)).slice(0,3)){\n\
-        \    const result={createdAt:row.created_at};\n    try {\n     const lookup=await\
-        \ read('/threads?'+new URLSearchParams({message_text:row.id,messengers:'api',limit:'5'}));\n\
+        \ '+process.env.MOON_AI_REST_API_KEY},signal:AbortSignal.timeout(60000)});return\
+        \ {http:r.status,data:await r.json().catch(()=>null)};};\n   try{const probe=await\
+        \ read('/channels/');report.providerChannelsHttp=probe.http;}catch(e){report.providerChannelsError=e.name;}\n\
+        \   for(const row of rows.filter(r=>!['paid','cancelled','refunded'].includes(r.status)).slice(0,3)){\n\
+        \    const result={createdAt:row.created_at};\n    try {\n     if(row.provider_thread_id){try{const\
+        \ t=await read('/threads/'+encodeURIComponent(row.provider_thread_id));result.storedThreadHttp=t.http;result.storedThreadHasError=t.data?.has_error===true;}catch(e){result.storedThreadError=e.name;}}\n\
+        \     const lookup=await read('/threads?'+new URLSearchParams({message_text:row.id,messengers:'api',limit:'5'}));\n\
         \     result.lookupHttp=lookup.http;const matches=lookup.data?.results??[];result.matchingThreads=matches.length;\n\
         \     if(matches.length===1){\n      const thread=matches[0];result.state=['active','paused','closed','completed','failed','processing'].includes(thread.status)?thread.status:'other';result.hasError=thread.has_error===true;\n\
         \      const messages=await read('/threads/'+encodeURIComponent(thread.id)+'/messages?limit=50');result.messagesHttp=messages.http;\n\
