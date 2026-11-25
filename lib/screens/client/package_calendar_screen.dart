@@ -37,6 +37,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       <String, List<Map<String, dynamic>>>{};
   final Map<String, List<Map<String, dynamic>>> _selectedNewAddonsByDate =
       <String, List<Map<String, dynamic>>>{};
+  String? _pendingAddonDateKey;
   DateTime _visibleMonth = DateTime(
     LaunchConfig.bookingFloor(DateTime.now()).year,
     LaunchConfig.bookingFloor(DateTime.now()).month,
@@ -1137,6 +1138,7 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       } else {
         _selectedNewAddonsByDate[dateKey] = fresh;
       }
+      _pendingAddonDateKey = dateKey;
     });
     if (chooseTime) await _selectTimeForDate(dateKey);
     _scrollToSelectedBlock();
@@ -2041,8 +2043,12 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
       if (!mounted) return;
       final selectedTime =
           await _showTimePickerBottomSheet(dateKey: dateKey, slots: slots);
-      if (mounted && selectedTime != null)
-        setState(() => _selectedTimes[dateKey] = selectedTime);
+      if (mounted && selectedTime != null) {
+        setState(() {
+          _selectedTimes[dateKey] = selectedTime;
+          if (_pendingAddonDateKey == dateKey) _pendingAddonDateKey = null;
+        });
+      }
     } catch (error) {
       if (mounted)
         showDomlySnackBar(context,
@@ -2088,7 +2094,18 @@ class _PackageCalendarScreenState extends State<PackageCalendarScreen> {
     }
 
     try {
-      setState(() => _loadingSlotsDateKey = dateKey);
+      setState(() {
+        _loadingSlotsDateKey = dateKey;
+        if (movePendingBookingAddons(
+          fromDateKey: _pendingAddonDateKey,
+          toDateKey: dateKey,
+          selectedTimes: _selectedTimes,
+          paidByDate: _selectedAddonsByDate,
+          newByDate: _selectedNewAddonsByDate,
+        )) {
+          _pendingAddonDateKey = dateKey;
+        }
+      });
       if (!await _chooseAddonsForDate(dateKey, chooseTime: false) || !mounted)
         return;
       await _selectTimeForDate(dateKey);
