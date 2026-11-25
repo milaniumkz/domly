@@ -31,6 +31,7 @@ export const openApiSpec = {
     },
   },
   paths: {
+    '/admin/calendar': {get:{...secured('Календарь клинеров: все записи, доли площади и утверждённые графики; только администраторы'),parameters:[query('from','2026-11-01'),query('to','2026-11-30')],responses:okError()}},
     '/admin/cancelled-sales': {get:{...secured('Отменённые счета и заказы: только администраторы'),parameters:['kind','search','dateFrom','dateTo','sort','limit','offset'].map(name=>query(name,'')),responses:okError()}},
     '/admin/customer-crm': {get:{...secured('Клиенты CRM: только администраторы'),parameters:['search','dateFrom','dateTo','stage','account','purchase','area','notes','profile','sort','city','house','paidMin','paidMax','limit','offset'].map(name=>query(name,'')),responses:okError()}},
     '/admin/customer-crm/{id}': {patch:{...secured('Изменить этап клиента; stage и revision обязательны'),parameters:[path('id')],responses:okError()}},
