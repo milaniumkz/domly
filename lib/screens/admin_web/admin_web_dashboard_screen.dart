@@ -1,3 +1,4 @@
+import '../../ui/admin_responsive_layout.dart';
 import '../../ui/admin_booking_calendar.dart';
 import '../../ui/admin_customer_crm.dart';
 import '../../ui/admin_cancelled_sales.dart';
@@ -94,7 +95,11 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   final _expandedFilterSections = ValueNotifier<Set<String>>(<String>{});
   String _workScheduleStatusFilter = 'pending';
 
-  String _searchQuery = '';
+  final _searchController = TextEditingController();
+  String get _searchQuery => _searchController.text;
+  set _searchQuery(String value) {
+    if (_searchController.text != value) _searchController.text = value;
+  }
   String _statusFilter = 'Все';
   String _clusterFilter = 'Все';
   String _cleanerFilter = 'Все';
@@ -317,10 +322,10 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         foregroundColor: const Color(0xFF1F2937),
         title: Text(
           'DomLY Админ-панель'.tr(),
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: MediaQuery.sizeOf(context).width < 600 ? 16 : 20),
         ),
         actions: [
-          if (currentSection.key != 'calendar' || MediaQuery.sizeOf(context).width > 640) Container(
+          if (MediaQuery.sizeOf(context).width >= 900) Container(
             margin: const EdgeInsets.only(right: 12, top: 10, bottom: 10),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -343,7 +348,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               ],
             ),
           ),
-          if (currentSection.key != 'calendar' || MediaQuery.sizeOf(context).width > 640) Padding(
+          if (MediaQuery.sizeOf(context).width >= 900) Padding(
             padding: EdgeInsets.only(right: 16),
             child: Center(
               child: Text(
@@ -367,7 +372,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final minContentWidth = currentSection.key == 'calendar' ? 0.0 : 980.0;
+                const minContentWidth = 0.0;
                 final contentWidth = constraints.maxWidth < minContentWidth
                     ? minContentWidth
                     : constraints.maxWidth;
@@ -376,11 +381,14 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   child: SizedBox(
                     width: contentWidth,
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: EdgeInsets.all(constraints.maxWidth < 600 ? 12 : 20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildHeader(currentSection),
+                          ConstrainedBox(
+                            constraints: BoxConstraints(maxHeight: constraints.maxWidth < 900 || constraints.maxHeight < 600 ? constraints.maxHeight * .40 : double.infinity),
+                            child: SingleChildScrollView(primary: false, child: _buildHeader(currentSection)),
+                          ),
                           const SizedBox(height: 18),
                           Expanded(
                             child: DecoratedBox(
@@ -441,6 +449,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   @override
   void dispose() {
     _expandedFilterSections.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -483,6 +492,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
 
   Widget _buildHeader(_AdminSection currentSection) {
     if (currentSection.key == 'calendar') return _headerTitleBlock(currentSection);
+    if (MediaQuery.sizeOf(context).width < 900 || MediaQuery.sizeOf(context).height < 600) return _mobileHeader(currentSection);
     final isNarrowHeader = MediaQuery.of(context).size.width < 900;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -548,6 +558,42 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       ],
     );
   }
+
+  Widget _mobileHeader(_AdminSection section) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(section.title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: TextField(
+          key: ValueKey('mobile-search-${section.key}'),
+          controller: _searchController,
+          onChanged: (value) => setState(() => _searchQuery = value),
+          decoration: InputDecoration(hintText: 'Поиск в разделе'.tr(),
+            prefixIcon: const Icon(Icons.search), isDense: true, filled: true,
+            fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+        )),
+        IconButton(tooltip: 'Сохранить вид'.tr(),
+          onPressed: () => _openSaveViewDialog(section.key),
+          icon: const Icon(Icons.bookmark_add_outlined)),
+      ]),
+      const SizedBox(height: 8),
+      ValueListenableBuilder<Set<String>>(
+        valueListenable: _expandedFilterSections,
+        builder: (context, expanded, _) => AdminFilterPanel(
+          expanded: expanded.contains(section.key),
+          activeCount: _activeFilterCount(section.key),
+          onChanged: (value) {
+            final updated = {..._expandedFilterSections.value};
+            value ? updated.add(section.key) : updated.remove(section.key);
+            _expandedFilterSections.value = updated;
+          },
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [_globalFiltersBar(), const SizedBox(height: 10), _savedViewsBar(section.key)]),
+        ),
+      ),
+    ],
+  );
 
   Widget _globalFiltersBar() {
     return Wrap(
@@ -623,6 +669,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             SizedBox(
               width: fullWidth ? double.infinity : 320,
               child: TextField(
+                controller: _searchController,
                 onChanged: (value) => setState(() => _searchQuery = value),
                 decoration: InputDecoration(
                   hintText: _selectedIndex == 0
@@ -1219,7 +1266,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          Row(
+          AdminAdaptiveRow(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
@@ -1786,7 +1833,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   Future<void> _restoreCustomer(Map<String, dynamic> customer) async {
     final confirmed = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => AdminFormDialog(
               title: Text('Восстановить аккаунт?'.tr()),
               content: Text(
                   'Подтвердите, что обращается владелец аккаунта. Его пакеты, оплаты и остаток уборок сохранятся.'
@@ -2339,7 +2386,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: const Color(0xFFBFDBFE)),
                       ),
-                      child: Row(
+                      child: AdminAdaptiveRow(
                         children: [
                           Expanded(
                             child: Text(
@@ -3358,7 +3405,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                   border: Border.all(
                                       color: const Color(0xFFE5E7EB)),
                                 ),
-                                child: Row(
+                                child: AdminAdaptiveRow(
                                   children: [
                                     Expanded(
                                       child: _metricTile(
@@ -3490,7 +3537,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: const Color(0xFFE5E7EB)),
                       ),
-                      child: Row(
+                      child: AdminAdaptiveRow(
                         children: [
                           Expanded(
                             child: _metricTile(
@@ -3543,7 +3590,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          AdminAdaptiveRow(
             children: [
               Expanded(
                 child: Text(
@@ -4081,7 +4128,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          AdminAdaptiveRow(
             children: [
               Expanded(
                 child: Column(
@@ -4230,7 +4277,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          AdminAdaptiveRow(
             children: [
               Expanded(
                 child: Text(
@@ -4651,7 +4698,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 });
                 final docs = _sortRecordsByDate(filteredPayouts);
                 return _sectionScaffold(
-                  toolbar: Row(
+                  toolbar: Wrap(spacing: 10, runSpacing: 10,
                     children: [
                       ElevatedButton.icon(
                         onPressed: !_canRunPayouts
@@ -4900,7 +4947,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             });
             final reviews = _sortRecordsByDate(filteredReviews);
             return _sectionScaffold(
-              toolbar: Row(
+              toolbar: Wrap(spacing: 10, runSpacing: 10,
                 children: [
                   OutlinedButton.icon(
                     onPressed:
@@ -5107,7 +5154,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             });
             final docs = _sortRecordsByDate(filteredChecklists);
             return _sectionScaffold(
-              toolbar: Row(
+              toolbar: Wrap(spacing: 10, runSpacing: 10,
                 children: [
                   OutlinedButton.icon(
                     onPressed:
@@ -6068,6 +6115,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     onChanged: assigning ? null : (value) => setModalState(() {selectedTeamSlot=value;selectedCleanerId=null;selectedCleanerName=null;}),
                   ),
                   DropdownButtonFormField<String>(
+        isExpanded: true,
                     initialValue: selectedCleanerId,
                     items: freeCleaners.where((cleaner) => !crew.any((member) => member['slot'] != selectedTeamSlot && member['cleaner_id'] == cleaner['id']))
                         .map(
@@ -6652,6 +6700,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
+        isExpanded: true,
                       key: ValueKey('house_zone_$selectedZoneId'),
                       initialValue: zones.any(
                         (zone) =>
@@ -6691,6 +6740,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     ),
                     SizedBox(height: 12),
                     DropdownButtonFormField<String>(
+        isExpanded: true,
                       initialValue: status,
                       decoration: InputDecoration(labelText: 'Статус'),
                       items: [
@@ -7330,7 +7380,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: const Color(0xFFDDD6FE)),
                       ),
-                      child: Row(
+                      child: AdminAdaptiveRow(
                         children: [
                           Expanded(
                             child: Text(
@@ -7841,7 +7891,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             });
             final docs = _sortRecordsByDate(filteredPrelaunch);
             return _sectionScaffold(
-              toolbar: Row(
+              toolbar: AdminAdaptiveRow(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
@@ -8090,7 +8140,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => AlertDialog(
+        builder: (context, setModalState) => AdminFormDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
@@ -8318,7 +8368,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       if (!mounted) return;
       await showDialog<void>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => AdminFormDialog(
                 title: Text('Города Казахстана: ${cities.length}'),
                 content: SizedBox(
                     width: 480,
@@ -8451,7 +8501,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         });
         final docs = _sortRecordsByDate(filteredReferrals);
         return _sectionScaffold(
-          toolbar: Row(
+          toolbar: Wrap(spacing: 10, runSpacing: 10,
             children: [
               OutlinedButton.icon(
                 onPressed: docs.isEmpty ? null : () => _copyReferralsCsv(docs),
@@ -8549,7 +8599,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: const Color(0xFFFDE68A)),
                   ),
-                  child: Row(
+                  child: AdminAdaptiveRow(
                     children: [
                       Expanded(
                         child: Text(
@@ -9168,7 +9218,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         });
         final filtered = _sortRecordsByDate(filteredVideos);
         return _sectionScaffold(
-          toolbar: Row(
+          toolbar: Wrap(spacing: 10, runSpacing: 10,
             children: [
               ElevatedButton.icon(
                 onPressed:
@@ -9185,8 +9235,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 )
               : GridView.builder(
                   padding: const EdgeInsets.all(20),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: MediaQuery.sizeOf(context).width < 700 ? 1 : 2,
+                    mainAxisExtent: 350,
                     mainAxisSpacing: 16,
                     crossAxisSpacing: 16,
                     childAspectRatio: 1.6,
@@ -9349,7 +9400,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           });
 
         return _sectionScaffold(
-          toolbar: Row(
+          toolbar: Wrap(spacing: 10, runSpacing: 10,
             children: [
               OutlinedButton.icon(
                 onPressed: !_canEditCatalog
@@ -9510,7 +9561,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         final banners = snapshot.data ?? const <Map<String, dynamic>>[];
 
         return _sectionScaffold(
-          toolbar: Row(
+          toolbar: Wrap(spacing: 10, runSpacing: 10,
             children: [
               ElevatedButton.icon(
                 onPressed: () =>
@@ -10278,18 +10329,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
   }
 
-  Widget _sectionScaffold({Widget? toolbar, required Widget child}) {
-    return Column(
-      children: [
-        if (toolbar != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            child: Align(alignment: Alignment.centerLeft, child: toolbar),
-          ),
-        Expanded(child: child),
-      ],
-    );
-  }
+  Widget _sectionScaffold({Widget? toolbar, required Widget child}) =>
+      AdminSectionLayout(toolbar: toolbar, child: child);
 
   Widget _listMetricCard({
     required String title,
@@ -10416,7 +10457,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   color: const Color(0xFFF8FAFC),
                   border: Border.all(color: const Color(0xFFE5E7EB)),
                 ),
-                child: Row(
+                child: AdminAdaptiveRow(
                   children: [
                     Expanded(
                       child: Column(
@@ -10476,7 +10517,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          AdminAdaptiveRow(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
@@ -10604,6 +10645,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     return Container(
       constraints: const BoxConstraints(minWidth: 180, maxWidth: 220),
       child: DropdownButtonFormField<String>(
+        isExpanded: true,
         initialValue: items.contains(value) ? value : items.first,
         decoration: InputDecoration(
           labelText: label,
@@ -11088,7 +11130,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     if (status == 'canceled' || status == 'cancelled') {
       final confirmed = await showDialog<bool>(
           context: context,
-          builder: (dialogContext) => AlertDialog(
+          builder: (dialogContext) => AdminFormDialog(
                 title: Text('Отменить заказ?'.tr()),
                 content: Text('Заказов для отмены: ${orderIds.length}'.tr()),
                 actions: [
@@ -11348,7 +11390,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Подтвердить квадратуру'.tr()),
         content: SizedBox(
@@ -11530,7 +11572,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     await showDialog<void>(
       context: context,
       builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        insetPadding: EdgeInsets.symmetric(horizontal: MediaQuery.sizeOf(context).width < 600 ? 12 : 28, vertical: 24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1180, maxHeight: 820),
           child: Padding(
@@ -11538,7 +11580,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                AdminAdaptiveRow(
                   children: [
                     Expanded(
                       child: Column(
@@ -11590,7 +11632,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                           runSpacing: 12,
                           children: [
                             SizedBox(
-                              width: 340,
+                              width: math.min(340, MediaQuery.sizeOf(context).width - 104),
                               child: _verificationInfoPanel(
                                 title: 'Данные уборщицы',
                                 rows: {
@@ -11608,7 +11650,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                               ),
                             ),
                             SizedBox(
-                              width: 340,
+                              width: math.min(340, MediaQuery.sizeOf(context).width - 104),
                               child: _verificationInfoPanel(
                                 title: 'Ревью заявки',
                                 rows: {
@@ -11780,7 +11822,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           ...rows.entries.map(
             (entry) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
+              child: AdminAdaptiveRow(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
@@ -11816,7 +11858,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final controller = TextEditingController();
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text('Сохранить текущий вид'.tr()),
         content: TextField(
           controller: controller,
@@ -11879,7 +11921,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final title = (zone['title'] ?? zoneId).toString();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text('Удалить зону покрытия'.tr()),
         content: Text(
           'Удалить зону "$title"? У домов этой зоны будет очищена привязка к району.'
@@ -11912,7 +11954,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   Future<void> _deletePackage(String packageId) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text('Удалить пакет'.tr()),
         content: Text('Удалить пакет "$packageId" из customer_packages?'.tr()),
         actions: [
@@ -11946,7 +11988,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text('Удалить акцию'.tr()),
         content: Text('Удалить акцию "$normalizedPromotionId"?'.tr()),
         actions: [
@@ -11994,7 +12036,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final exclusions = textList(promo['exclusions']);
     return showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text(title),
         content: SizedBox(
           width: 520,
@@ -12053,7 +12095,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     final title = (cleaner['name'] ?? cleanerId).toString();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text('Удалить уборщицу'.tr()),
         content: Text('Удалить уборщицу "$title" из админки?'.tr()),
         actions: [
@@ -12641,7 +12683,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
-          builder: (context, setModalState) => AlertDialog(
+          builder: (context, setModalState) => AdminFormDialog(
                 title:
                     Text(docId == null ? 'Новое видео' : 'Редактировать видео'),
                 content: SingleChildScrollView(
@@ -12702,6 +12744,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                       Text('MP4 или WebM, до 50 МБ'.tr()),
                       SizedBox(height: 12),
                       DropdownButtonFormField<String>(
+        isExpanded: true,
                         initialValue: audienceType,
                         items: [
                           DropdownMenuItem(
@@ -12874,7 +12917,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
+        builder: (dialogContext, setDialogState) => AdminFormDialog(
           title: Text(index == null ? 'Новый баннер' : 'Редактировать баннер'),
           content: StatefulBuilder(
             builder: (context, setModalState) => SingleChildScrollView(
@@ -12906,7 +12949,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  AdminAdaptiveRow(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
@@ -12976,6 +13019,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   if (targetMode == 'route') ...[
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
+        isExpanded: true,
                       initialValue: selectedRoute,
                       decoration: const InputDecoration(
                         labelText: 'Страница приложения',
@@ -13222,7 +13266,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  AdminAdaptiveRow(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
@@ -13320,6 +13364,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+        isExpanded: true,
                     initialValue: selectedPackageExists ? packageId : '',
                     decoration: const InputDecoration(labelText: 'Пакет'),
                     items: [
@@ -13341,6 +13386,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+        isExpanded: true,
                     initialValue: rewardTarget,
                     decoration: InputDecoration(labelText: 'Куда дать бонус'),
                     items: [
@@ -13358,6 +13404,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+        isExpanded: true,
                     initialValue: rewardMode,
                     decoration: InputDecoration(labelText: 'Тип начисления'),
                     items: [
@@ -13606,7 +13653,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text('Политики'.tr()),
         content: SingleChildScrollView(
           child: Column(
@@ -13918,7 +13965,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text(
           docId == null ? 'Новая карточка' : 'Редактировать карточку',
         ),
@@ -13976,6 +14023,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   ),
                   SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+        isExpanded: true,
                     initialValue: type,
                     items: [
                       DropdownMenuItem(
@@ -14111,7 +14159,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text(docId == null ? 'Новый пакет' : 'Редактировать пакет'),
         content: StatefulBuilder(
           builder: (context, setModalState) => SingleChildScrollView(
@@ -14154,6 +14202,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   ),
                   if (isSpecial)
                     DropdownButtonFormField<String>(
+        isExpanded: true,
                       initialValue: pricingType,
                       decoration: const InputDecoration(labelText: 'Расчёт цены'),
                       items: [
@@ -14460,7 +14509,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                   color: const Color(0xFFE5E7EB),
                                 ),
                               ),
-                              child: Row(
+                              child: AdminAdaptiveRow(
                                 children: [
                                   Expanded(
                                     child: Column(
@@ -14528,7 +14577,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                               ),
                             );
                           }),
-                          Row(
+                          AdminAdaptiveRow(
                             children: [
                               TextButton.icon(
                                 onPressed: !_canEditCatalog
@@ -14739,7 +14788,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text(
           docId == null ? 'Новая группа допуслуг' : 'Редактировать группу',
         ),
@@ -14868,7 +14917,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text(
           existing == null ? 'Новая доп. услуга' : 'Редактировать доп. услугу',
         ),
@@ -15063,7 +15112,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text('Удалить доп. услугу'.tr()),
         content: Text('Удалить позицию "$itemKey" из группы "$groupId"?'.tr()),
         actions: [
@@ -15133,7 +15182,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text(
           docId == null ? 'Новый шаблон чек-листа' : 'Редактировать шаблон',
         ),
@@ -15236,7 +15285,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     );
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdminFormDialog(
         title: Text(docId == null ? 'Новая фраза' : 'Редактировать перевод'),
         content: SingleChildScrollView(
           child: SizedBox(

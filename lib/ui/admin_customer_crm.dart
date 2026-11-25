@@ -293,6 +293,7 @@ class _AdminCustomerCrmState extends State<AdminCustomerCrm> {
                       child: DropdownButtonFormField<String>(
                           initialValue: '${row['crm_stage'] ?? 'new'}',
                           key: ValueKey('${row['id']}:${row['crm_stage']}'),
+                          isExpanded: true,
                           decoration: InputDecoration(
                               labelText: 'Этап работы'.tr(),
                               border: const OutlineInputBorder()),
@@ -341,7 +342,9 @@ class _AdminCustomerCrmState extends State<AdminCustomerCrm> {
                       icon: const Icon(Icons.refresh))
                 ])),
         if (widget.filtersExpanded)
-          Padding(
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .25),
+            child: SingleChildScrollView(primary: false, child: Padding(
               padding: const EdgeInsets.all(12),
               child: Wrap(spacing: 10, runSpacing: 12, children: [
                 _select(
@@ -410,7 +413,7 @@ class _AdminCustomerCrmState extends State<AdminCustomerCrm> {
                 _field('Сумма оплат до', _max, number: true),
                 TextButton(
                     onPressed: _reset, child: Text('Сбросить фильтры'.tr())),
-              ])),
+              ])))),
         if (_loading) const LinearProgressIndicator(),
         if (_failed)
           Text('Не удалось загрузить CRM. Проверьте фильтры и повторите.'.tr()),
@@ -528,11 +531,12 @@ class _CrmNotesState extends State<_CrmNotes> {
 
   @override
   Widget build(BuildContext context) => Dialog(
+      insetPadding: EdgeInsets.symmetric(horizontal: MediaQuery.sizeOf(context).width < 600 ? 12 : 40, vertical: 12),
       child: SizedBox(
           width: 760,
           height: MediaQuery.sizeOf(context).height * .85,
           child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 12 : 20),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -540,7 +544,8 @@ class _CrmNotesState extends State<_CrmNotes> {
                       Expanded(
                           child: Text(
                               '${'Заметки клиента'.tr()}: ${widget.customer['full_name'] ?? widget.customer['phone'] ?? ''}',
-                              style: Theme.of(context).textTheme.titleLarge)),
+                              maxLines: 3, overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
                       IconButton(
                           onPressed: () => Navigator.pop(context),
                           icon: const Icon(Icons.close))
@@ -588,8 +593,8 @@ class _CrmNotesState extends State<_CrmNotes> {
                     ])),
                     TextField(
                         controller: _text,
-                        minLines: 3,
-                        maxLines: 5,
+                        minLines: 2,
+                        maxLines: 3,
                         maxLength: 10000,
                         enabled: !_saving,
                         decoration: InputDecoration(
@@ -598,7 +603,7 @@ class _CrmNotesState extends State<_CrmNotes> {
                                     : 'Редактирование заметки')
                                 .tr(),
                             border: const OutlineInputBorder())),
-                    Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                    Wrap(alignment: WrapAlignment.end, spacing: 8, runSpacing: 8, children: [
                       if (_editing != null)
                         TextButton(
                             onPressed: () {

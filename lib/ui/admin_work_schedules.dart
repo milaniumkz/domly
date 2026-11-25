@@ -1,3 +1,4 @@
+import 'admin_responsive_layout.dart';
 import 'admin_filter_panel.dart';
 import 'package:flutter/material.dart';
 import '../localization/translation_controller.dart';
@@ -41,7 +42,7 @@ class _AdminWorkSchedulesState extends State<AdminWorkSchedules> {
       final controller = TextEditingController();
       final value = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => AdminFormDialog(
                   title: Text('Отклонить график?'.tr()),
                   content: TextField(
                       controller: controller,
