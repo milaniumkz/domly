@@ -796,6 +796,16 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
 
   Widget _buildSidebar({required bool compact}) {
     final sections = _sections;
+    const firstSections = <String>[
+      'orders', 'calendar', 'work_schedules', 'payments', 'quality_control',
+      'area', 'customers', 'cleaners', 'verifications', 'cleaner_photos',
+    ];
+    final orderedIndexes = <int>[
+      ...firstSections.map((key) => sections.indexWhere((s) => s.key == key))
+          .where((index) => index >= 0),
+      for (var index = 0; index < sections.length; index++)
+        if (!firstSections.contains(sections[index].key)) index,
+    ];
     return Container(
       width: compact ? 280 : double.infinity,
       color: const Color(0xFF0F172A),
@@ -828,11 +838,12 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             Expanded(
               child: ListView.separated(
                 padding: const EdgeInsets.all(12),
-                itemCount: sections.length,
+                itemCount: orderedIndexes.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 6),
                 itemBuilder: (context, index) {
-                  final section = sections[index];
-                  final selected = index == _selectedIndex;
+                  final sectionIndex = orderedIndexes[index];
+                  final section = sections[sectionIndex];
+                  final selected = sectionIndex == _selectedIndex;
                   return Material(
                     color:
                         selected ? const Color(0xFF1D4ED8) : Colors.transparent,
@@ -841,7 +852,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                       borderRadius: BorderRadius.circular(14),
                       onTap: () {
                         setState(() {
-                          _selectedIndex = index;
+                          _selectedIndex = sectionIndex;
                           _searchQuery = '';
                           _statusFilter = 'Все';
                           _clusterFilter = 'Все';
