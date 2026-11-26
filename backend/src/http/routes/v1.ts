@@ -1,3 +1,4 @@
+import {cleanerWorkloadRouter} from './cleanerWorkload';
 import {adminCalendarRouter} from './adminCalendar';
 import {planCleaningTeam,reserveCleaningTeam,CleaningTeamPlan,teamDurationAfterAddonChange,assertTeamInterval} from '../../modules/cleaningTeam';
 import {assertCleanerCapacity} from '../../modules/cleanerCapacity';
@@ -2435,6 +2436,7 @@ export function buildV1Router(deps: {
   };
   router.get('/scheduling/available-slots', auth(), asyncHandler(async(req,res)=>{ok(res,await availableSlots(req));}));
   router.use(adminCalendarRouter(deps.db));
+  router.use(cleanerWorkloadRouter(deps.db));
   router.use(customerCrmRouter(deps.db));
   router.use(botOrderingRouter(deps.db,{purchasePackage,createOrder,availableSlots,verifyPayment:async(payment:any)=>{
     if(payment.provider==='bcc'){

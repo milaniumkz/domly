@@ -513,7 +513,8 @@ export class SchedulingService {
        LIMIT 1`,
       [cleanerId, date, startTime, endTime, excludeOrderId ?? null],
     )).rows);
-    return !overlap;
+    if(overlap)return false;
+    return Boolean((await this.db.query('SELECT domly_cleaner_gap_allowed($1::uuid,$2::date,$3::time,$4::time,NULL,$5::uuid) AS allowed',[cleanerId,date,startTime,endTime,excludeOrderId??null])).rows[0]?.allowed);
   }
 
   async availableCleaners(date: string, startTime: string, endTime: string, zoneId?: string, queryable: Queryable = this.db, requireWorkingHours=false, durationMinutes?:number, area=0, excludeOrderId?:string) {
@@ -525,6 +526,7 @@ export class SchedulingService {
        JOIN cleaner_profiles cp ON cp.user_id=u.id
        ${zoneJoin}
        WHERE u.role='cleaner' AND u.status='approved' AND cp.verification_status='approved' AND $5::numeric>=0
+       AND domly_cleaner_gap_allowed(u.id,$1::date,$2::time,$3::time,$4::int,$6::uuid)
        ${requireWorkingHours ? 'AND '+cleanerSlotAllowedSql('u.id','$1','$2','$3','$4','$5','$6') : ''}
        AND NOT EXISTS (
          SELECT 1 FROM cleaner_order_workloads o

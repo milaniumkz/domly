@@ -9,8 +9,8 @@ export const bookingLock='domly:booking-create-reschedule';
 export async function pendingBookingCount(db:Database,date:string,start:string,duration:number){
  return Number((await db.query(`SELECT COUNT(*)::int AS count FROM service_orders o
   WHERE o.cleaner_id IS NULL AND NOT EXISTS(SELECT 1 FROM order_team_members tm WHERE tm.order_id=o.id) AND o.status NOT IN ('cancelled','completed')
-  AND o.scheduled_date+o.start_time < $1::date+$2::time+$3::int*INTERVAL '1 minute'
-  AND cleaning_end_at(o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes)>$1::date+$2::time`,[date,start,duration])).rows[0].count);
+  AND o.scheduled_date+o.start_time < $1::date+$2::time+($3::int+GREATEST(domly_cleaner_gap_minutes(o.scheduled_date),domly_cleaner_gap_minutes($1::date)))*INTERVAL '1 minute'
+  AND cleaning_end_at(o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes)+GREATEST(domly_cleaner_gap_minutes(o.scheduled_date),domly_cleaner_gap_minutes($1::date))*INTERVAL '1 minute'>$1::date+$2::time`,[date,start,duration])).rows[0].count);
 }
 export async function checkBotBookingCapacity(db:Database,customerId:string,date:string,start:string,duration:number,freeCleaners:number){
  const overlap=(await db.query(`SELECT id FROM service_orders o WHERE customer_id=$1 AND status NOT IN ('cancelled','completed')

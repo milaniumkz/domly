@@ -424,7 +424,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status) VALUES($1,$2,$3,'2039-04-02','13:00','14:00',60,'assigned')",[busy,customer,cleaner]);
         const path='/scheduling/available-slots?date=2039-04-02&customerPackageId='+purchase;
         const baseSlots=await request(path,'GET',undefined,true);
-        assert.ok(baseSlots.json.data.some((slot:any)=>slot.startTime==='10:00'&&slot.durationMinutes===160));
+        assert.ok(baseSlots.json.data.some((slot:any)=>slot.startTime==='08:00'&&slot.durationMinutes===160));
         const details=[{key:addon,quantity:2},{key:special,quantity:2}];
         const withExtras=await request(path+'&addonsDetailed='+encodeURIComponent(JSON.stringify(details)),'GET',undefined,true);
         assert.equal(withExtras.status,200,JSON.stringify(withExtras.json));
@@ -634,7 +634,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'proposal-'+worker]);
         await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
         await approvedFixtureShift(worker,'2039-06-01');
-        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,area,status) VALUES($1,$3,$4,'2039-06-01','10:00','12:00',120,100,'in_progress'),($2,$3,$4,'2039-06-01','13:00','14:00',60,100,'assigned')",[order,next,customer,worker]);
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,area,status) VALUES($1,$3,$4,'2039-06-01','10:00','12:00',120,100,'in_progress'),($2,$3,$4,'2039-06-01','14:30','15:30',60,100,'assigned')",[order,next,customer,worker]);
         await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes,paid_separately) VALUES($1,'Духовка',3000,25,FALSE),($2,'Химчистка',50000,90,TRUE)",[addon,special]);
         const first=await propose([{key:addon,label:'Духовка',quantity:2,price:1}]);
         assert.equal(first.status,201,JSON.stringify(first.json));
@@ -658,7 +658,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const changed=await request('/orders/'+order+'/addons','POST',{addonsDetailed:[{id:addon,quantity:2}]},true);
         assert.equal(changed.status,200,JSON.stringify(changed.json));assert.equal(changed.json.data.order.status,'in_progress');assert.equal(changed.json.data.order.estimated_duration_minutes,170);
         const overlap=await request('/orders/'+order+'/addons','POST',{addonsDetailed:[{id:addon,quantity:3}]},true);
-        assert.equal(overlap.status,409);assert.match(JSON.stringify(overlap.json),/cleaner_unavailable/);
+        assert.equal(overlap.status,409);assert.match(JSON.stringify(overlap.json),/cleaner_unavailable|cleaner_capacity_exceeded/);
         assert.equal((await db.query('SELECT estimated_duration_minutes FROM service_orders WHERE id=$1',[order])).rows[0].estimated_duration_minutes,170);
         await request('/orders/'+order+'/addons','POST',{addonsDetailed:[]},true);
         assert.equal((await propose([{key:special,quantity:1}])).status,201);
@@ -2401,4 +2401,43 @@ test('health database timeout returns 503 and the same process recovers',async()
   const url='http://127.0.0.1:'+(server.address() as AddressInfo).port+'/health';
   try{assert.equal((await fetch(url)).status,503);fail=false;assert.equal((await fetch(url)).status,200);}
   finally{await new Promise<void>(r=>server.close(()=>r()));}
+});
+
+test('90 minute gaps start in December; actual cleaner workload is admin-only and team-aware', {skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async()=>{
+ const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
+ const {cleanerWorkloadRouter,workloadRange}=await import('../http/routes/cleanerWorkload');
+ await db.query("INSERT INTO app_settings(key,value) VALUES('enforceServiceZones','false') ON CONFLICT(key) DO UPDATE SET value='false'");
+ const ids={admin:randomUUID(),customer:randomUUID(),cleaner:randomUUID(),other:randomUUID()};
+ const orders:string[]=[];
+ const app=express();app.use(express.json(),cleanerWorkloadRouter(db),errorHandler);const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
+ const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
+ async function add(date:string,start:string,end:string,status='assigned',area=89,worker:string|null=ids.cleaner){const id=randomUUID();orders.push(id);await db.query('INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,status,area) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,ids.customer,worker,date,start,end,status,area]);return id;}
+ async function gap(date:string,start:string,end:string,exclude:string|null=null){return (await db.query('SELECT domly_cleaner_gap_allowed($1,$2,$3,$4,NULL,$5) allowed',[ids.cleaner,date,start,end,exclude])).rows[0].allowed;}
+ try{
+  for(const [key,id]of Object.entries(ids))await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,$3,'approved')",[id,'workload-'+id,key==='admin'?'superadmin':key==='customer'?'customer':'cleaner']);
+  assert.throws(()=>workloadRange({from:'2026-02-30',to:'2026-12-01'}));
+  assert.throws(()=>workloadRange({from:'2026-12-02',to:'2026-12-01'}));
+  const november=await add('2026-11-29','11:00','13:00');assert.equal(await gap('2026-11-29','13:00','14:00'),true);
+  const december=await add('2026-12-01','11:00','13:00');
+  assert.equal(await gap('2026-12-01','14:29','15:00'),false);assert.equal(await gap('2026-12-01','14:30','15:00'),true);
+  assert.equal(await gap('2026-12-01','08:00','09:30'),true);assert.equal(await gap('2026-12-01','08:00','09:31'),false);
+  assert.equal(await gap('2026-12-01','11:00','13:00',december),true);
+  await db.query("UPDATE service_orders SET status='cancelled' WHERE id=$1",[december]);assert.equal(await gap('2026-12-01','12:00','13:00'),true);
+  const night=await add('2026-11-30','22:00','23:30');assert.equal(await gap('2026-12-01','00:59','02:00'),false);assert.equal(await gap('2026-12-01','01:00','02:00'),true);
+  const pending=await add('2026-12-03','11:00','13:00','pending_assignment',89,null);
+  const {pendingBookingCount}=await import('../modules/botBookingCapacity');
+  assert.equal(await pendingBookingCount(db,'2026-12-03','14:29',60),1);assert.equal(await pendingBookingCount(db,'2026-12-03','14:30',60),0);
+  const solo=await add('2026-12-02','08:00','10:30','completed');await db.query("UPDATE service_orders SET started_at='2026-12-02 08:00+05',completed_at='2026-12-02 10:30+05' WHERE id=$1",[solo]);
+  const team=await add('2026-12-02','13:00','15:00','in_progress',500,null);await db.query('UPDATE service_orders SET required_cleaners=2 WHERE id=$1',[team]);
+  await db.query("INSERT INTO order_team_members(order_id,cleaner_id,slot_number,allocated_area,status,started_at,completed_at) VALUES($1,$2,0,250,'completed','2026-12-02 13:00+05','2026-12-02 15:00+05'),($1,$3,1,250,'in_progress','2026-12-02 13:00+05',NULL)",[team,ids.cleaner,ids.other]);
+  await add('2026-12-02','16:00','17:00','completed',50);
+  const request=async(role:'superadmin'|'customer')=>fetch(base+'/admin/cleaner-workload?from=2026-12-02&to=2026-12-02',{headers:{Authorization:'Bearer '+signAccessToken({id:role==='superadmin'?ids.admin:ids.customer,role,phone:'fixture'})}});
+  assert.equal((await request('customer')).status,403);
+  const response=await request('superadmin');assert.equal(response.status,200);const data=(await response.json() as any).data;
+  const cleaner=data.cleaners.find((r:any)=>r.id===ids.cleaner),other=data.cleaners.find((r:any)=>r.id===ids.other);
+  assert.equal(Number(cleaner.cleaned_area),389);assert.equal(cleaner.completed_count,3);assert.equal(Number(cleaner.actual_minutes),270);assert.equal(cleaner.missing_time_count,1);
+  assert.equal(Number(other.cleaned_area),0);assert.equal(Number(other.actual_minutes),0);
+ }finally{
+  await db.query('DELETE FROM order_team_members WHERE order_id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[Object.values(ids)]);await new Promise<void>(r=>server.close(()=>r()));await db.pool.end();
+ }
 });
