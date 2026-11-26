@@ -1,0 +1,71 @@
+name: Read-only encrypted greeting purchase timing audit
+'on':
+  push:
+    branches:
+    - support/greeting-audit-20261126
+    paths:
+    - .github/workflows/greeting-diagnosis-once.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - name: Read authorized greeting and purchase timing without sends or data changes
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}\" | base64\
+        \ -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\n\
+        // Authorized read-only timing diagnosis. No names, phones, sums or conversation text.\nconst {Pool}=require('pg');\n\
+        (async()=>{\n const db=new Pool({connectionString:process.env.DATABASE_URL});const client=await db.connect();\n try{\n\
+        \  await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await client.query(\"SET LOCAL statement_timeout='15s'\"\
+        );\n  const report={checkedAt:new Date().toISOString(),counts:(await client.query(\"SELECT kind,state,COUNT(*)::int\
+        \ count FROM moon_ai_outbox WHERE COALESCE(started_at,created_at)>NOW()-INTERVAL '7 days' AND kind NOT IN ('invoice','message')\
+        \ GROUP BY kind,state ORDER BY kind,state\")).rows,entries:[]};\n  const rows=(await client.query(`SELECT o.customer_id,o.kind,o.state,o.created_at,o.run_after,o.started_at,o.finished_at,o.failure_code,\n\
+        \   o.payload->>'deliveryChannel' AS delivery_channel,o.payload#>>'{messengerDelivery,delivery}' AS delivery_result,\n\
+        \   (o.payment_id IS NOT NULL) AS linked_payment,u.created_at AS registered_at\n   FROM moon_ai_outbox o LEFT JOIN\
+        \ app_users u ON u.id=o.customer_id\n   WHERE COALESCE(o.started_at,o.created_at)>NOW()-INTERVAL '7 days' AND o.kind\
+        \ NOT IN ('invoice','message')\n   ORDER BY COALESCE(o.started_at,o.created_at) DESC LIMIT 50`)).rows;\n  for(const\
+        \ row of rows){\n   const payments=(await client.query(`SELECT status,provider,created_at,paid_at,approved_at,\n \
+        \    (customer_package_id IS NOT NULL) AS package_payment,(order_id IS NOT NULL) AS order_payment\n     FROM payments\
+        \ WHERE customer_id=$1 ORDER BY created_at DESC LIMIT 15`,[row.customer_id])).rows;\n   const packages=(await client.query(`SELECT\
+        \ cp.status,cp.created_at,cp.updated_at,\n     p.status AS purchase_status,p.paid_at AS purchase_paid_at,p.approved_at\
+        \ AS purchase_approved_at\n     FROM customer_packages cp LEFT JOIN payments p ON p.id=cp.purchase_payment_id\n  \
+        \   WHERE cp.customer_id=$1 ORDER BY cp.created_at DESC LIMIT 15`,[row.customer_id])).rows;\n   const {customer_id,...safe}=row;const\
+        \ point=row.started_at??row.created_at;\n   report.entries.push({case:report.entries.length+1,...safe,\n     checkout_before_dispatch:payments.some(p=>new\
+        \ Date(p.created_at)<=new Date(point)),\n     confirmed_paid_before_dispatch:payments.some(p=>(p.paid_at||p.approved_at)&&new\
+        \ Date(p.paid_at??p.approved_at)<=new Date(point)),payments,packages});\n  }\n  await client.query('ROLLBACK');const\
+        \ e=process.env;\n  if(e.MOON_AI_REST_API_KEY&&e.MOON_AI_WABA_CHANNEL_ID){\n   const base=`https://core.mooonai.com/api/v1/organizations/${e.MOON_AI_ORGANIZATION_ID}/agents/${e.MOON_AI_AGENT_ID}`;\n\
+        \   try{const r=await fetch(base+`/channels/${e.MOON_AI_WABA_CHANNEL_ID}/whatsapp-templates`,{headers:{Authorization:`Bearer\
+        \ ${e.MOON_AI_REST_API_KEY}`},signal:AbortSignal.timeout(30000)});report.templatesHttp=r.status;const data=await r.json();report.templates=(data.templates??[]).filter(t=>String(t.id)===e.MOON_AI_WABA_TEMPLATE_ID||/domly_welcome/.test(t.name??'')).map(t=>({id:t.id,name:t.name,status:t.status,configured_generic:String(t.id)===e.MOON_AI_WABA_TEMPLATE_ID,old_name:/ал[её]н/i.test(JSON.stringify(t.components)),new_name:/анар/i.test(JSON.stringify(t.components))}));}catch(error){report.templateReadError=error.name;}\n\
+        \   try{const r=await fetch(base,{headers:{Authorization:`Bearer ${e.MOON_AI_REST_API_KEY}`},signal:AbortSignal.timeout(20000)});report.agentHttp=r.status;if(r.ok){const\
+        \ data=await r.json();report.agentFields=Object.keys(data);report.agentOldNameFields=Object.entries(data).filter(([k,v])=>typeof\
+        \ v==='string'&&/ал[её]н/i.test(v)).map(([k])=>k);report.agentNewNameFields=Object.entries(data).filter(([k,v])=>typeof\
+        \ v==='string'&&/анар/i.test(v)).map(([k])=>k);}}catch(error){report.agentReadError=error.name;}\n  }\n  console.log(JSON.stringify(report));\n\
+        \ }finally{client.release();await db.end();}\n})().catch(e=>{console.error('READ_ONLY_GREETING_AUDIT_FAILED',e.code||e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAvK1iJp5ZcnS6ygOj74FY\n\
+        rgCF/hcARAm4At9LEIq4wnbCwIHIvPsU7puB7Js+GNb8tvtxPdR3KPTbel9+CGlw\nFVScby2ok4KVmSGL8lJAxrdwaXAW//VKpBfw92fRNAF+PSBKFFg6RzpqMvsEFw3Y\n\
+        0fqVjLZbLaHmcUJoSOW2ZWJHCET/y7i18eOYqP8asheSOW1DdkuOxHtAlsJ3Dn4O\nQVt6gbzfNo8EKbDiBSjUfZ6k4dDv+PkrT8va2BAhxRDWoTK4h8gxabP/XjpWOtVO\n\
+        LpUn3S0gMlZpP+QvRoZBodY3Oqe4dwHMNgZEWaPNUGiATlP0feswTWoiQ/bQNow6\nW+IVXUWufmFQrGA2XmCOrhqeFVdtohslQUVM1YoOWboYo9QcIinKHUi4PLArckc7\n\
+        IqDcfN4dSaxxPg0sEkSNzEYOqVJmyGx6IbxisrmHforsrXroN6t5/c8O9NTn2jZl\nT/JTI4aOmHwgIcVL8p8WmGfAWy2rItkBkC3hO7ljblALAgMBAAE=\n\
+        -----END PUBLIC KEY-----\nOWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ 'mktemp -d /tmp/domly-greeting-audit-XXXXXX')\n[[ \"$remote_dir\" =~ ^/tmp/domly-greeting-audit-[A-Za-z0-9]+$ ]]\n\
+        trap 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm -rf -- $remote_dir\" >/dev/null\
+        \ 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes audit.js owner-public.pem \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
+        \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"set -euo pipefail; cd '$DEPLOY_PATH/current'\
+        \ && umask 077 && timeout 240 docker compose -p domly-backend exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
+        \ && openssl rand -out '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc -salt -pbkdf2 -in '$remote_dir/report.json'\
+        \ -out '$remote_dir/report.enc' -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey '$remote_dir/owner-public.pem'\
+        \ -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\
+        \nmkdir -m 700 -p encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: greeting-timing-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
