@@ -2438,6 +2438,6 @@ test('90 minute gaps start in December; actual cleaner workload is admin-only an
   assert.equal(Number(cleaner.cleaned_area),389);assert.equal(cleaner.completed_count,3);assert.equal(Number(cleaner.actual_minutes),270);assert.equal(cleaner.missing_time_count,1);
   assert.equal(Number(other.cleaned_area),0);assert.equal(Number(other.actual_minutes),0);
  }finally{
-  await db.query('DELETE FROM order_team_members WHERE order_id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[Object.values(ids)]);await new Promise<void>(r=>server.close(()=>r()));await db.pool.end();
+  await db.query('DELETE FROM order_team_members WHERE order_id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[Object.values(ids)]);await new Promise<void>(r=>server.close(()=>r()));await db.close();
  }
 });

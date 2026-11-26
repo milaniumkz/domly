@@ -75,7 +75,12 @@ class _AdminWorkSchedulesState extends State<AdminWorkSchedules> {
     setState(() => _busy.add(id));
     try {
       await _data.reviewWorkingSchedule(id, decision, comment);
-      if (mounted) setState(() => _revision++);
+      if (mounted)
+        setState(() {
+          _revision++;
+          _stream = _data.adminWorkingSchedulesStream(
+              status: _status == 'all' ? null : _status);
+        });
     } catch (error) {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
