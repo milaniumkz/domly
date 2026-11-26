@@ -1,0 +1,54 @@
+name: Read-only encrypted assistant name configuration
+'on':
+  push:
+    branches:
+    - support/greeting-audit-20261126
+    paths:
+    - .github/workflows/anara-profile-read-once.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - name: Read assistant name configuration only; no customer records or messages
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}\" | base64\
+        \ -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS }}\" > ~/.ssh/known_hosts\ncat > audit.js <<'AUDIT_JS'\n\
+        // Read only assistant configuration; emit property names and name-match flags only.\n(async()=>{\n const e=process.env,base=`https://core.mooonai.com/api/v1/organizations/${e.MOON_AI_ORGANIZATION_ID}/agents/${e.MOON_AI_AGENT_ID}`;\n\
+        \ async function read(path,method='GET'){const r=await fetch(base+path,{method,headers:{Authorization:`Bearer ${e.MOON_AI_REST_API_KEY}`},signal:AbortSignal.timeout(25000)});return\
+        \ {http:r.status,allow:r.headers.get('allow'),body:await r.json().catch(()=>null)};}\n const root=await read('');const\
+        \ report={agentHttp:root.http,fields:Object.keys(root.body??{}),nameMatches:[],integrationShapes:[]};\n const walk=(v,path)=>{if(/key|token|password|secret|phone|email/i.test(path))return;if(typeof\
+        \ v==='string'&&/ал[её]на|alena|alyona|анара|anara/i.test(v))report.nameMatches.push({path,old:/ал[её]на|alena|alyona/i.test(v),anara:/анара|anara/i.test(v)});else\
+        \ if(Array.isArray(v))v.forEach((x,i)=>walk(x,path+'['+i+']'));else if(v&&typeof v==='object')for(const [k,x]of Object.entries(v))walk(x,path+'.'+k);};\n\
+        \ walk(root.body,'agent');\n const integrations=root.body?.integrations;if(Array.isArray(integrations))report.integrationShapes=integrations.map(x=>typeof\
+        \ x==='object'&&x?Object.keys(x):typeof x);\n const meta=await read('','OPTIONS');report.optionsHttp=meta.http;report.allow=meta.allow;report.writableFields=Object.entries(meta.body?.actions?.PUT??meta.body?.actions?.PATCH??{}).filter(([k,v])=>!v.read_only).map(([k])=>k);\n\
+        \ const integration=await read('/integrations/');report.integrationHttp=integration.http;if(integration.http===200){report.integrationFields=Object.keys(integration.body??{});walk(integration.body,'integrations');}\n\
+        \ console.log(JSON.stringify(report));\n})().catch(e=>{console.error('CONFIG_READ_FAILED',e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAvK1iJp5ZcnS6ygOj74FY\n\
+        rgCF/hcARAm4At9LEIq4wnbCwIHIvPsU7puB7Js+GNb8tvtxPdR3KPTbel9+CGlw\nFVScby2ok4KVmSGL8lJAxrdwaXAW//VKpBfw92fRNAF+PSBKFFg6RzpqMvsEFw3Y\n\
+        0fqVjLZbLaHmcUJoSOW2ZWJHCET/y7i18eOYqP8asheSOW1DdkuOxHtAlsJ3Dn4O\nQVt6gbzfNo8EKbDiBSjUfZ6k4dDv+PkrT8va2BAhxRDWoTK4h8gxabP/XjpWOtVO\n\
+        LpUn3S0gMlZpP+QvRoZBodY3Oqe4dwHMNgZEWaPNUGiATlP0feswTWoiQ/bQNow6\nW+IVXUWufmFQrGA2XmCOrhqeFVdtohslQUVM1YoOWboYo9QcIinKHUi4PLArckc7\n\
+        IqDcfN4dSaxxPg0sEkSNzEYOqVJmyGx6IbxisrmHforsrXroN6t5/c8O9NTn2jZl\nT/JTI4aOmHwgIcVL8p8WmGfAWy2rItkBkC3hO7ljblALAgMBAAE=\n\
+        -----END PUBLIC KEY-----\nOWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ 'mktemp -d /tmp/domly-anara-profile-XXXXXX')\n[[ \"$remote_dir\" =~ ^/tmp/domly-anara-profile-[A-Za-z0-9]+$ ]]\n\
+        trap 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm -rf -- $remote_dir\" >/dev/null\
+        \ 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes audit.js owner-public.pem \"$VPS_USER@$VPS_HOST:$remote_dir/\"\
+        \nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"set -euo pipefail; cd '$DEPLOY_PATH/current'\
+        \ && umask 077 && timeout 240 docker compose -p domly-backend exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json'\
+        \ && openssl rand -out '$remote_dir/key.bin' 32 && openssl enc -aes-256-cbc -salt -pbkdf2 -in '$remote_dir/report.json'\
+        \ -out '$remote_dir/report.enc' -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey '$remote_dir/owner-public.pem'\
+        \ -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\
+        \nmkdir -m 700 -p encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: anara-config-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
