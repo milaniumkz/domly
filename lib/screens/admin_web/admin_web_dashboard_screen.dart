@@ -5445,6 +5445,14 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                         : '${periodStats['cleaned_area']} м²',
                                   ),
                                   _adminInfoChip(
+                                    'Отработано дней',
+                                    periodStats?['worked_days']?.toString() ?? '—',
+                                  ),
+                                  _adminInfoChip(
+                                    'Время по заказам',
+                                    scheduledWorkLabel(periodStats),
+                                  ),
+                                  _adminInfoChip(
                                     'Фактически отработано',
                                     actualWorkLabel(periodStats),
                                   ),

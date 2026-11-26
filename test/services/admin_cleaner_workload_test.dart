@@ -20,6 +20,7 @@ void main() {
                           'id': 'a',
                           'cleaned_area': '389',
                           'actual_minutes': '270',
+                          'scheduled_minutes': '305',
                           'missing_time_count': 1
                         }
                       ]
@@ -28,9 +29,15 @@ void main() {
                     toolbar: Wrap(children: [
                       SizedBox(width: double.infinity, child: picker)
                     ]),
-                    child: Text(actualWorkLabel(totals['a'])))))));
+                    child: Column(children: [
+                      Text(actualWorkLabel(totals['a'])),
+                      Text(scheduledWorkLabel(totals['a']))
+                    ]))))));
     await tester.pumpAndSettle();
     expect(find.text('4 ч 30 мин'), findsOneWidget);
+    expect(find.text('5 ч 5 мин'), findsOneWidget);
+    expect(scheduledWorkLabel(null), '—');
+    expect(scheduledWorkLabel({}), '—');
     expect(find.textContaining('Выполнено за период:'), findsOneWidget);
     expect(tester.takeException(), isNull);
     expect(actualWorkLabel(null), '—');
