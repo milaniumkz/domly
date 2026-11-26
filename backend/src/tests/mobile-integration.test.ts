@@ -394,7 +394,7 @@ test('Moon AI invoices, signed events, guest isolation and timed WhatsApp campai
         const parsedUrl=new URL(url);const path=parsedUrl.pathname;
         if(path.endsWith('/threads')){assert.equal(parsedUrl.searchParams.get('messengers'),'whatsapp_business');assert.equal(init.headers['Content-Type'],undefined);}
         nativeCalls.push({path,body:init.body?JSON.parse(init.body):null});
-        const result=path.endsWith('/threads')?{results:[]}:path.endsWith('/whatsapp-templates')?{templates:[{id:216,name:'domly_welcome_alena_formal_20261027',status:'APPROVED'}]}:
+        const result=path.endsWith('/threads')?{results:[]}:path.endsWith('/whatsapp-templates')?{templates:[{id:216,name:'domly_welcome_anara_formal_20261126',status:'APPROVED'}]}:
           {thread_id:'native-waba-thread',delivery_status:'enqueued'};
         return new Response(JSON.stringify(result),{status:200});
       }) as typeof fetch;
@@ -418,7 +418,7 @@ test('Moon AI invoices, signed events, guest isolation and timed WhatsApp campai
         return new Response(JSON.stringify(result),{status:200});
       }) as typeof fetch;
       await sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Internal event',phone:'+77000000000'},transport);
-      assert.equal(calls.find(c=>c.path.endsWith('/messages')).body.data.text,'Здравствуйте! 👋 Я Алена из поддержки DomLY. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?');
+      assert.equal(calls.find(c=>c.path.endsWith('/messages')).body.data.text,'Здравствуйте! 👋 Я Анара из поддержки DomLY. Вижу, вы только что установили приложение. Разобрались, как оно работает, или подсказать, какой вариант уборки лучше выбрать под вашу квартиру, чтобы сэкономить?');
     });
     await t.test('signup never falls back to the old template while approval is pending',async()=>{
       const calls:string[]=[];
@@ -426,7 +426,7 @@ test('Moon AI invoices, signed events, guest isolation and timed WhatsApp campai
         assert.equal(init.method,'GET','no message may be sent');
         const path=new URL(url).pathname;calls.push(path);
         return new Response(JSON.stringify(path.endsWith('/threads')?{results:[]}:
-          {templates:[{id:215,status:'APPROVED'},{id:216,name:'domly_welcome_alena_formal_20261027',status:'PENDING'}]}),{status:200});
+          {templates:[{id:215,status:'APPROVED'},{id:216,name:'domly_welcome_anara_formal_20261126',status:'PENDING'}]}),{status:200});
       }) as typeof fetch;
       await assert.rejects(sendMessengerFollowup({id:randomUUID(),kind:'inactive_signup',text:'Internal event',phone:'+77000000000'},transport),
         (e:any)=>e.failureCode==='whatsapp_template_not_approved' && e.retryable===true);
