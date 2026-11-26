@@ -120,8 +120,13 @@ class _AdminCleanerWorkloadState extends State<AdminCleanerWorkload> {
       );
 }
 
-String actualWorkLabel(Map<String, dynamic>? row) {
-  if (row == null) return '—';
-  final minutes = calendarNumber(row['actual_minutes']).round();
+String actualWorkLabel(Map<String, dynamic>? row) =>
+    workTimeLabel(row, 'actual_minutes');
+String scheduledWorkLabel(Map<String, dynamic>? row) =>
+    workTimeLabel(row, 'scheduled_minutes');
+
+String workTimeLabel(Map<String, dynamic>? row, String field) {
+  if (row == null || row[field] == null) return '—';
+  final minutes = calendarNumber(row[field]).round();
   return '${minutes ~/ 60} ч ${minutes % 60} мин';
 }

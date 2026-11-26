@@ -17,23 +17,25 @@ export function cleanerWorkloadRouter(db:Database){
   const range=workloadRange(req.query);
   const rows=(await db.query(`WITH completed AS (
     SELECT o.id,o.cleaner_id,COALESCE(NULLIF(o.area,0),a.verified_area,a.area,0) AS area,
-      o.started_at,o.completed_at,o.scheduled_date
+      o.started_at,o.completed_at,o.scheduled_date,o.estimated_duration_minutes,o.start_time,o.end_time
     FROM service_orders o LEFT JOIN customer_addresses a ON a.id=o.address_id
     WHERE o.status='completed' AND o.cleaner_id IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM order_team_members m WHERE m.order_id=o.id)
     UNION ALL
-    SELECT o.id,m.cleaner_id,m.allocated_area,m.started_at,m.completed_at,o.scheduled_date
+    SELECT o.id,m.cleaner_id,m.allocated_area,m.started_at,m.completed_at,o.scheduled_date,o.estimated_duration_minutes,o.start_time,o.end_time
     FROM order_team_members m JOIN service_orders o ON o.id=m.order_id
     WHERE m.status='completed' AND m.cleaner_id IS NOT NULL AND o.status NOT IN ('cancelled','canceled','draft')
    ), totals AS (
-    SELECT cleaner_id,COUNT(*)::int AS completed_count,COALESCE(SUM(area),0) AS cleaned_area,
+    SELECT cleaner_id,COUNT(DISTINCT COALESCE((completed_at AT TIME ZONE 'Asia/Almaty')::date,scheduled_date))::int AS worked_days,COUNT(*)::int AS completed_count,COALESCE(SUM(area),0) AS cleaned_area,
+      COALESCE(SUM(CASE WHEN estimated_duration_minutes>0 THEN estimated_duration_minutes
+        ELSE GREATEST(0,EXTRACT(EPOCH FROM (end_time-start_time+CASE WHEN end_time<start_time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END))/60) END),0) AS scheduled_minutes,
       COALESCE(SUM(CASE WHEN started_at IS NOT NULL AND completed_at>=started_at
         THEN EXTRACT(EPOCH FROM completed_at-started_at)/60 ELSE 0 END),0) AS actual_minutes,
       COUNT(*) FILTER(WHERE started_at IS NULL OR completed_at IS NULL OR completed_at<started_at)::int AS missing_time_count
     FROM completed WHERE COALESCE((completed_at AT TIME ZONE 'Asia/Almaty')::date,scheduled_date) BETWEEN $1::date AND $2::date
     GROUP BY cleaner_id
    ) SELECT u.id,u.full_name,COALESCE(t.completed_count,0) AS completed_count,COALESCE(t.cleaned_area,0) AS cleaned_area,
-     COALESCE(t.actual_minutes,0) AS actual_minutes,COALESCE(t.missing_time_count,0) AS missing_time_count
+     COALESCE(t.worked_days,0) AS worked_days,COALESCE(t.scheduled_minutes,0) AS scheduled_minutes,COALESCE(t.actual_minutes,0) AS actual_minutes,COALESCE(t.missing_time_count,0) AS missing_time_count
     FROM app_users u LEFT JOIN totals t ON t.cleaner_id=u.id
     WHERE u.role='cleaner' AND (u.deleted_at IS NULL OR t.cleaner_id IS NOT NULL)
     ORDER BY COALESCE(u.full_name,''),u.id`,[range.from,range.to])).rows;

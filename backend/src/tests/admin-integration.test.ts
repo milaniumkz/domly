@@ -2427,7 +2427,7 @@ test('90 minute gaps start in December; actual cleaner workload is admin-only an
   const pending=await add('2026-12-03','11:00','13:00','pending_assignment',89,null);
   const {pendingBookingCount}=await import('../modules/botBookingCapacity');
   assert.equal(await pendingBookingCount(db,'2026-12-03','14:29',60),1);assert.equal(await pendingBookingCount(db,'2026-12-03','14:30',60),0);
-  const solo=await add('2026-12-02','08:00','10:30','completed');await db.query("UPDATE service_orders SET started_at='2026-12-02 08:00+05',completed_at='2026-12-02 10:30+05' WHERE id=$1",[solo]);
+  const solo=await add('2026-12-02','08:00','10:30','completed');await db.query("UPDATE service_orders SET estimated_duration_minutes=125,started_at='2026-12-02 08:00+05',completed_at='2026-12-02 10:30+05' WHERE id=$1",[solo]);
   const team=await add('2026-12-02','13:00','15:00','in_progress',500,null);await db.query('UPDATE service_orders SET required_cleaners=2 WHERE id=$1',[team]);
   await db.query("INSERT INTO order_team_members(order_id,cleaner_id,slot_number,allocated_area,status,started_at,completed_at) VALUES($1,$2,0,250,'completed','2026-12-02 13:00+05','2026-12-02 15:00+05'),($1,$3,1,250,'in_progress','2026-12-02 13:00+05',NULL)",[team,ids.cleaner,ids.other]);
   await add('2026-12-02','16:00','17:00','completed',50);
@@ -2437,6 +2437,21 @@ test('90 minute gaps start in December; actual cleaner workload is admin-only an
   const cleaner=data.cleaners.find((r:any)=>r.id===ids.cleaner),other=data.cleaners.find((r:any)=>r.id===ids.other);
   assert.equal(Number(cleaner.cleaned_area),389);assert.equal(cleaner.completed_count,3);assert.equal(Number(cleaner.actual_minutes),270);assert.equal(cleaner.missing_time_count,1);
   assert.equal(Number(other.cleaned_area),0);assert.equal(Number(other.actual_minutes),0);
+  assert.equal(Number(cleaner.scheduled_minutes),305,'estimated minutes and legacy clock ranges are summed separately from actual time');
+  assert.equal(Number(other.scheduled_minutes),0);
+  assert.equal(Number(cleaner.worked_days),1,'three cleanings on the same date count as one workday');
+  assert.equal(Number(other.worked_days),0,'unfinished work does not count as a completed workday');
+  const late=await add('2026-12-02','23:30','01:00','completed',20);
+  await db.query("UPDATE service_orders SET started_at='2026-12-02 20:00Z',completed_at='2026-12-02 21:00Z' WHERE id=$1",[late]);
+  const cancelled=await add('2026-12-04','08:00','10:00','cancelled',100);
+  await db.query("UPDATE service_orders SET started_at='2026-12-04 08:00+05',completed_at='2026-12-04 10:00+05' WHERE id=$1",[cancelled]);
+  const expanded=await fetch(base+'/admin/cleaner-workload?from=2026-12-02&to=2026-12-04',{headers:{Authorization:'Bearer '+signAccessToken({id:ids.admin,role:'superadmin',phone:'fixture'})}});
+  assert.equal(expanded.status,200);
+  const expandedRow=((await expanded.json() as any).data.cleaners as any[]).find(r=>r.id===ids.cleaner);
+  assert.equal(Number(expandedRow.worked_days),2,'completion dates use Astana time, including the midnight boundary; cancelled work is excluded');
+  assert.equal(Number(expandedRow.completed_count),4);
+  assert.equal(Number(expandedRow.scheduled_minutes),395,'overnight clock fallback is 90 minutes, without cancelled jobs');
+
  }finally{
   await db.query('DELETE FROM order_team_members WHERE order_id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[Object.values(ids)]);await new Promise<void>(r=>server.close(()=>r()));await db.close();
  }
