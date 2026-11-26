@@ -65,4 +65,20 @@ void main() {
     expect(data.approvedWeek('a', '2026-11-29'), isTrue);
     expect(data.approvedWeek('c', '2026-11-29'), isFalse);
   });
+  test('December calendar keeps ninety minutes around each occupied visit', () {
+    final visit = AdminCalendarVisit({
+      'id': 'gap',
+      'service_date': '2026-12-01',
+      'start_time': '11:00',
+      'estimated_duration_minutes': 120,
+      'status': 'assigned'
+    }, {
+      'cleaner_id': 'a',
+      'allocated_area': 80
+    });
+    expect(
+        calendarFreeIntervals({'start_time': '08:00', 'end_time': '18:00'},
+            [visit], '2026-12-01'),
+        [(start: 480, end: 570), (start: 870, end: 1080)]);
+  });
 }

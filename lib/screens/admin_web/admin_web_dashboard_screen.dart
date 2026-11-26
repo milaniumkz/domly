@@ -1,3 +1,4 @@
+import '../../ui/admin_cleaner_workload.dart';
 import '../../ui/admin_responsive_layout.dart';
 import '../../ui/admin_booking_calendar.dart';
 import '../../ui/admin_customer_crm.dart';
@@ -942,6 +943,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               search: _searchQuery,
               filtersExpanded: expanded.contains('work_schedules'),
               initialStatus: _workScheduleStatusFilter,
+              onOpenOrder: (order) => _openOrderDetails(context,mapAdminOrder(order),orderDisplayId(order)),
               onStatusChanged: (status) =>
                   setState(() => _workScheduleStatusFilter = status),
             ),
@@ -5270,190 +5272,233 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   }
 
   Widget _cleaners() {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _data.cleanersDirectoryStream(),
-      builder: (context, snapshot) {
+    return AdminCleanerWorkload(
+      builder: (context, periodTotals, periodPicker) {
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _data.adminCleanerDailyScheduleStream(),
-          builder: (context, scheduleSnapshot) {
-            final selectedDate = _filterStartDate ?? DateTime.now();
-            final selectedDateKey =
-                '${selectedDate.year.toString().padLeft(4, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
-            final scheduleByCleaner = <String, Map<String, dynamic>>{
-              for (final item
-                  in (scheduleSnapshot.data ?? const <Map<String, dynamic>>[]))
-                if ((item['dateKey'] ?? '').toString() == selectedDateKey)
-                  (item['cleanerId'] ?? '').toString(): item,
-            };
-            final query = _searchQuery.trim().toLowerCase();
-            final filteredCleaners = (snapshot.data ?? []).where((cleaner) {
-              if (!_matchesRecordDateRange(cleaner)) {
-                return false;
-              }
-              if (query.isEmpty) {
-                return true;
-              }
-              final haystack = [
-                cleaner['id'],
-                cleaner['name'],
-                cleaner['clusterName'],
-                cleaner['verificationStatus'],
-                cleaner['cleanerStatusLabel'],
-              ].join(' ').toLowerCase();
-              return haystack.contains(query);
-            });
-            final cleaners = _sortRecordsByDate(filteredCleaners);
-            return _sectionScaffold(
-              toolbar: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: !_canEditCleaners
-                        ? null
-                        : () => _openCleanerEditor(context, null),
-                    icon: const Icon(Icons.add),
-                    label: Text('Добавить уборщицу'.tr()),
+          stream: _data.cleanersDirectoryStream(),
+          builder: (context, snapshot) {
+            return StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _data.adminCleanerDailyScheduleStream(),
+              builder: (context, scheduleSnapshot) {
+                final selectedDate = _filterStartDate ?? DateTime.now();
+                final selectedDateKey =
+                    '${selectedDate.year.toString().padLeft(4, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+                final scheduleByCleaner = <String, Map<String, dynamic>>{
+                  for (final item
+                      in (scheduleSnapshot.data ??
+                          const <Map<String, dynamic>>[]))
+                    if ((item['dateKey'] ?? '').toString() == selectedDateKey)
+                      (item['cleanerId'] ?? '').toString(): item,
+                };
+                final query = _searchQuery.trim().toLowerCase();
+                final filteredCleaners = (snapshot.data ?? []).where((cleaner) {
+                  if (!_matchesRecordDateRange(cleaner)) {
+                    return false;
+                  }
+                  if (query.isEmpty) {
+                    return true;
+                  }
+                  final haystack = [
+                    cleaner['id'],
+                    cleaner['name'],
+                    cleaner['clusterName'],
+                    cleaner['verificationStatus'],
+                    cleaner['cleanerStatusLabel'],
+                  ].join(' ').toLowerCase();
+                  return haystack.contains(query);
+                });
+                final cleaners = _sortRecordsByDate(filteredCleaners);
+                return _sectionScaffold(
+                  toolbar: Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      SizedBox(width: double.infinity, child: periodPicker),
+                      ElevatedButton.icon(
+                        onPressed: !_canEditCleaners
+                            ? null
+                            : () => _openCleanerEditor(context, null),
+                        icon: const Icon(Icons.add),
+                        label: Text('Добавить уборщицу'.tr()),
+                      ),
+                      _statusLegendChip('Approved', const Color(0xFF047857)),
+                      _statusLegendChip('Pending', const Color(0xFFD97706)),
+                      _statusLegendChip(
+                        'Нагрузка на ${_dateLabel(selectedDate)}',
+                        const Color(0xFF1D4ED8),
+                      ),
+                    ],
                   ),
-                  _statusLegendChip('Approved', const Color(0xFF047857)),
-                  _statusLegendChip('Pending', const Color(0xFFD97706)),
-                  _statusLegendChip(
-                    'Нагрузка на ${_dateLabel(selectedDate)}',
-                    const Color(0xFF1D4ED8),
-                  ),
-                ],
-              ),
-              child: cleaners.isEmpty
-                  ? _emptyState(
-                      'Уборщицы не найдены',
-                      'Измените поиск или добавьте нового исполнителя.',
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(20),
-                      itemCount: cleaners.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final cleaner = cleaners[index];
-                        final earnings =
-                            (cleaner['monthlyEarnings'] as num?)?.toInt() ?? 0;
-                        final verification =
-                            (cleaner['verificationStatus'] ?? 'draft')
-                                .toString()
-                                .toLowerCase();
-                        final dailySchedule = scheduleByCleaner[
-                                (cleaner['id'] ?? '').toString()] ??
-                            const <String, dynamic>{};
-                        final totalSqm =
-                            (dailySchedule['totalSqm'] as num?)?.toDouble() ??
+                  child: cleaners.isEmpty
+                      ? _emptyState(
+                          'Уборщицы не найдены',
+                          'Измените поиск или добавьте нового исполнителя.',
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(20),
+                          itemCount: cleaners.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final cleaner = cleaners[index];
+                            final periodStats =
+                                periodTotals['${cleaner['id']}'];
+                            final earnings =
+                                (cleaner['monthlyEarnings'] as num?)?.toInt() ??
                                 0;
-                        final totalMinutes =
-                            (dailySchedule['totalMinutes'] as num?)?.toInt() ??
+                            final verification =
+                                (cleaner['verificationStatus'] ?? 'draft')
+                                    .toString()
+                                    .toLowerCase();
+                            final dailySchedule =
+                                scheduleByCleaner[(cleaner['id'] ?? '')
+                                    .toString()] ??
+                                const <String, dynamic>{};
+                            final totalSqm =
+                                (dailySchedule['totalSqm'] as num?)
+                                    ?.toDouble() ??
                                 0;
-                        final assignedOrders =
-                            ((dailySchedule['orders'] as List?) ?? const [])
-                                .length;
-                        final remainingSqm = math.max(
-                          0,
-                          220 - totalSqm.round(),
-                        );
-                        final loadHours = (totalMinutes / 60).toStringAsFixed(
-                          1,
-                        );
-                        final cleanerName = _personName(
-                          cleaner,
-                          const {},
-                          prefix: 'cleaner',
-                        );
-                        return _entityCard(
-                          title: cleanerName,
-                          subtitle:
-                              'Телефон: ${_personPhone(cleaner, const {}, prefix: 'cleaner')} · Районы: ${_cleanerAreasText(cleaner)} · Рейтинг: ${(cleaner['rating'] ?? 0)} · За месяц: $earnings ₸',
-                          badges: [
-                            _statusBadge(
-                              _cleanerVerificationLabel(verification),
-                              color: verification == 'approved'
-                                  ? const Color(0xFF047857)
-                                  : verification == 'rejected'
+                            final totalMinutes =
+                                (dailySchedule['totalMinutes'] as num?)
+                                    ?.toInt() ??
+                                0;
+                            final assignedOrders =
+                                ((dailySchedule['orders'] as List?) ?? const [])
+                                    .length;
+                            final remainingSqm = math.max(
+                              0,
+                              220 - totalSqm.round(),
+                            );
+                            final loadHours = (totalMinutes / 60)
+                                .toStringAsFixed(1);
+                            final cleanerName = _personName(
+                              cleaner,
+                              const {},
+                              prefix: 'cleaner',
+                            );
+                            return _entityCard(
+                              title: cleanerName,
+                              subtitle:
+                                  'Телефон: ${_personPhone(cleaner, const {}, prefix: 'cleaner')} · Районы: ${_cleanerAreasText(cleaner)} · Рейтинг: ${(cleaner['rating'] ?? 0)} · За месяц: $earnings ₸',
+                              badges: [
+                                _statusBadge(
+                                  _cleanerVerificationLabel(verification),
+                                  color: verification == 'approved'
+                                      ? const Color(0xFF047857)
+                                      : verification == 'rejected'
                                       ? const Color(0xFFDC2626)
                                       : const Color(0xFFD97706),
-                            ),
-                            if ((cleaner['cleanerStatusLabel'] ?? '')
-                                .toString()
-                                .isNotEmpty)
-                              _statusBadge(
-                                (cleaner['cleanerStatusLabel'] ?? '')
-                                    .toString(),
-                                color: const Color(0xFF1D4ED8),
+                                ),
+                                if ((cleaner['cleanerStatusLabel'] ?? '')
+                                    .toString()
+                                    .isNotEmpty)
+                                  _statusBadge(
+                                    (cleaner['cleanerStatusLabel'] ?? '')
+                                        .toString(),
+                                    color: const Color(0xFF1D4ED8),
+                                  ),
+                                _statusBadge(
+                                  totalSqm >= 220
+                                      ? 'День заполнен'
+                                      : 'Есть запас',
+                                  color: totalSqm >= 220
+                                      ? const Color(0xFF7C2D12)
+                                      : const Color(0xFF0F766E),
+                                ),
+                              ],
+                              actions: [
+                                TextButton(
+                                  onPressed: () => _openCleanerDetails(
+                                    context,
+                                    cleaner,
+                                    initialDate: selectedDate,
+                                  ),
+                                  child: Text('Детали'.tr()),
+                                ),
+                                IconButton(
+                                  onPressed: !_canEditCleaners
+                                      ? null
+                                      : () => _openCleanerEditor(
+                                          context,
+                                          cleaner,
+                                        ),
+                                  icon: const Icon(Icons.edit_outlined),
+                                ),
+                                IconButton(
+                                  tooltip: 'Удалить уборщицу',
+                                  onPressed: !_canEditCleaners
+                                      ? null
+                                      : () => _deleteCleaner(cleaner),
+                                  color: const Color(0xFFDC2626),
+                                  icon: const Icon(Icons.delete_outline),
+                                ),
+                              ],
+                              body: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _adminInfoChip(
+                                    'Убрано за период',
+                                    periodStats == null
+                                        ? '—'
+                                        : '${periodStats['cleaned_area']} м²',
+                                  ),
+                                  _adminInfoChip(
+                                    'Фактически отработано',
+                                    actualWorkLabel(periodStats),
+                                  ),
+                                  _adminInfoChip(
+                                    'Выполнено за период',
+                                    periodStats == null
+                                        ? '—'
+                                        : '${periodStats['completed_count']}',
+                                  ),
+                                  if (periodStats != null &&
+                                      (int.tryParse(
+                                                '${periodStats['missing_time_count']}',
+                                              ) ??
+                                              0) >
+                                          0)
+                                    _adminInfoChip(
+                                      'Без отметок времени',
+                                      '${periodStats['missing_time_count']} уборок',
+                                    ),
+                                  _adminInfoChip(
+                                    'Нагрузка',
+                                    '${totalSqm.toStringAsFixed(0)} из 220 м²',
+                                  ),
+                                  _adminInfoChip('Часы', '$loadHours ч'),
+                                  _adminInfoChip(
+                                    'Заказов',
+                                    assignedOrders.toString(),
+                                  ),
+                                  _adminInfoChip('Остаток', '$remainingSqm м²'),
+                                  _adminInfoChip(
+                                    'Регистрация',
+                                    _firstAdminDateTime(cleaner, const [
+                                      'registeredAt',
+                                      'createdAt',
+                                      'joinedAt',
+                                      'joinDate',
+                                    ]),
+                                  ),
+                                  _adminInfoChip(
+                                    'Верификация',
+                                    _firstAdminDateTime(cleaner, const [
+                                      'approvedAt',
+                                      'verifiedAt',
+                                      'reviewedAt',
+                                      'verificationApprovedAt',
+                                    ]),
+                                  ),
+                                ],
                               ),
-                            _statusBadge(
-                              totalSqm >= 220 ? 'День заполнен' : 'Есть запас',
-                              color: totalSqm >= 220
-                                  ? const Color(0xFF7C2D12)
-                                  : const Color(0xFF0F766E),
-                            ),
-                          ],
-                          actions: [
-                            TextButton(
-                              onPressed: () => _openCleanerDetails(
-                                context,
-                                cleaner,
-                                initialDate: selectedDate,
-                              ),
-                              child: Text('Детали'.tr()),
-                            ),
-                            IconButton(
-                              onPressed: !_canEditCleaners
-                                  ? null
-                                  : () => _openCleanerEditor(context, cleaner),
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                            IconButton(
-                              tooltip: 'Удалить уборщицу',
-                              onPressed: !_canEditCleaners
-                                  ? null
-                                  : () => _deleteCleaner(cleaner),
-                              color: const Color(0xFFDC2626),
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          ],
-                          body: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _adminInfoChip(
-                                'Нагрузка',
-                                '${totalSqm.toStringAsFixed(0)} из 220 м²',
-                              ),
-                              _adminInfoChip('Часы', '$loadHours ч'),
-                              _adminInfoChip(
-                                'Заказов',
-                                assignedOrders.toString(),
-                              ),
-                              _adminInfoChip('Остаток', '$remainingSqm м²'),
-                              _adminInfoChip(
-                                'Регистрация',
-                                _firstAdminDateTime(cleaner, const [
-                                  'registeredAt',
-                                  'createdAt',
-                                  'joinedAt',
-                                  'joinDate',
-                                ]),
-                              ),
-                              _adminInfoChip(
-                                'Верификация',
-                                _firstAdminDateTime(cleaner, const [
-                                  'approvedAt',
-                                  'verifiedAt',
-                                  'reviewedAt',
-                                  'verificationApprovedAt',
-                                ]),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                            );
+                          },
+                        ),
+                );
+              },
             );
           },
         );

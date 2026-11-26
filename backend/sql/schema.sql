@@ -1719,11 +1719,29 @@ RETURNS NUMERIC LANGUAGE SQL STABLE AS $$
    (SELECT COALESCE(NULLIF(o.area,0),a.verified_area,a.area,0) FROM service_orders o LEFT JOIN customer_addresses a ON a.id=o.address_id WHERE o.id=target_order))
 $$;
 
+-- Effective by service date in Astana; retain the previous policy in November.
+CREATE OR REPLACE FUNCTION domly_cleaner_gap_minutes(service_day DATE)
+RETURNS INTEGER LANGUAGE SQL IMMUTABLE AS $$
+ SELECT CASE WHEN service_day>=DATE '2026-12-01' THEN 90 ELSE 0 END
+$$;
+CREATE OR REPLACE FUNCTION domly_cleaner_gap_allowed(cleaner UUID,service_day DATE,start_clock TIME,end_clock TIME,duration_minutes INTEGER,exclude_order UUID DEFAULT NULL)
+RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
+ SELECT NOT EXISTS(SELECT 1 FROM cleaner_order_workloads w
+ WHERE w.cleaner_id=cleaner AND w.status NOT IN ('cancelled','canceled','draft')
+ AND (w.status<>'completed' OR GREATEST(domly_cleaner_gap_minutes(service_day),domly_cleaner_gap_minutes(w.scheduled_date))>0)
+ AND (exclude_order IS NULL OR w.id<>exclude_order)
+ AND w.scheduled_date+w.start_time < cleaning_end_at(service_day,start_clock,end_clock,duration_minutes)
+   + GREATEST(domly_cleaner_gap_minutes(service_day),domly_cleaner_gap_minutes(w.scheduled_date))*INTERVAL '1 minute'
+ AND cleaning_end_at(w.scheduled_date,w.start_time,w.end_time,w.estimated_duration_minutes)
+   + GREATEST(domly_cleaner_gap_minutes(service_day),domly_cleaner_gap_minutes(w.scheduled_date))*INTERVAL '1 minute' > service_day+start_clock)
+$$;
+
 -- One policy for customer slot previews, offers and atomic assignment checks.
 -- Completed visits still consume the day's area. Exclude the edited visit once.
 CREATE OR REPLACE FUNCTION domly_cleaner_slot_allowed(cleaner UUID,service_day DATE,start_clock TIME,end_clock TIME,duration_minutes INTEGER,incoming_area NUMERIC,exclude_order UUID DEFAULT NULL)
 RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
  SELECT incoming_area>=0 AND incoming_area<=250
+ AND domly_cleaner_gap_allowed(cleaner,service_day,start_clock,end_clock,duration_minutes,exclude_order)
  AND EXISTS(SELECT 1 FROM cleaner_working_days wd JOIN cleaner_work_schedule_requests wr ON wr.id=wd.request_id
    WHERE wr.status='approved' AND wd.cleaner_id=cleaner AND wd.work_date=service_day
    AND wd.start_time<=start_clock AND wd.end_time>=start_clock

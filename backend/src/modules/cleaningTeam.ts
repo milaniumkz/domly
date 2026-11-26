@@ -74,8 +74,8 @@ export async function planCleaningTeam(db: Queryable, input: {
           AND ($5::uuid IS NULL OR pending.id<>$5)
           AND NOT EXISTS(SELECT 1 FROM order_team_members tm WHERE tm.order_id=pending.id)
           AND NOT EXISTS(SELECT 1 FROM order_offers f WHERE f.order_id=pending.id AND f.status='offered' AND f.expires_at>NOW() AND pending.payable_amount<=0)
-          AND pending.scheduled_date+pending.start_time<$1::date+$2::time+CEIL($4::numeric/sizes.size)*INTERVAL '1 minute'
-          AND cleaning_end_at(pending.scheduled_date,pending.start_time,pending.end_time,pending.estimated_duration_minutes)>$1::date+$2::time)
+          AND pending.scheduled_date+pending.start_time<$1::date+$2::time+(CEIL($4::numeric/sizes.size)+GREATEST(domly_cleaner_gap_minutes(pending.scheduled_date),domly_cleaner_gap_minutes($1::date)))*INTERVAL '1 minute'
+          AND cleaning_end_at(pending.scheduled_date,pending.start_time,pending.end_time,pending.estimated_duration_minutes)+GREATEST(domly_cleaner_gap_minutes(pending.scheduled_date),domly_cleaner_gap_minutes($1::date))*INTERVAL '1 minute'>$1::date+$2::time)
       AND $9::uuid[] <@ candidates.ids
     ORDER BY sizes.size LIMIT 1`,
     [input.date,input.startTime,input.area,input.laborMinutes,input.excludeOrderId??null,minimum,input.expandForTime===true,input.zoneId??null,input.requiredCleanerIds??[]])).rows;

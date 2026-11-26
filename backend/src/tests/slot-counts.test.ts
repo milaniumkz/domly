@@ -14,22 +14,22 @@ test('batched calendar preserves overlap boundaries, zones and approved verifica
   for(const id of [zone,empty])await db.query("INSERT INTO service_zones(id,name_ru,city) VALUES($1,$2,'Астана')",[id,'Тест-'+id]);
   await db.query('INSERT INTO cleaner_zones(cleaner_id,zone_id) VALUES($1,$4),($2,$4),($3,$4)',[cleaner,pending,off,zone]);
   const schedule=(await db.query("INSERT INTO cleaner_work_schedule_requests(cleaner_id,week_start,days,status) VALUES($1,'2039-01-31','[]','approved') RETURNING id",[cleaner])).rows[0];
-  await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2039-02-03','08:00','18:00',$2),($1,'2039-02-04','00:00','02:00',$2)",[cleaner,schedule.id]);
+  await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2039-02-03','08:00','18:00',$2),($1,'2039-02-04','00:00','03:00',$2)",[cleaner,schedule.id]);
   await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,status) VALUES($1,$2,$3,'2039-02-03','10:00','12:00','assigned')",[order,customer,cleaner]);
   const result=await service.availableSlotCounts('2039-02-03',slots,zone);
-  assert.deepEqual(result.map(s=>s.cleanersCount),[1,0,0,1]);
+  assert.deepEqual(result.map(s=>s.cleanersCount),[0,0,0,0]);
   assert.deepEqual(result.map(s=>s.startTime),slots.map(s=>s.startTime));
   assert.deepEqual((await service.availableSlotCounts('2039-02-03',slots,empty)).map(s=>s.cleanersCount),[0,0,0,0]);
   assert.deepEqual(await service.availableSlotCounts('2039-02-03',[],zone),[]);
   for(const status of ['cancelled','completed']){
    await db.query('UPDATE service_orders SET status=$2 WHERE id=$1',[order,status]);
-   assert.deepEqual((await service.availableSlotCounts('2039-02-03',slots,zone)).map(s=>s.cleanersCount),[1,1,1,1]);
+   assert.deepEqual((await service.availableSlotCounts('2039-02-03',slots,zone)).map(s=>s.cleanersCount),status==='cancelled'?[1,1,1,1]:[0,0,0,0]);
   }
   await db.query("UPDATE service_orders SET status='assigned',start_time='18:00',end_time='00:41',estimated_duration_minutes=401 WHERE id=$1",[order]);
-  const night=[{startTime:'00:00',endTime:'01:00'},{startTime:'00:41',endTime:'01:41'}];
-  assert.deepEqual((await service.availableSlotCounts('2039-02-04',night,zone)).map(s=>s.cleanersCount),[0,1]);
+  const night=[{startTime:'00:00',endTime:'01:00'},{startTime:'00:41',endTime:'01:41'},{startTime:'02:11',endTime:'03:11'}];
+  assert.deepEqual((await service.availableSlotCounts('2039-02-04',night,zone)).map(s=>s.cleanersCount),[0,0,1]);
   assert.equal(await service.cleanerAvailable(cleaner,'2039-02-04','00:00','01:00'),false);
-  assert.equal(await service.cleanerAvailable(cleaner,'2039-02-04','00:41','01:41'),true);
+  assert.equal(await service.cleanerAvailable(cleaner,'2039-02-04','00:41','01:41'),false);
   assert.equal((await service.availableCleaners('2039-02-04','00:00','01:00',zone,db,true)).length,0);
   await db.query("UPDATE service_orders SET status='completed' WHERE id=$1",[order]);
   await db.query("UPDATE cleaner_work_schedule_requests SET status='pending' WHERE id=$1",[schedule.id]);
@@ -132,7 +132,7 @@ test('whole team is reserved atomically, daily area counts each share and renova
   assert.equal(workloads.length,2);assert.equal(workloads.reduce((n,r)=>n+Number(r.area),0),400);assert.equal(workloads.reduce((n,r)=>n+Number(r.total_amount),0),100);
   assert.equal(await planCleaningTeam(db,base),null);
   await db.query("INSERT INTO service_orders(id,customer_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status,area) VALUES($1,$2,$3,'08:00','09:00',60,'waiting_cleaner',20)",[legacy,customer,day]);
-  await assert.rejects(new SchedulingService(db).assignOrder(legacy,workloads[0].cleaner_id,customer),(e:any)=>e.code==='cleaner_unavailable');
+  await assert.rejects(new SchedulingService(db).assignOrder(legacy,workloads[0].cleaner_id,customer),(e:any)=>['cleaner_unavailable','cleaner_capacity_exceeded'].includes(e.code));
 
   await db.query("UPDATE service_orders SET status='completed' WHERE id=$1",[winner]);
   assert.equal(await planCleaningTeam(db,{...base,startTime:'14:00',area:501}),null);
@@ -179,9 +179,9 @@ test('team accepts individually, replaces only the refusal, completes after last
   assert.equal((await db.query('SELECT status FROM order_team_members WHERE order_id=$1 AND cleaner_id=$2',[orderId,first])).rows[0].status,'accepted');
   const assigned=await service.acceptOffer(orderId,next.cleaner_id) as any;
   assert.equal(assigned.status,'assigned');
-  await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status,area) VALUES($1,$2,$3,$4,'14:00','15:00',60,'assigned',20)",[following,customer,first,day]);
+  await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status,area) VALUES($1,$2,$3,$4,'15:30','16:30',60,'assigned',20)",[following,customer,first,day]);
   await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes,active) VALUES($1,'Team addon fixture',100,120,TRUE)",[addon]);
-  await assert.rejects(updateOrderAddons(db,orderId,customer,[{id:addon,quantity:1}]),(e:any)=>e.code==='cleaner_unavailable');
+  await assert.rejects(updateOrderAddons(db,orderId,customer,[{id:addon,quantity:1}]),(e:any)=>['cleaner_unavailable','cleaner_capacity_exceeded'].includes(e.code));
   assert.equal((await db.query('SELECT estimated_duration_minutes FROM service_orders WHERE id=$1',[orderId])).rows[0].estimated_duration_minutes,320);
   assert.equal((await db.query('SELECT COUNT(*)::int n FROM order_addons WHERE order_id=$1',[orderId])).rows[0].n,0);
   await db.query('UPDATE catalog_addons SET duration_minutes=60 WHERE id=$1',[addon]);

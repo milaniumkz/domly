@@ -31,7 +31,7 @@ class AdminCalendarVisit {
           ? 'completed'
           : '${assignment['member_status'] ?? parentStatus}';
   bool get occupiesTime =>
-      !calendarCancelled(parentStatus) && parentStatus != 'completed';
+      !calendarCancelled(parentStatus) && (parentStatus != 'completed' || day.compareTo('2026-12-01')>=0);
   bool get countsArea => !calendarCancelled(parentStatus);
   int get start => calendarClockMinutes(order['start_time']);
   int get duration {
@@ -161,17 +161,18 @@ class AdminCalendarSnapshot {
 }
 
 /// Approved shift minus the union of occupied intervals. Completed visits still
-/// consume square metres but no longer reserve time, matching the server policy.
+/// consume square metres. From December they also retain their scheduled interval.
 List<({int start, int end})> calendarFreeIntervals(
     Map<String, dynamic> shift, List<AdminCalendarVisit> visits, String day) {
+  final gap=day.compareTo('2026-12-01')>=0?90:0;
   final start = calendarClockMinutes(shift['start_time']);
   final end = calendarClockMinutes(shift['end_time']);
   if (end <= start) return [];
   final busy = visits
       .where((v) => v.occupiesTime)
       .map((v) => (
-            start: math.max(start, v.startOn(day)),
-            end: math.min(end, v.endOn(day))
+            start: math.max(start, v.startOn(day)-gap),
+            end: math.min(end, v.endOn(day)+gap)
           ))
       .where((i) => i.end > i.start)
       .toList()
