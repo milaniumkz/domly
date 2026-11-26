@@ -8,6 +8,6 @@
  if(!r.ok)throw Error('Template lookup HTTP '+r.status);
  const data=await r.json();const t=(data.templates||[]).find(x=>String(x.id)===e.MOON_AI_WABA_TEMPLATE_ID);
  if(!t)throw Error('Configured approved template missing');
- for(const item of (data.templates||[]).filter(x=>String(x.id)===e.MOON_AI_WABA_TEMPLATE_ID || x.name==='domly_welcome_alena_formal_20261027'))
+ for(const item of (data.templates||[]).filter(x=>String(x.id)===e.MOON_AI_WABA_TEMPLATE_ID || x.name==='domly_welcome_anara_formal_20261126'))
   console.log(JSON.stringify({id:item.id,name:item.name,status:item.status,components:item.components}));
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
