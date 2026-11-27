@@ -2408,7 +2408,7 @@ test('90 minute gaps start in December; actual cleaner workload is admin-only an
  const {cleanerWorkloadRouter,workloadRange}=await import('../http/routes/cleanerWorkload');
  await db.query("INSERT INTO app_settings(key,value) VALUES('enforceServiceZones','false') ON CONFLICT(key) DO UPDATE SET value='false'");
  const ids={admin:randomUUID(),customer:randomUUID(),cleaner:randomUUID(),other:randomUUID()};
- const orders:string[]=[];
+ const orders:string[]=[];const addon=randomUUID();
  const app=express();app.use(express.json(),cleanerWorkloadRouter(db),errorHandler);const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
  const base='http://127.0.0.1:'+(server.address() as AddressInfo).port;
  async function add(date:string,start:string,end:string,status='assigned',area=89,worker:string|null=ids.cleaner){const id=randomUUID();orders.push(id);await db.query('INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,status,area) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,ids.customer,worker,date,start,end,status,area]);return id;}
@@ -2431,6 +2431,14 @@ test('90 minute gaps start in December; actual cleaner workload is admin-only an
   const team=await add('2026-12-02','13:00','15:00','in_progress',500,null);await db.query('UPDATE service_orders SET required_cleaners=2 WHERE id=$1',[team]);
   await db.query("INSERT INTO order_team_members(order_id,cleaner_id,slot_number,allocated_area,status,started_at,completed_at) VALUES($1,$2,0,250,'completed','2026-12-02 13:00+05','2026-12-02 15:00+05'),($1,$3,1,250,'in_progress','2026-12-02 13:00+05',NULL)",[team,ids.cleaner,ids.other]);
   await add('2026-12-02','16:00','17:00','completed',50);
+  await db.query("INSERT INTO catalog_addons(id,title_ru,price) VALUES($1,'Тестовая услуга статистики',9999)",[addon]);
+  // Snapshot prices, quantities, rejected proposals, specialist work, and unfinished team members.
+  for(const [order,quantity,price,status,separate,approval] of [
+    [solo,2,700,'paid',false,false],[solo,1,999,'pending',false,false],
+    [solo,1,999,'paid',true,false],[solo,1,999,'paid',false,true],
+    [solo,1,999,'cancelled',false,false],[team,3,100.01,'paid',false,false],
+    [december,1,999,'paid',false,false],
+  ] as const) await db.query('INSERT INTO order_addons(order_id,addon_id,quantity,price,payment_status,paid_separately,requires_customer_approval) VALUES($1,$2,$3,$4,$5,$6,$7)',[order,addon,quantity,price,status,separate,approval]);
   const request=async(role:'superadmin'|'customer')=>fetch(base+'/admin/cleaner-workload?from=2026-12-02&to=2026-12-02',{headers:{Authorization:'Bearer '+signAccessToken({id:role==='superadmin'?ids.admin:ids.customer,role,phone:'fixture'})}});
   assert.equal((await request('customer')).status,403);
   const response=await request('superadmin');assert.equal(response.status,200);const data=(await response.json() as any).data;
@@ -2439,10 +2447,20 @@ test('90 minute gaps start in December; actual cleaner workload is admin-only an
   assert.equal(Number(other.cleaned_area),0);assert.equal(Number(other.actual_minutes),0);
   assert.equal(Number(cleaner.scheduled_minutes),305,'estimated minutes and legacy clock ranges are summed separately from actual time');
   assert.equal(Number(other.scheduled_minutes),0);
+  assert.equal(Number(cleaner.addon_count),5,'quantity is summed, not the number of rows');
+  assert.equal(Number(cleaner.addon_amount),1550.02,'historical unit prices and exact team share, no catalog repricing');
+  assert.equal(cleaner.addons.length,2);
+  assert.equal(Number(cleaner.addons.find((a:any)=>a.order_id===solo).amount),1400);
+  assert.equal(Number(cleaner.addons.find((a:any)=>a.order_id===team).amount),150.02);
+  assert.equal(cleaner.addons[0].title,'Тестовая услуга статистики');
+  assert.equal(Number(other.addon_count),0,'unfinished participants have no performed addons');
+  assert.equal(Number(other.addon_amount),0);
+  assert.deepEqual(other.addons,[]);
   assert.equal(Number(cleaner.worked_days),1,'three cleanings on the same date count as one workday');
   assert.equal(Number(other.worked_days),0,'unfinished work does not count as a completed workday');
   const late=await add('2026-12-02','23:30','01:00','completed',20);
   await db.query("UPDATE service_orders SET started_at='2026-12-02 20:00Z',completed_at='2026-12-02 21:00Z' WHERE id=$1",[late]);
+  await db.query("INSERT INTO order_addons(order_id,addon_id,quantity,price,payment_status,requires_customer_approval) VALUES($1,$2,1,50,'paid',FALSE)",[late,addon]);
   const cancelled=await add('2026-12-04','08:00','10:00','cancelled',100);
   await db.query("UPDATE service_orders SET started_at='2026-12-04 08:00+05',completed_at='2026-12-04 10:00+05' WHERE id=$1",[cancelled]);
   const expanded=await fetch(base+'/admin/cleaner-workload?from=2026-12-02&to=2026-12-04',{headers:{Authorization:'Bearer '+signAccessToken({id:ids.admin,role:'superadmin',phone:'fixture'})}});
@@ -2450,9 +2468,11 @@ test('90 minute gaps start in December; actual cleaner workload is admin-only an
   const expandedRow=((await expanded.json() as any).data.cleaners as any[]).find(r=>r.id===ids.cleaner);
   assert.equal(Number(expandedRow.worked_days),2,'completion dates use Astana time, including the midnight boundary; cancelled work is excluded');
   assert.equal(Number(expandedRow.completed_count),4);
+  assert.equal(Number(expandedRow.addon_count),6,'period follows Astana completion date');
+  assert.equal(Number(expandedRow.addon_amount),1600.02);
   assert.equal(Number(expandedRow.scheduled_minutes),395,'overnight clock fallback is 90 minutes, without cancelled jobs');
 
  }finally{
-  await db.query('DELETE FROM order_team_members WHERE order_id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[Object.values(ids)]);await new Promise<void>(r=>server.close(()=>r()));await db.close();
+  await db.query('DELETE FROM order_team_members WHERE order_id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[Object.values(ids)]);await new Promise<void>(r=>server.close(()=>r()));await db.close();
  }
 });

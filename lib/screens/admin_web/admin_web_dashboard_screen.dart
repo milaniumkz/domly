@@ -5473,6 +5473,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                                         ? '—'
                                         : '${periodStats['completed_count']}',
                                   ),
+                                  CleanerAddonStatistics(row: periodStats),
                                   if (periodStats != null &&
                                       (int.tryParse(
                                                 '${periodStats['missing_time_count']}',
