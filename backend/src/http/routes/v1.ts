@@ -1642,7 +1642,7 @@ export function buildV1Router(deps: {
     const previousPayment = (await deps.db.query('SELECT * FROM payments WHERE order_id=$1 ORDER BY created_at DESC LIMIT 1',[order.id])).rows[0];
     if (previousPayment?.status === 'invoice_requested') throw new ApiError(409,'invoice_active','Предыдущий счёт ещё активен. Отмените его в Kaspi перед повторной оплатой.');
     let resumed = previousPayment?.status === 'pending' ? (await deps.db.query(
-      "UPDATE payments SET provider=$2,invoice_phone=$3,updated_at=NOW() WHERE id=$1 AND status='pending' RETURNING *",
+      "UPDATE payments SET provider=$2,invoice_phone=$3,payload=CASE WHEN payload->>'kind'='addon_edit_checkout' THEN payload||jsonb_build_object('addonCheckoutSelected',true) ELSE payload END,updated_at=NOW() WHERE id=$1 AND status='pending' RETURNING *",
       [previousPayment.id, req.body.provider ?? 'kaspi', req.body.invoicePhone ?? null],
     )).rows[0] : null;
     if (resumed && req.body.useBonus === true) resumed = await topUpPendingBonus(deps.db,resumed.id,Number(req.body.requestedBonus ?? 0),await addonBonusPercent(deps.db,order.id)) ?? resumed;
@@ -2095,6 +2095,7 @@ export function buildV1Router(deps: {
     )).rows);
     if (!order) throw new ApiError(404, 'not_found', 'Заказ не найден.');
     const row = await deps.db.atomic(()=>deps.db.transaction(async tx => {
+      await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[order.customer_id]);
       await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[bookingLock]);
       // Lock the package before orders to serialize credit allocation with expiry.
       if(order.customer_package_id)await refreshPackageUsage(deps.db,order.customer_package_id);
@@ -2680,8 +2681,11 @@ export function buildV1Router(deps: {
       return;
     }
     const updated = first((await deps.db.query(
-      `UPDATE payments SET provider='bcc', updated_at=NOW()
+      `UPDATE payments SET provider='bcc',
+         payload=CASE WHEN payload->>'kind'='addon_edit_checkout' THEN payload||jsonb_build_object('addonCheckoutSelected',true) ELSE payload END,
+         updated_at=NOW()
        WHERE id=$1 AND status IN ('pending','invoice_requested')
+         AND (payload->>'kind' IS DISTINCT FROM 'addon_edit_checkout' OR provider<>'kaspi' OR status<>'invoice_requested')
        RETURNING *`,
       [req.params.id],
     )).rows);

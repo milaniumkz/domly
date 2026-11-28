@@ -187,6 +187,8 @@ test('team accepts individually, replaces only the refusal, completes after last
   await db.query('UPDATE catalog_addons SET duration_minutes=60 WHERE id=$1',[addon]);
   const extended=await updateOrderAddons(db,orderId,customer,[{id:addon,quantity:1}]);
   assert.equal((extended.order as any).estimated_duration_minutes,350);assert.equal((extended.order as any).labor_duration_minutes,700);
+  assert.ok(extended.payment);
+  await db.query("UPDATE payments SET status='paid' WHERE id=$1",[(extended.payment as any).id]);
   await db.query("UPDATE order_addons SET payment_status='paid' WHERE order_id=$1",[orderId]);
   await db.query('UPDATE service_orders SET payable_amount=0 WHERE id=$1',[orderId]);
 
@@ -216,6 +218,8 @@ test('team accepts individually, replaces only the refusal, completes after last
  }finally{
   await db.query('DELETE FROM notifications WHERE target_id=$1',[orderId]);
   await db.query('DELETE FROM reviews WHERE order_id=$1',[orderId]);
+  await db.query('DELETE FROM moon_ai_outbox WHERE payment_id IN(SELECT id FROM payments WHERE order_id=$1)',[orderId]);
+  await db.query('DELETE FROM payments WHERE order_id=$1',[orderId]);
   await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[[orderId,following]]);
   await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);
   await db.query('DELETE FROM service_zones WHERE id=$1',[zone]);
