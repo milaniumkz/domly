@@ -1,0 +1,74 @@
+name: Read-only encrypted assignment diagnosis
+'on':
+  push:
+    branches:
+    - support/order-assignment-audit-20261128
+    paths:
+    - .github/workflows/order-assignment-audit-once.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - name: Read only authorized order status, time, area and aggregate restriction flags
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}\"\
+        \ | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS }}\" > ~/.ssh/known_hosts\n\
+        cat > audit.js <<'AUDIT_JS'\n// Authorized narrow diagnosis: one order's status/time/area and aggregate\
+        \ constraint flags only.\nconst {Pool}=require('pg');\n(async()=>{\n const db=new Pool({connectionString:process.env.DATABASE_URL});const\
+        \ c=await db.connect();\n try{\n  await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');\n  await\
+        \ c.query(\"SET LOCAL statement_timeout='15s'\");\n  const order=(await c.query(`SELECT numeric_id,status,to_char(scheduled_date,'YYYY-MM-DD')\
+        \ AS date,start_time,end_time,estimated_duration_minutes,area,\n   (payable_amount>0) AS payment_blocks_assignment,(cleaner_id\
+        \ IS NOT NULL) AS already_assigned,\n   cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)\
+        \ AS calculated_end\n   FROM service_orders WHERE numeric_id=73`)).rows[0];\n  const restrictions=order?(await\
+        \ c.query(`WITH checks AS (\n    SELECT u.status='approved' AND cp.verification_status='approved' AS approved,\n\
+        \     domly_cleaner_slot_allowed(u.id,o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes,domly_order_cleaner_area(o.id,u.id),o.id)\
+        \ AS slot_allowed,\n     domly_cleaner_gap_allowed(u.id,o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes,o.id)\
+        \ AS gap_allowed,\n     EXISTS(SELECT 1 FROM cleaner_working_days wd JOIN cleaner_work_schedule_requests\
+        \ wr ON wr.id=wd.request_id\n       WHERE wr.status='approved' AND wd.cleaner_id=u.id AND wd.work_date=o.scheduled_date\
+        \ AND wd.start_time<=o.start_time AND wd.end_time>=o.start_time) AS shift_covers_start,\n     EXISTS(SELECT\
+        \ 1 FROM cleaner_working_days wd JOIN cleaner_work_schedule_requests wr ON wr.id=wd.request_id\n       WHERE\
+        \ wr.status='approved' AND wd.cleaner_id=u.id AND wd.work_date=o.scheduled_date AND wd.start_time<=o.start_time\
+        \ AND wd.end_time>=o.start_time\n       AND GREATEST(cleaning_end_at(o.scheduled_date,o.start_time,o.end_time,o.estimated_duration_minutes),cleaning_end_at(o.scheduled_date,o.start_time,o.end_time,0))<=o.scheduled_date+wd.end_time+INTERVAL\
+        \ '2 hours') AS shift_covers_end,\n     domly_order_cleaner_area(o.id,u.id)+COALESCE((SELECT SUM(w.area)\
+        \ FROM cleaner_order_workloads w WHERE w.cleaner_id=u.id AND w.scheduled_date=o.scheduled_date AND w.id<>o.id\
+        \ AND w.status NOT IN ('cancelled','draft')),0)<=250 AS daily_area_allowed,\n     domly_order_cleaner_area(o.id,u.id)\
+        \ BETWEEN 0 AND 250 AS incoming_area_allowed\n    FROM service_orders o CROSS JOIN app_users u LEFT JOIN\
+        \ cleaner_profiles cp ON cp.user_id=u.id\n    WHERE o.numeric_id=73 AND u.role='cleaner' AND u.deleted_at\
+        \ IS NULL\n   ) SELECT COUNT(*)::int AS checked_cleaners,\n    COUNT(*) FILTER(WHERE approved AND slot_allowed)::int\
+        \ AS eligible_cleaners,\n    COUNT(*) FILTER(WHERE approved IS NOT TRUE)::int AS unapproved_cleaners,\n\
+        \    COUNT(*) FILTER(WHERE approved AND NOT gap_allowed)::int AS gap_or_overlap_blocked,\n    COUNT(*) FILTER(WHERE\
+        \ approved AND NOT shift_covers_start)::int AS shift_start_blocked,\n    COUNT(*) FILTER(WHERE approved\
+        \ AND shift_covers_start AND NOT shift_covers_end)::int AS overtime_blocked,\n    COUNT(*) FILTER(WHERE\
+        \ approved AND NOT daily_area_allowed)::int AS daily_area_blocked,\n    COUNT(*) FILTER(WHERE approved AND\
+        \ NOT incoming_area_allowed)::int AS order_area_blocked\n    FROM checks`)).rows[0]:null;\n  await c.query('ROLLBACK');console.log(JSON.stringify({checkedAt:new\
+        \ Date().toISOString(),found:!!order,order,restrictions}));\n }finally{c.release();await db.end();}\n})().catch(e=>{console.error('READ_ONLY_ASSIGNMENT_AUDIT_FAILED',e.code||e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAx2bA2TRiWN/fMmxyo7Hh\n\
+        VZ46QLBX9pavTr4dTtqHNuEHM7yiJ7b6kDi5YJN9V416jxsjHvc59gmwvQ7BvXUh\nFLWyRiRNrFo0UE69K7jJLdalxD5TYOQzSyCu1r/MEhuQxnFW9SscBDbgkDqFMR2O\n\
+        Xo+IUMIND3tVmtf35yhgu0VNikw+ypXPD+mGaBR87x27Vhfe69RRsjc5Jfo8/dbp\noxUBNFVjHYYnV8NETUtf6mh6exxbC3z85uKTBnhdysvshBYzm6a8KFkRMPflqe0c\n\
+        k+QUhoGreJSbXQCSyu7OBKx+34Z+i2rxAZx+zOAIIvlLmO855gNpAMJzmpPyzKH5\n9M2VpW7SCrtWRt8+6WL1HIEDk5u7GfEj4X28JynivF9zJRIhpeN4bEYv5MyM9A+7\n\
+        hLJmcixPMrm1AqjklXxwaOx4WaCK/mL08CIuR3u9pfiWrCg4Pczoz5FBqWMPx1Il\n0jSXP1Dp3M6LWgUuvahUykxLI5ZOx1Jd8c5afjGZvEJBAgMBAAE=\n\
+        -----END PUBLIC KEY-----\nOWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ 'mktemp -d /tmp/domly-assignment-audit-XXXXXX')\n[[ \"$remote_dir\" =~ ^/tmp/domly-assignment-audit-[A-Za-z0-9]+$\
+        \ ]]\ntrap 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm -rf -- $remote_dir\"\
+        \ >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes audit.js owner-public.pem\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/\"\nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ \"set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && timeout 240 docker compose -p domly-backend\
+        \ exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json' && openssl rand -out '$remote_dir/key.bin'\
+        \ 32 && openssl enc -aes-256-cbc -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
+        \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey '$remote_dir/owner-public.pem'\
+        \ -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\
+        \nmkdir -m 700 -p encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: assignment-diagnosis-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
