@@ -28,7 +28,7 @@ test('lost HTTP replies retain one order, one reservation and one cancellation r
   await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price,price_per_m2) VALUES($1,'Fixture',10,1,0,0)",[catalog]);
   await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area,verified_area) VALUES($1,$2,'Астана','Тест','1',100,100)",[address,user]);
   await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,$4,10,10,'active')",[pkg,user,catalog,address]);
-  const body={customerPackageId:pkg,date:'2035-01-02',startTime:'08:00',idempotencyKey:key};
+  const body={customerPackageId:pkg,date:'2035-01-02',startTime:'10:00',idempotencyKey:key};
   await assert.rejects(send('/orders',body),/fetch failed/);
   const saved=(await db.query("SELECT response,status_code FROM api_idempotency WHERE user_id=$1 AND scope='order_create' AND key=$2",[user,key])).rows[0];
   assert.equal(saved.status_code,201);const order=saved.response.data.order.id;

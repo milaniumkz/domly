@@ -31,6 +31,9 @@ export const openApiSpec = {
     },
   },
   paths: {
+    '/admin/calendar/orders/{id}/transfer-candidates': {get:{...secured('Доступные уборщицы для передачи; fromCleanerId — текущая участница'),parameters:[path('id'),query('fromCleanerId','uuid')],responses:okError()}},
+    '/admin/calendar/transfer': {post:{...secured('Передать заказ: orderId, fromCleanerId, toCleanerId; с проверкой нагрузки и уведомлениями'),responses:okError()}},
+    '/admin/calendar/swap': {post:{...secured('Атомарный обмен: moves из двух встречных передач; при конфликте ничего не меняется'),responses:okError()}},
     '/admin/calendar': {get:{...secured('Календарь клинеров: все записи, доли площади и утверждённые графики; только администраторы'),parameters:[query('from','2026-11-01'),query('to','2026-11-30')],responses:okError()}},
     '/admin/cancelled-sales': {get:{...secured('Отменённые счета и заказы: только администраторы'),parameters:['kind','search','dateFrom','dateTo','sort','limit','offset'].map(name=>query(name,'')),responses:okError()}},
     '/admin/customer-crm': {get:{...secured('Клиенты CRM: только администраторы'),parameters:['search','dateFrom','dateTo','stage','account','purchase','area','notes','profile','sort','city','house','paidMin','paidMax','limit','offset'].map(name=>query(name,'')),responses:okError()}},

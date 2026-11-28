@@ -45,7 +45,12 @@ export async function readWorkingSchedule(db:Database,cleanerId:string) {
     ORDER BY created_at DESC,id DESC`,[cleanerId,weeks.currentWeekStart,weeks.nextWeekStart])).rows;
   const approved=(await db.query(`SELECT wd.* FROM cleaner_working_days wd JOIN cleaner_work_schedule_requests wr ON wr.id=wd.request_id
     WHERE wd.cleaner_id=$1 AND wr.status='approved' AND wd.work_date>=$2::date AND wd.work_date<$2::date+14 ORDER BY wd.work_date`,[cleanerId,weeks.currentWeekStart])).rows;
-  return {...weeks,requests,approved};
+  // Response-only drafts let installed Pro clients render the current defaults.
+  // They are not saved requests, working days or administrator approval items.
+  const defaults=[weeks.currentWeekStart,weeks.nextWeekStart]
+    .filter(week=>!requests.some(r=>String(r.week_start).slice(0,10)===week || (r.week_start instanceof Date && r.week_start.toISOString().slice(0,10)===week)))
+    .map(week=>({week_start:week,status:'draft',is_default:true,days:workWeekDates(week).map(date=>({date,working:false,startTime:'10:00',endTime:'18:00'}))}));
+  return {...weeks,requests:[...requests,...defaults],approved};
 }
 export async function submitWorkingSchedule(db:Database,cleanerId:string,input:any) {
   const {week,days,key}=normalizeWorkSchedule(input);

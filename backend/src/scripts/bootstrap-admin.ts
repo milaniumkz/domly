@@ -32,7 +32,7 @@ async function main() {
     const settings: Record<string, unknown> = {
       baseCleaningMinutes: 0,
       minutesPerM2: 1.6,
-      slotStartTimes: ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
+      slotStartTimes: ['10:00', '12:00', '14:00', '16:00', '18:00'],
       qualityCheckHours: 48,
       bonusPaymentEnabled: true,
       defaultBonusMaxPercent: 50,

@@ -15,6 +15,7 @@ export function isBookableDate(date: string, now = Date.now()): boolean {
 /** At 21:00 Astana time, tomorrow's starts before noon close for new bookings. */
 export function isBookableStart(date: string, time: string, now = Date.now()): boolean {
   if (!isBookableDate(date, now) || !/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(time)) return false;
+  if (!fitsBookingHours(time, 1)) return false;
   const local = new Date(now + 5 * 60 * 60 * 1000);
   return date !== earliestBookingDate(now) || local.getUTCHours() < 21 || time >= '12:00';
 }
@@ -33,6 +34,7 @@ export function validateBookingStart(date: unknown, time: unknown, now = Date.no
   if (day < earliestBookingDate(now)) {
     throw new ApiError(400, 'booking_from_tomorrow', 'Заказать уборку можно только с завтрашнего дня. Выберите другую дату.');
   }
+  validateBookingHours(clock, 1);
   if (!isBookableStart(day, clock, now)) {
     throw new ApiError(400, 'next_morning_booking_closed', 'После 21:00 по Астане уборку на завтра можно заказать с 12:00. Выберите более позднее время или другую дату.');
   }
@@ -42,17 +44,17 @@ export function validateBookingStart(date: unknown, time: unknown, now = Date.no
   }
 }
 
-/** Preserve the estimated duration; only the start is restricted to 08:00–18:00. */
+/** Preserve the estimated duration; only the start is restricted to 10:00–18:00. */
 export function fitsBookingHours(start: string, durationMinutes: number): boolean {
   if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(start)) return false;
   const [hour, minute] = start.split(':').map(Number);
   const minutes = hour * 60 + minute;
   return Number.isFinite(durationMinutes) && durationMinutes > 0 &&
-    minutes >= 8 * 60 && minutes <= 18 * 60;
+    minutes >= 10 * 60 && minutes <= 18 * 60;
 }
 export function validateBookingHours(start: string, durationMinutes: number) {
   if (!fitsBookingHours(start, durationMinutes)) {
-    throw new ApiError(400, 'invalid_order_time', 'Начало уборки — с 08:00 до 18:00 включительно. Выберите другое время начала.');
+    throw new ApiError(400, 'invalid_order_time', 'Начало уборки — с 10:00 до 18:00 включительно. Выберите другое время начала.');
   }
 }
 

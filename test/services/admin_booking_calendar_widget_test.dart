@@ -13,6 +13,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final opened = <String>[];
+    final shown = <String>[];
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: AdminBookingCalendar(
@@ -26,6 +27,7 @@ void main() {
                         'workingDays': [],
                         'approvedWeeks': []
                       },
+                onShowInOrders: (order) => shown.add('${order['id']}'),
                 onOpenOrder: (order) async => opened.add('${order['id']}')))));
     await tester.pumpAndSettle();
     expect(find.text('Ноябрь 2026'), findsOneWidget);
@@ -34,9 +36,16 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.text('230 м²'), findsOneWidget);
     expect(find.text('200 м²'), findsWidgets);
-    await tester.tap(find.byKey(const ValueKey('calendar-order-team-a')));
+    await tester.ensureVisible(find.byKey(const ValueKey('calendar-order-team-a')));
+    await tester.tap(find.descendant(of: find.byKey(const ValueKey('calendar-order-team-a')), matching: find.byType(Text)).first);
     await tester.pumpAndSettle();
     expect(opened, ['team']);
+    expect(find.byKey(const ValueKey('calendar-cleaner-c')), findsNothing);
+    final row = find.byKey(const ValueKey('calendar-order-team-a'));
+    await tester.ensureVisible(find.descendant(of: row, matching: find.text('Открыть в заказах')));
+    await tester.tap(find.descendant(of: row, matching: find.text('Открыть в заказах')));
+    await tester.pumpAndSettle();
+    expect(shown, ['team']);
     await tester.drag(find.byType(ListView).first, const Offset(0, 2000));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Следующий месяц'));

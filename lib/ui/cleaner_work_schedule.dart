@@ -83,7 +83,7 @@ class _CleanerWorkScheduleSheetState extends State<CleanerWorkScheduleSheet> {
     final value = await showTimePicker(
         context: context,
         initialTime: TimeOfDay(
-            hour: int.tryParse(parts.first) ?? 8,
+            hour: int.tryParse(parts.first) ?? 10,
             minute: int.tryParse(parts.last) ?? 0),
         builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),

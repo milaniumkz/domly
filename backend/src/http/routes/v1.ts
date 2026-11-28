@@ -2351,7 +2351,7 @@ export function buildV1Router(deps: {
     const now = Date.now();
     if (!isBookableDate(date,now)) return [];
     const settings = await readAppSettings(deps.db);
-    const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
+    const slots = Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes.map(String) : ['10:00', '12:00', '14:00', '16:00', '18:00'];
     const addonIds = String(req.query.addonIds ?? '').split(',').map((id) => id.trim()).filter(Boolean);
     let detailed:any[]|null=null;
     if(req.query.addonsDetailed!==undefined){
@@ -2437,7 +2437,7 @@ export function buildV1Router(deps: {
     return available;
   };
   router.get('/scheduling/available-slots', auth(), asyncHandler(async(req,res)=>{ok(res,await availableSlots(req));}));
-  router.use(adminCalendarRouter(deps.db));
+  router.use(adminCalendarRouter(deps.db,deps.notifications));
   router.use(cleanerWorkloadRouter(deps.db));
   router.use(customerCrmRouter(deps.db));
   router.use(botOrderingRouter(deps.db,{purchasePackage,createOrder,availableSlots,verifyPayment:async(payment:any)=>{
@@ -5237,7 +5237,7 @@ export function buildRuntimeConfig(settings: Record<string, any>) {
       localization,
       booking: {
         minBookingDate: settings.minBookingDate ?? null,
-        slotStartTimes: settings.slotStartTimes ?? ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
+        slotStartTimes: (Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes : ['10:00', '12:00', '14:00', '16:00', '18:00']).map(String).filter((time:string)=>fitsBookingHours(time,1)),
         requireAvailableCleaner: settings.requireAvailableCleaner ?? true,
         allowCustomTime: settings.allowCustomTime ?? false,
         scrollToPendingAfterAddonSelection: settings.scrollToPendingAfterAddonSelection ?? true,

@@ -107,6 +107,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   String _serviceAreaFilter = 'Все';
   String _assignmentStatusFilter = 'Все';
   String _ordersTabFilter = 'Все заказы';
+  String? _calendarFocusedOrderId;
+  String? _dashboardOrderScope;
   String _customerStatusFilter = 'Все';
   String _customerHouseFilter = 'Все';
   String _dictionaryLocale = 'ru';
@@ -941,7 +943,17 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           title: 'Календарь',
           subtitle: 'Записи клинеров, рабочие часы и площадь на каждый день.',
           icon: Icons.calendar_month_outlined,
-          builder: () => AdminBookingCalendar(onOpenOrder: (order) => _openOrderDetails(context, mapAdminOrder(order), orderDisplayId(order))),
+          builder: () => AdminBookingCalendar(
+            onOpenOrder: (order) => _openOrderDetails(context, mapAdminOrder(order), orderDisplayId(order), showInOrders: true),
+            onShowInOrders: (order) => setState(() {
+              _calendarFocusedOrderId = '${order['id']}';
+              _dashboardOrderScope = null;
+              _selectedIndex = _sectionIndexByKey('orders');
+              _searchQuery = '';
+              _statusFilter = _clusterFilter = _cleanerFilter = _serviceAreaFilter = _assignmentStatusFilter = 'Все';
+              _ordersTabFilter = 'Все заказы';
+              _filterStartDate = _filterEndDate = null;
+            })),
         ),
         _AdminSection(
           key: 'work_schedules',
@@ -1182,6 +1194,35 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         ),
       ];
 
+  void _dashboardNavigate(String section, {String? orderScope}) => setState(() {
+    _selectedIndex = _sectionIndexByKey(section);
+    _calendarFocusedOrderId = null;
+    _dashboardOrderScope = orderScope;
+    _searchQuery = '';
+    _statusFilter = _clusterFilter = _cleanerFilter = _serviceAreaFilter = _assignmentStatusFilter = 'Все';
+    _ordersTabFilter = 'Все заказы';
+    _filterStartDate = _filterEndDate = null;
+  });
+
+  bool _dashboardOrderMatches(Map<String, dynamic> data, String? scope) {
+    if (scope == null) return true;
+    final status = '${data['orderStatus'] ?? data['status'] ?? ''}';
+    final active = !['completed', 'cancelled', 'canceled', 'draft'].contains(status);
+    final date = _normalizeToDate(data['scheduledFor'] ?? data['scheduled_date'] ?? data['scheduledDate'] ?? data['date']);
+    final today = DateTime.now().toUtc().add(const Duration(hours: 5));
+    final day = DateTime(today.year, today.month, today.day);
+    final visitDay = date == null ? null : DateTime(date.year, date.month, date.day);
+    return switch (scope) {
+      'Сегодня' => active && visitDay == day,
+      'Завтра' => active && visitDay == day.add(const Duration(days: 1)),
+      'Без назначения' => active && ['pending_assignment', 'waiting_cleaner'].contains(status),
+      'В работе' => status == 'in_progress',
+      'Завершены' => status == 'completed',
+      'Активные' => active,
+      _ => true,
+    };
+  }
+
   Widget _dashboard() {
     final query = _searchQuery.trim().toLowerCase();
     return SingleChildScrollView(
@@ -1220,64 +1261,39 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                   ));
             },
           ),
-          Wrap(
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              _listMetricCard(
-                title: 'Активные заказы',
-                subtitle: 'Заказы в работе и на подтверждении',
-                icon: Icons.receipt_long_outlined,
-                stream: _data.adminOrdersStream(),
-                countBuilder: (items) => items.where((doc) {
-                  final status = (doc['orderStatus'] ?? '').toString();
-                  return status == 'confirmed' ||
-                      status == 'assigned' ||
-                      status == 'in_progress';
-                }).length,
-              ),
-              _listMetricCard(
-                title: 'Без назначения',
-                subtitle: 'Нужен выбор уборщицы',
-                icon: Icons.person_search_outlined,
-                stream: _data.adminOrdersStream(),
-                countBuilder: (items) => items.where((data) {
-                  final status =
-                      (data['orderStatus'] ?? '').toString().toLowerCase();
-                  final cleanerId = (data['cleanerId'] ?? '').toString();
-                  return cleanerId.isEmpty &&
-                      status != 'completed' &&
-                      status != 'canceled' &&
-                      status != 'cancelled';
-                }).length,
-                accent: const Color(0xFFD97706),
-              ),
-              _listMetricCard(
-                title: 'Верификация',
-                subtitle: 'Ожидают решения менеджера',
-                icon: Icons.verified_user_outlined,
-                stream: _data.allCleanerVerificationsStream(),
-                countBuilder: (items) => items.where((doc) {
-                  final status =
-                      (doc['status'] ?? 'pending').toString().toLowerCase();
-                  return status == 'pending';
-                }).length,
-                accent: const Color(0xFF7C3AED),
-              ),
-              _listMetricCard(
-                title: 'Жалобы в работе',
-                subtitle: 'Нужна реакция или закрытие',
-                icon: Icons.report_problem_outlined,
-                stream: _data.complaintsStream(admin: true),
-                countBuilder: (items) => items.where((doc) {
-                  final status =
-                      (doc['status'] ?? 'open').toString().toLowerCase();
-                  return status != 'resolved' && status != 'refund';
-                }).length,
-                accent: const Color(0xFFDC2626),
-              ),
-            ],
-          ),
+          Text('Оперативная сводка', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 6),
+          const Text('Состояние на сейчас. Нажмите на блок, чтобы перейти к деталям.'),
+          const SizedBox(height: 14),
+          StreamBuilder<List<Map<String, dynamic>>>(stream: _data.adminOrdersStream(), builder: (context, dashboardOrders) => Wrap(spacing: 12, runSpacing: 12, children: [
+            for (final scope in ['Сегодня', 'Завтра', 'Без назначения', 'В работе', 'Активные', 'Завершены'])
+              _listMetricCard(title: scope, subtitle: switch(scope) {
+                'Сегодня' => 'Предстоящие и текущие уборки', 'Завтра' => 'План на следующий день',
+                'Без назначения' => 'Нужно подобрать исполнителя', 'В работе' => 'Уборка уже началась',
+                'Завершены' => 'Все выполненные заказы', _ => 'Все незавершённые уборки'},
+                icon: scope == 'Без назначения' ? Icons.person_search_outlined : Icons.event_available,
+                snapshot: dashboardOrders,
+                countBuilder: (items) => items.where((item) => _isAdminCleaningVisitOrder(item) && _dashboardOrderMatches(item, scope)).length,
+                accent: scope == 'Без назначения' ? const Color(0xFFD97706) : const Color(0xFF16745C),
+                onTap: () => _dashboardNavigate('orders', orderScope: scope)),
+            _listMetricCard(title: 'Платежи', subtitle: 'Открыть счета, суммы и статусы', icon: Icons.payments_outlined,
+              stream: _data.adminPaymentsStream(), countBuilder: (items) => items.length, onTap: () => _dashboardNavigate('payments')),
+            _listMetricCard(title: 'Проверка площади', subtitle: 'Заявки, ожидающие решения', icon: Icons.square_foot,
+              stream: _data.qualityControlAreaChecksStream(), countBuilder: (items) => items.where((d) => ['pending','new','in_review'].contains('${d['status'] ?? 'pending'}')).length,
+              onTap: () => _dashboardNavigate('quality_control'), accent: const Color(0xFFD97706)),
+            _listMetricCard(title: 'Графики на одобрении', subtitle: 'Заявки на рабочие смены', icon: Icons.pending_actions,
+              stream: _data.adminWorkingSchedulesStream(status: 'pending'), countBuilder: (items) => items.length,
+              onTap: () { _dashboardNavigate('work_schedules'); setState(() => _workScheduleStatusFilter = 'pending'); }),
+            _listMetricCard(title: 'Верификация', subtitle: 'Документы новых уборщиц', icon: Icons.verified_user_outlined,
+              stream: _data.allCleanerVerificationsStream(), countBuilder: (items) => items.where((d) => '${d['status'] ?? 'pending'}' == 'pending').length,
+              onTap: () => _dashboardNavigate('verifications'), accent: const Color(0xFF7C3AED)),
+            _listMetricCard(title: 'Жалобы в работе', subtitle: 'Нужна реакция администратора', icon: Icons.report_problem_outlined,
+              stream: _data.complaintsStream(admin: true), countBuilder: (items) => items.where((d) => !['resolved','refund'].contains('${d['status'] ?? 'open'}')).length,
+              onTap: () => _dashboardNavigate('complaints'), accent: const Color(0xFFDC2626)),
+            _listMetricCard(title: 'Уборщицы', subtitle: 'Состав команды и статистика', icon: Icons.groups_outlined,
+              stream: _data.cleanersDirectoryStream(), countBuilder: (items) => items.length, onTap: () => _dashboardNavigate('cleaners')),
+          ])),
+          Padding(padding: const EdgeInsets.only(top: 12), child: OutlinedButton.icon(onPressed: () => _dashboardNavigate('calendar'), icon: const Icon(Icons.calendar_month), label: const Text('Открыть календарь и загрузку команды'))),
           const SizedBox(height: 24),
           AdminAdaptiveRow(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2294,6 +2310,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
             final cleaningOrders =
                 orders.where(_isAdminCleaningVisitOrder).length;
             final filteredOrders = tabOrders.where((data) {
+              if (_calendarFocusedOrderId != null) return '${data['id']}' == _calendarFocusedOrderId;
+              if (!_dashboardOrderMatches(data, _dashboardOrderScope)) return false;
               var status =
                   (data['orderStatus'] ?? '—').toString().toLowerCase();
               var filterStatus = _statusFilter.toLowerCase();
@@ -2357,6 +2375,8 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
               toolbar: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (_dashboardOrderScope != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [Text('Заказы: $_dashboardOrderScope'), TextButton(onPressed: () => setState(() => _dashboardOrderScope = null), child: const Text('Показать все'))])),
+                  if (_calendarFocusedOrderId != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [const Text('Заказ из календаря'), TextButton(onPressed: () => setState(() => _calendarFocusedOrderId = null), child: const Text('Показать все заказы'))])),
                   if (cleanersSnapshot.hasError)
                     _adminWarningBox(
                       'Не удалось загрузить уборщиц. Обновите страницу перед назначением.',
@@ -2858,8 +2878,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   Future<void> _openOrderDetails(
     BuildContext context,
     Map<String, dynamic> data,
-    String displayId,
-  ) async {
+    String displayId, {
+    bool showInOrders = false,
+  }) async {
     Map<String, dynamic> details = const {};
     if (!DebugSession.enabled) {
       try {
@@ -2901,6 +2922,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     _openEntityDetails(
       context,
       title: 'Заказ $displayId',
+      attachment: showInOrders ? Padding(padding: const EdgeInsets.only(bottom: 16), child: FilledButton.icon(onPressed: () { Navigator.of(context).pop(); _dashboardNavigate('orders'); setState(() => _calendarFocusedOrderId = '${data['id']}'); }, icon: const Icon(Icons.open_in_new), label: const Text('Открыть в заказах — все действия'))) : null,
       sections: [
         _detailSection('Основное', {
           'Статус': _orderStatusLabel(_adminOrderDisplayStatus(data)),
@@ -10401,74 +10423,94 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     required String title,
     required String subtitle,
     required IconData icon,
-    required Stream<List<Map<String, dynamic>>> stream,
+    Stream<List<Map<String, dynamic>>>? stream,
+    AsyncSnapshot<List<Map<String, dynamic>>>? snapshot,
     required int Function(List<Map<String, dynamic>>) countBuilder,
+    VoidCallback? onTap,
     Color accent = const Color(0xFF1D4ED8),
   }) {
-    return SizedBox(
-      width: 260,
-      child: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: stream,
-        builder: (context, snapshot) {
-          final items = snapshot.data ?? const <Map<String, dynamic>>[];
-          final count = countBuilder(items);
-          return Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              color: Colors.white,
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x08111827),
-                  blurRadius: 14,
-                  offset: Offset(0, 6),
-                ),
-              ],
+    Widget card(AsyncSnapshot<List<Map<String, dynamic>>> snapshot) {
+      final items = snapshot.data ?? const <Map<String, dynamic>>[];
+      final count = countBuilder(items);
+      return SizedBox(
+        width: math.min(
+          220.0,
+          math.max(140.0, (MediaQuery.sizeOf(context).width - 72) / 2),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                color: Colors.white,
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x08111827),
+                    blurRadius: 14,
+                    offset: Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: accent),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    snapshot.hasError
+                        ? '!'
+                        : !snapshot.hasData
+                        ? '—'
+                        : '$count',
+                    style: const TextStyle(
+                      fontSize: 27,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: accent),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  '$count',
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-              ],
-            ),
+          ),
+        ),
+      );
+    }
+
+    return snapshot != null
+        ? card(snapshot)
+        : StreamBuilder<List<Map<String, dynamic>>>(
+            stream: stream,
+            builder: (context, value) => card(value),
           );
-        },
-      ),
-    );
   }
 
   Widget _dashboardPanel({
