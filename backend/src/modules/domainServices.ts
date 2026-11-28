@@ -527,7 +527,7 @@ export class SchedulingService {
        FROM app_users u
        JOIN cleaner_profiles cp ON cp.user_id=u.id
        ${zoneJoin}
-       WHERE u.role='cleaner' AND u.status='approved' AND cp.verification_status='approved' AND $5::numeric>=0
+       WHERE u.role='cleaner' AND u.status='approved' AND u.deleted_at IS NULL AND cp.verification_status='approved' AND $5::numeric>=0
        AND domly_cleaner_gap_allowed(u.id,$1::date,$2::time,$3::time,$4::int,$6::uuid)
        ${requireWorkingHours ? 'AND '+cleanerSlotAllowedSql('u.id','$1','$2','$3','$4','$5','$6') : ''}
        AND NOT EXISTS (

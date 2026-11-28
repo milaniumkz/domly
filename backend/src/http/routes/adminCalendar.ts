@@ -1,3 +1,5 @@
+import {calendarTransferCandidates,moveCalendarAssignments} from '../../modules/calendarAssignments';
+import {NotificationService} from '../../modules/domainServices';
 import {cleanerAreaNorm,cleanerDailyAreaMaximum} from '../../modules/cleanerCapacity';
 import {Router} from 'express';
 import {auth} from '../../common/auth';
@@ -14,7 +16,7 @@ export function calendarRange(query:Record<string,unknown>,now=Date.now()){
 }
 
 /** One consistent, read-only month snapshot; no arbitrary first-page limits. */
-export function adminCalendarRouter(db:Database){
+export function adminCalendarRouter(db:Database,notifications:NotificationService){
  const router=Router();
  router.get('/admin/calendar',auth(['admin','superadmin']),asyncHandler(async(req,res)=>{
   const range=calendarRange(req.query);
@@ -53,6 +55,15 @@ export function adminCalendarRouter(db:Database){
    return {...range,orders,assignments,workingDays,approvedWeeks,cleaners,areaNorm:cleanerAreaNorm,areaMaximum:cleanerDailyAreaMaximum,updatedAt:new Date().toISOString()};
   });
   res.set('Cache-Control','no-store');ok(res,data);
+ }));
+ router.get('/admin/calendar/orders/:id/transfer-candidates',auth(['admin','superadmin']),asyncHandler(async(req,res)=>{
+  ok(res,await calendarTransferCandidates(db,String(req.params.id),String(req.query.fromCleanerId??'')));
+ }));
+ router.post('/admin/calendar/transfer',auth(['admin','superadmin']),asyncHandler(async(req,res)=>{
+  ok(res,await moveCalendarAssignments(db,notifications,req.user!.id,[req.body]));
+ }));
+ router.post('/admin/calendar/swap',auth(['admin','superadmin']),asyncHandler(async(req,res)=>{
+  ok(res,await moveCalendarAssignments(db,notifications,req.user!.id,req.body.moves));
  }));
  return router;
 }

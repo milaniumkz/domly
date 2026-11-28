@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'admin_calendar_assignment_dialog.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/backend_api_service.dart';
@@ -11,9 +12,10 @@ typedef AdminCalendarLoader = Future<Map<String, dynamic>> Function(
 
 class AdminBookingCalendar extends StatefulWidget {
   const AdminBookingCalendar(
-      {super.key, required this.onOpenOrder, this.load, this.initialDay});
+      {super.key, required this.onOpenOrder, this.load, this.initialDay, this.onShowInOrders});
   final Future<void> Function(Map<String, dynamic>) onOpenOrder;
   final AdminCalendarLoader? load;
+  final void Function(Map<String, dynamic>)? onShowInOrders;
   final DateTime? initialDay;
   @override
   State<AdminBookingCalendar> createState() => _AdminBookingCalendarState();
@@ -152,6 +154,15 @@ class _AdminBookingCalendarState extends State<AdminBookingCalendar> {
     }
   }
 
+  Future<void> _reassign(AdminCalendarVisit visit, bool swap) async {
+    final changed = await showDialog<bool>(context: context, barrierDismissible: false,
+      builder: (_) => AdminCalendarAssignmentDialog(visit: visit, swap: swap));
+    if (changed == true && mounted) {
+      await _reload();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(swap ? 'Заказы обменены' : 'Заказ передан')));
+    }
+  }
+
   bool _matches(Map<String, dynamic> order) {
     final query = _search.text.toLowerCase().trim();
     if (query.isEmpty) return true;
@@ -253,6 +264,8 @@ class _AdminBookingCalendarState extends State<AdminBookingCalendar> {
           final visits = snapshot
               .forCleaner('${c['id']}', _day, includeCancelled: _cancelled)
               .where((v) => _matches(v.order));
+          final active = c['status'] == 'approved' && c['deleted_at'] == null && c['verification_status'] == 'approved';
+          if (!(active && snapshot.workingDay('${c['id']}', _day) != null) && visits.isEmpty) return false;
           return (!_onlyBooked || visits.isNotEmpty) &&
               (_search.text.trim().isEmpty || visits.isNotEmpty);
         }).toList() ??
@@ -865,6 +878,13 @@ class _AdminBookingCalendarState extends State<AdminBookingCalendar> {
                                     const TextStyle(fontSize: 12, color: muted),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis),
+                          Wrap(spacing: 6, runSpacing: 4, children: [
+                            if (widget.onShowInOrders != null) TextButton.icon(onPressed: () => widget.onShowInOrders!(order), icon: const Icon(Icons.open_in_new, size: 16), label: const Text('Открыть в заказах')),
+                            if (['assigned', 'pending_assignment', 'waiting_cleaner'].contains(visit.parentStatus) && visit.status == 'accepted') ...[
+                              TextButton.icon(onPressed: () => _reassign(visit, false), icon: const Icon(Icons.person_add_alt, size: 16), label: const Text('Передать заказ')),
+                              TextButton.icon(onPressed: () => _reassign(visit, true), icon: const Icon(Icons.swap_horiz, size: 16), label: const Text('Обменяться заказами')),
+                            ],
+                          ]),
                           const SizedBox(height: 5),
                           Wrap(spacing: 10, runSpacing: 4, children: [
                             Text(_statusTitle(visit),

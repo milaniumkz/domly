@@ -4,7 +4,7 @@ import {packageConsentVersion} from '../modules/packageTerms';
 import {rejectAreaDocument} from '../modules/areaRejection';
 import {updateOrderAddons} from '../modules/orderAddons';
 import {packageQuote} from '../modules/packageQuote';
-import {workingScheduleWeeks,workWeekDates} from '../modules/workingSchedule';
+import {workingScheduleWeeks,workWeekDates,readWorkingSchedule} from '../modules/workingSchedule';
 import {readFileSync} from 'node:fs';
 import {defaultRequiredTasks} from '../modules/checklists';
 import sharp from 'sharp';
@@ -57,6 +57,62 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
 
     await db.query("INSERT INTO files(id,owner_id,bucket,object_key,public_url) VALUES($1,$2,'test',$3,'https://example.com/document')",[file,cleaner,file]);
     await db.query("INSERT INTO cleaner_documents(cleaner_id,type,file_id) VALUES($1,'selfieUrl',$2)",[cleaner,file]);
+    await t.test('server supplies editable 10am drafts without saving or approving a shift',async()=>{
+      const before=Number((await db.query('SELECT COUNT(*)::int n FROM cleaner_work_schedule_requests WHERE cleaner_id=$1',[cleaner])).rows[0].n);
+      const data=await readWorkingSchedule(db,cleaner);
+      const drafts=data.requests.filter((r:any)=>r.is_default);
+      assert.equal(drafts.length,2);
+      for(const draft of drafts)for(const day of draft.days){assert.equal(day.startTime,'10:00');assert.equal(day.working,false);}
+      assert.equal(Number((await db.query('SELECT COUNT(*)::int n FROM cleaner_work_schedule_requests WHERE cleaner_id=$1',[cleaner])).rows[0].n),before);
+    });
+    await t.test('calendar transfers and swaps are atomic, respect schedules and preserve team colleagues',async()=>{
+      const workers=[randomUUID(),randomUUID(),randomUUID(),randomUUID()],orders=[randomUUID(),randomUUID(),randomUUID()];
+      const day='2039-06-15';
+      try{
+        for(const id of workers){
+          await db.query("INSERT INTO app_users(id,phone,role,status,full_name) VALUES($1,$2,'cleaner','approved','Календарь тест')",[id,'calendar-'+id]);
+          await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[id]);
+        }
+        for(const id of workers.slice(0,3))await approvedFixtureShift(id,day,'10:00','18:00');
+        for(const [i,id] of orders.slice(0,2).entries())await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,area,status) VALUES($1,$2,$3,$4,'10:00','11:00',60,100,'assigned')",[id,customer,workers[i],day]);
+        const candidates=await request('/admin/calendar/orders/'+orders[0]+'/transfer-candidates?fromCleanerId='+workers[0]);
+        assert.equal(candidates.status,200);
+        assert.deepEqual(candidates.json.data.map((c:any)=>c.id),[workers[2]]);
+        const move={orderId:orders[0],fromCleanerId:workers[0],toCleanerId:workers[2]};
+        assert.equal((await request('/admin/calendar/transfer','POST',move,true)).status,403);
+        assert.equal((await request('/admin/calendar/transfer','POST',move)).status,200);
+        assert.equal((await db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[orders[0]])).rows[0].cleaner_id,workers[2]);
+        assert.equal((await request('/admin/calendar/transfer','POST',move)).status,409);
+        const countBefore=(await db.query("SELECT count(*)::int n FROM notifications WHERE target_id=$1",[orders[0]])).rows[0].n;
+        const swap=await request('/admin/calendar/swap','POST',{moves:[{orderId:orders[0],fromCleanerId:workers[2],toCleanerId:workers[1]},{orderId:orders[1],fromCleanerId:workers[1],toCleanerId:workers[2]}]});
+        assert.equal(swap.status,200,JSON.stringify(swap.json));
+        assert.equal((await db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[orders[0]])).rows[0].cleaner_id,workers[1]);
+        assert.equal((await db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[orders[1]])).rows[0].cleaner_id,workers[2]);
+        assert.equal((await db.query("SELECT count(*)::int n FROM notifications WHERE target_id=$1",[orders[0]])).rows[0].n,countBefore+3);
+        const denied=await request('/admin/calendar/transfer','POST',{orderId:orders[0],fromCleanerId:workers[1],toCleanerId:workers[3]});
+        assert.equal(denied.status,409);
+        assert.equal((await db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[orders[0]])).rows[0].cleaner_id,workers[1]);
+        // A third appointment makes the final swap exceed daily capacity; neither side may move.
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,area,status) VALUES($1,$2,$3,$4,'15:00','16:00',60,170,'assigned')",[orders[2],customer,workers[1],day]);
+        await db.query('UPDATE service_orders SET area=80 WHERE id=$1',[orders[0]]);
+        const failed=await request('/admin/calendar/swap','POST',{moves:[{orderId:orders[0],fromCleanerId:workers[1],toCleanerId:workers[2]},{orderId:orders[1],fromCleanerId:workers[2],toCleanerId:workers[1]}]});
+        assert.equal(failed.status,409);
+        assert.equal((await db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[orders[0]])).rows[0].cleaner_id,workers[1]);
+        assert.equal((await db.query('SELECT cleaner_id FROM service_orders WHERE id=$1',[orders[1]])).rows[0].cleaner_id,workers[2]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[orders[2]]);
+        await db.query("UPDATE service_orders SET area=400,required_cleaners=2,status='assigned' WHERE id=$1",[orders[0]]);
+        await db.query("INSERT INTO order_team_members(order_id,cleaner_id,slot_number,allocated_area,status) VALUES($1,$2,0,200,'accepted'),($1,$3,1,200,'accepted')",[orders[0],workers[1],workers[0]]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[orders[1]]);
+        const team=await request('/admin/calendar/transfer','POST',{orderId:orders[0],fromCleanerId:workers[1],toCleanerId:workers[2]});
+        assert.equal(team.status,200,JSON.stringify(team.json));
+        const members=(await db.query('SELECT cleaner_id FROM order_team_members WHERE order_id=$1 ORDER BY slot_number',[orders[0]])).rows;
+        assert.deepEqual(members.map(m=>m.cleaner_id),[workers[2],workers[0]]);
+        assert.equal((await db.query('SELECT required_cleaners FROM service_orders WHERE id=$1',[orders[0]])).rows[0].required_cleaners,2);
+      }finally{
+        await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[orders]);
+        await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[workers]);
+      }
+    });
     await t.test('renovation seed copies the single rate once and preserves renamed administrator tariffs',async()=>{
       await db.transaction(async tx=>{
         await tx.query('CREATE TEMP TABLE catalog_packages (LIKE public.catalog_packages INCLUDING ALL) ON COMMIT DROP');
@@ -421,34 +477,35 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       const pkg=randomUUID(),address=randomUUID(),purchase=randomUUID(),addon=randomUUID(),special=randomUUID(),busy=randomUUID();
       await db.query("UPDATE app_users SET status='approved' WHERE id=$1",[cleaner]);
       await db.query("UPDATE cleaner_profiles SET verification_status='approved' WHERE user_id=$1",[cleaner]);
+      await approvedFixtureShift(cleaner,'2039-04-02','10:00','20:00');
       try{
         await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,base_price) VALUES($1,'Slot extras',4,100)",[pkg]);
         await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Тестовая','1',100)",[address,customer]);
         await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes,paid_separately) VALUES($1,'Духовка',3000,25,FALSE),($2,'Химчистка',50000,90,TRUE)",[addon,special]);
         await db.query("INSERT INTO customer_packages(id,customer_id,package_id,address_id,total_cleanings,available_cleanings,status) VALUES($1,$2,$3,$4,4,4,'active')",[purchase,customer,pkg,address]);
-        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status) VALUES($1,$2,$3,'2039-04-02','13:00','14:00',60,'assigned')",[busy,customer,cleaner]);
+        await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status) VALUES($1,$2,$3,'2039-04-02','14:30','15:30',60,'assigned')",[busy,customer,cleaner]);
         const path='/scheduling/available-slots?date=2039-04-02&customerPackageId='+purchase;
         const baseSlots=await request(path,'GET',undefined,true);
-        assert.ok(baseSlots.json.data.some((slot:any)=>slot.startTime==='08:00'&&slot.durationMinutes===160));
+        assert.ok(baseSlots.json.data.some((slot:any)=>slot.startTime==='10:00'&&slot.durationMinutes===160));
         const details=[{key:addon,quantity:2},{key:special,quantity:2}];
         const withExtras=await request(path+'&addonsDetailed='+encodeURIComponent(JSON.stringify(details)),'GET',undefined,true);
         assert.equal(withExtras.status,200,JSON.stringify(withExtras.json));
-        assert.ok(withExtras.json.data.some((slot:any)=>slot.startTime==='08:00'&&slot.endTime==='11:30'&&slot.durationMinutes===210));
+        assert.ok(withExtras.json.data.some((slot:any)=>slot.startTime==='18:00'&&slot.endTime==='21:30'&&slot.durationMinutes===210));
         assert.ok(!withExtras.json.data.some((slot:any)=>slot.startTime==='10:00'));
-        await db.query("UPDATE service_orders SET estimated_duration_minutes=552,start_time='08:00',end_time='17:12' WHERE id=$1",[busy]);
+        await db.query("UPDATE service_orders SET estimated_duration_minutes=552,start_time='10:00',end_time='19:12' WHERE id=$1",[busy]);
         const edited=await request(path+'&orderId='+busy,'GET',undefined,true);
         assert.equal(edited.status,200,JSON.stringify(edited.json));
-        assert.ok(edited.json.data.some((slot:any)=>slot.startTime==='08:00'&&slot.endTime==='17:12'&&slot.durationMinutes===552&&slot.cleanersCount===1));
+        assert.ok(edited.json.data.some((slot:any)=>slot.startTime==='10:00'&&slot.endTime==='19:12'&&slot.durationMinutes===552&&slot.cleanersCount===1));
         await db.query("INSERT INTO order_addons(order_id,addon_id,quantity,price,duration_minutes,payment_status,requires_customer_approval) VALUES($1,$2,2,1000,392,'paid',FALSE)",[busy,addon]);
         const preserved=await request(path+'&orderId='+busy+'&addonsDetailed='+encodeURIComponent(JSON.stringify([{id:addon,quantity:2}])),'GET',undefined,true);
-        assert.ok(preserved.json.data.some((slot:any)=>slot.startTime==='08:00'&&slot.endTime==='17:12'&&slot.durationMinutes===552));
+        assert.ok(preserved.json.data.some((slot:any)=>slot.startTime==='10:00'&&slot.endTime==='19:12'&&slot.durationMinutes===552));
         const tooLate=await request('/orders/'+busy+'/reschedule','POST',{date:'2039-04-03',time:'14:00',addonsDetailed:[{id:addon,quantity:2}]},true);
         assert.equal(tooLate.status,409);assert.equal(tooLate.json.code,'cleaner_capacity_exceeded');
-        const moved=await request('/orders/'+busy+'/reschedule','POST',{date:'2039-04-03',time:'08:00',addonsDetailed:[{id:addon,quantity:2}]},true);
-        assert.equal(moved.status,200,JSON.stringify(moved.json));assert.equal(moved.json.data.order.end_time,'17:12:00');assert.equal(Number(moved.json.data.order.estimated_duration_minutes),552);
+        const moved=await request('/orders/'+busy+'/reschedule','POST',{date:'2039-04-03',time:'10:00',addonsDetailed:[{id:addon,quantity:2}]},true);
+        assert.equal(moved.status,200,JSON.stringify(moved.json));assert.equal(moved.json.data.order.end_time,'19:12:00');assert.equal(Number(moved.json.data.order.estimated_duration_minutes),552);
         const blockedAdmin=await request('/admin/orders/'+busy,'PATCH',{startTime:'18:00',endTime:'23:00'});
         assert.equal(blockedAdmin.status,409);assert.equal(blockedAdmin.json.code,'cleaner_capacity_exceeded');
-        assert.equal((await db.query('SELECT start_time::text FROM service_orders WHERE id=$1',[busy])).rows[0].start_time,'08:00:00');
+        assert.equal((await db.query('SELECT start_time::text FROM service_orders WHERE id=$1',[busy])).rows[0].start_time,'10:00:00');
 
         const other=await request('/scheduling/available-slots?date=2039-04-02&orderId='+busy);assert.equal(other.status,404);
         const unavailable=await request('/scheduling/available-slots?date=2039-04-05&orderId='+busy,'GET',undefined,true);assert.deepEqual(unavailable.json.data,[]);
@@ -1700,9 +1757,9 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         }
         const slots=await request('/scheduling/available-slots?date='+day+'&customerPackageId='+purchase,'GET',undefined,true);
         assert.equal(slots.status,200);assert.ok(slots.json.data.length>0);
-        const first=slots.json.data.find((s:any)=>s.startTime==='08:00');assert.equal(first.requiredCleaners,3);assert.equal(first.durationMinutes,320);
+        const first=slots.json.data.find((s:any)=>s.startTime==='10:00');assert.equal(first.requiredCleaners,3);assert.equal(first.durationMinutes,320);
         const empty=await request('/scheduling/available-slots?date=2043-06-04&customerPackageId='+purchase,'GET',undefined,true);assert.deepEqual(empty.json.data,[]);
-        const body={customerPackageId:purchase,date:day,startTime:'08:00',idempotencyKey:key};
+        const body={customerPackageId:purchase,date:day,startTime:'10:00',idempotencyKey:key};
         const created=await request('/orders','POST',body,true);assert.equal(created.status,201,JSON.stringify(created.json));visit=created.json.data.order.id;
         assert.equal(created.json.data.order.required_cleaners,3);assert.equal(created.json.data.order.estimated_duration_minutes,320);
         assert.equal((await db.query('SELECT available_cleanings FROM customer_packages WHERE id=$1',[purchase])).rows[0].available_cleanings,3);
@@ -1728,7 +1785,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const assigned=await request('/admin/orders/'+visit+'/assign-cleaner','POST',{cleanerId:replacement,teamSlot:memberRows[0].slot_number});assert.equal(assigned.status,200,JSON.stringify(assigned.json));
         const preserved=(await db.query('SELECT * FROM order_team_members WHERE order_id=$1 ORDER BY slot_number',[visit])).rows;
         assert.equal(preserved[0].cleaner_id,replacement);assert.deepEqual(preserved.slice(1).map(m=>m.cleaner_id),memberRows.slice(1).map(m=>m.cleaner_id));
-        const moved=await request('/orders/'+visit+'/reschedule','POST',{date:'2043-06-04',startTime:'08:00'},true);assert.equal(moved.status,409);
+        const moved=await request('/orders/'+visit+'/reschedule','POST',{date:'2043-06-04',startTime:'10:00'},true);assert.equal(moved.status,409);
         assert.equal((await db.query('SELECT scheduled_date::text AS service_day FROM service_orders WHERE id=$1',[visit])).rows[0].service_day,day);
       }finally{
         if(visit){await db.query('DELETE FROM notifications WHERE target_id=$1',[visit]);await db.query('DELETE FROM service_orders WHERE id=$1',[visit]);}
@@ -1746,7 +1803,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'renovation-'+worker]);
         await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
         const schedule=(await db.query("INSERT INTO cleaner_work_schedule_requests(cleaner_id,week_start,days,status) VALUES($1,'2039-01-31','[]','approved') RETURNING id",[worker])).rows[0];
-        await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2039-02-03','08:00','18:00',$2),($1,'2039-02-04','08:00','18:00',$2)",[worker,schedule.id]);
+        await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2039-02-03','10:00','18:00',$2),($1,'2039-02-04','10:00','18:00',$2)",[worker,schedule.id]);
         const local=new Date(Date.now()+5*3600000);
         if(local.getUTCHours()*60+local.getUTCMinutes()>8*60){
           const date=new Date(Date.now()+29*3600000).toISOString().slice(0,10);
@@ -1761,14 +1818,14 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query('UPDATE customer_addresses SET area=20 WHERE id=$1',[address]);
         const fitting=await request('/scheduling/available-slots?date=2039-02-03&customerPackageId='+purchase,'GET',undefined,true);
         assert.ok(fitting.json.data.length>0);assert.ok(fitting.json.data.every((s:any)=>s.durationMinutes===500));
-        const booked=await request('/orders','POST',{customerPackageId:purchase,date:'2039-02-03',startTime:'08:00'},true);
+        const booked=await request('/orders','POST',{customerPackageId:purchase,date:'2039-02-03',startTime:'10:00'},true);
         assert.equal(booked.status,201,JSON.stringify(booked.json));visit=booked.json.data.order.id;
         assert.equal(booked.json.data.order.estimated_duration_minutes,500);
-        assert.equal(booked.json.data.order.end_time,'16:20:00');
+        assert.equal(booked.json.data.order.end_time,'18:20:00');
         const end=(await db.query('SELECT cleaning_end_at(scheduled_date,start_time,end_time,estimated_duration_minutes)::text AS end FROM service_orders WHERE id=$1',[visit])).rows[0].end;
-        assert.equal(end,'2039-02-03 16:20:00');
+        assert.equal(end,'2039-02-03 18:20:00');
         await db.query("UPDATE service_orders SET estimated_duration_minutes=107,end_time='09:47' WHERE id=$1",[visit]);
-        const moved=await request('/orders/'+visit+'/reschedule','POST',{date:'2039-02-04',startTime:'08:00'},true);
+        const moved=await request('/orders/'+visit+'/reschedule','POST',{date:'2039-02-04',startTime:'10:00'},true);
         assert.equal(moved.status,200,JSON.stringify(moved.json));
         assert.equal(moved.json.data.estimated_duration_minutes,500);
       }finally{
@@ -2197,24 +2254,24 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'night-cutoff-'+worker]);
         await db.query("INSERT INTO cleaner_profiles(user_id,verification_status) VALUES($1,'approved')",[worker]);
         const schedule=(await db.query("INSERT INTO cleaner_work_schedule_requests(cleaner_id,week_start,days,status) VALUES($1,'2039-07-04','[]','approved') RETURNING id",[worker])).rows[0];
-        await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2039-07-06','08:00','18:00',$2)",[worker,schedule.id]);
-        await db.query("INSERT INTO service_orders(id,customer_id,status,scheduled_date,start_time,end_time) VALUES($1,$2,'waiting_cleaner','2039-07-07','08:00','10:00')",[order,customer]);
+        await db.query("INSERT INTO cleaner_working_days(cleaner_id,work_date,start_time,end_time,request_id) VALUES($1,'2039-07-06','10:00','18:00',$2)",[worker,schedule.id]);
+        await db.query("INSERT INTO service_orders(id,customer_id,status,scheduled_date,start_time,end_time) VALUES($1,$2,'waiting_cleaner','2039-07-07','10:00','10:00')",[order,customer]);
         t.mock.timers.enable({apis:['Date'],now:Date.parse('2039-07-05T20:59:59+05:00')});
         const path='/scheduling/available-slots?date=2039-07-06&durationMinutes=90';
         const before=await request(path,'GET',undefined,true);assert.equal(before.status,200);
-        assert.ok(before.json.data.some((row:any)=>row.startTime==='08:00'));
+        assert.ok(before.json.data.some((row:any)=>row.startTime==='10:00'));
         t.mock.timers.setTime(Date.parse('2039-07-05T21:00:00+05:00'));
         const after=await request(path,'GET',undefined,true);assert.equal(after.status,200);
         assert.ok(after.json.data.some((row:any)=>row.startTime==='12:00'));
         assert.ok(after.json.data.every((row:any)=>row.startTime>='12:00'));
-        for(const time of ['08:00','11:59']){
+        for(const time of ['10:00','11:59']){
           const denied=await request('/orders','POST',{customerPackageId:randomUUID(),date:'2039-07-06',startTime:time},true);
           assert.equal(denied.status,400);assert.equal(denied.json.code,'next_morning_booking_closed');
           const moved=await request('/orders/'+order+'/reschedule','POST',{date:'2039-07-06',startTime:time},true);
           assert.equal(moved.status,400);assert.equal(moved.json.code,'next_morning_booking_closed');
         }
         const unchanged=(await db.query('SELECT scheduled_date::text,start_time::text FROM service_orders WHERE id=$1',[order])).rows[0];
-        assert.equal(unchanged.scheduled_date,'2039-07-07');assert.equal(unchanged.start_time,'08:00:00');
+        assert.equal(unchanged.scheduled_date,'2039-07-07');assert.equal(unchanged.start_time,'10:00:00');
       } finally {
         t.mock.timers.reset();
         await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
@@ -2315,7 +2372,7 @@ test('purchase idempotency and legacy payment callback authentication',{skip:!pr
     }
     assert.equal((await hook(env.kaspiWebhookToken)).status,200);assert.equal((await hook(env.kaspiWebhookToken)).status,200);
     const cp=(await db.query('SELECT status,available_cleanings FROM customer_packages WHERE customer_id=$1',[customer])).rows[0];assert.equal(cp.status,'active');assert.equal(cp.available_cleanings,1);
-    const orderBody={customerPackageId:rows[0].data.customerPackage.id,date:new Date(Date.now()+29*3600000).toISOString().slice(0,10),startTime:'08:00',idempotencyKey:randomUUID()};
+    const orderBody={customerPackageId:rows[0].data.customerPackage.id,date:new Date(Date.now()+29*3600000).toISOString().slice(0,10),startTime:'10:00',idempotencyKey:randomUUID()};
     for(const stage of ['notification','idempotency']) {
       const fail='fail_order_completion_'+randomUUID().replace(/-/g,'');
       const table=stage==='notification'?'notifications':'api_idempotency';

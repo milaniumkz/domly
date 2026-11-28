@@ -20,6 +20,7 @@ void main() {
     expect(days.last['startTime'], '12:00');
     expect(days.last['endTime'], '20:00');
     expect(days.first['working'], isFalse);
+    expect(days.first['startTime'], '10:00');
   });
   test(
       'wire dates and pending approval are displayed without losing the actual day',

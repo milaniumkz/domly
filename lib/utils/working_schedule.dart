@@ -16,7 +16,7 @@ List<Map<String, dynamic>> workScheduleDays(
     return {
       'date': key,
       'working': existing?['working'] == true,
-      'startTime': existing?['startTime'] ?? '08:00',
+      'startTime': existing?['startTime'] ?? '10:00',
       'endTime': existing?['endTime'] ?? '18:00'
     };
   });

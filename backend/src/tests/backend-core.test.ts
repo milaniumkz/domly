@@ -1038,8 +1038,8 @@ test('booking date validation rejects malformed, rolled-over and past local time
     assert.throws(()=>validateBookingStart(day,time,now));
   }
   assert.throws(()=>validateBookingStart('2026-10-23','15:01',now),/завтрашнего дня/);
-  assert.doesNotThrow(()=>validateBookingStart('2026-10-24','08:00',now));
-  assert.doesNotThrow(()=>validateBookingStart('2026-11-01','08:00:00',now));
+  assert.doesNotThrow(()=>validateBookingStart('2026-10-24','10:00',now));
+  assert.doesNotThrow(()=>validateBookingStart('2026-11-01','10:00:00',now));
 });
 
 test('all web bootstraps preserve detail identifiers before Flutter starts', async () => {
@@ -1158,8 +1158,11 @@ test('evening booking limits only the start, preserving late and overnight durat
   assert.equal(fitsBookingHours('18:30',120),false);
   assert.equal(fitsBookingHours('18:05',120),false);
   assert.equal(fitsBookingHours('16:00',240),true);
-  assert.equal(fitsBookingHours('08:00',180),true);
+  assert.equal(fitsBookingHours('08:00',180),false);
   assert.equal(fitsBookingHours('07:59',180),false);
+  assert.equal(fitsBookingHours('09:59',180),false);
+  assert.equal(fitsBookingHours('10:00',180),true);
+  assert.throws(()=>validateBookingHours('09:59',120),/10:00/);
   assert.equal(fitsBookingHours('18:00',NaN),false);
   assert.doesNotThrow(()=>validateBookingHours('18:00',240));
   assert.doesNotThrow(()=>validateBookingHours('18:00',401));
@@ -1201,7 +1204,7 @@ test('booking floor rolls over at Kazakhstan midnight, month and year boundaries
   assert.equal(isBookableDate('2026-02-30',before),false);
   assert.equal(earliestBookingDate(Date.parse('2026-12-31T10:00:00Z')),'2027-01-01');
   for(const time of ['08:00','12:00','18:00'])assert.throws(()=>validateBookingStart('2026-11-03',time,after),/завтрашнего дня/);
-  assert.doesNotThrow(()=>validateBookingStart('2026-11-04','08:00',after));
+  assert.doesNotThrow(()=>validateBookingStart('2026-11-04','10:00',after));
 });
 
 
@@ -1343,7 +1346,7 @@ test('catalog price translations preserve source-based admin text and do not ove
 test('next-morning booking closes at 21:00 Astana time; noon, later dates and midnight remain correct',async()=>{
   const {isBookableStart,validateBookingStart}=await import('../modules/bookingValidation');
   const before=Date.parse('2026-11-22T20:59:59+05:00'),cutoff=Date.parse('2026-11-22T21:00:00+05:00');
-  for(const time of ['08:00','10:00','11:59:59']){
+  for(const time of ['10:00','10:30','11:59:00']){
     assert.equal(isBookableStart('2026-11-23',time,before),true);
     assert.doesNotThrow(()=>validateBookingStart('2026-11-23',time,before));
     for(const now of [cutoff,Date.parse('2026-11-22T23:59:59+05:00')]){
@@ -1352,10 +1355,10 @@ test('next-morning booking closes at 21:00 Astana time; noon, later dates and mi
     }
   }
   for(const time of ['12:00','12:00:00','14:00','18:00'])assert.doesNotThrow(()=>validateBookingStart('2026-11-23',time,cutoff));
-  assert.doesNotThrow(()=>validateBookingStart('2026-11-24','08:00',cutoff));
+  assert.doesNotThrow(()=>validateBookingStart('2026-11-24','10:00',cutoff));
   const midnight=Date.parse('2026-11-23T00:00:00+05:00');
   assert.equal(isBookableStart('2026-11-23','08:00',midnight),false);
-  assert.doesNotThrow(()=>validateBookingStart('2026-11-24','08:00',midnight));
+  assert.doesNotThrow(()=>validateBookingStart('2026-11-24','10:00',midnight));
   assert.equal(isBookableStart('2026-11-23','invalid',cutoff),false);
   assert.equal(isBookableStart('2026-02-30','12:00',cutoff),false);
   assert.equal(isBookableStart('2027-01-01','08:00',Date.parse('2026-12-31T21:00:00+05:00')),false);
@@ -1368,11 +1371,11 @@ test('legacy calendar counts and time choices use the same 21:00 booking cutoff'
   const repo:any={getUserPackageByPackage:async()=>({}),getApartment:async()=>({id:'apartment',area:60,district:'fixture'}),getClosedDays:async()=>new Set(),getCleaningSlotsForMonth:async()=>slots,getCleaningSlots:async()=>slots};
   const service=new CalendarBookingService(repo,{} as any);
   try {
-    assert.deepEqual(await service.getAvailableDates('user','apartment','package','2039-07'),[{date:'2039-07-06',availableSlots:3}]);
+    assert.deepEqual(await service.getAvailableDates('user','apartment','package','2039-07'),[{date:'2039-07-06',availableSlots:2}]);
     t.mock.timers.setTime(Date.parse('2039-07-05T21:00:00+05:00'));
     assert.deepEqual(await service.getAvailableDates('user','apartment','package','2039-07'),[{date:'2039-07-06',availableSlots:1}]);
     assert.deepEqual((await service.getAvailableTimeSlots('2039-07-06','apartment')).map(s=>s.startTime),['12:00']);
-    assert.throws(()=>service.validatePackageBookingSelection([{date:'2039-07-06',startTime:'08:00',endTime:'10:00'}],{cleaningCount:1,allowSameDay:false}),(e:any)=>e.code==='next_morning_booking_closed');
+    assert.throws(()=>service.validatePackageBookingSelection([{date:'2039-07-06',startTime:'10:00',endTime:'12:00'}],{cleaningCount:1,allowSameDay:false}),(e:any)=>e.code==='next_morning_booking_closed');
   } finally {t.mock.timers.reset();}
 });
 
