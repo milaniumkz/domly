@@ -122,6 +122,24 @@ Future<List<Map<String, dynamic>>> loadAdminOrders(
   return orders.values.toList();
 }
 
+/// Assignment is independent of payment: an unpaid scheduled visit still needs staff.
+bool adminOrderNeedsAssignment(Map<String, dynamic> order) {
+  if (order['type'] == 'package_purchase' || order['view_kind'] == 'package_purchase') return false;
+  final status = '${order['orderStatus'] ?? order['status'] ?? ''}'.trim().toLowerCase();
+  if ({'draft', 'completed', 'cancelled', 'canceled', 'refunded'}.contains(status)) return false;
+  final required = num.tryParse('${order['required_cleaners'] ?? order['requiredCleaners'] ?? 1}') ?? 1;
+  final members = order['team_members'] ?? order['teamMembers'];
+  if (required > 1) {
+    final rows = members is List ? members : const [];
+    final assigned = rows.whereType<Map>().where((member) =>
+      '${member['cleaner_id'] ?? member['cleanerId'] ?? ''}'.trim().isNotEmpty &&
+      {'accepted', 'in_progress', 'completed'}.contains('${member['status']}'))
+      .map((member) => '${member['cleaner_id'] ?? member['cleanerId']}').toSet().length;
+    return assigned < required;
+  }
+  return '${order['cleanerId'] ?? order['cleaner_id'] ?? ''}'.trim().isEmpty;
+}
+
 bool canAdminAssignOrder(Map<String, dynamic> order) =>
     order['type'] != 'package_purchase' &&
     {'pending_assignment', 'waiting_cleaner', 'assigned'}

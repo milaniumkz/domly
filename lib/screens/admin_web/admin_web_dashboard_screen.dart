@@ -1215,7 +1215,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     return switch (scope) {
       'Сегодня' => active && visitDay == day,
       'Завтра' => active && visitDay == day.add(const Duration(days: 1)),
-      'Без назначения' => active && ['pending_assignment', 'waiting_cleaner'].contains(status),
+      'Без назначения' => adminOrderNeedsAssignment(data),
       'В работе' => status == 'in_progress',
       'Завершены' => status == 'completed',
       'Активные' => active,
