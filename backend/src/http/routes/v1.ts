@@ -2681,8 +2681,11 @@ export function buildV1Router(deps: {
       return;
     }
     const updated = first((await deps.db.query(
-      `UPDATE payments SET provider='bcc', updated_at=NOW()
+      `UPDATE payments SET provider='bcc',
+         payload=CASE WHEN payload->>'kind'='addon_edit_checkout' THEN payload||jsonb_build_object('addonCheckoutSelected',true) ELSE payload END,
+         updated_at=NOW()
        WHERE id=$1 AND status IN ('pending','invoice_requested')
+         AND (payload->>'kind' IS DISTINCT FROM 'addon_edit_checkout' OR provider<>'kaspi' OR status<>'invoice_requested')
        RETURNING *`,
       [req.params.id],
     )).rows);

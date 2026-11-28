@@ -9,7 +9,7 @@ export async function editableAddonCheckout(db:Database,orderId:string){
  return (await db.query(`SELECT p.* FROM payments p WHERE p.order_id=$1 AND p.status='pending'
   AND p.payload->>'kind'=$2 AND p.payload->>'addonCheckoutSelected' IS DISTINCT FROM 'true'
   AND NOT (p.payload ? 'paymentHtml') AND NOT EXISTS(SELECT 1 FROM moon_ai_outbox b WHERE b.payment_id=p.id AND b.kind='invoice')
-  ORDER BY p.created_at DESC LIMIT 1`,[orderId,kind])).rows[0];
+  ORDER BY p.created_at DESC LIMIT 1 FOR UPDATE OF p`,[orderId,kind])).rows[0];
 }
 
 /** Persist the payment with the edit, so closing the payment picker cannot lose the bill. */

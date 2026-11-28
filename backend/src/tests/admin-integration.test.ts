@@ -824,11 +824,15 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       const originalFetch=global.fetch;
       Object.assign(env,{bccMode:'test',bccNotifyUrl:'https://domly.kz:443/api/v1/payments/bcc/webhook',publicApiUrl:'https://domly.kz',bccNotifyUser:'',bccNotifyPassword:''});
       await db.query("INSERT INTO service_orders(id,customer_id,status,payable_amount) VALUES($1,$2,'pending_payment',350)",[orderId,customer]);
-      await db.query("INSERT INTO payments(id,customer_id,order_id,provider,status,amount) VALUES($1,$2,$3,'bcc','pending',350)",[paymentId,customer,orderId]);
+      await db.query("INSERT INTO payments(id,customer_id,order_id,provider,status,amount,payload) VALUES($1,$2,$3,'kaspi','invoice_requested',350,'{\"kind\":\"addon_edit_checkout\"}')",[paymentId,customer,orderId]);
       try {
         const methods=await request('/payments/methods');assert.equal(methods.json.data.online,true);assert.equal(methods.json.data.onlineTest,true);
+        assert.equal((await request('/payments/'+paymentId+'/bcc-session','POST',{},true)).status,400,'an already queued Kaspi surcharge cannot also open BCC');
+        assert.equal((await db.query('SELECT provider FROM payments WHERE id=$1',[paymentId])).rows[0].provider,'kaspi');
+        await db.query("UPDATE payments SET status='pending' WHERE id=$1",[paymentId]);
         const session=await request('/payments/'+paymentId+'/bcc-session','POST',{},true);
         assert.equal(session.status,200);
+        assert.equal((await db.query('SELECT payload FROM payments WHERE id=$1',[paymentId])).rows[0].payload.addonCheckoutSelected,true);
         assert.match(session.json.data.paymentHtml,/test3ds.bcc.kz:5445/);
         assert.equal(session.json.data.testMode,true);
         const reference=session.json.data.providerPayload.ORDER;
