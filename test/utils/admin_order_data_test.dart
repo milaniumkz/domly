@@ -3,6 +3,45 @@ import 'package:domly/utils/order_display.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+      'new unpaid extras override an older paid invoice without changing assignment status',
+      () {
+    final row = {
+      'status': 'pending_assignment',
+      'payable_amount': '1500.00',
+      'latest_payment_status': 'paid'
+    };
+    final order = mapAdminOrder(row);
+    expect(order['paymentStatus'], 'pending_invoice');
+    expect(order['orderStatus'], 'pending_assignment');
+    expect(canAdminAssignOrder(order), isFalse);
+    expect(
+        adminOrderPaymentStatus(
+            {...row, 'latest_payment_status': 'invoice_requested'}),
+        'invoice_requested');
+    expect(adminOrderPaymentStatus({...row, 'payable_amount': '0.00'}), 'paid');
+    expect(
+        adminOrderPaymentStatus({
+          'view_kind': 'package_purchase',
+          'status': 'active',
+          'latest_payment_status': 'paid'
+        }),
+        'paid');
+    expect(
+        adminOrderPaymentStatus({
+          'view_kind': 'package_purchase',
+          'latest_payment_status': 'pending'
+        }),
+        'pending_invoice');
+    expect(
+        adminOrderPaymentStatus({
+          ...row,
+          'status': 'cancelled',
+          'latest_payment_status': 'refunded'
+        }),
+        'refunded');
+  });
+
   test('server order fields populate the administrator card and its actions',
       () {
     final order = mapAdminOrder({

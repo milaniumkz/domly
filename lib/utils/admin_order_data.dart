@@ -1,5 +1,32 @@
 import 'cleaning_time_range.dart';
 
+/// A paid previous invoice does not settle extras added afterwards.
+String adminOrderPaymentStatus(Map<String, dynamic> row) {
+  final purchase = row['view_kind'] == 'package_purchase' ||
+      row['type'] == 'package_purchase';
+  final status = (row['status'] ?? row['orderStatus'] ?? '').toString();
+  final latest = row['latest_payment_status'] ??
+      row['latestPaymentStatus'] ??
+      row['payment_status'];
+  if (purchase)
+    return latest == 'pending'
+        ? 'pending_invoice'
+        : (latest?.toString() ?? '—');
+  if (status == 'cancelled' || status == 'canceled') {
+    return latest == 'refunded' ? 'refunded' : 'cancelled';
+  }
+  final balance = row['payable_amount'] ?? row['payableAmount'];
+  final due = balance is num ? balance : num.tryParse('$balance');
+  if (due != null && due > 0) {
+    return latest == 'invoice_requested'
+        ? 'invoice_requested'
+        : 'pending_invoice';
+  }
+  if (status == 'pending_payment') return 'pending_invoice';
+  if (due != null && due <= 0) return 'paid';
+  return latest?.toString() ?? '—';
+}
+
 Map<String, dynamic> mapAdminOrder(Map<String, dynamic> row) {
   num amount(dynamic value) =>
       value is num ? value : num.tryParse('$value') ?? 0;
@@ -30,7 +57,6 @@ Map<String, dynamic> mapAdminOrder(Map<String, dynamic> row) {
             'paymentStatus': item['paymentStatus'] ?? item['payment_status'],
           })
       .toList();
-  final latestPayment = row['latest_payment_status'] ?? row['payment_status'];
   return {
     ...row,
     'id': row['id'],
@@ -67,8 +93,7 @@ Map<String, dynamic> mapAdminOrder(Map<String, dynamic> row) {
     'addonAmount': amount(row['addon_amount']),
     'payableAmount': amount(row['payable_amount'] ?? row['payableAmount']),
     'bonusAppliedAmount': amount(row['bonus_spent']),
-    'paymentStatus': latestPayment ??
-        (status == 'pending_payment' ? 'pending_invoice' : '—'),
+    'paymentStatus': adminOrderPaymentStatus(row),
     'addonsDetailed': normalizedAddons,
     'createdAt': row['created_at'] ?? row['createdAt'],
     'updatedAt': row['updated_at'] ?? row['updatedAt'],
