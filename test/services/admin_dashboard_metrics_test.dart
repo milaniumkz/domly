@@ -1,3 +1,4 @@
+import 'dart:ui' show SemanticsAction;
 import 'package:domly/ui/admin_dashboard_metrics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     var tapped = -1;
+    final semantics = tester.ensureSemantics();
+
     for (final width in [320.0, 375.0, 430.0, 1200.0]) {
       for (final scale in [1.0, 1.8]) {
         tester.view.physicalSize = Size(width, 1000);
@@ -48,9 +51,11 @@ void main() {
         await tester.tap(find.descendant(
             of: find.byKey(const ValueKey(0)), matching: find.byType(InkWell)));
         expect(tapped, 0);
+        expect(tester.getSemantics(find.bySemanticsLabel('Без назначения: 1. Нужно подобрать исполнителя')).getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
         expect(tester.takeException(), isNull);
         tapped = -1;
       }
     }
+    semantics.dispose();
   });
 }

@@ -31,7 +31,8 @@ class AdminDashboardMetricCard extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, size) {
         final compact = size.maxWidth < 150;
         return Semantics(
-            button: true,
+            button: onTap != null,
+            onTap: onTap,
             label: '$title: $value. $subtitle',
             excludeSemantics: true,
             child: Tooltip(
