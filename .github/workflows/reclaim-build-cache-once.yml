@@ -13,7 +13,9 @@ jobs:
     environment: production
     timeout-minutes: 15
     steps:
-    - name: Inspect aggregate deployment disk usage without opening customer data
+    - uses: actions/checkout@v4
+    - name: 'Owner-approved cleanup: generated old web bundles only; retain current
+        and five newest releases'
       env:
         VPS_HOST: ${{ secrets.VPS_HOST }}
         VPS_USER: ${{ secrets.VPS_USER }}
@@ -28,8 +30,11 @@ jobs:
 
         printf ''%s\n'' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
-        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "df -h
-        /; du -x -m --max-depth=1 ''$DEPLOY_PATH'' /var/log /var/lib/docker; du -x
-        -m --max-depth=1 ''$DEPLOY_PATH/releases'' ''$DEPLOY_PATH/backups''"
+        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "python3
+        - ''$DEPLOY_PATH'' ''5db35d96a87d378b65915064a0c8f31d4446b614'' --apply" <
+        scripts/server/reclaim_old_web_builds_once.py
+
+        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" ''df
+        -h /''
 
         '
