@@ -337,6 +337,9 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       }finally{
         await db.query('DELETE FROM notifications WHERE target_id IN (SELECT id::text FROM service_orders WHERE customer_package_id=$1)',[purchase]);
         await db.query('DELETE FROM api_idempotency WHERE user_id=$1 AND key=$2',[customer,key]);
+        await db.query('DELETE FROM notifications WHERE target_id IN (SELECT id::text FROM payments WHERE order_id IN (SELECT id FROM service_orders WHERE customer_package_id=$1))',[purchase]);
+        await db.query('DELETE FROM moon_ai_outbox WHERE payment_id IN (SELECT id FROM payments WHERE order_id IN (SELECT id FROM service_orders WHERE customer_package_id=$1))',[purchase]);
+        await db.query('DELETE FROM payments WHERE order_id IN (SELECT id FROM service_orders WHERE customer_package_id=$1)',[purchase]);
         await db.query('DELETE FROM service_orders WHERE customer_package_id=$1',[purchase]);
         await db.query('DELETE FROM customer_packages WHERE id=$1',[purchase]);
         await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);
@@ -409,6 +412,8 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.equal(Number((await db.query('SELECT price FROM order_addons WHERE order_id=$1 AND addon_id=$2',[order,special])).rows[0].price),9000);
       }finally{
         if(old)await db.query("INSERT INTO app_settings(key,value) VALUES('customerTierRules',$1) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[JSON.stringify(old.value)]);
+        await db.query('DELETE FROM moon_ai_outbox WHERE payment_id IN (SELECT id FROM payments WHERE order_id=$1)',[order]);
+        await db.query('DELETE FROM payments WHERE order_id=$1',[order]);
         await db.query('DELETE FROM service_orders WHERE id=$1',[order]);await db.query('DELETE FROM payments WHERE id=$1',[payment]);await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);await db.query('DELETE FROM catalog_addons WHERE id=ANY($1::uuid[])',[[ordinary,special]]);await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);await db.query('DELETE FROM app_users WHERE id=$1',[user]);
       }
     });
@@ -628,7 +633,7 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       } finally {await db.query('DELETE FROM translations WHERE key=$1',[key]);}
     });
     await t.test('cleaner key proposals persist before payment and active extras respect the next order',async()=>{
-      const worker=randomUUID(),order=randomUUID(),next=randomUUID(),addon=randomUUID(),special=randomUUID(),payment=randomUUID();
+      const worker=randomUUID(),order=randomUUID(),next=randomUUID(),addon=randomUUID(),special=randomUUID();let payment=randomUUID();
       async function propose(items:any[]){const response=await fetch(base+'/orders/'+order+'/addon-requests',{method:'POST',headers:{Authorization:'Bearer '+signAccessToken({id:worker,role:'cleaner',phone:'proposal'}),'Content-Type':'application/json'},body:JSON.stringify({addonsDetailed:items})});return {status:response.status,json:await response.json() as any};}
       try{
         await db.query("INSERT INTO app_users(id,phone,role,status) VALUES($1,$2,'cleaner','approved')",[worker,'proposal-'+worker]);
@@ -665,14 +670,15 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         const approved=await request('/orders/'+order+'/addon-requests/approve','POST',{paymentMethod:'separate'},true);
         assert.equal(approved.status,200,JSON.stringify(approved.json));assert.equal(approved.json.data.payableAmount,0);
         assert.equal((await db.query('SELECT requires_customer_approval FROM order_addons WHERE order_id=$1',[order])).rows[0].requires_customer_approval,false);
-        assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM payments WHERE order_id=$1',[order])).rows[0].n,0);
+        assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM payments WHERE order_id=$1 AND status<>'cancelled'",[order])).rows[0].n,0,'removed extras retain only the cancelled draft; specialist approval creates no invoice');
         const initialChecklist=await request('/orders/'+order+'/checklist','GET',undefined,true);
         assert.equal(initialChecklist.status,200);
         const checkedId=initialChecklist.json.data.items[0].id;
         await db.query('UPDATE checklist_report_items SET checked=TRUE,checked_at=NOW() WHERE id=$1',[checkedId]);
         const own=await request('/orders/'+order+'/addons','POST',{addonsDetailed:[{id:addon,quantity:2},{id:special,quantity:1}]},true);
         assert.equal(own.status,200);
-        await db.query("INSERT INTO payments(id,customer_id,order_id,provider,status,amount) VALUES($1,$2,$3,'kaspi','invoice_requested',6000)",[payment,customer,order]);
+        payment=own.json.data.payment.id;
+        await db.query("UPDATE payments SET provider='kaspi',status='invoice_requested' WHERE id=$1",[payment]);
         const confirmed=await request('/payments/'+payment+'/confirm','POST',{});
         assert.equal(confirmed.status,200,JSON.stringify(confirmed.json));
         assert.equal((await db.query('SELECT payment_status FROM order_addons WHERE order_id=$1 AND addon_id=$2',[order,addon])).rows[0].payment_status,'paid');
@@ -680,9 +686,9 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
         assert.ok(checklist.json.data.items.some((item:any)=>item.title_ru==='Доп. услуга: Духовка'&&item.required));
         assert.ok(checklist.json.data.items.some((item:any)=>item.id===checkedId&&item.checked));
       }finally{
-        await db.query('DELETE FROM moon_ai_outbox WHERE payment_id=$1',[payment]);
-        await db.query('DELETE FROM notifications WHERE target_id=$1',[payment]);
-        await db.query('DELETE FROM payments WHERE id=$1',[payment]);
+        await db.query('DELETE FROM moon_ai_outbox WHERE payment_id IN (SELECT id FROM payments WHERE order_id=$1)',[order]);
+        await db.query('DELETE FROM notifications WHERE target_id IN (SELECT id::text FROM payments WHERE order_id=$1)',[order]);
+        await db.query('DELETE FROM payments WHERE order_id=$1',[order]);
         await db.query('DELETE FROM notifications WHERE target_id=ANY($1::text[])',[[order,next]]);
         await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[[order,next]]);
         await db.query('DELETE FROM catalog_addons WHERE id=ANY($1::uuid[])',[[addon,special]]);
