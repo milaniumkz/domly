@@ -3257,12 +3257,12 @@ export function buildV1Router(deps: {
       `SELECT c.*, cu.full_name AS customer_name, cu.phone AS customer_phone,
               cu.email AS customer_email, cu.rating AS customer_rating, cu.bonus_balance AS customer_bonus_balance,
               cl.full_name AS cleaner_name, cl.phone AS cleaner_phone, cl.email AS cleaner_email, cl.rating AS cleaner_rating,
-              o.numeric_id AS order_number, o.scheduled_date, o.start_time, o.end_time, o.status AS order_status,
+              o.numeric_id AS order_number, o.scheduled_date, o.start_time, o.end_time, o.status AS order_status, o.estimated_duration_minutes,
               ca.city, ca.settlement, ca.street, ca.house, ca.apartment, ca.entrance, ca.area, ca.verified_area
        FROM complaints c
        LEFT JOIN app_users cu ON cu.id=c.customer_id
-       LEFT JOIN app_users cl ON cl.id=c.cleaner_id
        LEFT JOIN service_orders o ON o.id=c.order_id
+       LEFT JOIN app_users cl ON cl.id=COALESCE(c.cleaner_id,o.cleaner_id)
        LEFT JOIN customer_addresses ca ON ca.id=o.address_id
        WHERE c.id=$1`,
       [req.params.id],
@@ -4859,6 +4859,17 @@ function buildAdminListQuery(section: string, query: any, limit: number, offset:
       values,
     };
   };
+  if (section === 'complaints') {
+    addCommon('c', ['c.title', 'c.body', 'cu.full_name', 'cu.phone', 'o.numeric_id::text']);
+    return done(`SELECT c.*,cu.full_name AS customer_name,cu.phone AS customer_phone,
+      cl.full_name AS cleaner_name,cl.phone AS cleaner_phone,
+      o.numeric_id AS order_number,o.scheduled_date,o.start_time,o.end_time,o.status AS order_status,o.estimated_duration_minutes,
+      ca.city,ca.street,ca.house,ca.apartment,COALESCE(o.area,ca.verified_area,ca.area) AS area
+      FROM complaints c LEFT JOIN app_users cu ON cu.id=c.customer_id
+      LEFT JOIN service_orders o ON o.id=c.order_id
+      LEFT JOIN app_users cl ON cl.id=COALESCE(c.cleaner_id,o.cleaner_id)
+      LEFT JOIN customer_addresses ca ON ca.id=o.address_id`, 'c.created_at DESC');
+  }
   if (section === 'orders') {
     addCommon('o', ['o.numeric_id::text', 'cu.full_name', 'cu.phone', 'cl.full_name', 'cl.phone', 'ca.street', 'ca.house']);
     return done(

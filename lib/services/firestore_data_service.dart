@@ -1,3 +1,4 @@
+import '../utils/admin_complaint_data.dart';
 import '../utils/admin_area_check_data.dart';
 import 'booking_checkout_service.dart';
 import '../utils/cleaning_time_range.dart';
@@ -7765,26 +7766,8 @@ class FirestoreDataService {
           });
       });
     }
-    return _backendPollingStream(() async {
-      return (await BackendApiService.instance
-              .getList(admin ? '/admin/complaints' : '/complaints'))
-          .map((
-        item,
-      ) {
-        return {
-          'id': item['id'],
-          'orderId': item['order_id'],
-          'customerId': item['customer_id'],
-          'cleanerId': item['cleaner_id'],
-          'text': item['body'] ?? item['title'] ?? '',
-          'title': item['title'],
-          'photoUrls': item['photo_urls'] ?? const [],
-          'status': item['status'],
-          'createdAt': item['created_at'],
-          'updatedAt': item['updated_at'],
-        };
-      }).toList();
-    });
+    return _backendPollingStream(() async => (await BackendApiService.instance
+      .getList(admin ? '/admin/complaints' : '/complaints')).map(mapAdminComplaint).toList());
   }
 
   Stream<List<Map<String, dynamic>>> reviewsStream() {
