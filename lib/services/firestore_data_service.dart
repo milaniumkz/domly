@@ -635,11 +635,7 @@ class FirestoreDataService {
       'cleaningStartRejected': item['cleaning_start_rejected'] == true,
       'startedAt': item['started_at'],
       'completedAt': item['completed_at'],
-      'paymentStatus': item['view_kind'] == 'package_purchase'
-          ? (item['latest_payment_status'] == 'pending'
-              ? 'pending_invoice'
-              : item['latest_payment_status'])
-          : (item['status'] == 'pending_payment' ? 'pending_invoice' : 'paid'),
+      'paymentStatus': adminOrderPaymentStatus(item),
       'customerId': item['customer_id'],
       'cleanerId': item['cleaner_id'],
       'customerName': item['customer_name'],
