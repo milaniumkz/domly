@@ -843,7 +843,8 @@ export function buildV1Router(deps: {
 
   router.get('/packages/my', auth(['customer']), asyncHandler(async (req, res) => {
     const active=(await deps.db.query("SELECT id FROM customer_packages WHERE customer_id=$1 AND status='active'",[req.user!.id])).rows;
-    for(const pkg of active)await refreshPackageUsage(deps.db,pkg.id);
+    const paused=new Set<string>();
+    for(const pkg of active)if((await refreshPackageUsage(deps.db,pkg.id)).expiryPaused)paused.add(pkg.id);
     ok(res, (await deps.db.query(
       `SELECT cp.*, p.name_ru, p.name_kk, p.description_ru, p.description_kk, p.cleaning_count, p.months, a.city, a.street, a.house, a.apartment, COALESCE(a.verified_area,a.area) AS address_area
        FROM customer_packages cp
@@ -852,7 +853,7 @@ export function buildV1Router(deps: {
        WHERE cp.customer_id=$1
        ORDER BY cp.created_at DESC`,
       [req.user!.id],
-    )).rows);
+    )).rows.map(row=>paused.has(row.id)?{...row,period_end:null,expiry_paused:true}:row));
   }));
 
   router.patch('/packages/my/:id', auth(['customer']), asyncHandler(async (req,res) => {
@@ -2416,8 +2417,8 @@ export function buildV1Router(deps: {
       if(!isBookableStart(date,start,now)||!fitsBookingHours(start,duration)|| (isPostRenovation(tariff)&&!hasBookingLeadTime(date,start,24)))return false;
       if(!usage?.managed)return true;
       const period=bookingPeriod(usage.periods,date,start);
-      if(!period || new Date(period.ends_at).getTime()<=Date.now())return false;
-      return packageBookingCapacity(usage.periods,date,start,editedOrder?.usage_period_id)>0;
+      if(!usage.expiryPaused&&(!period || new Date(period.ends_at).getTime()<=Date.now()))return false;
+      return packageBookingCapacity(usage.periods,date,start,editedOrder?.usage_period_id,usage.expiryPaused)>0;
     }).map((start: string) => ({startTime: start, endTime: addMinutes(start, duration), durationMinutes: duration}));
     const slotArea=editedOrder?.labor_duration_minutes?Number(editedOrder.area):slotAddressId?Number((await deps.db.query('SELECT COALESCE(verified_area,area) area FROM customer_addresses WHERE id=$1',[slotAddressId])).rows[0]?.area??50):50;
     if(slotArea>250 || isPostRenovation(tariff) || Number(editedOrder?.required_cleaners)>1){

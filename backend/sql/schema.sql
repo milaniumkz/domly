@@ -2073,3 +2073,7 @@ UPDATE notifications n SET target_type='user',target_id='review:'||r.id::text,
 FROM reviews r WHERE n.target_type='review' AND n.target_id=r.id::text
  AND n.user_id=r.cleaner_id AND r.author_role='customer';
 -- End received-review notification backfill.
+
+-- Temporary expiry campaigns are reversible; each completed pause extends deadlines once.
+INSERT INTO app_settings(key,value) VALUES('packageExpiryPromotion','{"intervals":[]}'::jsonb) ON CONFLICT(key) DO NOTHING;
+ALTER TABLE customer_packages ADD COLUMN IF NOT EXISTS expiry_pause_offsets JSONB NOT NULL DEFAULT '{}'::jsonb;

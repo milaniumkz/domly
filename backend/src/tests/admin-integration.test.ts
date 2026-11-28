@@ -2486,3 +2486,63 @@ test('90 minute gaps start in December; actual cleaner workload is admin-only an
   await db.query('DELETE FROM order_team_members WHERE order_id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[orders]);await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[Object.values(ids)]);await new Promise<void>(r=>server.close(()=>r()));await db.close();
  }
 });
+
+test('expiry promotion preserves monthly credits and booking, pauses reminders, resumes once, and announces to every role', {skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async()=>{
+ const {setExpiryPromotion,announceExpiryPromotion}=await import('../modules/packageExpiryPromotion');
+ const {refreshPackageUsage,validatePackagePeriod,processPackageUsageForPackage,packageBookingCapacity}=await import('../modules/packageUsage');
+ const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!);
+ const old=(await db.query("SELECT value FROM app_settings WHERE key='packageExpiryPromotion'")).rows[0];
+ const users=[randomUUID(),randomUUID(),randomUUID(),randomUUID()],deleted=randomUUID(),pkg=randomUUID(),purchase=randomUUID(),quarter=randomUUID(),booking=randomUUID();
+ const oldZone=(await db.query("SELECT value FROM app_settings WHERE key='enforceServiceZones'")).rows[0];
+ let campaignId='';const notifications=new NotificationService(db,{send:async()=>({sent:0})} as any);
+ const time=(s:string)=>Date.parse(s+'T10:00:00+05:00');
+ try{
+  await db.query("INSERT INTO app_settings(key,value) VALUES('enforceServiceZones','false') ON CONFLICT(key) DO UPDATE SET value='false'");
+  for(const [i,role]of ['customer','cleaner','admin','superadmin'].entries())await db.query('INSERT INTO app_users(id,phone,role) VALUES($1,$2,$3)',[users[i],'expiry-promo-'+users[i],role]);
+  await db.query("INSERT INTO app_users(id,phone,role,deleted_at) VALUES($1,$2,'customer',NOW())",[deleted,'expiry-promo-'+deleted]);
+  await db.query("INSERT INTO catalog_packages(id,name_ru,cleaning_count,months,base_price) VALUES($1,$2,4,1,0)",[pkg,'Promo fixture '+pkg]);
+  await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,months,period_start,period_end,status) VALUES($1,$2,$3,4,4,1,'2026-12-01','2027-01-01','active')",[purchase,users[0],pkg]);
+  await db.query("INSERT INTO payments(customer_id,customer_package_id,provider,status,amount,paid_at) VALUES($1,$2,'manual','paid',1000,'2026-12-01 10:00+05')",[users[0],purchase]);
+  await db.query("INSERT INTO customer_packages(id,customer_id,package_id,total_cleanings,available_cleanings,months,period_start,period_end,status) VALUES($1,$2,$3,6,4,3,'2026-11-01','2027-02-01','active')",[quarter,users[0],pkg]);
+  await db.query("INSERT INTO payments(customer_id,customer_package_id,provider,status,amount,paid_at) VALUES($1,$2,'manual','paid',1000,'2026-11-01 10:00+05')",[users[0],quarter]);
+  await db.query(`INSERT INTO customer_package_periods(customer_package_id,period_index,starts_at,ends_at,quota,legacy_used,expired_cleanings)
+   VALUES($1,0,'2026-11-01 10:00+05','2026-12-01 10:00+05',2,1,1),($1,1,'2026-12-01 10:00+05','2027-01-01 10:00+05',2,0,0),($1,2,'2027-01-01 10:00+05','2027-02-01 10:00+05',2,0,0)`,[quarter]);
+  const promotion=await setExpiryPromotion(db,true,time('2026-12-20'));campaignId=promotion.campaign!.id;
+  assert.equal((await setExpiryPromotion(db,true,time('2026-12-21'))).campaign!.id,campaignId,'activation retries do not create another campaign');
+  let state=await refreshPackageUsage(db,purchase,time('2027-02-10'));
+  const q=await refreshPackageUsage(db,quarter,time('2027-02-10'));assert.equal(Number(q.pkg.available_cleanings),4);assert.equal(Number(q.periods[0].expired_cleanings),1,'past burnt credits are not restored; the quarterly monthly remainder is protected');
+  assert.equal(state.expiryPaused,true);assert.equal(state.pkg.status,'active');assert.equal(Number(state.pkg.available_cleanings),4);
+  assert.equal(Number(state.periods[0].expired_cleanings),0);
+  assert.equal(packageBookingCapacity(state.periods,'2027-03-01','12:00',undefined,state.expiryPaused),4,'dates after the original end remain bookable');
+  await validatePackagePeriod(db,purchase,'2027-03-01','12:00',undefined,time('2027-02-10'));
+  let warnings=0;await processPackageUsageForPackage(db,{create:async()=>{warnings++;return null;}} as any,purchase,time('2026-12-25'));assert.equal(warnings,0);
+  await db.query("INSERT INTO service_orders(id,customer_id,customer_package_id,status,scheduled_date,start_time,end_time) VALUES($1,$2,$3,'pending_assignment','2027-03-01','12:00','13:00')",[booking,users[0],purchase]);
+  await db.query('UPDATE customer_packages SET available_cleanings=3 WHERE id=$1',[purchase]);
+  state=await refreshPackageUsage(db,purchase,time('2027-02-10'));assert.equal(Number(state.periods[0].used),1,'paused bookings allocate an existing credit, not a free visit');
+  assert.equal(packageBookingCapacity(state.periods,'2027-03-02','12:00',undefined,true),3);
+  await db.query("UPDATE service_orders SET status='cancelled' WHERE id=$1",[booking]);await db.query('UPDATE customer_packages SET available_cleanings=4 WHERE id=$1',[purchase]);
+  const token=signAccessToken({id:users[0],role:'customer',phone:'fixture'});
+  const app=express();app.use(express.json(),buildV1Router({db,notifications} as any),errorHandler);const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
+  try{const response=await fetch('http://127.0.0.1:'+(server.address() as AddressInfo).port+'/packages/my',{headers:{Authorization:'Bearer '+token}});assert.equal(response.status,200);const row=((await response.json() as any).data as any[]).find(r=>r.id===purchase);assert.equal(row.period_end,null);assert.equal(row.expiry_paused,true,'installed clients do not hide dates based on the old deadline');}finally{await new Promise<void>(r=>server.close(()=>r()));}
+  await announceExpiryPromotion(db,notifications,promotion.campaign!);await announceExpiryPromotion(db,notifications,promotion.campaign!);
+  const sent=(await db.query('SELECT user_id,body_ru FROM notifications WHERE dedupe_key=$1',['package-expiry-promo:'+campaignId])).rows;
+  for(const id of users)assert.equal(sent.filter(n=>n.user_id===id).length,1,'all roles, even without packages, get one personal notification');
+  assert.ok(!sent.some(n=>n.user_id===deleted));assert.ok(sent.every(n=>n.body_ru.includes('мы сделали для вас исключение')&&!n.body_ru.includes('сообщим дополнительно')));
+  const raw=(await db.query('SELECT id FROM notifications WHERE dedupe_key=$1 AND user_id=$2',['package-expiry-promo:'+campaignId,users[0]])).rows[0];
+  await notifications.deliver({...raw,user_id:users[0],role:null},{userId:users[0],titleRu:'Уборки скоро сгорят',bodyRu:'Old warning',dedupeKey:'package-period-fixture-reminder-1'},{throwOnError:true});
+  // During the pause no deadline is debited, including the final package date.
+  await setExpiryPromotion(db,false,time('2027-01-10'));
+  state=await refreshPackageUsage(db,purchase,time('2027-01-11'));assert.equal(state.pkg.status,'active');assert.equal(Number(state.pkg.available_cleanings),4);
+  assert.equal(new Date(state.periods[0].ends_at).getTime(),time('2027-01-22'),'the 21-day campaign extends the deadline, without catch-up burning');
+  state=await refreshPackageUsage(db,purchase,time('2027-01-12'));assert.equal(new Date(state.periods[0].ends_at).getTime(),time('2027-01-22'),'resume is idempotent');
+  state=await refreshPackageUsage(db,purchase,time('2027-01-23'));assert.equal(state.pkg.status,'expired');assert.equal(Number(state.pkg.available_cleanings),0,'normal expiry still works when explicitly resumed');
+  await setExpiryPromotion(db,true,time('2027-01-24'));
+  const expired=await refreshPackageUsage(db,purchase,time('2027-01-24'));assert.equal(expired.pkg.status,'expired');assert.equal(Number(expired.pkg.available_cleanings),0,'an already expired package is not resurrected by a new campaign');
+ }finally{
+  if(oldZone)await db.query("UPDATE app_settings SET value=$1::jsonb WHERE key='enforceServiceZones'",[JSON.stringify(oldZone.value)]);else await db.query("DELETE FROM app_settings WHERE key='enforceServiceZones'");
+  if(old)await db.query("UPDATE app_settings SET value=$1::jsonb WHERE key='packageExpiryPromotion'",[JSON.stringify(old.value)]);else await db.query("DELETE FROM app_settings WHERE key='packageExpiryPromotion'");
+  await db.query('DELETE FROM notifications WHERE dedupe_key=$1',['package-expiry-promo:'+campaignId]);
+  await db.query('DELETE FROM service_orders WHERE id=$1',[booking]);await db.query('DELETE FROM payments WHERE customer_package_id=ANY($1::uuid[])',[[purchase,quarter]]);await db.query('DELETE FROM customer_packages WHERE id=ANY($1::uuid[])',[[purchase,quarter]]);
+  await db.query('DELETE FROM catalog_packages WHERE id=$1',[pkg]);await db.query('DELETE FROM app_users WHERE id=ANY($1::uuid[])',[[...users,deleted]]);await db.close();
+ }
+});
