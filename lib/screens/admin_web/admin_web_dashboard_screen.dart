@@ -1,3 +1,4 @@
+import '../../ui/admin_dashboard_metrics.dart';
 import '../../ui/admin_cleaner_workload.dart';
 import '../../ui/admin_responsive_layout.dart';
 import '../../ui/admin_booking_calendar.dart';
@@ -799,7 +800,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   Widget _buildSidebar({required bool compact}) {
     final sections = _sections;
     const firstSections = <String>[
-      'orders', 'calendar', 'work_schedules', 'payments', 'quality_control',
+      'dashboard', 'orders', 'calendar', 'work_schedules', 'payments', 'quality_control',
       'area', 'customers', 'cleaners', 'verifications', 'cleaner_photos',
     ];
     final orderedIndexes = <int>[
@@ -1265,7 +1266,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           const SizedBox(height: 6),
           const Text('Состояние на сейчас. Нажмите на блок, чтобы перейти к деталям.'),
           const SizedBox(height: 14),
-          StreamBuilder<List<Map<String, dynamic>>>(stream: _data.adminOrdersStream(), builder: (context, dashboardOrders) => Wrap(spacing: 12, runSpacing: 12, children: [
+          StreamBuilder<List<Map<String, dynamic>>>(stream: _data.adminOrdersStream(), builder: (context, dashboardOrders) => AdminDashboardMetrics(children: [
             for (final scope in ['Сегодня', 'Завтра', 'Без назначения', 'В работе', 'Активные', 'Завершены'])
               _listMetricCard(title: scope, subtitle: switch(scope) {
                 'Сегодня' => 'Предстоящие и текущие уборки', 'Завтра' => 'План на следующий день',
@@ -10429,88 +10430,10 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
     VoidCallback? onTap,
     Color accent = const Color(0xFF1D4ED8),
   }) {
-    Widget card(AsyncSnapshot<List<Map<String, dynamic>>> snapshot) {
-      final items = snapshot.data ?? const <Map<String, dynamic>>[];
-      final count = countBuilder(items);
-      return SizedBox(
-        width: math.min(
-          220.0,
-          math.max(140.0, (MediaQuery.sizeOf(context).width - 72) / 2),
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                color: Colors.white,
-                border: Border.all(color: const Color(0xFFE5E7EB)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x08111827),
-                    blurRadius: 14,
-                    offset: Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icon, color: accent),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    snapshot.hasError
-                        ? '!'
-                        : !snapshot.hasData
-                        ? '—'
-                        : '$count',
-                    style: const TextStyle(
-                      fontSize: 27,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF111827),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF6B7280),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return snapshot != null
-        ? card(snapshot)
-        : StreamBuilder<List<Map<String, dynamic>>>(
-            stream: stream,
-            builder: (context, value) => card(value),
-          );
+    Widget card(AsyncSnapshot<List<Map<String, dynamic>>> value) => AdminDashboardMetricCard(
+      title: title, subtitle: subtitle, icon: icon, accent: accent, onTap: onTap,
+      value: value.hasError ? '!' : !value.hasData ? '—' : '${countBuilder(value.data!)}');
+    return snapshot != null ? card(snapshot) : StreamBuilder<List<Map<String, dynamic>>>(stream: stream, builder: (context, value) => card(value));
   }
 
   Widget _dashboardPanel({
