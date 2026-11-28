@@ -1,0 +1,86 @@
+name: Authorized one-off invoice for unpaid order extras
+'on':
+  push:
+    branches:
+    - support/order-assignment-audit-20261128
+    paths:
+    - .github/workflows/order73-unpaid-invoice-once.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - name: Request one explicitly authorized unpaid-extras invoice, preserve existing payments, never mark paid
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}\"\
+        \ | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS }}\" > ~/.ssh/known_hosts\n\
+        cat > audit.js <<'AUDIT_JS'\n// Explicit owner request: one invoice for only the unpaid extras of order\
+        \ 73.\n// Never confirm payment, spend bonuses, cancel invoices or disclose payer details.\nconst {Database}=require('/app/dist/infrastructure/db/Database');\n\
+        const {PaymentService,BonusService}=require('/app/dist/modules/domainServices');\nconst {queueMoonInvoice,moonAiReady,processMoonOutbox}=require('/app/dist/modules/moonAi');\n\
+        (async()=>{\n const db=new Database(process.env.DATABASE_URL);const op='support-order73-unpaid-addons-20261128';\n\
+        \ try{\n  if(!moonAiReady())throw new Error('invoice_integration_not_ready');\n  const result=await db.atomic(async()=>{\n\
+        \   await db.query(\"SELECT pg_advisory_xact_lock(hashtextextended('domly:booking-create-reschedule',0))\"\
+        );\n   const owner=(await db.query('SELECT id,customer_id FROM service_orders WHERE numeric_id=73')).rows[0];\n\
+        \   if(!owner)throw new Error('order_not_found');\n   await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['order-payment:'+owner.id]);\n\
+        \   await db.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[owner.customer_id]);\n   const o=(await\
+        \ db.query('SELECT * FROM service_orders WHERE id=$1 FOR UPDATE',[owner.id])).rows[0];\n   const replay=(await\
+        \ db.query(\"SELECT * FROM payments WHERE order_id=$1 AND payload->>'supportOperation'=$2 ORDER BY created_at\
+        \ LIMIT 1\",[o.id,op])).rows[0];\n   if(replay)return {paymentId:replay.id,created:false,reason:'operation_already_recorded'};\n\
+        \   if(Number(o.payable_amount)<=0)return {created:false,reason:'no_unpaid_extras'};\n   if(!['pending_assignment','waiting_cleaner','assigned','pending_payment'].includes(o.status))throw\
+        \ new Error('order_not_payable');\n   const active=(await db.query(\"SELECT * FROM payments WHERE order_id=$1\
+        \ AND status IN ('pending','invoice_requested') ORDER BY created_at DESC FOR UPDATE\",[o.id])).rows;\n \
+        \  if(active.length)return {paymentId:active[0].id,created:false,reason:'existing_active_payment_retained'};\n\
+        \   const addons=(await db.query(`SELECT COALESCE(SUM(price*quantity),0) AS amount,MIN(created_at) AS first_created_at\
+        \ FROM order_addons\n    WHERE order_id=$1 AND paid_separately=FALSE AND requires_customer_approval IS DISTINCT\
+        \ FROM TRUE AND payment_status IN ('pending','draft')`,[o.id])).rows[0];\n   if(Math.round(Number(addons.amount)*100)!==Math.round(Number(o.payable_amount)*100)||Number(addons.amount)<=0)throw\
+        \ new Error('unpaid_total_requires_review');\n   const alreadyPaid=(await db.query(\"SELECT 1 FROM payments\
+        \ WHERE order_id=$1 AND status='paid' AND COALESCE(paid_at,approved_at,applied_at,created_at)>=$2::timestamptz\
+        \ LIMIT 1\",[o.id,addons.first_created_at])).rows.length;\n   if(alreadyPaid)throw new Error('new_payment_already_paid_requires_reconciliation');\n\
+        \   const previous=(await db.query(\"SELECT invoice_phone FROM payments WHERE order_id=$1 AND provider='kaspi'\
+        \ AND invoice_phone IS NOT NULL ORDER BY created_at DESC LIMIT 1\",[o.id])).rows[0];\n   if(!/^7\\d{10}$/.test(String(previous?.invoice_phone??'').replace(/\\\
+        D/g,'')))throw new Error('previous_payer_phone_not_available');\n   const payment=(await new PaymentService(db,new\
+        \ BonusService(db)).createPayment({customerId:o.customer_id,orderId:o.id,provider:'kaspi',amount:Number(o.payable_amount),invoicePhone:previous.invoice_phone,applyReferralDiscount:false,useBonus:false,payload:{kind:'order_payment',supportOperation:op,requestSource:'owner_explicit_unpaid_addons_invoice'}})).payment;\n\
+        \   await queueMoonInvoice(db,payment,'Неоплаченные дополнительные услуги заказа №73 DomLY');\n   await\
+        \ db.query(\"INSERT INTO audit_logs(action,entity_type,entity_id,payload) VALUES('payment.invoice_requested','payment',$1,$2::jsonb)\"\
+        ,[payment.id,JSON.stringify({source:'support_owner_explicit',supportOperation:op,orderNumber:73,scope:'unpaid_addons_only'})]);\n\
+        \   return {paymentId:payment.id,created:true,reason:'queued_once'};\n  });\n  if(result.created){\n   const\
+        \ outbox=(await db.query(\"SELECT id FROM moon_ai_outbox WHERE payment_id=$1 AND kind='invoice'\",[result.paymentId])).rows[0];\n\
+        \   if(outbox)await processMoonOutbox(db,fetch,outbox.id);\n  }\n  let status;\n  for(let attempt=0;attempt<13;attempt++){\n\
+        \   if(!result.paymentId)break;\n   status=(await db.query(`SELECT p.numeric_id AS payment_number,p.status,\n\
+        \    (SELECT state FROM moon_ai_outbox WHERE payment_id=p.id AND kind='invoice' ORDER BY created_at DESC\
+        \ LIMIT 1) AS delivery_state,\n    (SELECT failure_code FROM moon_ai_outbox WHERE payment_id=p.id AND kind='invoice'\
+        \ ORDER BY created_at DESC LIMIT 1) AS delivery_failure,\n    EXISTS(SELECT 1 FROM payment_events e WHERE\
+        \ e.payment_id=p.id AND e.event_type='moon_ai_status' AND e.status='invoice_requested') AS provider_confirmed_invoice\n\
+        \    FROM payments p WHERE p.id=$1`,[result.paymentId])).rows[0];\n   if(status?.provider_confirmed_invoice||['paid','cancelled','rejected','refunded'].includes(status?.status)||['failed','uncertain'].includes(status?.delivery_state))break;\n\
+        \   if(attempt<12)await new Promise(r=>setTimeout(r,5000));\n  }\n  console.log(JSON.stringify({checkedAt:new\
+        \ Date().toISOString(),order:73,created:result.created,reason:result.reason,...status}));\n }finally{await\
+        \ db.close();}\n})().catch(e=>{console.error('SCOPED_INVOICE_OPERATION_FAILED',e.code||e.message||e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAx2bA2TRiWN/fMmxyo7Hh\n\
+        VZ46QLBX9pavTr4dTtqHNuEHM7yiJ7b6kDi5YJN9V416jxsjHvc59gmwvQ7BvXUh\nFLWyRiRNrFo0UE69K7jJLdalxD5TYOQzSyCu1r/MEhuQxnFW9SscBDbgkDqFMR2O\n\
+        Xo+IUMIND3tVmtf35yhgu0VNikw+ypXPD+mGaBR87x27Vhfe69RRsjc5Jfo8/dbp\noxUBNFVjHYYnV8NETUtf6mh6exxbC3z85uKTBnhdysvshBYzm6a8KFkRMPflqe0c\n\
+        k+QUhoGreJSbXQCSyu7OBKx+34Z+i2rxAZx+zOAIIvlLmO855gNpAMJzmpPyzKH5\n9M2VpW7SCrtWRt8+6WL1HIEDk5u7GfEj4X28JynivF9zJRIhpeN4bEYv5MyM9A+7\n\
+        hLJmcixPMrm1AqjklXxwaOx4WaCK/mL08CIuR3u9pfiWrCg4Pczoz5FBqWMPx1Il\n0jSXP1Dp3M6LWgUuvahUykxLI5ZOx1Jd8c5afjGZvEJBAgMBAAE=\n\
+        -----END PUBLIC KEY-----\nOWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ 'mktemp -d /tmp/domly-assignment-audit-XXXXXX')\n[[ \"$remote_dir\" =~ ^/tmp/domly-assignment-audit-[A-Za-z0-9]+$\
+        \ ]]\ntrap 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm -rf -- $remote_dir\"\
+        \ >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes audit.js owner-public.pem\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/\"\nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ \"set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && timeout 240 docker compose -p domly-backend\
+        \ exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json' && openssl rand -out '$remote_dir/key.bin'\
+        \ 32 && openssl enc -aes-256-cbc -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
+        \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey '$remote_dir/owner-public.pem'\
+        \ -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\
+        \nmkdir -m 700 -p encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: order73-invoice-result-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
