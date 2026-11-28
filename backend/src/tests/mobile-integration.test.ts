@@ -117,6 +117,9 @@ test('mobile backend persistence, permissions, pricing and account lifecycle', {
       const result=await updateOrderAddons(db,order,customer,[{key:addon,quantity:2,price:1}]);
       assert.equal(result.payableAmount,50);
       assert.equal((await request(`/orders/${order}/addons`,'POST',{addonsDetailed:[{key:addon,quantity:2}]},inviter)).status,404);
+      assert.ok(result.payment,'an edit persists a recoverable payment before the payment picker opens');
+      assert.equal(Number((result.payment as any).amount),50);
+      await db.query("UPDATE payments SET status='paid' WHERE order_id=$1",[order]);
       await db.query("UPDATE order_addons SET payment_status='paid' WHERE order_id=$1",[order]);
       await assert.rejects(updateOrderAddons(db,order,customer,[]));
       assert.equal((await db.query('SELECT quantity FROM order_addons WHERE order_id=$1',[order])).rows[0].quantity,'2.00');
@@ -165,7 +168,7 @@ test('mobile backend persistence, permissions, pricing and account lifecycle', {
     configureAuthDatabase(null);
     await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
     await db.query('DELETE FROM bonus_transactions WHERE payment_id=$1',[payment]);
-    await db.query('DELETE FROM payments WHERE id=$1',[payment]);
+    await db.query('DELETE FROM payments WHERE id=$1 OR order_id=$2',[payment,order]);
     await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
     await db.query('DELETE FROM customer_packages WHERE id=$1',[cp]);
     await db.query('DELETE FROM user_referrals WHERE customer_id=$1',[customer]);
@@ -819,4 +822,54 @@ test('one phone has isolated customer and cleaner profiles and role-scoped codes
     await db.query('DELETE FROM auth_otp_codes WHERE phone=$1',[phone]);
     await db.query('DELETE FROM app_users WHERE phone=$1',[phone]);await db.close();
   }
+});
+
+
+test('addon edit checkout persists, coalesces, recovers Kaspi once and keeps explicit BCC choice', {skip:!process.env.DOMLY_INTEGRATION_DATABASE_URL},async()=>{
+ const {recoverAddonCheckouts}=await import('../modules/addonCheckoutRecovery');
+ const {env}=await import('../common/env');
+ const saved={enabled:env.moonAiEnabled,url:env.moonAiChannelUrl,key:env.moonAiChannelApiKey,token:env.moonAiWebhookToken};
+ Object.assign(env,{moonAiEnabled:true,moonAiChannelUrl:'https://api.mooonai.com/test',moonAiChannelApiKey:'fixture',moonAiWebhookToken:'fixture'});
+ const db=new Database(process.env.DOMLY_INTEGRATION_DATABASE_URL!),user=randomUUID(),order=randomUUID(),other=randomUUID(),separate=randomUUID(),addon=randomUUID();
+ const oldZone=(await db.query("SELECT value FROM app_settings WHERE key='enforceServiceZones'")).rows[0];
+ let notices=0;const notify={create:async()=>{notices++;return null;},createAdminEvent:async()=>{notices++;return [];}} as any;
+ try{
+  await db.query("INSERT INTO app_settings(key,value) VALUES('enforceServiceZones','false') ON CONFLICT(key) DO UPDATE SET value='false'");
+  await db.query("INSERT INTO app_users(id,phone,role) VALUES($1,$2,'customer')",[user,'addon-recovery-'+user]);
+  await db.query("INSERT INTO catalog_addons(id,title_ru,price,duration_minutes) VALUES($1,$2,25,5)",[addon,'Addon recovery '+addon]);
+  for(const id of [order,other,separate])await db.query("INSERT INTO service_orders(id,customer_id,status,scheduled_date,start_time,end_time,estimated_duration_minutes,area) VALUES($1,$2,'pending_assignment',CURRENT_DATE+1,'10:00','11:00',60,50)",[id,user]);
+  await db.query("INSERT INTO order_addons(order_id,addon_id,price,payment_status,requires_customer_approval) VALUES($1,$2,25,'paid',FALSE)",[order,addon]);
+  await db.query("INSERT INTO payments(customer_id,order_id,provider,status,amount,invoice_phone,paid_at) VALUES($1,$2,'kaspi','paid',25,'+77000000000',NOW()-INTERVAL '1 hour')",[user,order]);
+  const a=await updateOrderAddons(db,order,user,[{id:addon,quantity:2}]);
+  assert.equal(a.payableAmount,25);assert.equal(Number((a.payment as any).amount),25,'previous paid extras are not invoiced again');
+  const b=await updateOrderAddons(db,order,user,[{id:addon,quantity:3}]);assert.equal((a.payment as any).id,(b.payment as any).id);assert.equal(Number((b.payment as any).amount),50);
+  await updateOrderAddons(db,order,user,[{id:addon,quantity:1}]);
+  assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[(a.payment as any).id])).rows[0].status,'cancelled');
+  assert.equal((await db.query("SELECT COUNT(*)::int n FROM moon_ai_outbox WHERE payment_id=$1 AND state='pending'",[(a.payment as any).id])).rows[0].n,0);
+  const due=await updateOrderAddons(db,order,user,[{id:addon,quantity:2}]);const payment=(due.payment as any).id;
+  await assert.rejects(updateOrderAddons(db,order,user,[{id:addon,quantity:-1}]));
+  assert.equal((await db.query("SELECT COUNT(*)::int n FROM payments WHERE order_id=$1 AND status='pending'",[order])).rows[0].n,1);
+  assert.equal((await recoverAddonCheckouts(db,notify,payment)).queued,0,'payment choice gets a grace period');
+  await db.query("UPDATE payments SET payload=payload||jsonb_build_object('addonRecoveryAfter',(NOW()-INTERVAL '1 minute')::text) WHERE id=$1",[payment]);
+  const competing=randomUUID();await db.query("INSERT INTO payments(id,customer_id,order_id,provider,status,amount) VALUES($1,$2,$3,'manual','pending',25)",[competing,user,order]);
+  assert.equal((await recoverAddonCheckouts(db,notify,payment)).queued,0,'a competing payment is reviewed instead of sending another invoice');assert.equal(notices,2);
+  await db.query('DELETE FROM payments WHERE id=$1',[competing]);await db.query("UPDATE payments SET payload=payload-'addonRecoveryNotified' WHERE id=$1",[payment]);notices=0;
+  const recovered=await Promise.all([recoverAddonCheckouts(db,notify,payment),recoverAddonCheckouts(db,notify,payment)]);
+  assert.equal(recovered.reduce((n,r)=>n+r.queued,0),1);
+  assert.equal((await db.query("SELECT COUNT(*)::int n FROM moon_ai_outbox WHERE payment_id=$1 AND kind='invoice'",[payment])).rows[0].n,1);
+  await recoverAddonCheckouts(db,notify,payment);
+  await assert.rejects(updateOrderAddons(db,order,user,[{id:addon,quantity:3}]),(e:any)=>e.code==='pending_invoice');
+  const noPayer=await updateOrderAddons(db,other,user,[{id:addon,quantity:1}]);const otherPayment=(noPayer.payment as any).id;
+  await db.query("UPDATE payments SET provider='bcc',payload=payload||jsonb_build_object('addonCheckoutSelected',true,'paymentHtml','fixture','addonRecoveryAfter',(NOW()-INTERVAL '1 minute')::text) WHERE id=$1",[otherPayment]);
+  assert.equal((await recoverAddonCheckouts(db,notify,otherPayment)).queued,0,'explicit BCC is never changed into Kaspi');assert.equal(notices,0);
+  await db.query("UPDATE payments SET provider='manual',payload=payload-'paymentHtml' WHERE id=$1",[otherPayment]);
+  await recoverAddonCheckouts(db,notify,otherPayment);await recoverAddonCheckouts(db,notify,otherPayment);assert.equal(notices,2,'missing payer or interrupted explicit choice alerts customer and admin once');
+  await db.query('UPDATE catalog_addons SET paid_separately=TRUE WHERE id=$1',[addon]);
+  const specialist=await updateOrderAddons(db,separate,user,[{id:addon,quantity:1}]);assert.equal(specialist.payableAmount,0);assert.equal(specialist.payment,null,'separately paid specialist work never creates an invoice');
+ }finally{
+  if(oldZone)await db.query("UPDATE app_settings SET value=$1::jsonb WHERE key='enforceServiceZones'",[JSON.stringify(oldZone.value)]);else await db.query("DELETE FROM app_settings WHERE key='enforceServiceZones'");
+  Object.assign(env,{moonAiEnabled:saved.enabled,moonAiChannelUrl:saved.url,moonAiChannelApiKey:saved.key,moonAiWebhookToken:saved.token});
+  await db.query('DELETE FROM moon_ai_outbox WHERE customer_id=$1',[user]);await db.query('DELETE FROM chat_participants WHERE user_id=$1',[user]);await db.query('DELETE FROM chats WHERE customer_id=$1',[user]);
+  await db.query('DELETE FROM payments WHERE customer_id=$1',[user]);await db.query('DELETE FROM service_orders WHERE id=ANY($1::uuid[])',[[order,other,separate]]);await db.query('DELETE FROM app_users WHERE id=$1',[user]);await db.query('DELETE FROM catalog_addons WHERE id=$1',[addon]);await db.close();
+ }
 });

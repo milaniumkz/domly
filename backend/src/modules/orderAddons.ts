@@ -1,3 +1,4 @@
+import {editableAddonCheckout,persistAddonCheckout} from './addonCheckoutRecovery';
 import {teamDurationAfterAddonChange,assertTeamInterval} from './cleaningTeam';
 import {assertCleanerCapacity} from './cleanerCapacity';
 import {bookingLock} from './botBookingCapacity';
@@ -12,6 +13,7 @@ import { ApiError } from '../common/api';
 export async function updateOrderAddons(db: Database, orderId: string, customerId: string, desired: any[],notifications?:NotificationService) {
   if (!Array.isArray(desired) || desired.length>100) throw new ApiError(400,'invalid_addons','Проверьте список услуг.');
   return db.atomic(()=>db.transaction(async tx => {
+    await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[customerId]);
     await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[bookingLock]);
     const owner=(await tx.query('SELECT cleaner_id FROM service_orders WHERE id=$1 AND customer_id=$2',[orderId,customerId])).rows[0];
     if(owner?.cleaner_id)await tx.query('SELECT id FROM app_users WHERE id=$1 FOR UPDATE',[owner.cleaner_id]);
@@ -20,7 +22,8 @@ export async function updateOrderAddons(db: Database, orderId: string, customerI
     if(order.cleaner_id!==owner?.cleaner_id)throw new ApiError(409,'order_changed','Назначение изменилось. Обновите заказ.');
     if (['completed','cancelled'].includes(order.status)) throw new ApiError(409,'order_not_editable','Этот заказ нельзя изменить.');
     const invoice = first((await tx.query("SELECT id FROM payments WHERE order_id=$1 AND status IN ('pending','invoice_requested') LIMIT 1",[orderId])).rows);
-    if (invoice) throw new ApiError(409,'pending_invoice','Сначала оплатите или отмените выставленный счёт.');
+    const editable=await editableAddonCheckout(db,orderId);
+    if (invoice && invoice.id!==editable?.id) throw new ApiError(409,'pending_invoice','Сначала оплатите или отмените выставленный счёт.');
     const existing = (await tx.query<any>('SELECT * FROM order_addons WHERE order_id=$1',[orderId])).rows;
     const selected = new Map<string,number>();
     for (const item of desired) {
@@ -66,6 +69,7 @@ export async function updateOrderAddons(db: Database, orderId: string, customerI
       estimated_duration_minutes=$4,end_time=start_time+($4::int*INTERVAL '1 minute'),updated_at=NOW()
       WHERE id=$1 RETURNING *`,[orderId,totals.total,totals.pending,duration])).rows);
     if(notifications)await notifySpecialistAddons(tx,notifications,orderId);
-    return {order: updated,payableAmount:Number(totals.pending)};
+    const payment=await persistAddonCheckout(db,updated,notifications);
+    return {order: updated,payableAmount:Number(totals.pending),payment};
   }));
 }

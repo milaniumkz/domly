@@ -1,3 +1,4 @@
+import {recoverAddonCheckouts} from '../modules/addonCheckoutRecovery';
 import {queuePackageRenewals} from '../modules/packageRenewal';
 import {processPackageUsage} from '../modules/packageUsage';
 import {cleanerSlotAllowedSql,orderAreaSql} from '../modules/cleanerCapacity';
@@ -200,7 +201,7 @@ void maintenanceQueue.add('expire-order-offers', {}, {
   removeOnComplete: true,
 });
 
-workers.push(new Worker('moon-ai', async()=>{await processMoonOutbox(db);await notifyMoonInvoiceFailures(db,notificationService);},{connection}));
+workers.push(new Worker('moon-ai', async()=>{try{await recoverAddonCheckouts(db,notificationService);}catch{console.warn('[addon-checkout] Recovery deferred; normal invoice delivery continues');}await processMoonOutbox(db);await notifyMoonInvoiceFailures(db,notificationService);},{connection}));
 void (async()=>{
   for(const job of await moonQueue.getRepeatableJobs())if(job.name==='moon-ai-outbox'&&Number(job.every)!==2000)await moonQueue.removeRepeatableByKey(job.key);
   await moonQueue.add('moon-ai-outbox', {}, {jobId:'moon-ai-outbox',repeat:{every:2000},removeOnComplete:true});
