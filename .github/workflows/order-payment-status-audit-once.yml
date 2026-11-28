@@ -1,0 +1,60 @@
+name: Read-only encrypted payment status comparison
+'on':
+  push:
+    branches:
+    - support/order-assignment-audit-20261128
+    paths:
+    - .github/workflows/order-payment-status-audit-once.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+    - name: Read only status, timestamps and reconciliation flags; exclude amounts, names, events and audit
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64 }}\"\
+        \ | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS }}\" > ~/.ssh/known_hosts\n\
+        cat > audit.js <<'AUDIT_JS'\n// Narrow read-only status comparison. No amounts, service names, identities,\
+        \ events or audit history.\nconst {Pool}=require('pg');\n(async()=>{\n const pool=new Pool({connectionString:process.env.DATABASE_URL});const\
+        \ c=await pool.connect();\n try{\n  await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await\
+        \ c.query(\"SET LOCAL statement_timeout='15s'\");\n  const o=(await c.query(`SELECT id,customer_package_id,numeric_id,status,(payable_amount>0)\
+        \ AS payment_blocks_assignment,\n   (addon_amount>0) AS has_priced_addons,(payable_amount=addon_amount)\
+        \ AS remaining_equals_addon_total,created_at,updated_at FROM service_orders WHERE numeric_id=73`)).rows[0];\n\
+        \  const report={checkedAt:new Date().toISOString(),found:!!o};\n  if(o){\n   const {id,customer_package_id,...order}=o;report.order=order;\n\
+        \   report.addonStatuses=(await c.query(`SELECT payment_status,paid_separately,requires_customer_approval,COUNT(*)::int\
+        \ AS rows,MIN(created_at) AS first_created_at,MAX(created_at) AS last_created_at\n    FROM order_addons\
+        \ WHERE order_id=$1 GROUP BY payment_status,paid_separately,requires_customer_approval`,[id])).rows;\n \
+        \  report.paymentStatuses=(await c.query(`SELECT p.provider,p.status,p.paid_at,p.approved_at,p.applied_at,p.created_at,p.updated_at,\n\
+        \    (p.order_id=$1) AS linked_to_order,(p.id=cp.purchase_payment_id) AS package_purchase\n    FROM payments\
+        \ p LEFT JOIN customer_packages cp ON cp.id=$2 WHERE p.order_id=$1 OR p.id=cp.purchase_payment_id ORDER\
+        \ BY p.created_at,p.id`,[id,customer_package_id])).rows;\n  }\n  await c.query('ROLLBACK');console.log(JSON.stringify(report));\n\
+        \ }finally{c.release();await pool.end();}\n})().catch(e=>{console.error('READ_ONLY_PAYMENT_STATUS_CHECK_FAILED',e.code||e.name);process.exitCode=1;});\n\
+        AUDIT_JS\ncat > owner-public.pem <<'OWNER_KEY'\n-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAx2bA2TRiWN/fMmxyo7Hh\n\
+        VZ46QLBX9pavTr4dTtqHNuEHM7yiJ7b6kDi5YJN9V416jxsjHvc59gmwvQ7BvXUh\nFLWyRiRNrFo0UE69K7jJLdalxD5TYOQzSyCu1r/MEhuQxnFW9SscBDbgkDqFMR2O\n\
+        Xo+IUMIND3tVmtf35yhgu0VNikw+ypXPD+mGaBR87x27Vhfe69RRsjc5Jfo8/dbp\noxUBNFVjHYYnV8NETUtf6mh6exxbC3z85uKTBnhdysvshBYzm6a8KFkRMPflqe0c\n\
+        k+QUhoGreJSbXQCSyu7OBKx+34Z+i2rxAZx+zOAIIvlLmO855gNpAMJzmpPyzKH5\n9M2VpW7SCrtWRt8+6WL1HIEDk5u7GfEj4X28JynivF9zJRIhpeN4bEYv5MyM9A+7\n\
+        hLJmcixPMrm1AqjklXxwaOx4WaCK/mL08CIuR3u9pfiWrCg4Pczoz5FBqWMPx1Il\n0jSXP1Dp3M6LWgUuvahUykxLI5ZOx1Jd8c5afjGZvEJBAgMBAAE=\n\
+        -----END PUBLIC KEY-----\nOWNER_KEY\nremote_dir=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ 'mktemp -d /tmp/domly-assignment-audit-XXXXXX')\n[[ \"$remote_dir\" =~ ^/tmp/domly-assignment-audit-[A-Za-z0-9]+$\
+        \ ]]\ntrap 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\" \"rm -rf -- $remote_dir\"\
+        \ >/dev/null 2>&1 || true' EXIT\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes audit.js owner-public.pem\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/\"\nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST\"\
+        \ \"set -euo pipefail; cd '$DEPLOY_PATH/current' && umask 077 && timeout 240 docker compose -p domly-backend\
+        \ exec -T api node - < '$remote_dir/audit.js' > '$remote_dir/report.json' && openssl rand -out '$remote_dir/key.bin'\
+        \ 32 && openssl enc -aes-256-cbc -salt -pbkdf2 -in '$remote_dir/report.json' -out '$remote_dir/report.enc'\
+        \ -pass file:'$remote_dir/key.bin' && openssl pkeyutl -encrypt -pubin -inkey '$remote_dir/owner-public.pem'\
+        \ -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in '$remote_dir/key.bin' -out '$remote_dir/key.enc'\"\
+        \nmkdir -m 700 -p encrypted-report\nscp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \"$VPS_USER@$VPS_HOST:$remote_dir/report.enc\"\
+        \ \"$VPS_USER@$VPS_HOST:$remote_dir/key.enc\" encrypted-report/\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: order-payment-status-encrypted
+        path: encrypted-report/
+        retention-days: 1
+        if-no-files-found: error
