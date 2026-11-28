@@ -880,7 +880,7 @@ class _AdminBookingCalendarState extends State<AdminBookingCalendar> {
                                 overflow: TextOverflow.ellipsis),
                           Wrap(spacing: 6, runSpacing: 4, children: [
                             if (widget.onShowInOrders != null) TextButton.icon(onPressed: () => widget.onShowInOrders!(order), icon: const Icon(Icons.open_in_new, size: 16), label: const Text('Открыть в заказах')),
-                            if (['assigned', 'pending_assignment', 'waiting_cleaner'].contains(visit.parentStatus) && visit.status == 'accepted') ...[
+                            if (['assigned', 'pending_assignment', 'waiting_cleaner'].contains(visit.parentStatus) && visit.status == 'accepted' && (DateTime.tryParse('${visit.day}T${order['start_time']}+05:00')?.isAfter(DateTime.now()) ?? false)) ...[
                               TextButton.icon(onPressed: () => _reassign(visit, false), icon: const Icon(Icons.person_add_alt, size: 16), label: const Text('Передать заказ')),
                               TextButton.icon(onPressed: () => _reassign(visit, true), icon: const Icon(Icons.swap_horiz, size: 16), label: const Text('Обменяться заказами')),
                             ],

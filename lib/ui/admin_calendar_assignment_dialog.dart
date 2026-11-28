@@ -73,7 +73,10 @@ class _AdminCalendarAssignmentDialogState
     final now = DateTime.now();
     final date = await showDatePicker(
         context: context,
-        initialDate: DateTime.parse(_day),
+        initialDate: DateTime.parse(_day)
+                .isBefore(DateTime(now.year, now.month, now.day))
+            ? DateTime(now.year, now.month, now.day)
+            : DateTime.parse(_day),
         firstDate: DateTime(now.year, now.month, now.day),
         lastDate: DateTime(now.year + 2));
     if (date != null && mounted) {

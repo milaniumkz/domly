@@ -585,6 +585,7 @@ test('acquirePaymentApplication applies a payment only once', async () => {
 
 test('buildRuntimeConfig returns backend-driven defaults for thin clients', () => {
   const config = buildRuntimeConfig({});
+  assert.deepEqual(buildRuntimeConfig({slotStartTimes:['08:00','09:59','10:00','18:00','18:05']}).backendDriven.booking.slotStartTimes,['10:00','18:00']);
   assert.equal(config.rules.qualityCheckHours, 48);
   assert.equal(config.backendDriven.booking.allowCustomTime, false);
   assert.equal(config.backendDriven.booking.requireAvailableCleaner, true);

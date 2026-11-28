@@ -5237,7 +5237,7 @@ export function buildRuntimeConfig(settings: Record<string, any>) {
       localization,
       booking: {
         minBookingDate: settings.minBookingDate ?? null,
-        slotStartTimes: settings.slotStartTimes ?? ['10:00', '12:00', '14:00', '16:00', '18:00'],
+        slotStartTimes: (Array.isArray(settings.slotStartTimes) ? settings.slotStartTimes : ['10:00', '12:00', '14:00', '16:00', '18:00']).map(String).filter((time:string)=>fitsBookingHours(time,1)),
         requireAvailableCleaner: settings.requireAvailableCleaner ?? true,
         allowCustomTime: settings.allowCustomTime ?? false,
         scrollToPendingAfterAddonSelection: settings.scrollToPendingAfterAddonSelection ?? true,
