@@ -1,3 +1,4 @@
+import {readExpiryPromotion} from './packageExpiryPromotion';
 import {teamOffers,assignTeamMember} from './cleaningTeam';
 import {cleanerSlotAllowedSql,orderAreaSql,assertCleanerCapacity} from './cleanerCapacity';
 import {translateKazakh,sendLocalizedPush} from '../localization';
@@ -205,6 +206,7 @@ export class NotificationService {
 
   async deliver(row: { id: string; user_id: string | null; role: string | null }, input: NotificationInput, options: {throwOnError?: boolean} = {}) {
     try {
+      if(input.dedupeKey?.startsWith('package-period-')&&input.dedupeKey.includes('-reminder-')&&(await readExpiryPromotion(this.db)).active)return;
       if (input.userId && input.targetType === 'order_offer') {
         const active = (await this.db.query(`SELECT 1 FROM order_offers f JOIN service_orders o ON o.id=f.order_id
           WHERE f.order_id=$1 AND f.cleaner_id=$2 AND f.status='offered' AND f.expires_at>NOW()
