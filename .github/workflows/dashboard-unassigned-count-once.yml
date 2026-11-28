@@ -1,0 +1,32 @@
+name: Inspect aggregate unassigned dashboard counters once
+'on':
+  push:
+    branches:
+    - support/greeting-audit-20261126
+    paths:
+    - .github/workflows/dashboard-unassigned-count-once.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+    - name: Read only status counters without identifiers or customer data
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+      run: "set -euo pipefail\numask 077\nmkdir -p ~/.ssh\nprintf '%s' \"${{ secrets.VPS_SSH_PRIVATE_KEY_B64\
+        \ }}\" | base64 -d > ~/.ssh/deploy_key\nprintf '%s\\n' \"${{ secrets.VPS_KNOWN_HOSTS\
+        \ }}\" > ~/.ssh/known_hosts\nssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes\
+        \ \"$VPS_USER@$VPS_HOST\" \"cd '$DEPLOY_PATH/current'; docker compose -p domly-backend\
+        \ exec -T api node\" <<'JS'\nconst {Database}=require('/app/dist/infrastructure/db/Database');\n\
+        (async()=>{const db=new Database(process.env.DATABASE_URL);try{\n const rows=(await\
+        \ db.query(`SELECT status,COUNT(*)::int AS total,\n COUNT(*) FILTER(WHERE\
+        \ cleaner_id IS NULL)::int AS without_primary_cleaner,\n COUNT(*) FILTER(WHERE\
+        \ required_cleaners>1)::int AS team_orders\n FROM service_orders WHERE status\
+        \ NOT IN ('completed','cancelled','draft') GROUP BY status ORDER BY status`)).rows;\n\
+        \ console.log(JSON.stringify({activeOrderCounts:rows}));\n}finally{await db.close();}})().catch(()=>{console.error('AGGREGATE_AUDIT_FAILED');process.exitCode=1;});\n\
+        JS\n"
