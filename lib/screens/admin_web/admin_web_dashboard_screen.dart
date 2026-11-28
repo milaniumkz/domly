@@ -1,3 +1,4 @@
+import '../../utils/admin_complaint_data.dart';
 import '../../ui/admin_dashboard_metrics.dart';
 import '../../ui/admin_cleaner_workload.dart';
 import '../../ui/admin_responsive_layout.dart';
@@ -109,6 +110,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
   String _assignmentStatusFilter = 'Все';
   String _ordersTabFilter = 'Все заказы';
   String? _calendarFocusedOrderId;
+  String? _openingComplaintId;
   String? _dashboardOrderScope;
   String _customerStatusFilter = 'Все';
   String _customerHouseFilter = 'Все';
@@ -2377,7 +2379,7 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (_dashboardOrderScope != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [Text('Заказы: $_dashboardOrderScope'), TextButton(onPressed: () => setState(() => _dashboardOrderScope = null), child: const Text('Показать все'))])),
-                  if (_calendarFocusedOrderId != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [const Text('Заказ из календаря'), TextButton(onPressed: () => setState(() => _calendarFocusedOrderId = null), child: const Text('Показать все заказы'))])),
+                  if (_calendarFocusedOrderId != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [const Text('Выбранный заказ'), TextButton(onPressed: () => setState(() => _calendarFocusedOrderId = null), child: const Text('Показать все заказы'))])),
                   if (cleanersSnapshot.hasError)
                     _adminWarningBox(
                       'Не удалось загрузить уборщиц. Обновите страницу перед назначением.',
@@ -3087,6 +3089,9 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
                 item['text'],
                 item['customerId'],
                 item['orderId'],
+                item['orderNumber'],
+                item['customerName'],
+                item['customerPhone'],
                 customer['name'],
                 customer['fullName'],
                 customer['displayName'],
@@ -3168,7 +3173,6 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
       customer['name'],
       customer['fullName'],
       customer['displayName'],
-      customerId,
     ]);
     final customerPhone = _firstText([
       complaint['customerPhone'],
@@ -3205,42 +3209,19 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
           _miniInfo('Номер', number),
           _miniInfo('Клиент', customerName),
           _miniInfo('Телефон', customerPhone),
-          _miniInfo('Заказ', orderId.isEmpty ? '—' : orderId),
+          _miniInfo('Заказ', complaintOrderLabel(complaint)),
+          if (complaint['orderDate'] != null) _miniInfo('Дата уборки', _adminOrderDateText({'scheduledDateKey': complaint['orderDate']})),
+          if ('${complaint['startTime'] ?? ''}'.isNotEmpty) _miniInfo('Время уборки', '${complaint['startTime']} — ${complaint['endTime']}'),
           _miniInfo('Создана', _formatAdminDateTime(complaint['createdAt'])),
         ],
       ),
       actions: [
         TextButton(
-          onPressed: () => _openEntityDetails(
-            context,
-            title: 'Жалоба №$number',
-            sections: [
-              _detailSection('Обращение', {
-                'Номер жалобы': number,
-                'ID жалобы': (complaint['id'] ?? '—').toString(),
-                'Заказ': orderId.isEmpty ? '—' : orderId,
-                'Статус': _complaintStatusLabel(status),
-                'Создана': _formatAdminDateTime(complaint['createdAt']),
-                'Текст': text,
-              }),
-              _detailSection('Клиент', {
-                'ID клиента': customerId.isEmpty ? '—' : customerId,
-                'Имя': customerName,
-                'Телефон': customerPhone,
-                'Адрес': _customerPrimaryAddress(customer),
-                'Площадь':
-                    '${customer['area'] ?? customer['apartmentArea'] ?? '—'} м²',
-                'Дом': _firstText([
-                  customer['residentialComplex'],
-                  customer['houseTitle'],
-                  customer['houseName'],
-                  customer['houseId'],
-                ]),
-              }),
-            ],
-          ),
-          child: Text('Открыть'.tr()),
+          onPressed: _openingComplaintId != null ? null : () => _openComplaintDetails(complaint, customer, number),
+          child: Text(_openingComplaintId == complaintId ? 'Загрузка…' : 'Открыть'),
         ),
+        if (orderId.isNotEmpty) TextButton.icon(
+          onPressed: () => _showComplaintOrder(orderId), icon: const Icon(Icons.receipt_long_outlined), label: const Text('Открыть заказ')),
         TextButton.icon(
           onPressed: customerPhone == '—'
               ? null
@@ -3308,6 +3289,45 @@ class _AdminWebDashboardScreenState extends State<AdminWebDashboardScreen> {
         ),
       ],
     );
+  }
+
+  void _showComplaintOrder(String id, {bool closeDetails = false}) {
+    if (closeDetails) Navigator.of(context).pop();
+    _dashboardNavigate('orders');
+    setState(() => _calendarFocusedOrderId = id);
+  }
+
+  Future<void> _openComplaintDetails(Map<String, dynamic> initial, Map<String, dynamic> customer, String number) async {
+    if (_openingComplaintId != null) return;
+    setState(() => _openingComplaintId = '${initial['id']}');
+    try {
+      var complaint = initial;
+      if (!DebugSession.enabled) {
+        final data = await BackendApiService.instance.getMap('/admin/complaints/${initial['id']}/details');
+        complaint = {...initial, ...mapAdminComplaint(Map<String, dynamic>.from(data['complaint'] as Map))};
+      }
+      if (!mounted || _sections[_selectedIndex].key != 'complaints') return;
+      final orderId = '${complaint['orderId'] ?? ''}';
+      await _openEntityDetails(context, title: 'Жалоба №$number',
+        attachment: orderId.isEmpty ? const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('Жалоба не привязана к конкретному заказу.')) : Padding(padding: const EdgeInsets.only(bottom: 12), child: FilledButton.icon(
+          onPressed: () => _showComplaintOrder(orderId, closeDetails: true), icon: const Icon(Icons.open_in_new), label: Text('Открыть ${complaintOrderLabel(complaint).toLowerCase()} — все действия'))),
+        sections: [
+          _detailSection('Обращение', {'Номер жалобы': number, 'Статус': _complaintStatusLabel('${complaint['status'] ?? 'open'}'), 'Создана': _formatAdminDateTime(complaint['createdAt']), 'Текст': '${complaint['text'] ?? ''}'}),
+          _detailSection('Клиент', {'Имя': _firstText([complaint['customerName'], customer['name'], customer['fullName']]), 'Телефон': _firstText([complaint['customerPhone'], customer['phone']])}),
+          if (orderId.isNotEmpty) _detailSection('Уборка', {
+            'Заказ': complaintOrderLabel(complaint),
+            'Дата': _adminOrderDateText({'scheduledDateKey': complaint['orderDate']}),
+            'Время': '${complaint['startTime'] ?? '—'} — ${complaint['endTime'] ?? '—'}',
+            'Статус': _orderStatusLabel('${complaint['orderStatus'] ?? ''}'),
+            'Уборщица': _firstText([complaint['cleanerName']]),
+            'Телефон уборщицы': _firstText([complaint['cleanerPhone']]),
+            'Адрес': [complaint['city'], complaint['street'], complaint['house'], if (complaint['apartment'] != null) 'кв. ${complaint['apartment']}'].where((v) => v != null && '$v'.isNotEmpty).join(', '),
+            'Площадь': '${complaint['verified_area'] ?? complaint['area'] ?? '—'} м²',
+          }),
+        ]);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(UserErrorMessage.message(error))));
+    } finally { if (mounted) setState(() => _openingComplaintId = null); }
   }
 
   String _complaintDisplayNumber(

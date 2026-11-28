@@ -2321,6 +2321,28 @@ test('admin operations against real PostgreSQL', {skip:!process.env.DOMLY_INTEGR
       assert.equal((await request('/complaints','GET',undefined,true)).status,200);
       const res=await request('/admin/complaints');assert.equal(res.status,200);assert.ok(res.json.data.some((row:any)=>row.customer_id===customer));
       assert.equal((await request('/complaints')).status,403);
+      const order=randomUUID(),address=randomUUID(),complaint=randomUUID();
+      try {
+        await db.query("INSERT INTO customer_addresses(id,user_id,city,street,house,area) VALUES($1,$2,'Астана','Тестовая','1',67)",[address,customer]);
+        const booked=(await db.query("INSERT INTO service_orders(id,customer_id,cleaner_id,address_id,scheduled_date,start_time,end_time,estimated_duration_minutes,status,area) VALUES($1,$2,$3,$4,'2030-02-02','10:00','12:00',120,'completed',67) RETURNING numeric_id",[order,customer,cleaner,address])).rows[0];
+        await db.query("INSERT INTO complaints(id,customer_id,order_id,title,body) VALUES($1,$2,$3,'Связанный заказ','Полный текст жалобы')",[complaint,customer,order]);
+        const listed=await request('/admin/complaints');
+        const row=listed.json.data.find((r:any)=>r.id===complaint);
+        assert.equal(row.order_id,order);assert.equal(String(row.order_number),String(booked.numeric_id));
+        assert.equal(row.customer_name,'Тестовая анкета');assert.equal(row.cleaner_name,'Тестовая анкета');assert.equal(row.start_time,'10:00:00');
+        const search=await request('/admin/complaints?search='+booked.numeric_id);assert.ok(search.json.data.some((r:any)=>r.id===complaint));
+        const detail=await request('/admin/complaints/'+complaint+'/details');assert.equal(detail.status,200);
+        assert.equal(detail.json.data.complaint.order_id,order);assert.equal(String(detail.json.data.complaint.order_number),String(booked.numeric_id));
+        assert.equal(detail.json.data.complaint.cleaner_name,'Тестовая анкета');assert.equal(detail.json.data.complaint.body,'Полный текст жалобы');
+        assert.equal((await request('/admin/complaints/'+complaint+'/details','GET',undefined,true)).status,403);
+        assert.ok(listed.json.data.some((r:any)=>r.customer_id===customer&&r.order_id===null));
+        for(const query of ['?status=open','?dateFrom=2000-01-01&dateTo=2099-01-01','?search=absent&offset=1&limit=2'])assert.equal((await request('/admin/complaints'+query)).status,200);
+      } finally {
+        await db.query('DELETE FROM complaints WHERE id=$1',[complaint]);
+        await db.query('DELETE FROM service_orders WHERE id=$1',[order]);
+        await db.query('DELETE FROM customer_addresses WHERE id=$1',[address]);
+      }
+
     });
   } finally {
     await new Promise<void>(resolve=>server.close(()=>resolve()));
