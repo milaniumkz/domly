@@ -13,7 +13,7 @@ jobs:
     environment: production
     timeout-minutes: 15
     steps:
-    - name: Inspect disk and reclaim only regenerable unused build cache
+    - name: Reclaim only unused rebuildable cache and dangling unused images; never containers or volumes
       env:
         VPS_HOST: ${{ secrets.VPS_HOST }}
         VPS_USER: ${{ secrets.VPS_USER }}
@@ -27,8 +27,7 @@ jobs:
 
         printf ''%s\n'' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
-        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" ''set
-        -e; df -h /; docker system df; docker builder prune --all --force --keep-storage
-        2GB; df -h /; docker system df''
+        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" ''set -e; df -h /; docker system df;
+        docker builder prune --all --force; docker image prune --force; df -h /; docker system df''
 
         '
