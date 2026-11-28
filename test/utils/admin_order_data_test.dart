@@ -3,6 +3,26 @@ import 'package:domly/utils/order_display.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('unassigned counter follows actual staff, including unpaid bookings and incomplete teams', () {
+    final unpaid = mapAdminOrder({'id': 'visit', 'status': 'pending_payment', 'scheduled_date': '2030-01-02', 'payable_amount': '1500', 'cleaner_id': null});
+    expect(adminOrderNeedsAssignment(unpaid), isTrue);
+    expect(unpaid['paymentStatus'], 'pending_invoice');
+    expect(canAdminAssignOrder(unpaid), isFalse);
+    expect(adminOrderNeedsAssignment({...unpaid, 'cleanerId': 'cleaner'}), isFalse);
+    expect(adminOrderNeedsAssignment({...unpaid, 'orderStatus': 'assigned'}), isTrue);
+    expect(adminOrderNeedsAssignment({...unpaid, 'orderStatus': 'waiting_cleaner', 'cleanerId': 'cleaner'}), isFalse);
+    for (final status in ['draft', 'completed', 'cancelled', 'canceled', 'refunded']) {
+      expect(adminOrderNeedsAssignment({...unpaid, 'orderStatus': status}), isFalse);
+    }
+    expect(adminOrderNeedsAssignment({...unpaid, 'type': 'package_purchase'}), isFalse);
+    final team = {...unpaid, 'orderStatus': 'assigned', 'cleanerId': 'first', 'required_cleaners': 2,
+      'team_members': [{'cleaner_id': 'first', 'status': 'accepted'}, {'cleaner_id': 'second', 'status': 'offered'}]};
+    expect(adminOrderNeedsAssignment(team), isTrue);
+    expect(adminOrderNeedsAssignment({...team, 'team_members': []}), isTrue);
+    expect(adminOrderNeedsAssignment({...team, 'team_members': [{'cleaner_id': 'first', 'status': 'accepted'}, {'cleaner_id': 'second', 'status': 'accepted'}]}), isFalse);
+    expect([unpaid, {...unpaid, 'cleanerId': 'cleaner'}, {...unpaid, 'orderStatus': 'cancelled'}].where(adminOrderNeedsAssignment).length, 1);
+  });
+
   test(
       'new unpaid extras override an older paid invoice without changing assignment status',
       () {
